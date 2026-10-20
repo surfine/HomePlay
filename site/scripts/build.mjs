@@ -121,7 +121,7 @@ function petImg(name, prefix, size, { on = false, lazy = false, priority = false
 }
 
 // 品牌的眼睛：白色橢圓、黑瞳孔、一點高光，沒有描邊。瞳孔與眼皮由 app.js 用 transform 驅動。
-const eye = (cx, cy) => `<g class="eye" data-cx="${cx}" data-cy="${cy}"><ellipse cx="${cx}" cy="${cy}" rx="36" ry="52" fill="#fff"/><g class="pupil"><circle cx="${cx}" cy="${cy}" r="18" fill="#000"/><circle cx="${cx - 6}" cy="${cy - 9}" r="5" fill="#fff"/></g></g>`;
+const eye = (cx, cy) => `<g class="eye" data-cx="${cx}" data-cy="${cy}"><ellipse cx="${cx}" cy="${cy}" rx="36" ry="52" fill="#fff"/><g class="pupil"><circle cx="${cx}" cy="${cy}" r="18" fill="#000"/><circle cx="${cx - 6}" cy="${cy - 9}" r="5" fill="#fff"/></g><path class="lid" d="M ${cx - 24} ${cy + 10} Q ${cx} ${cy + 26} ${cx + 24} ${cy + 10}" fill="none" stroke="#15181c" stroke-width="4.6" stroke-linecap="round" opacity="0"/></g>`;
 
 function page(c) {
   R = rendersFor(c);

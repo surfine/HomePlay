@@ -249,17 +249,18 @@
   // ── 為什麼是眼睛：品牌的那雙眼睛，跟著指標看、眨眼、閒置就闔上 ──
   (() => {
     const card = $('#eyes'); if (!card) return;
-    const eyes = $$('.eye', card).map(g => ({ g, pupil: $('.pupil', g), cx: +g.dataset.cx, cy: +g.dataset.cy }));
+    const eyes = $$('.eye', card).map(g => ({ g, pupil: $('.pupil', g), lid: $('.lid', g), cx: +g.dataset.cx, cy: +g.dataset.cy }));
     const MX = 14, MY = 30; // 瞳孔在眼睛裡能走的距離
     const draw = (ux, uy, open, k) => {
       for (const e of eyes) {
         const lid = open * k;
         e.pupil.setAttribute('transform', `translate(${(ux * MX).toFixed(2)} ${(uy * MY).toFixed(2)})`);
-        // 闭眼时只留下眼睑线；瞳孔和眼睛一起压扁会变成一道黑缝。
-        const shut = lid < .4;
-        e.pupil.style.opacity = shut ? '0' : '1';
-        e.pupil.style.visibility = shut ? 'hidden' : 'visible';
-        e.g.setAttribute('transform', `translate(${e.cx} ${e.cy}) scale(${k.toFixed(3)} ${lid.toFixed(3)}) translate(${-e.cx} ${-e.cy})`);
+        // 参考唐老鸭：闭眼保留白色眼白，只把瞳孔换成一条短的下弯眼睑线。
+        const close = Math.min(1, Math.max(0, (.55 - lid) / .25));
+        e.pupil.style.opacity = (1 - close).toFixed(3);
+        e.pupil.style.visibility = close >= 1 ? 'hidden' : 'visible';
+        e.lid.style.opacity = close.toFixed(3);
+        e.g.setAttribute('transform', `translate(${e.cx} ${e.cy}) scale(${k.toFixed(3)} ${k.toFixed(3)}) translate(${-e.cx} ${-e.cy})`);
       }
     };
     if (reduce || !hasIO) { draw(.55, -.45, 1, 1); return; }
