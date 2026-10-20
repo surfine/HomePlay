@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="https://homeplay.aaronlau.me/media/og.jpg" alt="HomePlay：桌上一台小螢幕，會看著你" width="820">
+  <img src="https://homeplay.aaronlau.me/media/og-v2.jpg" alt="HomePlay：桌上一台小螢幕，會看著你" width="820">
   <h2>桌上一台小螢幕，會看著你。</h2>
   <p><strong>A 3D HomeView desk pet for the Mac that runs real CarPlay.</strong></p>
   <p>

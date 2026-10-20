@@ -74,9 +74,10 @@ def card(kind, headline, sub, out, renders="", tc=True):
     W, H = 1200, 630
     im = Image.new("RGB", (W, H), BG)
     rdir = os.path.join(R, renders)
-    if not os.path.exists(os.path.join(rdir, "face-curious.webp")):
+    if not os.path.exists(os.path.join(rdir, "og-pet.webp")) and not os.path.exists(os.path.join(rdir, "face-curious.webp")):
         rdir = R  # 該語言的屏幕還沒拍：先用繁中那套
-    pet = Image.open(os.path.join(rdir, "face-curious.webp")).convert("RGBA")
+    pet_name = "og-pet.webp" if os.path.exists(os.path.join(rdir, "og-pet.webp")) else "face-curious.webp"
+    pet = Image.open(os.path.join(rdir, pet_name)).convert("RGBA")
     ph = 560
     pw = round(pet.width * ph / pet.height)
     pet = pet.resize((pw, ph), Image.LANCZOS)
@@ -104,9 +105,9 @@ def card(kind, headline, sub, out, renders="", tc=True):
     im.save(os.path.join(MEDIA, out), "JPEG", quality=90, optimize=True)
 
 T = titles()
-card("zh", T["zh-Hant"], "Mac 上的 3D HomeView 桌寵", "og.jpg", "", tc=True)
-card("zh", T["zh-Hans"], "Mac 上的 3D HomeView 桌宠", "og-zh-hans.jpg", "zh-Hans", tc=False)
-card("en", T["en"], "A 3D HomeView desktop pet for Mac", "og-en.jpg", "en")
+card("zh", T["zh-Hant"], "Mac 上的 3D HomeView 桌寵", "og-v2.jpg", "", tc=True)
+card("zh", T["zh-Hans"], "Mac 上的 3D HomeView 桌宠", "og-zh-hans-v2.jpg", "zh-Hans", tc=False)
+card("en", T["en"], "A 3D HomeView desktop pet for Mac", "og-en-v2.jpg", "en")
 
 # 方形分享圖：不透明 512x512，圖示置中約 78%，底色同網站背景
 sq = Image.new("RGB", (512, 512), BG)
