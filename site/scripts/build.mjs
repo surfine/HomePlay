@@ -44,6 +44,9 @@ const version = (p) => {
   return versions.get(p);
 };
 const bust = (html) => html.replace(/\/media\/[^"'?\s)]+/g, (m) => (version(m) ? `${m}?v=${version(m)}` : m));
+const assetVersion = (name) => createHash('sha256').update(readFileSync(path.join(root, name))).digest('hex').slice(0, 10);
+const CSS_V = assetVersion('style.css');
+const JS_V = assetVersion('app.js');
 // app.js 動態載入的渲染圖：把這一頁那套圖的版本號交給它
 // 鍵是相對於這套渲染圖目錄的檔名（含 spin/NN.webp）。
 const webpsIn = (dir, sub = '') => (existsSync(path.join(mediaRoot, dir, sub)) ? readdirSync(path.join(mediaRoot, dir, sub)).filter((f) => f.endsWith('.webp')).map((f) => sub + f) : []);
@@ -110,7 +113,7 @@ ${others.map((o) => `<meta property="og:locale:alternate" content="${o.locale}">
 <meta name="twitter:image" content="${img}">
 <meta name="twitter:image:alt" content="${attr(imageAlt)}">
 <script type="application/ld+json">${json(ld)}</script>
-<link rel="stylesheet" href="/style.css">`;
+<link rel="stylesheet" href="/style.css?v=${CSS_V}">`;
 }
 
 function petImg(name, prefix, size, { on = false, lazy = false, priority = false, alt = '' } = {}) {
@@ -279,7 +282,7 @@ ${c.rows.map(([f, t, r], i) => `      <button type="button" class="row${i ? '' :
 </main>
 <footer><div class="wrap"><span>${c.footer}</span><span class="links"><a href="${github}">${c.footerLinks.github}</a><a href="${notice}">${c.footerLinks.notice}</a>${langLinks}</span></div></footer>
 <script type="application/json" id="i18n">${json(i18n)}</script>
-<script src="/app.js" defer></script>
+<script src="/app.js?v=${JS_V}" defer></script>
 </body>
 </html>
 `;
@@ -296,7 +299,7 @@ function notFound() {
 <meta name="robots" content="noindex">
 <meta name="color-scheme" content="light dark">
 <link rel="icon" type="image/png" sizes="192x192" href="/media/icon-192.png">
-<link rel="stylesheet" href="/style.css">
+<link rel="stylesheet" href="/style.css?v=${CSS_V}">
 </head>
 <body class="nf">
 <main class="nf-main">

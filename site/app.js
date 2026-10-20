@@ -256,7 +256,9 @@
         const lid = open * k;
         e.pupil.setAttribute('transform', `translate(${(ux * MX).toFixed(2)} ${(uy * MY).toFixed(2)})`);
         // 闭眼时只留下眼睑线；瞳孔和眼睛一起压扁会变成一道黑缝。
-        e.pupil.setAttribute('opacity', lid < .35 ? '0' : '1');
+        const shut = lid < .4;
+        e.pupil.style.opacity = shut ? '0' : '1';
+        e.pupil.style.visibility = shut ? 'hidden' : 'visible';
         e.g.setAttribute('transform', `translate(${e.cx} ${e.cy}) scale(${k.toFixed(3)} ${lid.toFixed(3)}) translate(${-e.cx} ${-e.cy})`);
       }
     };
