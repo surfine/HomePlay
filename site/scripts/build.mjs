@@ -1,0 +1,343 @@
+import { mkdir, rm, cp, writeFile } from 'node:fs/promises';
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { fileURLToPath } from 'node:url';
+import path from 'node:path';
+import { copy, origin, github, notice, releaseDownload, FACES, FINISHES, LANGS } from './content.mjs';
+
+const root = fileURLToPath(new URL('../', import.meta.url));
+const dist = path.join(root, 'dist');
+// 每種語言用自己語言的屏幕渲染（render-media.py --lang en 拍到 renders/en/）；還沒拍的語言退回中文那套。
+let R = '/media/renders/';
+const rendersFor = (c) => (existsSync(path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'public', c.renders, 'face-idle.webp')) ? c.renders : '/media/renders/');
+const esc = (s) => s.replaceAll('&', '&amp;').replaceAll('"', '&quot;').replaceAll('<', '&lt;');
+const attr = esc;
+// 轉成 <script type="application/json"> 內容：避開 </script> 與 <!--
+const json = (o) => JSON.stringify(o).replaceAll('<', '\\u003c').replaceAll('&', '\\u0026');
+
+// 渲染圖的像素尺寸（寬高屬性防版面位移）。
+// 圖片寬高從 WebP 檔頭讀（兩種語言各拍一套，尺寸可能差幾個像素），避免版面跳動。
+function webpSize(file) {
+  const b = readFileSync(file);
+  const kind = b.toString('ascii', 12, 16);
+  if (kind === 'VP8X') return [1 + b.readUIntLE(24, 3), 1 + b.readUIntLE(27, 3)];
+  if (kind === 'VP8L') { const v = b.readUInt32LE(21); return [(v & 0x3fff) + 1, ((v >> 14) & 0x3fff) + 1]; }
+  return [b.readUInt16LE(26) & 0x3fff, b.readUInt16LE(28) & 0x3fff];
+}
+function sizesFor(dir) {
+  const at = (n) => webpSize(path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'public', dir, n));
+  return {
+    face: at('face-idle.webp'), finish: at('finish-g4.webp'),
+    spin: at('spin/00.webp'), apart: at('view-apart.webp'),
+    moment: Object.fromEntries(['hello.webp', 'ambient-night.webp', 'asleep-night.webp'].map((m) => [m, at(m)])),
+  };
+}
+let SIZE;
+// /media/* 快取一天：網址後面加內容雜湊，檔案一換網址就換，不會被邊緣快取卡住舊圖。
+const mediaRoot = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'public');
+const versions = new Map();
+const version = (p) => {
+  if (!versions.has(p)) {
+    const f = path.join(mediaRoot, p);
+    versions.set(p, existsSync(f) && !p.endsWith('/') ? createHash('sha256').update(readFileSync(f)).digest('hex').slice(0, 10) : '');
+  }
+  return versions.get(p);
+};
+const bust = (html) => html.replace(/\/media\/[^"'?\s)]+/g, (m) => (version(m) ? `${m}?v=${version(m)}` : m));
+// app.js 動態載入的渲染圖：把這一頁那套圖的版本號交給它
+// 鍵是相對於這套渲染圖目錄的檔名（含 spin/NN.webp）。
+const webpsIn = (dir, sub = '') => (existsSync(path.join(mediaRoot, dir, sub)) ? readdirSync(path.join(mediaRoot, dir, sub)).filter((f) => f.endsWith('.webp')).map((f) => sub + f) : []);
+const rendersVersions = (dir) => JSON.stringify(Object.fromEntries([...webpsIn(dir), ...webpsIn(dir, 'spin/'), ...webpsIn(dir, 'fx/')].map((f) => [f, version(dir + f)])));
+// 開機 hello 逐格（不分語言）
+const HELLO = '/media/renders/hello/';
+const helloVersions = () => JSON.stringify(Object.fromEntries(webpsIn(HELLO).map((f) => [f, version(HELLO + f)])));
+const SPIN_FRAMES = 36;
+const SW = { g4: 'sw-g4', silver: 'sw-silver', starlight: 'sw-starlight', rose: 'sw-rose', gray: 'sw-gray' };
+const fill = (tpl, k, v) => tpl.replace(`{${k}}`, v);
+const alternates = LANGS.map((l) => ({ hreflang: l.code, href: origin + l.path }));
+const stripTags = (h) => h.replace(/<[^>]+>/g, '');
+const otherLangs = (c) => LANGS.filter((l) => l.key !== c.lang);
+
+function head(c, { title, description, canonicalPath, image, imageAlt }) {
+  const url = origin + canonicalPath;
+  const img = origin + image;
+  const others = otherLangs(c);
+  const ld = {
+    '@context': 'https://schema.org',
+    '@graph': [
+      { '@type': 'WebSite', '@id': `${origin}/#website`, name: c.siteName, url, inLanguage: c.htmlLang },
+      {
+        '@type': 'SoftwareSourceCode', name: 'HomePlay', description: c.description, codeRepository: github,
+        programmingLanguage: 'Swift', runtimePlatform: 'macOS 14 or later', license: 'https://spdx.org/licenses/GPL-3.0-or-later.html',
+        image: img, url, inLanguage: c.htmlLang,
+      },
+      {
+        '@type': 'FAQPage', inLanguage: c.htmlLang,
+        mainEntity: c.faq.map(([q, a]) => ({ '@type': 'Question', name: stripTags(q), acceptedAnswer: { '@type': 'Answer', text: stripTags(a) } })),
+      },
+    ],
+  };
+  return `<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>${esc(title)}</title>
+<meta name="description" content="${attr(description)}">
+<meta name="keywords" content="${attr(c.keywords)}">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#eceef1" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0f1114" media="(prefers-color-scheme: dark)">
+<link rel="canonical" href="${url}">
+${alternates.map((a) => `<link rel="alternate" hreflang="${a.hreflang}" href="${a.href}">`).join('\n')}
+<link rel="alternate" hreflang="x-default" href="${origin}/">
+<link rel="icon" type="image/png" sizes="192x192" href="/media/icon-192.png">
+<link rel="apple-touch-icon" sizes="180x180" href="/media/apple-touch-icon.png">
+<link rel="preload" as="image" href="${R}face-idle.webp" fetchpriority="high">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="${c.siteName}">
+<meta property="og:title" content="${attr(c.ogTitle)}">
+<meta property="og:description" content="${attr(description)}">
+<meta property="og:url" content="${url}">
+<meta property="og:locale" content="${c.locale}">
+${others.map((o) => `<meta property="og:locale:alternate" content="${o.locale}">`).join('\n')}
+<meta property="og:image" content="${img}">
+<meta property="og:image:type" content="image/jpeg">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="${attr(imageAlt)}">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="${attr(c.ogTitle)}">
+<meta name="twitter:description" content="${attr(description)}">
+<meta name="twitter:image" content="${img}">
+<meta name="twitter:image:alt" content="${attr(imageAlt)}">
+<script type="application/ld+json">${json(ld)}</script>
+<link rel="stylesheet" href="/style.css">`;
+}
+
+function petImg(name, prefix, size, { on = false, lazy = false, priority = false, alt = '' } = {}) {
+  return `<img${on ? ' class="on"' : ''} src="${R}${prefix}${name}.webp" data-name="${name}" width="${size[0]}" height="${size[1]}" alt="${alt}" decoding="async"${priority ? ' fetchpriority="high"' : ''}${lazy ? ' loading="lazy"' : ''}>`;
+}
+
+// 品牌的眼睛：白色橢圓、黑瞳孔、一點高光，沒有描邊。瞳孔與眼皮由 app.js 用 transform 驅動。
+const eye = (cx, cy) => `<g class="eye" data-cx="${cx}" data-cy="${cy}"><ellipse cx="${cx}" cy="${cy}" rx="36" ry="52" fill="#fff"/><g class="pupil"><circle cx="${cx}" cy="${cy}" r="18" fill="#000"/><circle cx="${cx - 6}" cy="${cy - 9}" r="5" fill="#fff"/></g></g>`;
+
+function page(c) {
+  R = rendersFor(c);
+  SIZE = sizesFor(R);
+  const brand = `<a class="brand" href="${c.path}"><img src="/media/icon-192.png" width="26" height="26" alt="">HomePlay</a>`;
+  const langLinks = otherLangs(c).map((l) => `<a href="${l.path}" hreflang="${l.code}" lang="${l.code}">${l.label}</a>`).join('');
+  const first = Object.keys(c.faceNames)[0];
+  const rowFace = c.rows[0][0];
+  const finishFirst = FINISHES[0];
+  const i18n = {
+    faceNames: c.faceNames, heroLabel: c.heroLabel, facesLabel: c.facesLabel, finishLabel: c.finishLabel, finishes: c.finishes,
+    apart: c.apart, together: c.together, apartAlt: c.apartAlt, spinLabel: c.spinLabel, copyCode: c.copyCode, copied: c.copied, replay: c.replay,
+  };
+  return `<!doctype html>
+<html lang="${c.htmlLang}">
+<head>
+${head(c, { title: c.title, description: c.description, canonicalPath: c.path, image: c.og, imageAlt: c.ogAlt })}
+</head>
+<body data-renders="${R}" data-renders-v='${rendersVersions(R)}' data-hello="${HELLO}" data-hello-v='${helloVersions()}'>
+<img class="share-fallback" src="/media/share-square.jpg" width="512" height="512" alt="" hidden loading="lazy">
+<div class="sky" aria-hidden="true"><i class="dawn"></i><i class="day"></i><i class="dusk"></i><i class="night"></i></div>
+<div class="day-rail" aria-hidden="true"><span class="t t0">07:17</span><span class="t t1">23:59</span><i class="sun orb"></i><i class="moon orb"></i></div>
+<a class="skip" href="#main">${c.skip}</a>
+<header><div class="wrap">
+  ${brand}
+  <nav aria-label="${attr(c.navLabel)}">${c.nav.map(([id, t]) => `<a href="#${id}">${t}</a>`).join('')}</nav>
+  <div class="end"><nav class="langs" aria-label="${attr(c.langLabel)}">${langLinks}</nav><a class="btn btn-ghost" href="${github}">${c.githubLabel}</a></div>
+</div></header>
+<main id="main">
+
+<section class="hero" id="top"><div class="wrap">
+  <div class="hero-copy">
+    <h1>${c.h1}</h1>
+    <p class="lede">${c.lede}</p>
+    <div class="ctas"><a class="btn btn-primary" href="${releaseDownload}">${c.download}</a><a class="btn btn-ghost" href="${github}">${c.viewSource}</a></div>
+    <p class="hero-note">${c.heroNote}</p>
+  </div>
+  <div class="hero-bob"><div class="pet hero-pet" id="hero-pet" role="img" aria-label="${attr(fill(c.heroLabel, 'face', c.faceNames[first]))}" data-prefix="face-" data-names="${FACES.join(' ')}" data-first="idle" data-w="${SIZE.face[0]}" data-h="${SIZE.face[1]}" data-blink="auto" data-glance="auto">
+    ${petImg('idle', 'face-', SIZE.face, { on: true, priority: true })}
+  </div></div>
+</div></section>
+
+<section class="why" id="why"><div class="wrap why-grid">
+  <div class="why-text">
+    <h2 class="rise">${c.essayTitle}</h2>
+    <p class="lede">${c.essayLede}</p>
+    <ol class="beats" id="beats">
+      ${c.essay.map(([year, t, body]) => `<li><span class="yr">${year}</span><div><h3>${t}</h3><p>${body}</p></div></li>`).join('\n      ')}
+    </ol>
+    <p class="essay-close">${c.essayClose}</p>
+  </div>
+  <div class="why-eyes">
+    <div class="eyes-card" id="eyes" role="img" aria-label="${attr(c.eyesLabel)}">
+      <svg viewBox="0 0 300 300" aria-hidden="true" focusable="false">${eye(98, 142)}${eye(202, 142)}</svg>
+    </div>
+    <p class="eyes-hint">${c.eyesHint}</p>
+  </div>
+</div></section>
+
+<section class="faces" id="faces"><div class="wrap">
+  <div class="stick"><div class="pet still" id="face-pet" role="img" aria-label="${attr(fill(c.facesLabel, 'face', c.faceNames[rowFace]))}" data-prefix="face-" data-names="${FACES.join(' ')}" data-first="${rowFace}" data-w="${SIZE.face[0]}" data-h="${SIZE.face[1]}" data-blink="auto" data-glance="auto">
+    ${petImg(rowFace, 'face-', SIZE.face, { on: true, lazy: true })}
+  </div></div>
+  <div class="rise">
+    <h2>${c.facesTitle}</h2>
+    <p class="lede">${c.facesLede}</p>
+    <div class="rows" id="rows">
+${c.rows.map(([f, t, r], i) => `      <button type="button" class="row${i ? '' : ' on'}" aria-pressed="${i === 0}" data-face="${f}"><span class="t">${t}</span><span class="r">${r}</span></button>`).join('\n')}
+    </div>
+  </div>
+</div></section>
+
+<section class="carplay" id="carplay"><div class="wrap"><div class="panel">
+  <h2>${c.carplayTitle}</h2>
+  <p class="lede">${c.carplayLede}</p>
+  <div class="path" role="group" aria-label="${attr(c.pathLabel)}">
+    ${c.flow.map(([b, s], i) => `${i ? '<div class="link" aria-hidden="true"><i class="dot"></i><i class="dot d2"></i><i class="dot back"></i></div>' : ''}<div class="node"><b>${b}</b><span>${s}</span></div>`).join('\n    ')}
+  </div>
+  <div class="sources">
+    ${c.sources.map(([h, p, flag]) => `<div class="src"><h3>${h}</h3><p>${p}</p><p class="flag"><code>${flag}</code></p></div>`).join('\n    ')}
+  </div>
+  <p class="sources-note">${c.sourcesNote}</p>
+</div></div></section>
+
+<section class="spin" id="spin"><div class="wrap">
+  <div class="spin-head rise">
+    <h2>${c.spinTitle}</h2>
+    <p class="lede">${c.spinLede}</p>
+  </div>
+  <div class="spin-stage" id="spin-stage" tabindex="0" role="img" aria-label="${attr(c.spinLabel)}" data-frames="${SPIN_FRAMES}">
+    <img class="spin-still" src="${R}spin/00.webp" width="${SIZE.spin[0]}" height="${SIZE.spin[1]}" alt="" loading="lazy" decoding="async">
+    <canvas class="spin-canvas" aria-hidden="true"></canvas>
+    <img class="spin-apart" src="${R}view-apart.webp" width="${SIZE.apart[0]}" height="${SIZE.apart[1]}" alt="" loading="lazy" decoding="async">
+  </div>
+  <p class="spin-hint" id="spin-hint">${c.spinHint}</p>
+  <div class="spin-actions"><button type="button" class="btn btn-ghost" id="apart-btn" aria-pressed="false">${c.apart}</button></div>
+  <div class="gestures">
+    ${c.gestures.map(([a, b]) => `<div class="g"><span>${a}</span><span>${b}</span></div>`).join('\n    ')}
+  </div>
+</div></section>
+
+<section class="finish" id="finish"><div class="wrap">
+  <div class="pet still finish-pet" id="finish-pet" role="img" aria-label="${attr(fill(c.finishLabel, 'finish', c.finishes[finishFirst][0]))}" data-prefix="finish-" data-names="${FINISHES.join(' ')}" data-first="${finishFirst}" data-w="${SIZE.finish[0]}" data-h="${SIZE.finish[1]}" data-blink="auto" data-glance="always">
+    ${petImg(finishFirst, 'finish-', SIZE.finish, { on: true, lazy: true })}
+  </div>
+  <div class="rise">
+    <h2>${c.finishTitle}</h2>
+    <p class="lede">${c.finishLede}</p>
+    <div class="swatches" id="swatches" role="group" aria-label="${attr(c.finishTitle)}">
+      ${FINISHES.map((f, i) => `<button type="button" class="sw ${SW[f]}" aria-pressed="${i === 0}" data-finish="${f}" aria-label="${attr(c.finishes[f][0])}"></button>`).join('\n      ')}
+    </div>
+    <div class="swname" id="swname" aria-live="polite">${c.finishes[finishFirst][0]}</div>
+    <p class="swdesc" id="swdesc">${c.finishes[finishFirst][1]}</p>
+  </div>
+</div></section>
+
+<section class="moments"><div class="wrap">
+  <h2 class="rise">${c.momentsTitle}</h2>
+  <div class="grid">
+    ${c.moments.map(([h, p, file, alt], i) => {
+      const hello = file === 'hello.webp';
+      const ambient = file === 'ambient-night.webp';
+      const asleep = file === 'asleep-night.webp';
+      const shot = `<div class="shot"><img src="${R}${file}" width="${SIZE.moment[file][0]}" height="${SIZE.moment[file][1]}" alt="${attr(alt)}" loading="lazy" decoding="async">${hello ? `<canvas class="hello-canvas" aria-hidden="true" hidden></canvas>` : ''}</div>`;
+      return `<div class="cell c${i + 1}"${hello ? ` id="hello-cell" data-frames="16"` : ambient ? ' id="ambient-cell"' : asleep ? ' id="asleep-cell"' : ''}><h3>${h}</h3><p>${p}</p>${hello ? `<button type="button" class="textbtn" id="replay" hidden>${c.replay}</button>` : ''}${shot}</div>`;
+    }).join('\n    ')}
+  </div>
+</div></section>
+
+<section class="run" id="run"><div class="wrap">
+  <div class="rise">
+    <h2>${c.runTitle}</h2>
+    <p class="lede">${c.runLede}</p>
+    <div class="dl"><a class="btn btn-primary" href="${releaseDownload}">${c.download}</a><p class="dl-note">${c.downloadNote}</p></div>
+    <div class="first-use">
+      <h3>${c.firstStepsTitle}</h3>
+      <ol>
+        ${c.firstSteps.map((t) => `<li>${t}</li>`).join('\n        ')}
+      </ol>
+    </div>
+  </div>
+  <div class="build">
+    <h3>${c.buildTitle}</h3>
+    <ul>
+      ${c.runList.map((t) => `<li>${t}</li>`).join('\n      ')}
+    </ul>
+    <div class="code"><pre><code>${c.code.map(([k, t]) => (k ? `<span class="c">${esc(t)}</span>` : esc(t))).join('\n')}</code></pre><button type="button" class="copy" id="copy" aria-live="polite" hidden>${c.copyCode}</button></div>
+  </div>
+</div></section>
+
+<section id="faq"><div class="wrap faq">
+  <h2 class="rise">${c.faqTitle}</h2>
+  <div class="faq-list">
+    ${c.faq.map(([q, a], i) => `<details${i ? '' : ' open'}><summary>${q}</summary><p>${a}</p></details>`).join('\n    ')}
+  </div>
+</div></section>
+
+</main>
+<footer><div class="wrap"><span>${c.footer}</span><span class="links"><a href="${github}">${c.footerLinks.github}</a><a href="${notice}">${c.footerLinks.notice}</a>${langLinks}</span></div></footer>
+<script type="application/json" id="i18n">${json(i18n)}</script>
+<script src="/app.js" defer></script>
+</body>
+</html>
+`;
+}
+
+function notFound() {
+  const zh = copy['zh-Hant'], hans = copy['zh-Hans'], en = copy.en;
+  return `<!doctype html>
+<html lang="${zh.htmlLang}">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>${esc(zh.notFound.title)}</title>
+<meta name="robots" content="noindex">
+<meta name="color-scheme" content="light dark">
+<link rel="icon" type="image/png" sizes="192x192" href="/media/icon-192.png">
+<link rel="stylesheet" href="/style.css">
+</head>
+<body class="nf">
+<main class="nf-main">
+<img src="/media/icon-192.png" width="72" height="72" alt="">
+<h1>${zh.notFound.h1}</h1>
+<p>${zh.notFound.body}</p>
+<p lang="zh-Hans" class="nf-en">${hans.notFound.h1} ${hans.notFound.body}</p>
+<p lang="en" class="nf-en">${en.notFound.h1} ${en.notFound.body}</p>
+<p class="ctas"><a class="btn btn-primary" href="${zh.notFound.homeHref}">${zh.notFound.home}</a><a class="btn btn-ghost" lang="zh-Hans" href="${hans.notFound.homeHref}">${hans.notFound.home}</a><a class="btn btn-ghost" lang="en" href="${en.notFound.homeHref}">${en.notFound.home}</a></p>
+</main>
+</body>
+</html>
+`;
+}
+
+await rm(dist, { recursive: true, force: true });
+await mkdir(dist, { recursive: true });
+await cp(path.join(root, 'public'), dist, { recursive: true });
+for (const name of ['style.css', 'app.js']) await cp(path.join(root, name), path.join(dist, name));
+for (const c of Object.values(copy)) {
+  const target = path.join(dist, c.path.replace(/^\/|\/$/g, ''));
+  await mkdir(target, { recursive: true });
+  await writeFile(path.join(target, 'index.html'), bust(page(c)));
+}
+await writeFile(path.join(dist, '404.html'), bust(notFound()));
+await writeFile(path.join(dist, 'robots.txt'), `User-agent: *\nAllow: /\nSitemap: ${origin}/sitemap.xml\n`);
+const xlinks = alternates.map((a) => `<xhtml:link rel="alternate" hreflang="${a.hreflang}" href="${a.href}"/>`).join('') + `<xhtml:link rel="alternate" hreflang="x-default" href="${origin}/"/>`;
+await writeFile(path.join(dist, 'sitemap.xml'), `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:xhtml="http://www.w3.org/1999/xhtml">${LANGS.map((l) => `<url><loc>${origin}${l.path}</loc>${xlinks}</url>`).join('')}</urlset>\n`);
+await writeFile(path.join(dist, '_headers'), `/*
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: strict-origin-when-cross-origin
+  X-Frame-Options: DENY
+  Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; object-src 'none'; base-uri 'self'; frame-ancestors 'none'
+/media/*
+  Cache-Control: public, max-age=86400
+`);
+await writeFile(path.join(dist, '_redirects'), [
+  '/', ...LANGS.map((l) => l.path).filter((p) => p !== '/'),
+].map((p) => `${p}index.html ${p} 301`).concat([
+  // 舊 CarPlay 圖含真實地圖與地址；舊網址永久導向已撤換的無地圖版本。
+  '/media/carplay.png /media/carplay-music.png 302',
+  '/media/carplay-hevc.png /media/carplay-music.png 302',
+]).join('\n') + '\n');
+console.log(`Built ${LANGS.map((l) => l.code).join(', ')} pages in ${dist}`);

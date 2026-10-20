@@ -1,0 +1,522 @@
+// 无线 CarPlay 会话的控制面编排（接收端）。行为对应 MacPlay Engine/protocol/cpStack.ts：
+// 手机连上 _airplay._tcp 控制口后，依次 /info → /pair-setup → /pair-verify（M4 之后整条连接加密）→
+// /auth-setup → 会话级 SETUP（计时口、事件口）→ 流级 SETUP（屏幕 110，音频暂时只占位）→ RECORD。
+// 屏幕流解密后喂 H264Sink（同一套 wire 推给桌宠／App）；桌宠的触控经事件通道变成 HID 报告。
+// 音频（100/101/102）收 ChaCha20-Poly1305 加密的 RTP，AAC-LC 解码进 AVAudioEngine 出声（见 CarPlayAudio.swift）。
+// iAP 数据通道（130）、仪表盘副屏还没做：只回最小应答并记日志。
+import Foundation
+import Network
+import CryptoKit
+import H264
+
+package struct CarPlaySessionConfig {
+    package var info: InfoConfig
+    package var port: UInt16 = 7000
+    package var serviceName = "HomePlay"
+    /// 会话级 SETUP 是否声明 iAPChannel（MacPlay 声明且实现了 iAP 数据通道；我们还没实现，默认不声明）
+    package var advertiseIAPChannel = false
+    /// 选定的 iPhone 蓝牙地址：只探这台的 _carplay-ctrl
+    package var phoneBluetoothAddress: String?
+    package var probeForPhone = true
+    package init(info: InfoConfig) { self.info = info }
+}
+
+/// ControlCipher → 事件通道要的 MessageSealer（ControlCipher.feed 自己缓存不完整的帧）
+final class ControlCipherSealer: MessageSealer {
+    let cipher: ControlCipher
+    init(_ cipher: ControlCipher) { self.cipher = cipher }
+    func seal(_ plain: Data) throws -> Data { Data(try cipher.encrypt([UInt8](plain))) }
+    func open(_ buffered: Data) throws -> (plain: Data, rest: Data) { (Data(try cipher.feed([UInt8](buffered))), Data()) }
+}
+
+package final class CarPlaySession {
+    package private(set) var config: CarPlaySessionConfig
+    /// 自动匹配/重按发现手机后回填地址（CtrlProbe 每次探测时读 config）
+    package func setPhoneBluetoothAddress(_ address: String) {
+        config.phoneBluetoothAddress = address
+    }
+    private let store: PairingStore
+    private let signer: AccessorySigner
+    private let sink: H264Sink
+    private let queue = DispatchQueue(label: "session.control")
+    private var discovery: Discovery?
+    private var probe: CtrlProbe?
+    private var conns: [ObjectIdentifier: ControlConnection] = [:]
+    private var live: ControlConnection?
+    private var heartbeat: DispatchSourceTimer?
+
+    package var onLog: ((String) -> Void)?
+    package var onActive: (() -> Void)?
+    package var onEnded: ((String) -> Void)?
+    /// 手机的控制连接一接入就叫（比 RECORD 早）：用来取消 IPv6 备用重试
+    package var onControlConnected: ((String) -> Void)?
+
+    package init(config: CarPlaySessionConfig, store: PairingStore, signer: AccessorySigner, sink: H264Sink) {
+        self.config = config; self.store = store; self.signer = signer; self.sink = sink
+    }
+
+    /// 广播 _airplay._tcp 并开始叫手机回连。返回控制口端口。
+    @discardableResult
+    package func start() throws -> UInt16 {
+        let id = store.identity
+        let txt = DiscoveryTXT(deviceid: config.info.deviceID, pi: id.pairingId, pk: id.publicKeyHex)
+        var t = txt; t.model = config.info.model
+        let d = Discovery(serviceName: config.serviceName, txt: t)
+        let port = try d.start(port: config.port) { [weak self] c in self?.queue.async { self?.accept(c) } }
+        discovery = d
+        log("控制口 \(port)，广播 _airplay._tcp（\(config.serviceName)）")
+        startProbe()
+        let hb = DispatchSource.makeTimerSource(queue: queue)
+        hb.schedule(deadline: .now() + 1, repeating: 1)
+        hb.setEventHandler { [weak self] in self?.checkHeartbeat() }
+        hb.resume(); heartbeat = hb
+        return port
+    }
+
+    package func stop() {
+        queue.sync {
+            probe?.stop(); probe = nil
+            heartbeat?.cancel(); heartbeat = nil
+            for c in conns.values { c.close() }
+            conns = [:]; live = nil
+            discovery?.stop(); discovery = nil
+        }
+    }
+
+    /// 桌宠的 0..1 触控 → HID 报告
+    package func sendTouch(x: Double, y: Double, down: Bool) {
+        queue.async { [self] in
+            live?.event?.sendTouches([(id: 0, x: x, y: y, down: down)],
+                                     streamWidth: config.info.main.widthPixels, streamHeight: config.info.main.heightPixels)
+        }
+    }
+    package func requestKeyframe() { queue.async { [self] in live?.event?.forceKeyFrame() } }
+    /// 桌宠的媒体键 → CarPlay HID（播放/暂停/上一首/下一首）。没有 live 会话就丢。
+    package func sendMedia(_ button: HID.MediaButton) { queue.async { [self] in live?.event?.sendMedia(button) } }
+    /// 桌宠/诊断触发 Siri（与按车机 Siri 键等价）
+    /// 会话还没 live 时先挂起，RECORD 之后补发（F5 可以先按、桌宠再连）
+    private var pendingSiri = false
+    package func requestSiri() {
+        queue.async { [self] in
+            if let e = live?.event { e.sendSiri() }
+            else { pendingSiri = true }
+        }
+    }
+
+    /// 用户切换手机：结束旧手机的控制会话（含加密控制通道），按新地址重新叫回连。
+    /// 不动 Bonjour 发现和心跳：控制口不用重启，新手机可以直接连回来。
+    /// then 在会话队列上调用（调用方要回主队列请自己转）。
+    package func switchPhone(to address: String, then: (() -> Void)? = nil) {
+        queue.async { [self] in
+            config.phoneBluetoothAddress = address
+            if let cc = live {
+                live = nil
+                cc.close()
+                conns[ObjectIdentifier(cc)] = nil
+                log("切换手机：结束旧会话")
+                onEnded?("切换手机")
+            }
+            for c in conns.values { c.close() }
+            conns = [:]
+            probe?.stop(); probe = nil
+            startProbe()
+            log("切换手机：重新叫 \(address) 回连")
+            then?()
+        }
+    }
+
+    // MARK: 内部
+
+    private func log(_ s: String) { onLog?(s) }
+
+    private func startProbe() {
+        guard config.probeForPhone, probe == nil else { return }
+        let p = CtrlProbe(deviceId: config.info.deviceID, phoneBluetoothAddress: config.phoneBluetoothAddress)
+        p.onLog = { [weak self] s in self?.log(s) }
+        p.start(); probe = p
+    }
+
+    private func accept(_ c: NWConnection) {
+        guard discovery != nil else { c.cancel(); return }   // 已 stop
+        let cc = ControlConnection(conn: c, session: self)
+        conns[ObjectIdentifier(cc)] = cc
+        log("控制连接来自 \(cc.peerHost)")
+        onControlConnected?(cc.peerHost)
+        cc.start()
+    }
+
+    fileprivate func connectionClosed(_ cc: ControlConnection) {
+        conns[ObjectIdentifier(cc)] = nil
+        cc.close()
+        if live === cc { end("控制连接关闭") } else if live == nil { startProbe() }
+    }
+
+    fileprivate func became(live cc: ControlConnection) {
+        if let old = live, old !== cc {   // 第二条会话顶替旧的：旧的先关，免得两路屏幕流同时喂 sink
+            conns[ObjectIdentifier(old)] = nil
+            old.close()
+        }
+        live = cc
+        probe?.stop(); probe = nil   // 真的开始了才停叫回连
+        log("RECORD：会话开始")
+        onActive?()
+        if pendingSiri { pendingSiri = false; cc.event?.sendSiri() }
+    }
+
+    fileprivate func end(_ why: String) {
+        guard let cc = live else { return }
+        live = nil
+        cc.close()
+        conns[ObjectIdentifier(cc)] = nil
+        log("会话结束：\(why)")
+        onEnded?(why)
+        startProbe()   // 手机还在附近就再叫它回来
+    }
+
+    private func checkHeartbeat() {
+        for c in conns.values where c !== live && Date().timeIntervalSince(c.acceptedAt) > 60 {
+            log("回收 60 秒没进会话的控制连接 \(c.peerHost)")
+            connectionClosed(c)
+        }
+        guard let cc = live else { return }
+        let idle = Date().timeIntervalSince(max(cc.lastRead, cc.lastFrame))
+        if idle > 15 { end("15 秒没有控制消息也没有画面") }
+    }
+
+    // ControlConnection 用的依赖
+    fileprivate var pairingStore: PairingStore { store }
+    fileprivate var accessorySigner: AccessorySigner { signer }
+    fileprivate var h264Sink: H264Sink { sink }
+    fileprivate var controlQueue: DispatchQueue { queue }
+    fileprivate func note(_ s: String) { log(s) }
+}
+
+// MARK: - 一条控制连接
+
+private final class ControlConnection {
+    let conn: NWConnection
+    unowned let session: CarPlaySession
+    let peerHost: String
+    var parser = RTSPParser()
+    var cipher: ControlCipher?
+    let pairSetup: PairSetup
+    let pairVerify: PairVerify
+    var screen: ScreenStream?
+    var adapter: ScreenStreamH264Adapter?
+    var event: EventChannel?
+    var timing: TimingServer?
+    var audio: [CarPlayAudioStream] = []
+    var lastRead = Date()
+    var lastFrame = Date.distantPast
+    var closed = false
+    var endAfterReply = false
+    let acceptedAt = Date()
+    /// pair-verify 通过、控制通道已加密：之后的请求才算这台手机发的
+    var authenticated: Bool { pairVerify.verified && cipher != nil }   // 整个会话的 TEARDOWN：应答发出去之后再结束
+
+    init(conn: NWConnection, session: CarPlaySession) {
+        self.conn = conn; self.session = session
+        pairSetup = PairSetup(store: session.pairingStore)
+        pairVerify = PairVerify(store: session.pairingStore)
+        if case .hostPort(let h, _) = conn.endpoint {
+            switch h {
+            case .ipv4(let a): peerHost = "\(a)"
+            case .ipv6(let a): peerHost = "\(a)"
+            case .name(let n, _): peerHost = n
+            @unknown default: peerHost = "?"
+            }
+        } else { peerHost = "?" }
+    }
+
+    func start() {
+        conn.stateUpdateHandler = { [weak self] st in
+            guard let self else { return }
+            switch st {
+            case .failed, .cancelled: self.session.controlQueue.async { self.session.connectionClosed(self) }
+            default: break
+            }
+        }
+        conn.start(queue: session.controlQueue)
+        receive()
+    }
+
+    func close() {
+        guard !closed else { return }
+        closed = true
+        conn.cancel()
+        screen?.stop(); screen = nil
+        event?.stop(); event = nil
+        timing?.stop(); timing = nil
+        for a in audio { a.close() }
+        audio = []
+    }
+
+    private func receive() {
+        conn.receive(minimumIncompleteLength: 1, maximumLength: 1 << 16) { [weak self] data, _, done, err in
+            guard let self, !self.closed else { return }
+            if let data, !data.isEmpty { self.lastRead = Date(); self.ingest(data) }
+            if done || err != nil { self.session.connectionClosed(self); return }
+            self.receive()
+        }
+    }
+
+    private func ingest(_ data: Data) {
+        var plain = data
+        if let cipher {
+            do { plain = Data(try cipher.feed([UInt8](data))) }
+            catch { session.note("控制通道解密失败：\(error)"); session.connectionClosed(self); return }
+        }
+        let reqs = parser.feed(plain)
+        if parser.overflowed { session.note("控制请求过大，断开 \(peerHost)"); session.connectionClosed(self); return }
+        for req in reqs {
+            if req.isResponse { continue }
+            let res: RTSPResponse
+            do { res = try handle(req) } catch {
+                session.note("处理 \(req.method) \(req.path) 出错：\(error)")
+                res = RTSPResponse(status: 500)
+            }
+            let out = rtspSerialize(res, for: req)
+            let ending = endAfterReply
+            do {
+                conn.send(content: try cipher.map { Data(try $0.encrypt([UInt8](out))) } ?? out,
+                          completion: .contentProcessed { [weak self] _ in
+                    guard ending, let self else { return }
+                    self.session.controlQueue.async {
+                        if self.session.isLive(self) { self.session.end("手机结束会话") } else { self.close() }
+                    }
+                })
+            } catch { session.note("控制通道加密失败：\(error)") }
+            // pair-verify M4 用明文回；从下一条起加密
+            if cipher == nil, let k = pairVerify.controlKeys {
+                cipher = ControlCipher(keys: k)
+                session.note("控制通道已加密")
+            }
+        }
+    }
+
+    private static let plist = "application/x-apple-binary-plist"
+    private static let pairing = "application/pairing+tlv8"
+    private static let octet = "application/octet-stream"
+
+    private func handle(_ req: RTSPMessage) throws -> RTSPResponse {
+        let path = req.path.lowercased()
+        let chatty = req.method == "OPTIONS" || path.hasSuffix("/feedback")
+        if !chatty { session.note("< \(req.method) \(req.path)（\(req.body.count)B）") }
+
+        // 只有 /info、配对两步可以在认证前走；其余必须 pair-verify 通过且已加密（MacPlay 的流程也是如此）
+        let preAuthOK = path.hasSuffix("/info") || path.hasSuffix("/pair-setup") || path.hasSuffix("/pair-verify") || req.method == "OPTIONS"
+        if !preAuthOK && !authenticated {
+            session.note("拒绝未认证的 \(req.method) \(req.path)")
+            return RTSPResponse(status: 470)
+        }
+        switch req.method {
+        case "SETUP": return try setup(req)
+        case "RECORD":
+            session.became(live: self)
+            return RTSPResponse(status: 200)
+        case "TEARDOWN": return teardown(req)
+        default: break
+        }
+        if path.hasSuffix("/pair-setup") {
+            return RTSPResponse(status: 200, headers: [("Content-Type", Self.pairing)], body: Data(pairSetup.handle([UInt8](req.body))))
+        }
+        if path.hasSuffix("/pair-verify") {
+            return RTSPResponse(status: 200, headers: [("Content-Type", Self.pairing)], body: Data(pairVerify.handle([UInt8](req.body))))
+        }
+        if path.hasSuffix("/auth-setup") {
+            guard let body = try AuthSetup.respond(body: [UInt8](req.body), signer: session.accessorySigner) else {
+                return RTSPResponse(status: 400)
+            }
+            session.note("auth-setup 已签（证书 \(session.accessorySigner.certificate.count)B）")
+            return RTSPResponse(status: 200, headers: [("Content-Type", Self.octet)], body: Data(body))
+        }
+        if path.hasSuffix("/info") {
+            let info = CarPlayPlist.info(session.config.info)
+            let formats = (info["audioFormats"] as? [[String: Any]]) ?? []
+            let summary = formats.map { "\($0["type"] ?? "?")/\($0["audioType"] ?? "?")=\($0["audioOutputFormats"] ?? "?")" }.joined(separator: " ")
+            session.note("回 /info：features=0x\(String((info["features"] as? Int) ?? 0, radix: 16)) audioFormats[\(formats.count)] \(summary)")
+            return RTSPResponse(status: 200, headers: [("Content-Type", Self.plist)], body: try CarPlayPlist.infoResponse(session.config.info))
+        }
+        if req.method == "POST", path.hasSuffix("/command") {
+            if let d = try? BPlist.decodeDict(req.body), let t = d["type"] as? String { session.note("command \(t)（ack）") }
+            return RTSPResponse(status: 200)
+        }
+        if req.method == "POST", path.hasSuffix("/feedback") {
+            // 时钟驱动的缓冲流（102）没有播放位置会被手机判死拆掉；照 MacPlay 报
+            // origin 采样 + 按真实时间外推的当前位置，迟后量 = 协商的 audioLatencyMs
+            guard !audio.isEmpty else { return RTSPResponse(status: 200) }
+            let nowNs = DispatchTime.now().uptimeNanoseconds
+            let streams: [[String: Any]] = audio.map { a in
+                var s: [String: Any] = ["type": a.type, "sampleRate": a.sampleRate]
+                if let o = a.origin {
+                    let latencySec = Double(a.latencyMs) / 1000
+                    let elapsedSec = max(0, Double(Int64(bitPattern: nowNs &- o.atNs)) / 1e9 - latencySec)
+                    let play = o.firstSample &+ UInt32(elapsedSec * Double(a.sampleRate))
+                    if let id = a.connectionID { s["streamConnectionID"] = id }
+                    s["timestamp"] = Int64(bitPattern: timing?.syncedNTP() ?? 0)
+                    s["timestampRawNs"] = Int64(bitPattern: nowNs)
+                    s["sampleTime"] = play
+                }
+                return s
+            }
+            return RTSPResponse(status: 200, headers: [("Content-Type", Self.plist)], body: try BPlist.encode(["streams": streams]))
+        }
+        if !chatty { session.note("未处理 \(req.method) \(req.path)（回 200）") }
+        return RTSPResponse(status: 200)
+    }
+
+    private func setup(_ req: RTSPMessage) throws -> RTSPResponse {
+        let dict = try BPlist.decodeDict(req.body)
+        guard authenticated, let shared = pairVerify.sharedSecret else {
+            session.note("SETUP 在 pair-verify 之前到了")
+            return RTSPResponse(status: 470)
+        }
+        if let streams = dict["streams"] as? [[String: Any]] {
+            var resp: [[String: Any]] = []
+            for sd in streams {
+                let type = (sd["type"] as? NSNumber)?.intValue ?? -1
+                let sid = (sd["streamConnectionID"] as? NSNumber)?.uint64Value ?? 0
+                switch type {
+                case CarPlayStream.mainScreen:
+                    let key = deriveStreamKey(sharedSecret: shared, salt: StreamKeyInfo.salt(streamConnectionID: sid),
+                                              info: "DataStream-Output-Encryption-Key")
+                    screen?.stop(); screen = nil; adapter = nil   // 重复的屏幕 SETUP：旧的先停
+                    let s = ScreenStream(key: Data(key))
+                    let a = ScreenStreamH264Adapter(sink: session.h264Sink)
+                    a.attach(to: s)
+                    let onFrame = s.onFrame
+                    s.onFrame = { [weak self] nals, key in
+                        self?.session.controlQueue.async { self?.lastFrame = Date() }
+                        onFrame?(nals, key)
+                    }
+                    s.onError = { [weak self] e in self?.session.note("屏幕流：\(e)") }
+                    let port = try s.start()
+                    screen = s; adapter = a
+                    session.note("SETUP 屏幕（110，dataPort \(port)，id \(sid)）")
+                    resp.append(["type": type, "dataPort": Int(port)])
+                case CarPlayStream.mainAudio, CarPlayStream.altAudio, CarPlayStream.mainHighAudio:
+                    // 同类型的重复 SETUP：旧的先收掉
+                    audio.removeAll { old in
+                        guard old.type == type else { return false }
+                        old.close(); return true
+                    }
+                    let key = deriveStreamKey(sharedSecret: shared, salt: StreamKeyInfo.salt(streamConnectionID: sid),
+                                              info: "DataStream-Output-Encryption-Key")
+                    let fmt = (sd["audioFormat"] as? NSNumber)?.intValue ?? 0
+                    let latencyMs = (sd["audioLatencyMs"] as? NSNumber)?.intValue ?? 0
+                    let (codec, canPlay) = audioCodec(fromFormat: fmt)
+                    // type 100（MainAudio）帶 dataPort＝手機要麥克風（Siri/電話）。上行是 Opus，
+                    // 密鑰是 Output 的鏡像；包格式照 MacPlay mic/src/lib.rs。
+                    let phoneMicPort = (sd["dataPort"] as? NSNumber)?.uint16Value ?? 0
+                    session.note("SETUP 流 \(type) 参数：fmt=0x\(String(fmt, radix: 16)) dataPort=\(phoneMicPort) audioType=\(sd["audioType"] as? String ?? "?")")
+                    var mic: MicUplink?
+                    if type == CarPlayStream.mainAudio, phoneMicPort > 0 {
+                        // 上行负载跟着下行协商：Opus 位在就编 Opus；否则手机要的是 PCM
+                        //（无线 Siri 也可能给 fmt=0x40/24000 单声道），按 SETUP 的率/声道发
+                        // 16-bit 大端 PCM。MacPlay cpStack 同样 `isOpus ? opus : pcm`。
+                        let wire: MicUplink.WireCodec
+                        let rate: Int
+                        let micChannels: Int
+                        if fmt & 0x70000000 != 0 {
+                            wire = .opus
+                            rate = (fmt & 0x40000000) != 0 ? 48000 : ((fmt & 0x20000000) != 0 ? 24000 : 16000)
+                            micChannels = 1
+                        } else {
+                            wire = .pcm
+                            rate = codec.rate
+                            micChannels = codec.channels
+                        }
+                        let micKey = deriveStreamKey(sharedSecret: shared, salt: StreamKeyInfo.salt(streamConnectionID: sid),
+                                                     info: "DataStream-Input-Encryption-Key")
+                        let framesPerPacket = (sd["framesPerPacket"] as? NSNumber)?.intValue ?? 0
+                        let frameMs = framesPerPacket > 0 ? max(5, framesPerPacket * 1000 / rate) : 20
+                        let bitrate = rate <= 24000 ? 48000 : (rate <= 32000 ? 64000 : 96000)
+                        let m = MicUplink(codec: wire, key: Data(micKey), payloadType: type, sampleRate: rate,
+                                          channels: micChannels, frameMs: frameMs, bitrate: bitrate,
+                                          host: peerHost, port: phoneMicPort)
+                        m.onLog = { [weak self] s in self?.session.note(s) }
+                        mic = m
+                    }
+                    let a = try CarPlayAudioStream(
+                        type: type, connectionID: sd["streamConnectionID"] as? NSNumber,
+                        key: Data(key), codec: codec,
+                        latencyMs: latencyMs > 0 ? latencyMs : (type == CarPlayStream.mainHighAudio ? 1000 : 0),
+                        canPlay: canPlay, mic: mic)
+                    mic?.start()   // Siri 可能先要麥克風、後才有下行音訊；SETUP 一完成就開始送
+                    a.onLog = { [weak self] s in self?.session.note(s) }
+                    let described = sd["audioType"] as? String ?? "?"
+                    let codecName = canPlay ? (codec.isAAC ? "AAC-LC" : (codec.isOpus ? "Opus" : "PCM")) : "暂不解"
+                    let micNote = mic.map { "，麦克风上行 \($0.description)" } ?? ""
+                    session.note("SETUP 音频 \(type)（\(described)，\(codecName) \(codec.rate)×\(codec.channels)，dataPort \(a.dataPort)\(micNote)）")
+                    audio.append(a)
+                    resp.append(["type": type, "dataPort": Int(a.dataPort), "controlPort": Int(a.controlPort),
+                                 "streamConnectionID": sd["streamConnectionID"] ?? 0])
+                default:
+                    session.note("SETUP 流 \(type) 还没实现，不回")
+                }
+            }
+            return RTSPResponse(status: 200, headers: [("Content-Type", Self.plist)], body: try BPlist.encode(["streams": resp]))
+        }
+
+        // 会话级：计时口、事件口（重复 SETUP 时旧的先停）
+        timing?.stop(); timing = nil
+        event?.stop(); event = nil
+        if let name = dict["name"] as? String { session.note("手机：\(name) \(dict["model"] ?? "")") }
+        let t = TimingServer()
+        let timingPort = try t.listen()
+        if let peer = (dict["timingPort"] as? NSNumber)?.uint16Value, peer > 0 { t.start(peerHost: peerHost, peerPort: peer) }
+        t.onStats = { [weak self] s in self?.session.note(s) }
+        timing = t
+        let ev = EventChannel(sealer: { [weak self] in
+            guard let s = self?.pairVerify.sharedSecret else { return nil }
+            // 事件通道不交换方向：我们用 Events-Write 写、Events-Read 读
+            return ControlCipherSealer(ControlCipher(
+                readKey: PairingCrypto.hkdfSHA512(s, salt: "Events-Salt", info: "Events-Read-Encryption-Key"),
+                writeKey: PairingCrypto.hkdfSHA512(s, salt: "Events-Salt", info: "Events-Write-Encryption-Key")))
+        })
+        ev.onConnected = { [weak self] in self?.session.note("事件通道已连上") }
+        ev.onRequest = { [weak self] m in self?.session.note("事件通道请求 \(m.method) \(m.path)") }
+        ev.onError = { [weak self] e in self?.session.note("事件通道：\(e)") }
+        let eventPort = try ev.start()
+        event = ev
+        session.note("SETUP 会话（timingPort \(timingPort)，eventPort \(eventPort)）")
+        var body = try BPlist.decodeDict(try CarPlayPlist.setupSessionResponse(
+            timingPort: Int(timingPort), eventPort: Int(eventPort), hevc: session.config.info.hevc))
+        if !session.config.advertiseIAPChannel, var f = body["enabledFeatures"] as? [String] {
+            f.removeAll { $0 == "iAPChannel" }; body["enabledFeatures"] = f
+        }
+        return RTSPResponse(status: 200, headers: [("Content-Type", Self.plist)], body: try BPlist.encode(body))
+    }
+
+    private func teardown(_ req: RTSPMessage) -> RTSPResponse {
+        // 整体 TEARDOWN：原因可能在 body（Apple 惯例 plist）也可能在头里，都打出来
+        if let dict = try? BPlist.decodeDict(req.body), !dict.isEmpty {
+            session.note("TEARDOWN body：\(dict.map { "\($0.key)=\($0.value)" }.joined(separator: " "))")
+        } else if !req.body.isEmpty {
+            session.note("TEARDOWN body[\(req.body.count)B]：\(req.body.map { String(format: "%02x", $0) }.joined())")
+        }
+        if !req.headers.isEmpty {
+            session.note("TEARDOWN 头：\(req.headers.map { "\($0.0): \($0.1)" }.joined(separator: " | "))")
+        }
+        let types = ((try? BPlist.decodeDict(req.body))?["streams"] as? [[String: Any]])?
+            .compactMap { ($0["type"] as? NSNumber)?.intValue } ?? []
+        if types.isEmpty {
+            session.note("TEARDOWN（整个会话）")
+            endAfterReply = true
+            return RTSPResponse(status: 200)
+        }
+        session.note("TEARDOWN 流 \(types)")
+        for t in types {
+            if t == CarPlayStream.mainScreen { screen?.stop(); screen = nil; adapter = nil }
+            audio.removeAll { a in
+                guard a.type == t else { return false }
+                a.close(); return true
+            }
+        }
+        return RTSPResponse(status: 200)
+    }
+}
+
+extension CarPlaySession {
+    fileprivate func isLive(_ cc: ControlConnection) -> Bool { live === cc }
+}

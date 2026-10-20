@@ -1,0 +1,26 @@
+HomePlay
+
+Copyright (C) 2026 Aaron
+Licensed under the GNU General Public License v3.0 or later. See LICENSE.
+
+Origin:
+  The 3D HomeView pet, the loopback receiver, the H.264 data plane and the iAP2/MFi
+  probe were written in the WindowShade repository (tools/homeview-pet, tools/carplay)
+  and moved here at WindowShade commit b60b402.
+
+Protocol references:
+  The CarPlay session control plane in this project (Sources/Session) is a Swift
+  re-implementation that follows the behaviour of MacPlay and LIVI:
+    MacPlay: https://github.com/Roylyl/MacPlay (GPL-3.0-or-later)
+    LIVI: https://github.com/f-io/LIVI — original author Lasse Heitgres and LIVI contributors
+      (GPL-3.0-or-later)
+    DiPlay: https://github.com/shihabal3amri/DiPlay (referenced by MacPlay)
+  Their copyrights are retained; HomePlay is distributed under the same licence family.
+
+Authentication material:
+  HomePlay contains no accessory identity and never reads one bundled with another
+  project. The user supplies identity.pk8 + certificate.p7b; its origin and legality
+  are the user's responsibility. Tools never print identity contents.
+
+No Apple endorsement or certification is claimed. CarPlay and HomeView are
+trademarks of Apple Inc.; they are used here only to describe compatibility.

@@ -1,0 +1,6 @@
+"NSAppleEventsUsageDescription" = "当你开启「Mac 正在播放」时，读取「音乐」或 Spotify 的曲目和进度，显示在桌宠屏幕上。";
+"NSCalendarsFullAccessUsageDescription" = "在模组表盘显示下一个行程。";
+"NSCameraUsageDescription" = "可选：用摄像头找到你的位置、估计房间光线，让桌宠转向你并调整光影。画面只在这台 Mac 上即时处理，不会保存。";
+"NSBluetoothAlwaysUsageDescription" = "用蓝牙和 iPhone 配对，建立无线 CarPlay 连接。";
+"NSLocalNetworkUsageDescription" = "在局域网上接收 iPhone 传来的 CarPlay 画面与声音。";
+"NSMicrophoneUsageDescription" = "只用于 CarPlay 的 Siri 和电话通话。";

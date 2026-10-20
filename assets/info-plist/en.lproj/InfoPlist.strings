@@ -1,0 +1,6 @@
+"NSAppleEventsUsageDescription" = "Reads the current track and progress from Music or Spotify when you enable Mac Now Playing for the desk pet screen.";
+"NSCalendarsFullAccessUsageDescription" = "Shows your next event on the Modular face.";
+"NSCameraUsageDescription" = "Optionally turns the pet toward you and estimates room lighting. Frames are processed on this Mac and are never saved.";
+"NSBluetoothAlwaysUsageDescription" = "Pairs with your iPhone over Bluetooth to set up wireless CarPlay.";
+"NSLocalNetworkUsageDescription" = "Receives CarPlay video and audio from your iPhone over the local network.";
+"NSMicrophoneUsageDescription" = "Uses the Mac's microphone only for Siri and phone calls in CarPlay.";

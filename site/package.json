@@ -1,0 +1,14 @@
+{
+  "name": "homeplay-site",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "dev": "node scripts/serve.mjs",
+    "check": "node scripts/check.mjs",
+    "deploy": "npm run build && npm run check && npx wrangler pages deploy dist --project-name homeplay --branch main"
+  },
+  "devDependencies": {
+    "wrangler": "^4.131.1"
+  }
+}

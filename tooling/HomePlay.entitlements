@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <!-- Hardened Runtime 下用 NSAppleScript 控制「音樂」/Spotify 必需；
+       使用者仍會在第一次使用時看到系統的自動化授權對話框。 -->
+  <key>com.apple.security.automation.apple-events</key>
+  <true/>
+  <!-- Hardened Runtime 下用麦克风（Siri/電話上行）必需；沒有它系統會直接拒絕、不彈授權框。 -->
+  <key>com.apple.security.device.audio-input</key>
+  <true/>
+  <!-- 追人（摄像头）：Hardened Runtime 下没有它，AVCapture 会直接 denied、不弹授权框。 -->
+  <key>com.apple.security.device.camera</key>
+  <true/>
+</dict>
+</plist>

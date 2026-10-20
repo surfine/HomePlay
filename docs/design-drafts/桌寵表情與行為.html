@@ -1,0 +1,604 @@
+<title>HomeView 表情稿</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* 版面：左邊一台會動的 HomeView 當主角，右邊是操作與說明；往下是表情表、觸發表、CarPlay、守則、競品 */
+:root{
+  --bg:#e8eceb; --paper:#f6f8f7; --ink:#172225; --muted:#5a6a6b; --line:#cdd7d5;
+  --teal:#2f6a63; --blush:#d9798c; --shell:#fbfbfa; --shell-edge:#dfe3e2; --bezel:#0e0f10;
+  --shadow:rgba(20,40,40,.18);
+  --f-display:"Fredoka","PingFang TC","Noto Sans TC",system-ui,sans-serif;
+  --f-body:"PingFang TC","Noto Sans TC","Microsoft JhengHei",system-ui,sans-serif;
+  --f-mono:"JetBrains Mono",ui-monospace,"SF Mono",Menlo,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#101718; --paper:#172123; --ink:#e4ecea; --muted:#93a3a2; --line:#2a3739;
+  --teal:#74b6ab; --blush:#ee9aab; --shell:#eceeed; --shell-edge:#c9cfcd; --bezel:#050606;
+  --shadow:rgba(0,0,0,.5); color-scheme:dark }}
+:root[data-theme="dark"]{
+  --bg:#101718; --paper:#172123; --ink:#e4ecea; --muted:#93a3a2; --line:#2a3739;
+  --teal:#74b6ab; --blush:#ee9aab; --shell:#eceeed; --shell-edge:#c9cfcd; --bezel:#050606;
+  --shadow:rgba(0,0,0,.5); color-scheme:dark }
+
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:15px;line-height:1.65;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:32px 64px}
+.wrap{max-width:1080px;margin:0 auto;display:flex;flex-direction:column;gap:64px}
+h1,h2,h3{font-family:var(--f-display);font-weight:600;text-wrap:balance;margin:0;line-height:1.2}
+h1{font-size:clamp(34px,6vw,54px);letter-spacing:-.01em}
+h2{font-size:26px}
+h3{font-size:17px}
+p{margin:0}
+.eyebrow{font-family:var(--f-mono);font-size:12px;letter-spacing:.08em;color:var(--muted);text-transform:uppercase}
+.lede{max-width:62ch;color:var(--muted);font-size:16px}
+section{display:flex;flex-direction:column;gap:20px}
+.sec-head{display:flex;flex-direction:column;gap:6px;max-width:66ch}
+.sec-head p{color:var(--muted)}
+a{color:var(--teal)}
+code,.mono{font-family:var(--f-mono);font-size:12.5px}
+
+/* ---------- hero ---------- */
+header{display:flex;flex-direction:column;gap:14px}
+.hero{display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,1fr);gap:40px;align-items:center}
+.stage{position:relative;display:flex;justify-content:center;align-items:center;padding-block:28px 12px;
+  background:radial-gradient(60% 55% at 50% 45%,var(--paper),transparent 70%)}
+.device{position:relative;width:min(330px,74vw);aspect-ratio:1/1.12;touch-action:none;cursor:grab;user-select:none;-webkit-user-select:none}
+.device:active{cursor:grabbing}
+.device:focus-visible{outline:2px dashed var(--teal);outline-offset:10px;border-radius:24px}
+.head,.stand{position:absolute;inset:0;transform-origin:50% 85%;will-change:transform}
+.breath{position:absolute;inset:0;animation:breath 4.2s ease-in-out infinite}
+@keyframes breath{50%{transform:translateY(-2px)}}
+.part{position:absolute;transition:transform .75s cubic-bezier(.34,1.45,.5,1),opacity .5s ease}
+.shell{left:7%;top:1%;width:88%;height:78%;background:linear-gradient(90deg,var(--shell-edge),var(--shell) 40%);border-radius:17%;box-shadow:0 10px 24px var(--shadow)}
+.board{left:12%;top:8%;width:76%;height:62%;border-radius:12%;background:#3c4a4c;opacity:0}
+.board::before,.board::after{content:"";position:absolute;background:#1d2526;border-radius:3px}
+.board::before{left:62%;top:20%;width:14%;height:14%}
+.board::after{left:62%;top:55%;width:14%;height:22%}
+.bezel{left:4%;top:0;width:88%;height:78%;background:var(--bezel);border-radius:17%;padding:4.4%}
+.bezel canvas{display:block;width:100%;height:100%;border-radius:13%}
+.cam{position:absolute;left:50%;top:1.4%;width:2.4%;aspect-ratio:1;border-radius:50%;background:#2a2d30;transform:translateX(-50%)}
+.glass{left:4%;top:0;width:88%;height:78%;border-radius:17%;background:linear-gradient(135deg,rgba(255,255,255,.22),rgba(255,255,255,.04));
+  border:1px solid rgba(255,255,255,.35);opacity:0;pointer-events:none}
+.dome{left:31%;top:68%;width:38%;height:22%;border-radius:50% 50% 46% 46%/80% 80% 20% 20%;
+  background:radial-gradient(70% 90% at 40% 25%,var(--shell),var(--shell-edge));box-shadow:0 6px 14px var(--shadow)}
+.base{left:27%;top:88%;width:46%;height:8%;border-radius:50%;background:radial-gradient(60% 80% at 45% 30%,var(--shell),var(--shell-edge));box-shadow:0 8px 14px var(--shadow)}
+.floor{position:absolute;left:18%;right:18%;bottom:-1%;height:7%;border-radius:50%;background:radial-gradient(closest-side,var(--shadow),transparent)}
+.device.apart .glass{transform:translate(-36%,-7%) rotate(-5deg);opacity:.7}
+.device.apart .bezel{transform:translate(-16%,-3%)}
+.device.apart .board{transform:translate(10%,-1%);opacity:1}
+.device.apart .shell{transform:translate(28%,1%)}
+.device.apart .dome{transform:translate(44%,-4%)}
+.device.apart .base{transform:translate(46%,34%)}
+.head.shake{animation:shake .6s ease-in-out}
+@keyframes shake{20%{transform:rotate(-7deg)}45%{transform:rotate(6deg)}70%{transform:rotate(-3deg)}100%{transform:rotate(0)}}
+.cursor{position:absolute;width:22px;height:22px;pointer-events:none;opacity:0;transition:transform 1.4s cubic-bezier(.3,.7,.3,1),opacity .3s}
+.cursor svg{display:block;width:100%;height:100%}
+
+.panel{display:flex;flex-direction:column;gap:18px;min-width:0}
+.now{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap}
+.now strong{font-family:var(--f-display);font-size:30px;font-weight:600}
+.now span{color:var(--muted)}
+.caption{min-height:3.3em;padding:12px 14px;border-left:3px solid var(--teal);background:var(--paper);border-radius:0 10px 10px 0}
+.btns{display:flex;flex-wrap:wrap;gap:10px}
+button{font:inherit;font-weight:600;color:var(--ink);background:var(--paper);border:1px solid var(--line);border-radius:999px;padding:9px 16px;cursor:pointer;transition:transform .15s,border-color .15s}
+button:hover{border-color:var(--teal)}
+button:active{transform:scale(.97)}
+button:focus-visible{outline:2px solid var(--teal);outline-offset:2px}
+button:disabled{opacity:.45;cursor:default;transform:none}
+.try{display:grid;grid-template-columns:auto 1fr;gap:4px 14px;color:var(--muted);font-size:14px}
+.try b{color:var(--ink);font-weight:600;white-space:nowrap}
+
+/* ---------- 表情表 ---------- */
+.faces{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:14px}
+.face-card{all:unset;box-sizing:border-box;display:flex;flex-direction:column;gap:8px;padding:10px;border-radius:16px;background:var(--paper);
+  border:1px solid var(--line);cursor:pointer;transition:border-color .2s,transform .2s}
+.face-card:hover{transform:translateY(-2px)}
+.face-card:focus-visible{outline:2px solid var(--teal);outline-offset:2px}
+.face-card[aria-pressed="true"]{border-color:var(--teal);box-shadow:0 0 0 2px var(--teal) inset}
+.face-card canvas{width:100%;aspect-ratio:1;border-radius:12px;display:block;background:#1d4a57}
+.face-card .nm{font-family:var(--f-display);font-weight:600;font-size:16px;display:flex;justify-content:space-between;gap:6px}
+.face-card .nm em{font-style:normal;font-family:var(--f-mono);font-size:11px;color:var(--muted);font-weight:400;align-self:center}
+.face-card .pm{font-family:var(--f-mono);font-size:11px;line-height:1.5;color:var(--muted)}
+
+/* ---------- 表格 ---------- */
+.tbl{overflow-x:auto;border:1px solid var(--line);border-radius:14px;background:var(--paper)}
+table{border-collapse:collapse;width:100%;min-width:640px;font-size:14px}
+th,td{text-align:left;vertical-align:top;padding:11px 14px;border-bottom:1px solid var(--line)}
+th{font-family:var(--f-mono);font-size:11.5px;font-weight:500;letter-spacing:.06em;color:var(--muted);text-transform:uppercase}
+tr:last-child td{border-bottom:0}
+td:first-child{font-weight:600;white-space:nowrap}
+.chip{display:inline-block;font-family:var(--f-mono);font-size:11px;padding:1px 8px;border-radius:999px;border:1px solid var(--line);color:var(--muted);white-space:nowrap}
+.chip.near{color:var(--teal);border-color:var(--teal)}
+
+/* ---------- CarPlay ---------- */
+.frames{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:18px}
+.frame{display:flex;flex-direction:column;gap:10px;min-width:0}
+.frame .mini{position:relative;background:var(--bezel);border-radius:18%;padding:5%;aspect-ratio:1;max-width:100%}
+.frame canvas{display:block;width:100%;height:100%;border-radius:13%}
+.frame .tag{position:absolute;right:8%;top:8%;font-family:var(--f-mono);font-size:11px;color:#fff;background:rgba(0,0,0,.45);padding:2px 8px;border-radius:999px}
+.frame p{color:var(--muted);font-size:14px}
+.frame h3 span{font-family:var(--f-mono);font-size:12px;color:var(--muted);font-weight:400;margin-right:6px}
+
+/* ---------- 守則 ---------- */
+.rules{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px 32px;max-width:900px}
+.rule{display:flex;flex-direction:column;gap:2px;padding-block:12px;border-top:1px solid var(--line)}
+.rule p{color:var(--muted);font-size:14px}
+
+footer{color:var(--muted);font-size:13px;border-top:1px solid var(--line);padding-top:16px;max-width:70ch}
+
+@media (max-width:860px){
+  .hero{grid-template-columns:minmax(0,1fr);gap:20px}
+  .faces{grid-template-columns:repeat(3,minmax(0,1fr))}
+}
+@media (max-width:560px){
+  .faces{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .frames{grid-template-columns:minmax(0,1fr)}
+  .frame .mini{width:70%}
+  .rules{grid-template-columns:minmax(0,1fr)}
+}
+@media (prefers-reduced-motion:reduce){
+  .breath{animation:none}
+  .part{transition-duration:.01s}
+  .head.shake{animation:none}
+}
+</style>
+
+<div class="wrap">
+  <header>
+    <div class="eyebrow">HomePlay 桌寵 · 設計稿 · 2026-10-18</div>
+    <h1>HomeView 的表情</h1>
+    <p class="lede">桌面上那台小 HomeView 現在只會眨眼和往右下瞄。這份稿給它一套表情和反應：被拖會嚇一跳、被摸頭會笑、深夜會睡著、拆開會驚訝。全部沿用「島」的黑膠囊和兩顆白眼，只改眼睛的形狀，不換畫風。</p>
+  </header>
+
+  <section class="hero" aria-label="互動主角">
+    <div class="stage">
+      <div class="device" id="device" tabindex="0" role="img" aria-label="HomeView 桌寵，可以拖、雙擊拆開、懸停在圓頂上摸頭">
+        <div class="breath">
+          <div class="stand" id="stand">
+            <div class="part dome" id="dome"></div>
+            <div class="part base"></div>
+          </div>
+          <div class="head" id="head">
+            <div class="part shell"></div>
+            <div class="part board"></div>
+            <div class="part bezel"><canvas id="hero"></canvas></div>
+            <div class="part cam"></div>
+            <div class="part glass"></div>
+          </div>
+        </div>
+        <div class="floor"></div>
+        <div class="cursor" id="cursor"><svg viewBox="0 0 24 24"><path d="M4 2l16 10-7 1.5L9.5 21z" fill="#fff" stroke="#111" stroke-width="1.5" stroke-linejoin="round"/></svg></div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="now"><strong id="nowName">待機</strong><span id="nowWhy">眨眼、偶爾瞄一下、整台輕輕呼吸</span></div>
+      <p class="caption" id="caption">試著拖它一下，或把游標停在下面的白色圓頂上。</p>
+      <div class="btns">
+        <button id="bDrag" type="button">播：拖一下</button>
+        <button id="bNight" type="button">播：晚安</button>
+        <button id="bApart" type="button">播：拆開</button>
+      </div>
+      <div class="try">
+        <b>拖</b><span>抓起來嚇一跳，屏幕先走、底座慢半拍；放下彈一下，開心</span>
+        <b>雙擊</b><span>拆成幾層，屏幕是驚訝臉；組回後甩頭、眨一隻眼</span>
+        <b>摸頭</b><span>游標停在圓頂上 1.5 秒笑眼，4 秒變愛心</span>
+        <b>靠近</b><span>待機時游標靠近，眼珠跟著游標</span>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="sec-head">
+      <div class="eyebrow">十個表情</div>
+      <h2>只動眼睛</h2>
+      <p>參數用 <code>Face.render</code> 的座標（1024 畫布、×1.4 前的原值）：眼白半徑、上下眼皮遮住的比例、眼珠位移、膠囊寬。點一格，上面那台就換成這張臉。</p>
+    </div>
+    <div class="faces" id="faces"></div>
+  </section>
+
+  <section>
+    <div class="sec-head">
+      <div class="eyebrow">什麼時候出現</div>
+      <h2>觸發對照</h2>
+      <p>全部掛在現有操作上，不新增手勢；每個表情都有明確的時限，最後回到待機。標「靠近」的需要窗口追蹤游標，現在的 <code>NSPanel</code> 加一個 tracking area 就夠。</p>
+    </div>
+    <div class="tbl">
+      <table>
+        <thead><tr><th>表情</th><th>觸發</th><th>持續</th><th>之後</th></tr></thead>
+        <tbody>
+          <tr><td>待機</td><td>預設。眨眼間隔 4 s ± 0.6 s，八分之一機率連眨兩下；每 7–11 s 瞄一次</td><td>—</td><td>—</td></tr>
+          <tr><td>好奇</td><td>游標進到機身外 120 pt 內 <span class="chip near">靠近</span></td><td>游標還在範圍內</td><td>離開 2 s 後回待機</td></tr>
+          <tr><td>開心</td><td>游標停在圓頂上 1.5 s <span class="chip near">靠近</span>；拖完放下；CarPlay 重連成功</td><td>1.2 s</td><td>待機</td></tr>
+          <tr><td>愛心</td><td>游標在圓頂上停滿 4 s</td><td>游標還在圓頂上</td><td>開心 0.6 s → 待機</td></tr>
+          <tr><td>專注</td><td>短時間連點身體 5 次（不耐煩），同時搖一下頭</td><td>1.5 s</td><td>待機</td></tr>
+          <tr><td>困倦</td><td>22:00–06:00 之間閒置 3 分鐘</td><td>5 分鐘</td><td>睡著；中途被碰到就醒</td></tr>
+          <tr><td>睡著</td><td>困倦滿 5 分鐘。屏幕暗 45%、浮出「z」、畫面降到 1 fps</td><td>直到游標靠近或被拖</td><td>驚訝 0.4 s → 待機</td></tr>
+          <tr><td>驚訝</td><td>雙擊拆開；拖動開始的那一下；轉太快（偏航速度 &gt; 6 rad/s）</td><td>拆開期間／0.4 s</td><td>組回時甩頭 + 眨單眼</td></tr>
+          <tr><td>擔心</td><td>CarPlay 斷線、收得到但解不出畫面（<code>VideoHealth</code> 進入重建）</td><td>直到恢復</td><td>恢復時開心一下再切回直播</td></tr>
+          <tr><td>眨單眼</td><td>組回完成；整點</td><td>0.6 s</td><td>待機</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section>
+    <div class="sec-head">
+      <div class="eyebrow">直播時</div>
+      <h2>CarPlay 模式不畫臉</h2>
+      <p>直播時屏幕整塊歸畫面，臉不會疊上去擋地圖。情緒改用身體說，或在直播出不來的空檔才露臉。</p>
+    </div>
+    <div class="frames">
+      <div class="frame"><div class="mini"><canvas id="cp1"></canvas><span class="tag">直播</span></div>
+        <h3><span>連上</span>點一下頭</h3><p>出第一幀時整台往前點頭 6°，0.35 s，然後切直播。不出聲、不彈窗。</p></div>
+      <div class="frame"><div class="mini"><canvas id="cp2"></canvas></div>
+        <h3><span>斷線</span>回到擔心臉</h3><p>斷線或解不出畫面時，屏幕回到臉，眼角下垂、眼珠往下。自動重連照 5／10／20／30／60 s 的退避。</p></div>
+      <div class="frame"><div class="mini"><canvas id="cp3"></canvas></div>
+        <h3><span>重連成功</span>笑一下再走</h3><p>笑眼 0.8 s，再切回直播。讓人看得出「它回來了」，不必看日誌。</p></div>
+    </div>
+  </section>
+
+  <section>
+    <div class="sec-head">
+      <div class="eyebrow">不吵人</div>
+      <h2>安靜守則</h2>
+      <p>競品被罵最多的是吃電、搶游標、擋畫面。這四條先寫死。</p>
+    </div>
+    <div class="rules">
+      <div class="rule"><h3>不畫就不耗電</h3><p>只有表情或姿態在變時才換貼圖（現在 <code>Face.tick</code> 已經這樣做）；睡著時 SceneKit 降到 1 fps，窗口被全螢幕 App 蓋住時暫停渲染。</p></div>
+      <div class="rule"><h3>不搶游標</h3><p>好奇只動眼珠，絕不移動系統游標或窗口位置。<code>--source window</code> 的觸控注入會動真游標，只在使用者主動點屏幕時發生。</p></div>
+      <div class="rule"><h3>預設沒有聲音</h3><p>呼嚕聲、提示音都不做進預設。想要再加一個開關。</p></div>
+      <div class="rule"><h3>隨時一鍵離開</h3><p>Esc 和右鍵照舊退出；全螢幕 App 在前景時自動隱藏，回到桌面再出來。</p></div>
+    </div>
+  </section>
+
+  <section>
+    <div class="sec-head">
+      <div class="eyebrow">調研</div>
+      <h2>別人怎麼做</h2>
+      <p>看了 12 個桌寵和桌上機器人。最接近我們的是 Vector、Loona、EMO 這類「屏幕當臉」的機器人：沒有嘴，性格全靠眼睛。部分資料來自商店頁與評測，細節以連結原文為準。</p>
+    </div>
+    <div class="tbl">
+      <table>
+        <thead><tr><th>產品</th><th>可愛在哪</th><th>惹人煩的地方</th><th>我們拿什麼</th></tr></thead>
+        <tbody>
+          <tr><td><a href="https://www.macrumors.com/review/anki-vector-robot/">Vector</a></td><td>眼神不停游移，思考時瞇眼，睡著變細縫；背部被摸會理毛</td><td>—</td><td>眼神游移、睡眠細縫、摸頭回應</td></tr>
+          <tr><td><a href="https://newatlas.com/robotics/loona-pet-robot-kickstarter/">Loona</a></td><td>小屏卡通眼，開心時天線豎起、失望垂下</td><td>吵雜時聽不清；約 500 美元</td><td>用身體姿態補充表情</td></tr>
+          <tr><td><a href="https://keyirobot.com/en-us/blogs/buying-guide/emo-cute-robot-pet-review-is-livingais-emotional-robot-worth-it">EMO</a></td><td>不對稱表情（眨單眼、被打斷嘟嘴），摸頭出愛心眼</td><td>—</td><td>眨單眼、愛心、不耐煩</td></tr>
+          <tr><td><a href="https://kr-asia.com/meet-ropet-the-ai-powered-pet-stealing-the-show-at-ces-2025">Ropet</a></td><td>圓潤大眼，機身溫熱</td><td>—</td><td>圓頂摸頭這個動作本身</td></tr>
+          <tr><td><a href="https://store.steampowered.com/app/3419430/Bongo_Cat/">BongoCat</a></td><td>每按一鍵拍一下，回饋一對一</td><td>全螢幕遊戲要另給權限；Steam Deck 有卡頓回報</td><td>只拿「對輸入有反應」，不做每鍵一動</td></tr>
+          <tr><td><a href="https://store.steampowered.com/app/1920960/VPet_Simulator/">VPet</a></td><td>摸身體會害羞、可提起、會自己去睡</td><td>飽腹、口渴數值變成負擔；200–500 MB 記憶體</td><td>會自己睡；不做數值養成</td></tr>
+          <tr><td><a href="https://github.com/rullerzhou-afk/clawd-on-desk">Clawd on Desk</a></td><td>12 個狀態對應工作流程，邊緣探頭的 mini 模式</td><td>—</td><td>狀態即性格（CarPlay 連線、斷線）</td></tr>
+          <tr><td><a href="https://www.cyberciti.biz/open-source/oneko-app-creates-cute-cat-chasing-around-your-mouse/">oneko</a></td><td>追游標，追到就睡，一個動機一個結局</td><td>—</td><td>好奇看游標、睡著當收尾</td></tr>
+          <tr><td><a href="https://pixelomer.itch.io/shijima">Shimeji／Shijima-Qt</a></td><td>坐在窗口上、可拖起來丟</td><td>Shijima-Qt 已暫停開發</td><td>拖起來有重量感</td></tr>
+          <tr><td><a href="https://apps.apple.com/us/app/wandow/id6760296752">Wandow／Mewtoo</a></td><td>安靜待在邊緣，游標靠近才反應；閒置時窩著</td><td>—</td><td>預設安靜、靠近才醒</td></tr>
+          <tr><td><a href="https://www.ctrl.blog/entry/macos-runcat/">RunCat</a></td><td>貓跑速度跟 CPU 連動</td><td>評測量到每秒約喚醒 CPU 4 次</td><td>反面教材：不變就不畫</td></tr>
+          <tr><td><a href="https://samperson.itch.io/desktop-goose">Desktop Goose</a></td><td>搗蛋、偷游標</td><td>搶游標讓電腦難用，有人以為是病毒</td><td>反面教材：絕不搶游標</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <footer>
+    身體比例照 HomePlay 現有 3D 模型（<code>docs/evidence/pet3d-assembled-apart.jpg</code>），稿裡拆開只畫六層示意，實作仍是九件。臉的幾何、顏色、時間格式照 <code>Sources/homeplay-pet/main.swift</code> 的 <code>Face.render</code>；屏幕上的時間是你現在的真實時間。
+  </footer>
+</div>
+
+<script>
+(() => {
+const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const K = 1.4, PX = 512, PY = 640;
+const BASE = {cw:420,ch:156,rx:30,ry:42,sep:31,top:0,bot:0,tilt:0,smile:0,pdx:-13,pdy:6,ps:1,blush:0,dim:0};
+// 十個表情：數值都在 Face.render 的座標系裡（×1.4 之前）
+const EX = [
+  {id:'idle', name:'待機', en:'idle', why:'眨眼、偶爾瞄一下、整台輕輕呼吸', p:{}},
+  {id:'curious', name:'好奇', en:'curious', why:'眼珠跟著游標，眼睛睜大一點', p:{ry:46,cw:440}, follow:true},
+  {id:'happy', name:'開心', en:'happy', why:'眼白下緣被切成彎月，變成笑眼', p:{smile:1,ps:0,blush:.6}},
+  {id:'focus', name:'專注', en:'focus', why:'上下眼皮一起壓，眼珠置中', p:{top:.34,bot:.22,pdx:0,pdy:0}},
+  {id:'sleepy', name:'困倦', en:'sleepy', why:'上眼皮垂一半，眨得很慢', p:{top:.55,pdy:12,pdx:0}, slow:true},
+  {id:'asleep', name:'睡著', en:'asleep', why:'只剩一條縫，屏幕變暗，浮出 z', p:{top:.9,pdx:0,pdy:14,dim:.45}, z:true, noBlink:true},
+  {id:'surprised', name:'驚訝', en:'surprised', why:'眼白放大、眼珠縮小、膠囊撐寬', p:{rx:33,ry:50,sep:34,ps:.62,pdx:0,pdy:0,cw:460,ch:172}},
+  {id:'worried', name:'擔心', en:'worried', why:'眼皮往外斜、眼珠往下看', p:{top:.3,tilt:.38,pdx:0,pdy:14}},
+  {id:'love', name:'愛心', en:'love', why:'眼珠換成小心形，臉頰泛紅', p:{ps:1.25,pdx:0,pdy:2,blush:1}, heart:true},
+  {id:'wink', name:'眨單眼', en:'wink', why:'左眼笑眼、右眼照常', p:{}, wink:true},
+];
+const byId = Object.fromEntries(EX.map(e => [e.id, e]));
+const target = id => Object.assign({}, BASE, byId[id].p);
+
+function heartPath(g, x, y, s){
+  g.beginPath(); g.moveTo(x, y + s*.9);
+  g.bezierCurveTo(x - s*1.5, y - s*.1, x - s*.75, y - s*1.25, x, y - s*.45);
+  g.bezierCurveTo(x + s*.75, y - s*1.25, x + s*1.5, y - s*.1, x, y + s*.9);
+  g.closePath();
+}
+
+function drawEye(g, cx, cy, P, side, o){
+  const rx = P.rx*K, ry = P.ry*K*o.blinkF;
+  if (ry < 1) return;
+  g.save();
+  g.beginPath(); g.ellipse(cx, cy, rx, ry, 0, 0, Math.PI*2); g.clip();
+  g.fillStyle = '#fff'; g.fillRect(cx-rx, cy-ry, rx*2, ry*2);
+  const smile = o.winkLeft && side < 0 ? 1 : P.smile;
+  const ps = o.winkLeft && side < 0 ? 0 : P.ps;
+  if (ps > .02) {
+    const qx = cx + o.pdx*K, qy = cy + o.pdy*K;
+    g.fillStyle = '#000';
+    if (o.heart) { heartPath(g, qx, qy, 17*K*ps); g.fill(); }
+    else { g.beginPath(); g.ellipse(qx, qy, 14*K*ps, 19*K*ps, 0, 0, Math.PI*2); g.fill(); }
+  }
+  g.translate(cx, cy); g.rotate(P.tilt*side); g.fillStyle = '#000';
+  if (P.top > .005) g.fillRect(-rx*2, -ry*3, rx*4, ry + ry*2*P.top + ry);
+  if (P.bot > .005) g.fillRect(-rx*2, ry - ry*2*P.bot, rx*4, ry*3);
+  if (smile > .01) { g.beginPath(); g.ellipse(0, ry*(1.95 - .9*smile), rx*1.35, ry*1.1, 0, 0, Math.PI*2); g.fill(); }
+  g.restore();
+}
+
+function drawScreen(c, F, now){
+  const g = c.getContext('2d'), S = c.width;
+  g.setTransform(S/1024, 0, 0, S/1024, 0, 0);
+  const grad = g.createLinearGradient(0, 0, 0, 1024);
+  grad.addColorStop(0, '#1d4a57'); grad.addColorStop(1, '#2f6a63');
+  g.fillStyle = grad; g.fillRect(0, 0, 1024, 1024);
+  g.fillStyle = 'rgba(255,255,255,.07)'; g.beginPath(); g.arc(820, 180, 260, 0, Math.PI*2); g.fill();
+  const P = F.cur;
+  if (F.showTime) {
+    const d = F.clock ? F.clock() : new Date();
+    const hh = String(d.getHours()).padStart(2,'0'), mm = String(d.getMinutes()).padStart(2,'0');
+    const wk = '日一二三四五六'[d.getDay()];
+    g.fillStyle = '#fff'; g.font = '600 168px -apple-system, "SF Pro Display", "Helvetica Neue", sans-serif';
+    g.fillText(hh + ':' + mm, 84, 250);
+    g.fillStyle = 'rgba(255,255,255,.72)'; g.font = '500 44px -apple-system, "PingFang TC", sans-serif';
+    g.fillText(`${d.getMonth()+1} 月 ${d.getDate()} 日 星期${wk}`, 90, 322);
+  }
+  // 島
+  const cw = P.cw*K, ch = P.ch*K;
+  g.fillStyle = '#000'; g.beginPath(); g.roundRect(PX - cw/2, PY - ch/2, cw, ch, ch/2); g.fill();
+  if (P.blush > .01) {
+    g.fillStyle = `rgba(255,150,170,${.55*P.blush})`;
+    for (const s of [-1, 1]) { g.beginPath(); g.ellipse(PX + s*(cw/2 + 46), PY + 30, 40, 22, 0, 0, Math.PI*2); g.fill(); }
+  }
+  const o = F.eyeOpts(now);
+  for (const s of [-1, 1]) drawEye(g, PX + s*P.sep*K, PY, P, s, o);
+  if (F.ex.z && !reduce) {
+    g.fillStyle = 'rgba(255,255,255,.8)';
+    for (let i = 0; i < 2; i++) {
+      const t = ((now/1000*.45) + i*.5) % 1;
+      g.globalAlpha = Math.sin(t*Math.PI);
+      g.font = `600 ${60 + i*24}px -apple-system, sans-serif`;
+      g.fillText('z', PX + cw/2 - 10 + t*60 + i*30, PY - ch/2 - 20 - t*110);
+    }
+    g.globalAlpha = 1;
+  }
+  if (P.dim > .005) { g.fillStyle = `rgba(0,0,0,${P.dim})`; g.fillRect(0, 0, 1024, 1024); }
+}
+
+class FaceView {
+  constructor(canvas, id, opts = {}){
+    this.c = canvas; this.showTime = opts.showTime ?? true; this.clock = null;
+    this.ex = byId[id]; this.cur = target(id); this.tgt = target(id);
+    this.nextBlink = performance.now() + 800 + Math.random()*2500; this.blinkEnd = 0; this.double = false;
+    this.nextGlance = performance.now() + 3000 + Math.random()*5000; this.glanceEnd = 0;
+    this.pointer = null; this.size();
+  }
+  set(id){ if (this.ex.id === id) return; this.ex = byId[id]; this.tgt = target(id); }
+  size(){
+    const r = this.c.getBoundingClientRect(), d = Math.min(2, devicePixelRatio || 1);
+    const px = Math.max(64, Math.round(r.width * d));
+    if (this.c.width !== px) { this.c.width = px; this.c.height = px; }
+  }
+  eyeOpts(now){
+    const e = this.ex;
+    let blinkF = 1;
+    if (!e.noBlink && !reduce) {
+      if (now > this.nextBlink && !this.blinkEnd) { this.blinkEnd = now + (e.slow ? 380 : 130); }
+      if (this.blinkEnd) {
+        const dur = e.slow ? 380 : 130, k = 1 - (this.blinkEnd - now)/dur;
+        blinkF = e.slow ? Math.max(.08, Math.abs(1 - 2*k)) : .1;
+        if (now > this.blinkEnd) {
+          this.blinkEnd = 0;
+          if (!this.double && Math.random() < .125) { this.double = true; this.nextBlink = now + 160; }
+          else { this.double = false; this.nextBlink = now + (e.slow ? 6000 : 4000) + (Math.random()*1200 - 600); }
+        }
+      }
+    }
+    let pdx = this.cur.pdx, pdy = this.cur.pdy;
+    if (e.id === 'idle' && !reduce) {
+      if (now > this.nextGlance && !this.glanceEnd) this.glanceEnd = now + 1400;
+      if (this.glanceEnd) { pdx = 13; pdy = -14; if (now > this.glanceEnd) { this.glanceEnd = 0; this.nextGlance = now + 7000 + Math.random()*4000; } }
+    }
+    if (e.follow) {
+      const p = this.pointer || {x: Math.sin(now/900)*.8, y: Math.cos(now/1300)*.5};
+      pdx = Math.max(-1, Math.min(1, p.x)) * 15; pdy = Math.max(-1, Math.min(1, p.y)) * 18;
+    }
+    this.cur.pdx += (pdx - this.cur.pdx) * .35; this.cur.pdy += (pdy - this.cur.pdy) * .35;
+    return {blinkF, pdx: this.cur.pdx, pdy: this.cur.pdy, heart: !!e.heart, winkLeft: !!e.wink};
+  }
+  tick(now){
+    const a = reduce ? 1 : .22;
+    for (const k in this.tgt) if (k !== 'pdx' && k !== 'pdy') this.cur[k] += (this.tgt[k] - this.cur[k]) * a;
+    if (!this.ex.follow && !(this.ex.id === 'idle' && this.glanceEnd)) {
+      this.cur.pdx += (this.tgt.pdx - this.cur.pdx) * a * .6; this.cur.pdy += (this.tgt.pdy - this.cur.pdy) * a * .6;
+    }
+    drawScreen(this.c, this, now);
+  }
+}
+
+// ---------- 主角 ----------
+const device = document.getElementById('device'), head = document.getElementById('head'), stand = document.getElementById('stand');
+const dome = document.getElementById('dome'), cursor = document.getElementById('cursor');
+const hero = new FaceView(document.getElementById('hero'), 'idle');
+const nowName = document.getElementById('nowName'), nowWhy = document.getElementById('nowWhy'), caption = document.getElementById('caption');
+let selected = 'idle', override = null, near = false, busy = false;
+
+function show(id){
+  hero.set(id); nowName.textContent = byId[id].name; nowWhy.textContent = byId[id].why;
+  document.querySelectorAll('.face-card').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.id === selected)));
+}
+function resolve(){ show(override || (selected === 'idle' && near ? 'curious' : selected)); }
+const wait = ms => new Promise(r => setTimeout(r, reduce ? Math.min(ms, 400) : ms));
+
+// 彈簧：屏幕（head）跟目標，底座（stand）慢半拍跟屏幕
+const H = {x:0,y:0,vx:0,vy:0,tx:0,ty:0}, St = {x:0,y:0,vx:0,vy:0};
+let squash = 0;
+function physics(dt){
+  const kH = 170, dH = 16, kS = 60, dS = 10;
+  H.vx += ((H.tx - H.x)*kH - H.vx*dH)*dt; H.vy += ((H.ty - H.y)*kH - H.vy*dH)*dt;
+  H.x += H.vx*dt; H.y += H.vy*dt;
+  St.vx += ((H.x - St.x)*kS - St.vx*dS)*dt; St.vy += ((Math.max(0, H.y) - St.y)*kS - St.vy*dS)*dt;
+  St.x += St.vx*dt; St.y += St.vy*dt;
+  squash += (0 - squash) * Math.min(1, dt*9);
+  const stretch = Math.max(-.08, Math.min(.08, -H.vy/1600)) - squash;
+  const sy = 1 + stretch, sx = 1 / sy, rot = Math.max(-9, Math.min(9, -H.vx/45));
+  if (!head.classList.contains('shake'))
+    head.style.transform = `translate(${H.x}px,${H.y}px) rotate(${rot}deg) scale(${sx},${sy})`;
+  stand.style.transform = `translate(${St.x}px,${St.y}px)`;
+}
+
+// 指標：靠近、拖、摸頭
+let drag = null, domeTimer = null, domeStart = 0, pokes = [];
+addEventListener('pointermove', e => {
+  const r = device.getBoundingClientRect(), cx = r.left + r.width/2, cy = r.top + r.height*.38;
+  const dx = e.clientX - cx, dy = e.clientY - cy, dist = Math.hypot(dx, dy);
+  hero.pointer = {x: dx / (r.width*.6), y: dy / (r.height*.6)};
+  const n = dist < r.width*.5 + 120;
+  if (n !== near) { near = n; if (!busy) resolve(); }
+  if (drag) { H.tx = Math.max(-90, Math.min(90, e.clientX - drag.x)); H.ty = Math.max(-70, Math.min(40, e.clientY - drag.y - 16)); }
+});
+device.addEventListener('pointerdown', e => {
+  if (busy || e.target === dome) return;
+  device.setPointerCapture(e.pointerId);
+  drag = {x: e.clientX, y: e.clientY}; H.ty = -16;
+  override = 'surprised'; resolve(); caption.textContent = '抓起來了：先嚇一跳，屏幕往前走，底座慢半拍跟上。';
+  const t = performance.now(); pokes = pokes.filter(p => t - p < 1500); pokes.push(t);
+  if (pokes.length >= 5) { pokes = []; drag = null; H.tx = H.ty = 0; annoyed(); }
+});
+addEventListener('pointerup', () => {
+  if (!drag) return;
+  drag = null; H.tx = 0; H.ty = 0; squash = .1;
+  override = 'happy'; resolve(); caption.textContent = '放下：落地彈一下，笑一下，1.2 秒後回待機。';
+  setTimeout(() => { if (!busy && override === 'happy' && !drag) { override = null; resolve(); } }, 1200);
+});
+device.addEventListener('dblclick', () => { if (!busy) runApart(); });
+device.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); if (!busy) runApart(); } });
+dome.addEventListener('pointerenter', () => {
+  if (busy || drag) return;
+  domeStart = performance.now(); clearInterval(domeTimer);
+  domeTimer = setInterval(() => {
+    const t = performance.now() - domeStart;
+    if (t > 4000) { override = 'love'; caption.textContent = '摸滿 4 秒：愛心眼，臉頰泛紅。'; }
+    else if (t > 1500) { override = 'happy'; caption.textContent = '在摸頭：笑眼。再停久一點看看。'; }
+    resolve();
+  }, 200);
+});
+dome.addEventListener('pointerleave', () => {
+  clearInterval(domeTimer); if (busy) return;
+  if (override === 'love' || override === 'happy') {
+    override = 'happy'; resolve();
+    setTimeout(() => { if (!busy && !drag) { override = null; resolve(); } }, 600);
+  }
+});
+async function annoyed(){
+  busy = true; override = 'focus'; resolve(); caption.textContent = '連戳五下：不耐煩地瞇眼、搖一下頭。';
+  head.classList.add('shake'); await wait(600); head.classList.remove('shake');
+  await wait(900); override = null; busy = false; resolve();
+}
+
+// ---------- 三段小樣 ----------
+const btns = ['bDrag','bNight','bApart'].map(id => document.getElementById(id));
+async function demo(fn){ if (busy) return; busy = true; btns.forEach(b => b.disabled = true); try { await fn(); } finally { override = null; busy = false; btns.forEach(b => b.disabled = false); resolve(); } }
+
+document.getElementById('bDrag').onclick = () => demo(async () => {
+  override = 'surprised'; resolve(); H.ty = -18; caption.textContent = '① 抓起：驚訝，屏幕被拉長一點。';
+  await wait(450); H.tx = 70; caption.textContent = '② 拖著走：屏幕先到，球關節和底座慢半拍，屏幕往後仰。';
+  await wait(900); H.tx = -50; await wait(900); H.tx = 0;
+  await wait(500); H.ty = 0; squash = .1; override = 'happy'; resolve(); caption.textContent = '③ 放下：落地壓扁一下再彈回來，笑一下。';
+  await wait(1300); caption.textContent = '回到待機。';
+});
+
+document.getElementById('bNight').onclick = () => demo(async () => {
+  const start = new Date(); start.setHours(21, 58, 0, 0);
+  let virt = start.getTime(); hero.clock = () => new Date(virt);
+  const tick = setInterval(() => { virt += 60_000; }, reduce ? 20 : 70);
+  caption.textContent = '① 21:58，沒人動它。時間快轉中。';
+  await wait(1100); override = 'sleepy'; resolve(); caption.textContent = '② 22:00 後閒置 3 分鐘：上眼皮垂下來，眨得很慢。';
+  await wait(2600); override = 'asleep'; resolve(); caption.textContent = '③ 再過 5 分鐘：睡著了。屏幕變暗、浮出 z，畫面降到 1 fps。';
+  await wait(2600); clearInterval(tick);
+  caption.textContent = '④ 游標靠近……';
+  cursor.style.transition = 'none'; cursor.style.transform = 'translate(260px,300px)'; cursor.style.opacity = '1';
+  void cursor.offsetWidth; cursor.style.transition = ''; cursor.style.transform = 'translate(190px,170px)';
+  await wait(1400); override = 'surprised'; resolve(); caption.textContent = '⑤ 醒了：驚訝 0.4 秒。';
+  await wait(500); override = null; hero.clock = null; resolve(); cursor.style.opacity = '0'; caption.textContent = '⑥ 回到待機，時間回到現在。';
+  await wait(800);
+});
+
+async function runApart(){
+  await demo(async () => {
+    override = 'surprised'; resolve(); device.classList.add('apart'); caption.textContent = '① 雙擊：拆開成幾層（實作是九件），屏幕上是驚訝臉。';
+    await wait(2400); device.classList.remove('apart'); caption.textContent = '② 組回去……';
+    await wait(800); head.classList.add('shake'); caption.textContent = '③ 甩甩頭。';
+    await wait(620); head.classList.remove('shake'); override = 'wink'; resolve(); caption.textContent = '④ 眨一隻眼：沒事了。';
+    await wait(800);
+  });
+}
+document.getElementById('bApart').onclick = runApart;
+
+// ---------- 表情表 ----------
+const grid = document.getElementById('faces'), cards = [];
+const fmt = p => {
+  const q = Object.assign({}, BASE, p), out = [];
+  out.push(`眼白 ${q.rx*2}×${q.ry*2}`);
+  if (q.top || q.bot) out.push(`眼皮 上${Math.round(q.top*100)}% 下${Math.round(q.bot*100)}%`);
+  if (q.smile) out.push('笑眼 彎月');
+  if (q.tilt) out.push(`眼皮斜 ${q.tilt} rad`);
+  out.push(q.ps ? `眼珠 (${q.pdx}, ${q.pdy})${q.ps !== 1 ? ' ×' + q.ps : ''}` : '眼珠 隱藏');
+  if (q.cw !== 420) out.push(`膠囊 ${q.cw}×${q.ch}`);
+  if (q.dim) out.push(`屏幕暗 ${Math.round(q.dim*100)}%`);
+  return out.join('<br>');
+};
+for (const e of EX) {
+  const b = document.createElement('button');
+  b.className = 'face-card'; b.type = 'button'; b.dataset.id = e.id; b.setAttribute('aria-pressed', String(e.id === 'idle'));
+  b.setAttribute('aria-label', `${e.name}：${e.why}`);
+  let pm = fmt(e.p);
+  if (e.follow) pm += '<br>眼珠跟游標 ±15/±18';
+  if (e.heart) pm = pm.replace('眼珠 (', '心形 (');
+  if (e.wink) pm = '左眼 = 開心，右眼 = 待機';
+  b.innerHTML = `<canvas></canvas><span class="nm">${e.name}<em>${e.en}</em></span><span class="pm">${pm}</span>`;
+  b.onclick = () => { if (busy) return; selected = e.id; override = null; resolve(); caption.textContent = `${e.name}：${e.why}。點「待機」換回來。`; };
+  grid.appendChild(b);
+  cards.push(new FaceView(b.querySelector('canvas'), e.id, {showTime:false}));
+}
+
+// ---------- CarPlay 三格 ----------
+function drawLive(c){
+  const g = c.getContext('2d'), S = c.width; g.setTransform(S/400, 0, 0, S/400, 0, 0);
+  g.fillStyle = '#16181b'; g.fillRect(0, 0, 400, 400);
+  g.fillStyle = '#2b3036'; g.fillRect(0, 0, 70, 400);
+  g.fillStyle = '#3a4048';
+  for (let i = 0; i < 4; i++) { g.beginPath(); g.roundRect(18, 40 + i*80, 34, 34, 9); g.fill(); }
+  g.fillStyle = '#22343a'; g.fillRect(70, 0, 330, 400);
+  g.strokeStyle = '#3f5a62'; g.lineWidth = 10; g.beginPath(); g.moveTo(90, 360); g.bezierCurveTo(180, 260, 250, 300, 380, 60); g.stroke();
+  g.fillStyle = 'rgba(255,255,255,.55)'; g.font = '500 22px -apple-system, "PingFang TC", sans-serif'; g.fillText('直播畫面（示意）', 150, 210);
+}
+const cp1 = document.getElementById('cp1');
+const cp2 = new FaceView(document.getElementById('cp2'), 'worried');
+const cp3 = new FaceView(document.getElementById('cp3'), 'happy');
+
+function sizeAll(){ [hero, cp2, cp3, ...cards].forEach(f => f.size());
+  const r = cp1.getBoundingClientRect(), px = Math.round(r.width * Math.min(2, devicePixelRatio || 1)); cp1.width = cp1.height = Math.max(64, px); drawLive(cp1); }
+addEventListener('resize', sizeAll); sizeAll();
+
+let last = performance.now();
+function frame(now){
+  const dt = Math.min(.033, (now - last)/1000); last = now;
+  physics(dt);
+  hero.tick(now); cp2.tick(now); cp3.tick(now);
+  for (const f of cards) f.tick(now);
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+resolve();
+})();
+</script>

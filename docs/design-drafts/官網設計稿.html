@@ -1,0 +1,425 @@
+<!doctype html>
+<html lang="zh-Hant-TW">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>HomePlay 官網設計稿</title>
+<style>
+/* ── 設計 token ───────────────────────────────────────────
+   冷白／石墨兩套底，唯一強調色取自桌寵屏幕的 Aqua 藍。
+   圓角兩級：面板 28px（跟機身屏幕同一種圓角方），可按的東西一律膠囊。
+   字體只用系統字（SF + 蘋方），不載遠端字型。 */
+:root{
+  --bg:#eceef1; --surface:#f7f8fa; --ink:#15181c; --muted:#5b626b; --line:rgba(21,24,28,.1);
+  --accent:#2a63d4; --accent-ink:#fff; --panel:#dfe3e8; --code:#1b1e23;
+  --r:28px; --pill:999px;
+  --font:-apple-system,BlinkMacSystemFont,"SF Pro Display","SF Pro Text","PingFang TC","Noto Sans TC",sans-serif;
+  --mono:ui-monospace,"SF Mono",Menlo,monospace;
+  --spring:cubic-bezier(.2,.9,.25,1.05);
+  color-scheme:light dark;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme=light]){
+  --bg:#0f1114; --surface:#171a1e; --ink:#eef0f3; --muted:#9aa1aa; --line:rgba(238,240,243,.1);
+  --accent:#5b8ff5; --accent-ink:#0b1730; --panel:#1d2126; --code:#0b0d10;}}
+:root[data-theme=dark]{--bg:#0f1114; --surface:#171a1e; --ink:#eef0f3; --muted:#9aa1aa; --line:rgba(238,240,243,.1);
+  --accent:#5b8ff5; --accent-ink:#0b1730; --panel:#1d2126; --code:#0b0d10;}
+
+*{box-sizing:border-box} html{scroll-behavior:smooth}
+body{margin:0;background:var(--bg);color:var(--ink);font:17px/1.6 var(--font);-webkit-font-smoothing:antialiased}
+img{max-width:100%;display:block}
+a{color:inherit}
+.wrap{max-width:1180px;margin:0 auto;padding:0 24px}
+h1,h2,h3{margin:0;letter-spacing:-.02em;line-height:1.12;font-weight:650}
+h2{font-size:clamp(30px,4vw,48px)}
+p{margin:0}
+.lede{color:var(--muted);max-width:34em}
+.btn{display:inline-flex;align-items:center;gap:8px;height:46px;padding:0 22px;border-radius:var(--pill);
+  font-weight:600;font-size:16px;text-decoration:none;white-space:nowrap;transition:transform .2s var(--spring),background .2s}
+.btn:active{transform:scale(.975)}
+.btn-primary{background:var(--accent);color:var(--accent-ink)}
+.btn-ghost{box-shadow:inset 0 0 0 1px var(--line);background:var(--surface)}
+section{padding:112px 0}
+
+/* ── 設計註記（設計稿專用，正式站不帶） ── */
+.note{margin:0 auto 40px;max-width:1180px;padding:0 24px}
+.note>div{border:1.5px dashed color-mix(in srgb,var(--accent) 55%,transparent);border-radius:16px;padding:14px 18px;
+  font-size:13.5px;line-height:1.65;color:var(--muted);background:color-mix(in srgb,var(--accent) 5%,transparent)}
+.note b{color:var(--ink)}
+body.clean .note{display:none}
+.draft-bar{position:fixed;right:16px;bottom:16px;z-index:50;display:flex;gap:8px}
+.draft-bar button{font:600 13px var(--font);border:0;border-radius:var(--pill);padding:9px 14px;background:var(--ink);color:var(--bg);cursor:pointer}
+
+/* ── 頁首 ── */
+header{position:sticky;top:0;z-index:20;backdrop-filter:saturate(1.6) blur(18px);-webkit-backdrop-filter:saturate(1.6) blur(18px);
+  background:color-mix(in srgb,var(--bg) 78%,transparent);border-bottom:1px solid transparent}
+header .wrap{display:flex;align-items:center;height:64px;gap:28px}
+.brand{display:flex;align-items:center;gap:10px;font-weight:700;text-decoration:none;letter-spacing:-.01em}
+.brand img{width:26px;height:26px;object-fit:cover;object-position:50% 30%;border-radius:8px}
+nav{display:flex;gap:22px;font-size:15px;color:var(--muted)} nav a{text-decoration:none} nav a:hover{color:var(--ink)}
+header .end{margin-left:auto;display:flex;gap:10px;align-items:center}
+header .btn{height:36px;padding:0 16px;font-size:14px}
+.lang{font-size:14px;color:var(--muted);text-decoration:none}
+
+/* ── Hero：左字右機，機身就是可互動的桌寵 ── */
+.hero{padding:40px 0 72px;min-height:calc(100dvh - 64px);display:flex;align-items:center}
+.hero .wrap{display:grid;grid-template-columns:1fr 1.05fr;gap:40px;align-items:center}
+.hero h1{font-size:clamp(40px,5.6vw,72px)}
+.hero .lede{margin:22px 0 32px;font-size:19px}
+.hero .ctas{display:flex;gap:12px;flex-wrap:wrap}
+.pet{position:relative;width:100%;aspect-ratio:1200/1316;max-width:560px;margin-left:auto;cursor:pointer;
+  touch-action:manipulation;transition:transform .45s var(--spring)}
+.pet img{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;opacity:0;transition:opacity .16s linear}
+.pet img.on{opacity:1}
+.pet.press{transform:scale(.975)}
+.pet::after{content:"";position:absolute;left:18%;right:18%;bottom:-2%;height:6%;border-radius:50%;
+  background:radial-gradient(closest-side,rgba(20,30,50,.18),transparent);z-index:-1}
+
+/* ── 表情：左邊固定一台，右邊一行一個觸發 ── */
+.faces .wrap{display:grid;grid-template-columns:.9fr 1.1fr;gap:56px;align-items:start}
+.faces .stick{position:sticky;top:96px}
+.faces .stick .pet{max-width:440px;margin:0;cursor:default}
+.faces h2{margin-bottom:16px}
+.rows{margin-top:36px;display:grid;gap:6px}
+.row{all:unset;display:grid;grid-template-columns:1fr auto;gap:16px;align-items:center;padding:16px 20px;border-radius:18px;cursor:pointer;
+  transition:background .2s}
+.row:hover,.row:focus-visible,.row.on{background:var(--surface)}
+.row:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.row .t{font-weight:600}.row .r{color:var(--muted);font-size:15px;text-align:right}
+
+/* ── CarPlay：一塊深藍面板，畫資料怎麼走 ── */
+.carplay .panel{border-radius:var(--r);padding:56px;background:linear-gradient(160deg,#173a7a,#0e2453 70%);color:#eef3ff}
+.carplay .panel .lede{color:#b9c8ea;margin-top:16px}
+.path{margin-top:44px;display:grid;grid-template-columns:repeat(5,auto);align-items:center;justify-content:start;gap:14px}
+.node{padding:14px 18px;border-radius:16px;background:rgba(255,255,255,.08);box-shadow:inset 0 0 0 1px rgba(255,255,255,.14)}
+.node b{display:block;font-size:15px}.node span{font-size:13px;color:#b9c8ea}
+.arrow{font-size:20px;color:#8fb0ff}
+.sources{margin-top:40px;display:grid;grid-template-columns:1.2fr 1fr 1fr;gap:14px}
+.src{padding:22px;border-radius:20px;background:rgba(255,255,255,.06)}
+.src h3{font-size:17px;margin-bottom:6px}.src p{font-size:14.5px;color:#c5d2ef}
+.src code{font:13px var(--mono);color:#fff}
+
+/* ── 拆開：分段控制換視角 ── */
+.views{text-align:center}
+.views .lede{margin:16px auto 0}
+.seg{display:inline-flex;margin:32px 0 8px;padding:4px;border-radius:var(--pill);background:var(--panel)}
+.seg button{all:unset;cursor:pointer;padding:8px 18px;border-radius:var(--pill);font-size:15px;font-weight:600;color:var(--muted);transition:background .2s,color .2s}
+.seg button[aria-pressed=true]{background:var(--surface);color:var(--ink);box-shadow:0 1px 3px rgba(0,0,0,.08)}
+.seg kbd{font:12px var(--mono);opacity:.55;margin-left:6px}
+.viewstage{position:relative;height:min(62vh,600px);margin-top:20px}
+.viewstage img{position:absolute;inset:0;margin:auto;max-height:100%;width:auto;opacity:0;transform:scale(.97);transition:opacity .3s,transform .5s var(--spring)}
+.viewstage img.on{opacity:1;transform:none}
+.gestures{margin:56px auto 0;max-width:860px;display:grid;grid-template-columns:1fr 1fr;gap:10px 40px;text-align:left}
+.g{display:flex;justify-content:space-between;gap:16px;padding:10px 0;border-bottom:1px solid var(--line);font-size:15.5px}
+.g span:last-child{color:var(--muted)}
+
+/* ── 外觀：色票換機身 ── */
+.finish .wrap{display:grid;grid-template-columns:1.1fr .9fr;gap:56px;align-items:center}
+.finish .pet{max-width:520px;cursor:default;margin:0}
+.swatches{display:flex;gap:12px;margin:30px 0 14px}
+.sw{all:unset;cursor:pointer;width:34px;height:34px;border-radius:50%;box-shadow:inset 0 0 0 1px rgba(0,0,0,.12);transition:transform .25s var(--spring)}
+.sw[aria-pressed=true]{outline:2px solid var(--accent);outline-offset:3px}
+.sw:hover{transform:scale(1.08)}
+.swname{font-weight:600}.swdesc{color:var(--muted);font-size:15px;margin-top:4px;min-height:3.2em}
+
+/* ── 開機／夜裡／睡著：三格 ── */
+.moments .grid{margin-top:40px;display:grid;grid-template-columns:1.25fr 1fr 1fr;gap:14px}
+.cell{border-radius:var(--r);padding:28px 28px 0;overflow:hidden;display:flex;flex-direction:column}
+.cell h3{font-size:20px}.cell p{color:var(--muted);font-size:15px;margin-top:6px}
+.cell img{margin:22px auto -12%;width:86%}
+.c1{background:linear-gradient(170deg,#f3d9c4,#c9d5ec)} .c1 p{color:#4f5560} .c1 h3{color:#1a1d22}
+.c2{background:#262a36;color:#e9ecf2} .c2 p{color:#a4abb8}
+.c3{background:#151821;color:#e9ecf2} .c3 p{color:#9198a6}
+
+/* ── 跑起來 ── */
+.run .wrap{display:grid;grid-template-columns:.85fr 1.15fr;gap:56px}
+.run ul{margin:22px 0 0;padding:0;list-style:none;display:grid;gap:12px}
+.run li{padding-left:22px;position:relative;color:var(--muted)}
+.run li::before{content:"";position:absolute;left:0;top:.7em;width:8px;height:8px;border-radius:50%;background:var(--accent)}
+pre{margin:0;padding:26px 28px;border-radius:var(--r);background:var(--code);color:#e7ebf1;font:14px/1.75 var(--mono);overflow:auto}
+pre .c{color:#7f8a99}
+
+/* ── 說清楚 ── */
+.faq{max-width:820px}
+details{border-bottom:1px solid var(--line);padding:20px 0}
+summary{cursor:pointer;font-weight:600;font-size:18px;list-style:none;display:flex;justify-content:space-between;gap:16px}
+summary::after{content:"+";color:var(--muted);transition:transform .25s var(--spring)}
+details[open] summary::after{transform:rotate(45deg)}
+details p{color:var(--muted);margin-top:10px}
+
+footer{padding:48px 0 64px;color:var(--muted);font-size:14px}
+footer .wrap{display:flex;gap:24px;flex-wrap:wrap;justify-content:space-between;border-top:1px solid var(--line);padding-top:28px}
+
+/* 進場：只有 hero 和每段標題浮一下，捲動不劫持 */
+@media (prefers-reduced-motion:no-preference){
+  .rise{opacity:0;transform:translateY(16px);transition:opacity .7s ease,transform .8s var(--spring)}
+  .rise.in{opacity:1;transform:none}
+}
+@media (prefers-reduced-motion:reduce){.pet img,.viewstage img{transition:none}}
+
+/* 手機：全部單欄，16px 邊 */
+@media (max-width:820px){
+  .wrap{padding:0 16px} section{padding:72px 0}
+  nav{display:none}
+  .hero .wrap,.faces .wrap,.finish .wrap,.run .wrap{grid-template-columns:1fr}
+  .hero{min-height:auto}.pet{margin:0 auto}
+  .faces .stick{position:relative;top:0}
+  .carplay .panel{padding:32px 22px}
+  .path{grid-template-columns:1fr;justify-items:start}.arrow{transform:rotate(90deg)}
+  .sources,.moments .grid,.gestures{grid-template-columns:1fr}
+  .finish .pet{order:-1;margin:0 auto}
+}
+</style>
+</head>
+<body>
+
+<div class="draft-bar"><button id="t-notes">隱藏註記</button><button id="t-theme">切換深淺</button></div>
+
+<header><div class="wrap">
+  <a class="brand" href="#"><img src="../../site/public/media/renders/view-front.webp" alt="">HomePlay</a>
+  <nav><a href="#faces">表情</a><a href="#carplay">CarPlay</a><a href="#views">拆開</a><a href="#finish">外觀</a><a href="#run">跑起來</a></nav>
+  <div class="end"><a class="lang" href="#">English</a><a class="btn btn-ghost" href="#">GitHub</a></div>
+</div></header>
+
+<div class="note" style="margin-top:20px"><div>
+<b>整體方向。</b>沿用 WindowShade 與 AI System 6 官網的共同做法：首屏本身就是能玩的產品（WindowShade 是能收起的網頁桌面，AI System 6 是能開機的桌面），所有媒體本地載入、不放追蹤和遠端字型、文案只寫做得到的事。HomePlay 的「產品」是一個會看人的小東西，所以首屏放的是它本人，圖全部由 <code>homeplay-pet --snapshot</code> 現拍（<code>site/scripts/render-media.py</code>），沒有一張是手繪或假截圖。
+<br><b>語氣。</b>Apple 消費品頁的克制排版，加一點桌寵的頑皮：表情、hello、睡著都是真功能，不是裝飾。中文首頁（台灣正體）＋ <code>/en/</code>。
+<br><b>Dial。</b>變化 7／動態 6／密度 3。動畫只做三件事：首屏進場、表情回應游標、切換視角與外觀的過渡；不劫持捲動，「減少動態效果」下全部變成直接切換。
+</div></div>
+
+<!-- ───────── Hero ───────── -->
+<section class="hero"><div class="wrap">
+  <div class="rise">
+    <h1>桌上一台小屏幕，會看著你。</h1>
+    <p class="lede">HomePlay 是 Mac 上的 3D HomeView 桌寵。平常是時鐘和一雙眼睛；重按一下，屏幕上跑的是真的 CarPlay。</p>
+    <div class="ctas"><a class="btn btn-primary" href="#">看原始碼</a><a class="btn btn-ghost" href="#run">怎麼跑起來</a></div>
+  </div>
+  <div class="pet rise" id="hero-pet" role="img" aria-label="HomePlay 桌寵，G4 白機身，屏幕上是時鐘和一雙眼睛"></div>
+</div></section>
+
+<div class="note"><div>
+<b>Hero 互動（照 README 的行為表，網頁版縮成四條）。</b>游標離機身遠：<code>idle</code>；進到 160px 內：<code>curious</code>；停在機身上 1.5 秒：<code>happy</code>，4 秒：<code>love</code>；按下：機身縮 2.5%（跟 App 一樣）並 <code>surprised</code> 0.4 秒；1.5 秒內連點 5 下：<code>focus</code>。觸屏輕點等同按下。十張表情圖共用同一裁切框、同一分鐘拍攝，切換只換眼睛不跳機身。
+<br>首屏四個文字元素以內：標題、一句說明、兩顆按鈕。「看原始碼」連到公開倉庫；不放下載按鈕，因為不發安裝包。
+</div></div>
+
+<!-- ───────── 表情 ───────── -->
+<section class="faces" id="faces"><div class="wrap">
+  <div class="stick"><div class="pet" id="face-pet" role="img" aria-label="桌寵目前的表情"></div></div>
+  <div>
+    <h2>它知道你在做什麼。</h2>
+    <p class="lede">「島」只有一雙眼睛，十種表情全靠眼睛的形狀。把游標移到下面任一行，看它怎麼回應。</p>
+    <div class="rows" id="rows">
+      <button class="row" data-face="curious"><span class="t">游標靠近</span><span class="r">好奇，眼珠跟著游標</span></button>
+      <button class="row" data-face="happy"><span class="t">停在底座上</span><span class="r">1.5 秒笑眼</span></button>
+      <button class="row" data-face="love"><span class="t">一直停著</span><span class="r">4 秒出愛心</span></button>
+      <button class="row" data-face="surprised"><span class="t">抓起來轉</span><span class="r">嚇一跳，放開才笑</span></button>
+      <button class="row" data-face="focus"><span class="t">連點五下</span><span class="r">不耐煩，還會搖頭</span></button>
+      <button class="row" data-face="worried"><span class="t">CarPlay 斷線</span><span class="r">擔心，重連先笑一下</span></button>
+      <button class="row" data-face="wink"><span class="t">整點</span><span class="r">眨一下眼</span></button>
+      <button class="row" data-face="sleepy"><span class="t">深夜放著三分鐘</span><span class="r">睏了</span></button>
+      <button class="row" data-face="asleep"><span class="t">再五分鐘</span><span class="r">睡著，畫面降到 1 fps</span></button>
+    </div>
+  </div>
+</div></section>
+
+<div class="note"><div>
+<b>表情段。</b>左邊固定一台（捲動時黏住），右邊九行觸發條件，懸停、鍵盤聚焦或手機點一下都會換臉。不用九張卡片排格子：行為表本來就是「你做了什麼 → 它的反應」，一行一條最好讀。文案全部取自 README 的表情表，不加沒有的行為。
+</div></div>
+
+<!-- ───────── CarPlay ───────── -->
+<section class="carplay" id="carplay"><div class="wrap"><div class="panel">
+  <h2>重按，屏幕變成 CarPlay。</h2>
+  <p class="lede">不是錄影、不是模仿介面。HomePlay 自己當 CarPlay 主機：iPhone 送來畫面和聲音，你在桌寵屏幕上點的每一下，都送回 iPhone。</p>
+  <div class="path" aria-label="資料路徑">
+    <div class="node"><b>iPhone</b><span>CarPlay</span></div><div class="arrow">→</div>
+    <div class="node"><b>homeplay-receiver</b><span>配對・RTSP・解密</span></div><div class="arrow">→</div>
+    <div class="node"><b>桌寵屏幕</b><span>H.264 畫面・AAC 聲音</span></div>
+  </div>
+  <div class="sources">
+    <div class="src"><h3>無線</h3><p>藍牙 iAP2 交換 Wi-Fi 資訊，再走會話控制面。需要配件身份，自己準備。</p><p style="margin-top:10px"><code>--source wireless</code></p></div>
+    <div class="src"><h3>有線</h3><p>插著線走 usbmuxd，不需要 Wi-Fi。</p><p style="margin-top:10px"><code>--source usb</code></p></div>
+    <div class="src"><h3>一扇窗</h3><p>抓 CarPlay Simulator 之類的視窗，開發時用。</p><p style="margin-top:10px"><code>--source window</code></p></div>
+  </div>
+</div></div></section>
+
+<div class="note"><div>
+<b>CarPlay 段。</b>全頁唯一的深色塊，但仍在同一主題內（面板，不是整段反轉）。沒有真 CarPlay 截圖可放（那是 Apple 的介面，而且舊證據圖是觸控測試格），改畫資料路徑：這段要講的本來就是「它怎麼接上」。三種來源對應 receiver 的 <code>--source</code>，<code>auto</code> 寫在跑起來那段。身份材料只說「自己準備」，公開倉庫不帶。
+</div></div>
+
+<!-- ───────── 拆開 ───────── -->
+<section class="views" id="views"><div class="wrap">
+  <h2>九件，轉得動，也拆得開。</h2>
+  <p class="lede">鐘形底座、水平不鏽鋼鉸鏈、後仰 16° 的一整片薄屏幕。照真機比例做，地上不畫陰影。</p>
+  <div class="seg" role="group" aria-label="視角">
+    <button aria-pressed="true" data-view="front">正面<kbd>1</kbd></button>
+    <button aria-pressed="false" data-view="side">側面<kbd>2</kbd></button>
+    <button aria-pressed="false" data-view="back">背面<kbd>3</kbd></button>
+    <button aria-pressed="false" data-view="apart">拆開<kbd>4</kbd></button>
+  </div>
+  <div class="viewstage" id="viewstage">
+    <img class="on" data-view="front" src="../../site/public/media/renders/view-front.webp" alt="正面">
+    <img data-view="side" src="../../site/public/media/renders/view-side.webp" alt="側面">
+    <img data-view="back" src="../../site/public/media/renders/view-back.webp" alt="背面">
+    <img data-view="apart" src="../../site/public/media/renders/view-apart.webp" alt="拆開成零件">
+  </div>
+  <div class="gestures">
+    <div class="g"><span>拖動、兩指滑</span><span>轉身體，只走一個軸</span></div>
+    <div class="g"><span>雙擊</span><span>角度回正</span></div>
+    <div class="g"><span>雙指輕點兩下</span><span>拆開、組回</span></div>
+    <div class="g"><span>捏合、⌘+ ⌘−</span><span>縮放</span></div>
+    <div class="g"><span>重按</span><span>進入 CarPlay</span></div>
+    <div class="g"><span>空格</span><span>直播開關</span></div>
+  </div>
+</div></section>
+
+<div class="note"><div>
+<b>拆開段。</b>分段控制直接沿用 App 右鍵「視角」的四個選項和鍵 1–4（網頁上按數字鍵也能切）。手勢表兩欄六條，挑最有代表性的；完整列表在 README。
+</div></div>
+
+<!-- ───────── 外觀 ───────── -->
+<section class="finish" id="finish"><div class="wrap">
+  <div class="pet" id="finish-pet" role="img" aria-label="不同外觀的桌寵"></div>
+  <div>
+    <h2>換一身外觀。</h2>
+    <p class="lede" style="margin-top:14px">右鍵「外觀」切換，選了就記住。</p>
+    <div class="swatches" id="swatches">
+      <button class="sw" aria-pressed="true" data-finish="g4" style="background:#f4f5f3" aria-label="G4 白"></button>
+      <button class="sw" aria-pressed="false" data-finish="silver" style="background:#c9ccd0" aria-label="銀"></button>
+      <button class="sw" aria-pressed="false" data-finish="starlight" style="background:#e6dccb" aria-label="星光"></button>
+      <button class="sw" aria-pressed="false" data-finish="rose" style="background:#e8c9c2" aria-label="玫瑰粉"></button>
+      <button class="sw" aria-pressed="false" data-finish="gray" style="background:#5d6066" aria-label="太空灰"></button>
+    </div>
+    <div class="swname" id="swname">G4 白</div>
+    <p class="swdesc" id="swdesc">白色亮面清漆塑膠。屏幕走 Aqua 藍與凝膠光澤，游標靠近時會像向日葵一樣轉頭。</p>
+  </div>
+</div></section>
+
+<!-- ───────── 開機・夜裡・睡著 ───────── -->
+<section class="moments"><div class="wrap">
+  <h2>從早到晚都有樣子。</h2>
+  <div class="grid">
+    <div class="cell c1"><h3>開機先說 hello</h3><p>G4 白會先用手寫體寫一個 hello，向 Macintosh 致敬。</p><img src="../../site/public/media/renders/hello.webp" alt="屏幕上寫著 hello"></div>
+    <div class="cell c2"><h3>遠看是恆亮</h3><p>整面暗、數字細；游標靠近才亮起來。</p><img src="../../site/public/media/renders/ambient-night.webp" alt="夜間恆亮的時鐘"></div>
+    <div class="cell c3"><h3>深夜會睡著</h3><p>屏幕變暗、浮出 z，碰一下就醒。</p><img src="../../site/public/media/renders/asleep-night.webp" alt="睡著的桌寵"></div>
+  </div>
+</div></section>
+
+<div class="note"><div>
+<b>外觀與三格。</b>外觀段是唯一的左圖右字（hero 是左字右圖），之後的三格用不對稱寬度和三種底色，避免連續三段同一種排法。G4 白的致敬只寫一次（外觀說明 + hello 格），不重複。
+</div></div>
+
+<!-- ───────── 跑起來 ───────── -->
+<section class="run" id="run"><div class="wrap">
+  <div>
+    <h2>自己編，自己跑。</h2>
+    <p class="lede" style="margin-top:16px">沒有安裝包，原始碼就是全部。</p>
+    <ul>
+      <li>macOS 14 以上，Swift 6 工具鏈</li>
+      <li>只看桌寵：不需要 iPhone</li>
+      <li>CarPlay：iPhone；無線另需 Wi-Fi 和自備的配件身份</li>
+    </ul>
+  </div>
+<pre><span class="c"># 編譯</span>
+swift build -c release
+B=.build/release
+
+<span class="c"># 只有臉</span>
+$B/homeplay-pet
+
+<span class="c"># 接 CarPlay：插線走有線，沒插走無線</span>
+$B/homeplay-receiver --source auto --ssid '&lt;Wi-Fi 名&gt;' --port 8788
+$B/homeplay-pet --endpoint ws://127.0.0.1:8788</pre>
+</div></section>
+
+<!-- ───────── 說清楚 ───────── -->
+<section id="faq"><div class="wrap faq">
+  <h2>先說清楚。</h2>
+  <div style="margin-top:28px">
+    <details open><summary>這是 Apple 的產品嗎？</summary><p>不是。HomePlay 是個人實驗專案，跟 Apple 沒有關係，也沒有任何認證。CarPlay 與 HomeView 是 Apple Inc. 的商標，這裡只用來說明它做的是什麼。</p></details>
+    <details><summary>為什麼沒有下載？</summary><p>它是自用的實驗品，不發安裝包。原始碼公開，照上面的指令自己編譯。</p></details>
+    <details><summary>無線 CarPlay 要什麼？</summary><p>需要一份配件身份（<code>identity.pk8</code> 與 <code>certificate.p7b</code>），用 <code>--identity-dir</code> 指定。公開倉庫不附帶任何身份，來源與合法性由使用者自行負責。</p></details>
+    <details><summary>用什麼授權？</summary><p>GPL-3.0-or-later。CarPlay 會話控制面參考 MacPlay 與 LIVI 的行為重新用 Swift 實作，致謝寫在 NOTICE。</p></details>
+  </div>
+</div></section>
+
+<div class="note"><div>
+<b>跑起來與 FAQ。</b>指令全部取自 README，只留最短路徑。FAQ 四題是對外最需要講清楚的邊界：非 Apple、無安裝包、身份不隨公開倉庫、授權與致謝。頁尾只有 GitHub、授權、NOTICE、語言。
+</div></div>
+
+<footer><div class="wrap"><span>HomePlay，GPL-3.0-or-later。與 Apple Inc. 無關。</span><span><a href="#">GitHub</a>　<a href="#">NOTICE</a>　<a href="#">English</a></span></div></footer>
+
+<script>
+const R = "../../site/public/media/renders/";
+const FACES = ["idle","curious","happy","focus","sleepy","asleep","surprised","worried","love","wink"];
+const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+// 一台桌寵 = 疊在一起的幾張圖，換表情只換 .on
+function mountPet(el, names, prefix, first){
+  const imgs = {};
+  for (const n of names){
+    const i = new Image(); i.alt = ""; i.decoding = "async";
+    i.src = R + prefix + n + ".webp"; if (n === first) i.className = "on";
+    el.append(i); imgs[n] = i;
+  }
+  let cur = first;
+  return { set(n){ if (n === cur || !imgs[n]) return; imgs[cur].classList.remove("on"); imgs[n].classList.add("on"); cur = n; }, get cur(){ return cur; } };
+}
+
+// Hero：照 App 的行為表
+const heroEl = document.getElementById("hero-pet");
+const hero = mountPet(heroEl, FACES, "face-", "idle");
+let over = false, overTimer = [], locked = 0, clicks = [];
+const clearOver = () => { overTimer.forEach(clearTimeout); overTimer = []; };
+addEventListener("pointermove", e => {
+  if (Date.now() < locked) return;
+  const r = heroEl.getBoundingClientRect();
+  const dx = Math.max(r.left - e.clientX, 0, e.clientX - r.right), dy = Math.max(r.top - e.clientY, 0, e.clientY - r.bottom);
+  const near = Math.hypot(dx, dy) < 160;
+  if (!over) hero.set(near ? "curious" : "idle");
+}, { passive: true });
+heroEl.addEventListener("pointerenter", () => {
+  over = true; clearOver();
+  overTimer.push(setTimeout(() => Date.now() > locked && hero.set("happy"), 1500));
+  overTimer.push(setTimeout(() => Date.now() > locked && hero.set("love"), 4000));
+});
+heroEl.addEventListener("pointerleave", () => { over = false; clearOver(); if (Date.now() > locked) hero.set("happy"); setTimeout(() => !over && hero.set("curious"), 600); });
+heroEl.addEventListener("pointerdown", () => {
+  heroEl.classList.add("press");
+  const now = Date.now(); clicks = clicks.filter(t => now - t < 1500); clicks.push(now);
+  if (clicks.length >= 5){ hero.set("focus"); locked = now + 1600; clicks = []; }
+  else { hero.set("surprised"); locked = now + 400; setTimeout(() => hero.set(over ? "happy" : "curious"), 420); }
+});
+addEventListener("pointerup", () => heroEl.classList.remove("press"));
+
+// 表情段
+const facePet = mountPet(document.getElementById("face-pet"), FACES, "face-", "curious");
+const rows = [...document.querySelectorAll("#rows .row")];
+const pick = row => { rows.forEach(r => r.classList.toggle("on", r === row)); facePet.set(row.dataset.face); };
+rows.forEach(r => { r.addEventListener("pointerenter", () => pick(r)); r.addEventListener("focus", () => pick(r)); r.addEventListener("click", () => pick(r)); });
+pick(rows[0]);
+
+// 視角：分段控制 + 數字鍵 1–4
+const seg = [...document.querySelectorAll(".seg button")], views = [...document.querySelectorAll("#viewstage img")];
+const setView = v => { seg.forEach(b => b.setAttribute("aria-pressed", b.dataset.view === v)); views.forEach(i => i.classList.toggle("on", i.dataset.view === v)); };
+seg.forEach(b => b.addEventListener("click", () => setView(b.dataset.view)));
+addEventListener("keydown", e => { if (e.target.closest("input,textarea") || e.metaKey || e.ctrlKey) return; const v = ["front","side","back","apart"][+e.key - 1]; if (v) setView(v); });
+
+// 外觀
+const FIN = { g4:["G4 白","白色亮面清漆塑膠。屏幕走 Aqua 藍與凝膠光澤，游標靠近時會像向日葵一樣轉頭。"],
+  silver:["銀","緞面鋁，網面是細密點陣。"], starlight:["星光","偏暖的淺金鋁。"], rose:["玫瑰粉","帶一點粉的鋁色。"], gray:["太空灰","深色鋁，夜裡最安靜。"] };
+const finPet = mountPet(document.getElementById("finish-pet"), Object.keys(FIN), "finish-", "g4");
+const sws = [...document.querySelectorAll(".sw")];
+sws.forEach(b => b.addEventListener("click", () => {
+  const f = b.dataset.finish; finPet.set(f); sws.forEach(s => s.setAttribute("aria-pressed", s === b));
+  document.getElementById("swname").textContent = FIN[f][0]; document.getElementById("swdesc").textContent = FIN[f][1];
+}));
+
+// 進場
+const io = new IntersectionObserver(es => es.forEach(e => e.isIntersecting && (e.target.classList.add("in"), io.unobserve(e.target))), { threshold: .15 });
+document.querySelectorAll(".rise").forEach(el => reduce ? el.classList.add("in") : io.observe(el));
+
+// 設計稿工具列
+document.getElementById("t-notes").onclick = e => { document.body.classList.toggle("clean"); e.target.textContent = document.body.classList.contains("clean") ? "顯示註記" : "隱藏註記"; };
+document.getElementById("t-theme").onclick = () => { const r = document.documentElement; const dark = r.dataset.theme ? r.dataset.theme === "dark" : matchMedia("(prefers-color-scheme: dark)").matches; r.dataset.theme = dark ? "light" : "dark"; };
+</script>
+</body>
+</html>
