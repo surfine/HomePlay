@@ -92,6 +92,9 @@ function head(c, { title, description, canonicalPath, image, imageAlt }) {
 <link rel="canonical" href="${url}">
 ${alternates.map((a) => `<link rel="alternate" hreflang="${a.hreflang}" href="${a.href}">`).join('\n')}
 <link rel="alternate" hreflang="x-default" href="${origin}/">
+<link rel="icon" href="/media/favicon.ico" sizes="any">
+<link rel="icon" type="image/png" sizes="32x32" href="/media/favicon-32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/media/favicon-16.png">
 <link rel="icon" type="image/png" sizes="192x192" href="/media/icon-192.png">
 <link rel="apple-touch-icon" sizes="180x180" href="/media/apple-touch-icon.png">
 <link rel="preload" as="image" href="${R}face-idle.webp" fetchpriority="high">
@@ -311,6 +314,9 @@ function notFound() {
 <title>${esc(zh.notFound.title)}</title>
 <meta name="robots" content="noindex">
 <meta name="color-scheme" content="light dark">
+<link rel="icon" href="/media/favicon.ico" sizes="any">
+<link rel="icon" type="image/png" sizes="32x32" href="/media/favicon-32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/media/favicon-16.png">
 <link rel="icon" type="image/png" sizes="192x192" href="/media/icon-192.png">
 <link rel="stylesheet" href="/style.css?v=${CSS_V}">
 </head>
