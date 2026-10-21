@@ -105,9 +105,9 @@ def card(kind, headline, sub, out, renders="", tc=True):
     im.save(os.path.join(MEDIA, out), "JPEG", quality=90, optimize=True)
 
 T = titles()
-card("zh", T["zh-Hant"], "Mac 上的 3D HomeView 桌寵", "og-v2.jpg", "", tc=True)
-card("zh", T["zh-Hans"], "Mac 上的 3D HomeView 桌宠", "og-zh-hans-v2.jpg", "zh-Hans", tc=False)
-card("en", T["en"], "A 3D HomeView desktop pet for Mac", "og-en-v2.jpg", "en")
+card("zh", T["zh-Hant"], "Mac 上的 3D HomeView 桌寵", "og-v3.jpg", "", tc=True)
+card("zh", T["zh-Hans"], "Mac 上的 3D HomeView 桌宠", "og-zh-hans-v3.jpg", "zh-Hans", tc=False)
+card("en", T["en"], "A 3D HomeView desktop pet for Mac", "og-en-v3.jpg", "en")
 
 # 方形分享圖：不透明 512x512，圖示置中約 78%，底色同網站背景
 sq = Image.new("RGB", (512, 512), BG)

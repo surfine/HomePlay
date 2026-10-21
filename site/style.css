@@ -167,6 +167,13 @@ header .btn{height:36px;padding:0 16px;font-size:14px}
 .spin-hint{margin-top:14px;color:var(--muted);font-size:15px;transition:opacity .5s}
 .spin-hint.gone{opacity:0}
 .spin-actions{margin-top:14px}
+.apart-parts{display:none;max-width:860px;margin:28px auto 0;text-align:left}
+.spin-stage.apart ~ .apart-parts{display:block}
+.apart-note{margin:0;color:var(--muted);font-size:15px}
+.apart-parts ol{list-style:none;display:grid;grid-template-columns:repeat(3,1fr);gap:9px 28px;margin:14px 0 0;padding:0}
+.apart-parts li{display:flex;align-items:baseline;gap:9px;padding:8px 0;border-bottom:1px solid var(--line);font-size:15px}
+.apart-parts li span{width:1.4em;flex:none;color:var(--muted);font:12px var(--mono);font-variant-numeric:tabular-nums}
+@media (max-width:700px){.apart-parts ol{grid-template-columns:1fr 1fr;gap:6px 16px}.apart-parts li{font-size:14px}}
 .gestures{margin:48px auto 0;max-width:860px;display:grid;grid-template-columns:1fr 1fr;gap:10px 40px;text-align:left}
 .g{display:flex;justify-content:space-between;gap:16px;padding:10px 0;border-bottom:1px solid var(--line);font-size:15.5px}
 .g span:last-child{color:var(--muted);text-align:right}

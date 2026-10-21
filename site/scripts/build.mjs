@@ -120,8 +120,9 @@ function petImg(name, prefix, size, { on = false, lazy = false, priority = false
   return `<img${on ? ' class="on"' : ''} src="${R}${prefix}${name}.webp" data-name="${name}" width="${size[0]}" height="${size[1]}" alt="${alt}" decoding="async"${priority ? ' fetchpriority="high"' : ''}${lazy ? ' loading="lazy"' : ''}>`;
 }
 
-// 品牌的眼睛：白色橢圓、黑瞳孔、一點高光，沒有描邊。瞳孔與眼皮由 app.js 用 transform 驅動。
-const eye = (cx, cy) => `<g class="eye" data-cx="${cx}" data-cy="${cy}"><ellipse cx="${cx}" cy="${cy}" rx="36" ry="52" fill="#fff"/><g class="pupil"><circle cx="${cx}" cy="${cy}" r="18" fill="#000"/><circle cx="${cx - 6}" cy="${cy - 9}" r="5" fill="#fff"/></g><path class="lid" d="M ${cx - 24} ${cy + 10} Q ${cx} ${cy + 26} ${cx + 24} ${cy + 10}" fill="none" stroke="#15181c" stroke-width="4.6" stroke-linecap="round" opacity="0"/></g>`;
+// 品牌的眼睛：照產品的 👀 語言——白色球面眼白、琥珀虹膜、深棕瞳孔、左上大高光；
+// 閉眼仍用唐老鴨式的短下彎眼瞼線。瞳孔與眼皮由 app.js 用 transform 驅動。
+const eye = (cx, cy) => `<g class="eye" data-cx="${cx}" data-cy="${cy}"><ellipse cx="${cx}" cy="${cy}" rx="36" ry="52" fill="url(#eye-sclera)" stroke="#6e737a" stroke-opacity=".22" stroke-width="1.2"/><g class="pupil"><circle cx="${cx}" cy="${cy}" r="19.4" fill="url(#eye-iris)" stroke="#331d08" stroke-width="1.2" stroke-opacity=".9"/><circle cx="${cx - 7.4}" cy="${cy - 7.8}" r="6.2" fill="#fff" opacity=".16"/><circle cx="${cx - 7.4}" cy="${cy - 7.8}" r="5" fill="#fff"/><circle cx="${cx + 7.8}" cy="${cy + 7.4}" r="1.7" fill="#fff" opacity=".42"/></g><path class="lid" d="M ${cx - 24} ${cy + 10} Q ${cx} ${cy + 26} ${cx + 24} ${cy + 10}" fill="none" stroke="#15181c" stroke-width="4.6" stroke-linecap="round" opacity="0"/></g>`;
 
 function page(c) {
   R = rendersFor(c);
@@ -175,7 +176,7 @@ ${head(c, { title: c.title, description: c.description, canonicalPath: c.path, i
   </div>
   <div class="why-eyes">
     <div class="eyes-card" id="eyes" role="img" aria-label="${attr(c.eyesLabel)}">
-      <svg viewBox="0 0 300 300" aria-hidden="true" focusable="false">${eye(98, 142)}${eye(202, 142)}</svg>
+      <svg viewBox="0 0 300 300" aria-hidden="true" focusable="false"><defs><radialGradient id="eye-sclera" cx="38%" cy="32%" r="78%"><stop offset="0" stop-color="#fff"/><stop offset=".62" stop-color="#f8f9fa"/><stop offset="1" stop-color="#c9cfd6"/></radialGradient><radialGradient id="eye-iris" cx="50%" cy="50%" r="50%"><stop offset="0" stop-color="#1a0e05"/><stop offset=".5" stop-color="#291407"/><stop offset=".68" stop-color="#4d2908"/><stop offset=".8" stop-color="#944f09"/><stop offset=".88" stop-color="#d18a0c"/><stop offset=".94" stop-color="#f0a812"/><stop offset="1" stop-color="#4d2b08"/></radialGradient></defs>${eye(98, 142)}${eye(202, 142)}</svg>
     </div>
     <p class="eyes-hint">${c.eyesHint}</p>
   </div>
@@ -218,6 +219,10 @@ ${c.rows.map(([f, t, r], i) => `      <button type="button" class="row${i ? '' :
   </div>
   <p class="spin-hint" id="spin-hint">${c.spinHint}</p>
   <div class="spin-actions"><button type="button" class="btn btn-ghost" id="apart-btn" aria-pressed="false">${c.apart}</button></div>
+  <div class="apart-parts">
+    <p class="apart-note">${c.apartNote}</p>
+    <ol>${c.apartParts.map((p, i) => `<li><span>${i + 1}</span>${p}</li>`).join('')}</ol>
+  </div>
   <div class="gestures">
     ${c.gestures.map(([a, b]) => `<div class="g"><span>${a}</span><span>${b}</span></div>`).join('\n    ')}
   </div>

@@ -283,7 +283,7 @@ enum Expression: String, CaseIterable {
 
 struct FaceParams: Equatable {
     var cw: CGFloat = 420, ch: CGFloat = 156                    // 胶囊
-    var rx: CGFloat = 34, ry: CGFloat = 48, sep: CGFloat = 34   // 眼白半径、两眼中心离中线（唐老鸭式：大眼白、靠得近）
+    var rx: CGFloat = 31, ry: CGFloat = 50, sep: CGFloat = 36   // 眼白半径、两眼中心离中线（👀：竖长眼白、微微分开）
     var top: CGFloat = 0, bot: CGFloat = 0, tilt: CGFloat = 0   // 上下眼皮遮住的比例、眼皮往外斜（弧度）
     var smile: CGFloat = 0                                      // 笑眼：眼白下缘切成弯月
     var pdx: CGFloat = -13, pdy: CGFloat = 6, ps: CGFloat = 1   // 眼珠位移、缩放
@@ -293,12 +293,12 @@ struct FaceParams: Equatable {
         var p = FaceParams()
         switch e {
         case .idle, .wink: break
-        case .curious: p.rx = 35; p.ry = 51; p.cw = 440
+        case .curious: p.rx = 32; p.ry = 52; p.cw = 440
         case .happy: p.smile = 1; p.ps = 0; p.blush = 0.6
         case .focus: p.top = 0.34; p.bot = 0.22; p.pdx = 0; p.pdy = 0
         case .sleepy: p.top = 0.55; p.pdx = 0; p.pdy = 12
-        case .asleep: p.top = 0.9; p.pdx = 0; p.pdy = 14; p.dim = 0.45
-        case .surprised: p.rx = 36; p.ry = 54; p.sep = 37; p.ps = 0.62; p.pdx = 0; p.pdy = 0; p.cw = 460; p.ch = 172
+        case .asleep: p.top = 0; p.pdx = 0; p.pdy = 14; p.dim = 0.45
+        case .surprised: p.rx = 33; p.ry = 55; p.sep = 38; p.ps = 0.62; p.pdx = 0; p.pdy = 0; p.cw = 460; p.ch = 172
         case .worried: p.top = 0.3; p.tilt = 0.38; p.pdx = 0; p.pdy = 14
         case .love: p.ps = 1.25; p.pdx = 0; p.pdy = 2; p.blush = 1
         }
@@ -1115,16 +1115,41 @@ final class Face {
 
     func drawEye(_ g: CGContext, cx: CGFloat, cy: CGFloat, side: CGFloat, blinkF: CGFloat, k: CGFloat = 1.4) {
         let p = cur
-        let rx = p.rx * k, ry = p.ry * k * blinkF
+        let rx = p.rx * k, ry = p.ry * k
         guard ry >= 1 else { return }
-        let winkEye = expression == .wink && side < 0         // 眨单眼：左眼是笑眼
-        let smile = winkEye ? 1 : p.smile, ps = winkEye ? 0 : p.ps
+        let winkEye = expression == .wink && side < 0         // 眨单眼：左眼也画成闭眼
+        let lidA: CGFloat = winkEye || expression == .asleep ? 1 : max(0, min(1, (0.6 - blinkF) / 0.35))
+        let irisA: CGFloat = winkEye || expression == .asleep ? 0 : max(0, min(1, (blinkF - 0.5) / 0.2))
+        let smile = p.smile, ps = winkEye ? 0 : p.ps
         g.saveGState()
         let eye = CGRect(x: cx - rx, y: cy - ry, width: rx * 2, height: ry * 2)
         g.addEllipse(in: eye); g.clip()
-        g.setFillColor(NSColor.white.cgColor); g.fill(eye)
+        // 眼白不是纯色：左上亮、右下带一点冷灰，像 👀 那样有球面感。
+        let cs = CGColorSpaceCreateDeviceRGB()
+        let sclera = CGGradient(colorsSpace: cs, colors: [
+            NSColor.white.cgColor,
+            NSColor(srgbRed: 0.972, green: 0.976, blue: 0.982, alpha: 1).cgColor,
+            NSColor(srgbRed: 0.790, green: 0.812, blue: 0.838, alpha: 1).cgColor,
+        ] as CFArray, locations: [0, 0.62, 1])!
+        let light = CGPoint(x: cx - rx * 0.22, y: cy - ry * 0.38)
+        g.drawRadialGradient(sclera, startCenter: light, startRadius: 0,
+                             endCenter: light, endRadius: max(rx, ry) * 1.22, options: [.drawsAfterEndLocation])
+        // 👀 的眼白有一圈很柔的灰边，眼睛才像玻璃球而不是白纸片。
+        let rim = CGGradient(colorsSpace: cs, colors: [
+            NSColor(srgbRed: 0.55, green: 0.57, blue: 0.60, alpha: 0).cgColor,
+            NSColor(srgbRed: 0.55, green: 0.57, blue: 0.60, alpha: 0.20).cgColor,
+        ] as CFArray, locations: [0.72, 1])!
+        let ec = CGPoint(x: cx, y: cy)
+        g.drawRadialGradient(rim, startCenter: ec, startRadius: min(rx, ry) * 0.52,
+                             endCenter: ec, endRadius: max(rx, ry) * 1.06, options: [.drawsAfterEndLocation])
+        g.setStrokeColor(NSColor(srgbRed: 0.43, green: 0.45, blue: 0.48, alpha: 0.22).cgColor)
+        g.setLineWidth(max(1, 1.1 * k))
+        g.strokeEllipse(in: eye.insetBy(dx: 0.5, dy: 0.5))
+
         g.setFillColor(NSColor.black.cgColor)
-        if ps > 0.02 && blinkF > 0.5 {                        // 闭眼时不画眼珠
+        if ps > 0.02 && irisA > 0.01 {                        // 闭眼时眼珠淡出，换成眼睑线
+            g.saveGState()
+            g.setAlpha(irisA)
             let qx = cx + p.pdx * k, qy = cy + p.pdy * k
             if expression == .love {
                 g.addPath(heart(qx, qy, 18 * k * ps)); g.fillPath()
@@ -1135,20 +1160,47 @@ final class Face {
                                          width: hr * 2, height: hr * 2))
                 g.setFillColor(NSColor.black.cgColor)
             } else {
-                // 唐老鸭式：窄高的黑眼珠（不是圆豆），留出更多眼白
-                g.fillEllipse(in: CGRect(x: qx - 13 * k * ps, y: qy - 22 * k * ps,
-                                         width: 26 * k * ps, height: 44 * k * ps))
-                // 眼神光：一小一大两个高光，眼睛立刻「湿」起来
-                let hr = 4.6 * k * max(0.55, min(1.2, ps))
-                let hx = qx - 7.5 * k * ps, hy = qy - 13 * k * ps
-                g.setFillColor(NSColor.white.withAlphaComponent(0.92).cgColor)
+                // 👀：圆虹膜 + 琥珀色虹膜环 + 深棕瞳孔；眼白上的大高光让眼睛有玻璃感。
+                let ir = max(4, rx * 0.54 * ps)
+                let iris = CGRect(x: qx - ir, y: qy - ir, width: ir * 2, height: ir * 2)
+                g.saveGState()
+                g.addEllipse(in: iris); g.clip()
+                let irisGrad = CGGradient(colorsSpace: cs, colors: [
+                    NSColor(srgbRed: 0.10, green: 0.055, blue: 0.020, alpha: 1).cgColor,
+                    NSColor(srgbRed: 0.16, green: 0.080, blue: 0.025, alpha: 1).cgColor,
+                    NSColor(srgbRed: 0.30, green: 0.16, blue: 0.030, alpha: 1).cgColor,
+                    NSColor(srgbRed: 0.58, green: 0.34, blue: 0.035, alpha: 1).cgColor,
+                    NSColor(srgbRed: 0.82, green: 0.52, blue: 0.045, alpha: 1).cgColor,
+                    NSColor(srgbRed: 0.94, green: 0.66, blue: 0.070, alpha: 1).cgColor,
+                    NSColor(srgbRed: 0.30, green: 0.17, blue: 0.030, alpha: 1).cgColor,
+                ] as CFArray, locations: [0, 0.50, 0.68, 0.80, 0.88, 0.94, 1])!
+                g.drawRadialGradient(irisGrad, startCenter: CGPoint(x: qx, y: qy), startRadius: 0,
+                                     endCenter: CGPoint(x: qx, y: qy), endRadius: ir, options: [])
+                // 上半圈压一点深棕，让它像受光的虹膜，而不是平滑的金色圆环。
+                let irisShade = CGGradient(colorsSpace: cs, colors: [
+                    NSColor(srgbRed: 0.12, green: 0.065, blue: 0.025, alpha: 0.28).cgColor,
+                    NSColor(srgbRed: 0.12, green: 0.065, blue: 0.025, alpha: 0).cgColor,
+                ] as CFArray, locations: [0, 1])!
+                g.drawLinearGradient(irisShade, start: CGPoint(x: qx, y: qy - ir),
+                                     end: CGPoint(x: qx, y: qy + ir), options: [])
+                g.restoreGState()
+                g.setStrokeColor(NSColor(srgbRed: 0.20, green: 0.115, blue: 0.030, alpha: 0.92).cgColor)
+                g.setLineWidth(max(1, ir * 0.08))
+                g.strokeEllipse(in: iris.insetBy(dx: ir * 0.04, dy: ir * 0.04))
+                // 主高光在左上，右下再补一颗很小的反光；高光比 emoji 略收一点，避免盖住虹膜。
+                let hr = ir * 0.255
+                let hx = qx - ir * 0.38, hy = qy - ir * 0.40
+                g.setFillColor(NSColor.white.withAlphaComponent(0.16).cgColor)
+                g.fillEllipse(in: CGRect(x: hx - hr * 1.25, y: hy - hr * 1.25, width: hr * 2.5, height: hr * 2.5))
+                g.setFillColor(NSColor.white.withAlphaComponent(0.97).cgColor)
                 g.fillEllipse(in: CGRect(x: hx - hr, y: hy - hr, width: hr * 2, height: hr * 2))
-                g.setFillColor(NSColor.white.withAlphaComponent(0.42).cgColor)
-                let sr = 2.2 * k * max(0.5, min(1, ps))
-                g.fillEllipse(in: CGRect(x: qx + 4 * k * ps - sr, y: qy + 9 * k * ps - sr,
+                let sr = ir * 0.085
+                g.setFillColor(NSColor.white.withAlphaComponent(0.40).cgColor)
+                g.fillEllipse(in: CGRect(x: qx + ir * 0.40 - sr, y: qy + ir * 0.38 - sr,
                                          width: sr * 2, height: sr * 2))
                 g.setFillColor(NSColor.black.cgColor)
             }
+            g.restoreGState()
         }
         // 眼皮：绕眼睛中心往外斜（左眼外侧在左），上下各遮一部分；笑眼用一个黑椭圆把下缘切成弯月
         g.translateBy(x: cx, y: cy); g.rotate(by: p.tilt * side)
@@ -1167,6 +1219,19 @@ final class Face {
         if smile > 0.01 {
             let c = ry * (1.95 - 0.9 * smile)
             g.fillEllipse(in: CGRect(x: -rx * 1.35, y: c - ry * 1.1, width: rx * 2.7, height: ry * 2.2))
+        }
+        if lidA > 0.01 {
+            // 唐老鸭式闭眼：保留白色眼白，只画一条短的下弯眼睑线（和网站同一套比例）。
+            g.saveGState()
+            g.setAlpha(lidA)
+            g.setStrokeColor(NSColor(srgbRed: 0.082, green: 0.094, blue: 0.110, alpha: 1).cgColor)
+            g.setLineWidth(max(2, ry * 0.09))
+            g.setLineCap(.round)
+            let lid = CGMutablePath()
+            lid.move(to: CGPoint(x: -rx * 0.667, y: ry * 0.192))
+            lid.addQuadCurve(to: CGPoint(x: rx * 0.667, y: ry * 0.192), control: CGPoint(x: 0, y: ry * 0.5))
+            g.addPath(lid); g.strokePath()
+            g.restoreGState()
         }
         g.restoreGState()
     }
@@ -1313,7 +1378,7 @@ final class HomeViewModel {
     static let rigY: CGFloat = 10.46
     static let hingeY: CGFloat = 7.20
     static let rigHome = SIMD3<Float>(0, 7.20, 3.80)
-    static let rigOff = SIMD3<Float>(0, 2.6, 3.4)
+    static let rigOff = SIMD3<Float>(0, 8.5, 3.8)
     static let screenSize: Float = 12.54
 
     /// 世界单位是厘米：USDZ 根节点自带 0.01（米），再乘 100 回到厘米。
@@ -1350,6 +1415,14 @@ final class HomeViewModel {
     private var grilleMask: TextureResource?
     private var usbPort: USBCPortAssembly?
 
+    /// 拆解時逐件位移：保留 USDZ 原始零件，只沿螢幕法線 / 底座 Y 軸拉開。
+    private struct ExplodeMover {
+        let entity: Entity
+        let origin: SIMD3<Float>
+        let offset: SIMD3<Float>
+    }
+    private var explodeMovers: [ExplodeMover] = []
+
     /// 给 ARView.hitTest 用的不可见碰触盒（包住整机）
     private(set) var hitBody = Entity()
 
@@ -1382,7 +1455,6 @@ final class HomeViewModel {
             root.findEntity(named: "tLEDFVYGwydBKWm")?.isEnabled = false
             root.findEntity(named: "FotmOZuSlJsjcoC")?.isEnabled = false
             holder.addChild(root)
-
             guard let base = root.findEntity(named: "NJhDUJBxvaEheAQ"),
                   let screen = root.findEntity(named: "CnqMXaudxjxUchB"),
                   let display = root.findEntity(named: "RFkcSjAtJLGqwDA") as? ModelEntity,
@@ -1459,6 +1531,7 @@ final class HomeViewModel {
             port.root.position = SIMD3<Float>(0, 1.537, -4.100)
             base.addChild(port.root)
             usbPort = port
+            buildExplodeMovers()
 
 
 
@@ -1478,6 +1551,54 @@ final class HomeViewModel {
         } catch {
             log("USDZ 加载失败：\(error)")
         }
+    }
+
+    /// 把官方 USDZ 的零件分成可讀的層：螢幕沿法線（前玻璃／顯示／中框／背殼），
+    /// 底座沿 Y（圓頂／網罩／低音／腳環）。不重畫幾何，只位移原始節點。
+    private func buildExplodeMovers() {
+        explodeMovers.removeAll()
+        guard let screen = screenGroup, let base = baseGroup else { return }
+        let n = simd_normalize(screenAnchor.orientation.act(SIMD3<Float>(0, 0, 1)))
+        var seen = Set<ObjectIdentifier>()
+
+        func add(_ e: Entity, _ offset: SIMD3<Float>) {
+            let key = ObjectIdentifier(e)
+            guard !seen.contains(key), e.isEnabled else { return }
+            seen.insert(key)
+            explodeMovers.append(ExplodeMover(entity: e, origin: e.position, offset: offset))
+        }
+
+        func walk(_ e: Entity, root: Entity, _ offset: (Entity, BoundingBox?) -> SIMD3<Float>) {
+            if let m = e as? ModelEntity, m.model != nil {
+                add(e, offset(e, e.visualBounds(relativeTo: root)))
+            }
+            for c in e.children { walk(c, root: root, offset) }
+        }
+
+        for child in screen.children {
+            walk(child, root: screen) { e, _ in
+                if e.name == "gBXWwTbBvrZBZxY" { return SIMD3<Float>(0, 0, 4.2) }   // 前玻璃
+                // 其餘螢幕件保持組裝關係：顯示、中框、主板、相機、下緣網罩一起移動。
+                // 側面看到的是官方螢幕本身的厚度，不再拆成五張紙。
+                return SIMD3<Float>(0, 0, 1.6)
+            }
+        }
+        if let back = screenBack { add(back, SIMD3<Float>(0, 0, -2.6)) } // 鋁背殼
+
+        for child in base.children {
+            walk(child, root: base) { e, _ in
+                switch e.name {
+                case "nLuFOBqijsErMHq": return SIMD3<Float>(0, -4.5, 0)   // 腳環
+                case "SZbxWWDrhdKpHNV", "tFNxtBHMOOTecPg":
+                    return SIMD3<Float>(0, 3.0, 0)                       // 圓頂
+                case "TlTyQAuZSZnkfBS": return SIMD3<Float>(0, 1.5, 0)   // 鉸鏈
+                case "GkdQECEsVboLhOs", "iKNLnLHtbywYoYi":
+                    return SIMD3<Float>(0, -1.8, 0)                      // 低音／輻射器座
+                default: return SIMD3<Float>(0, -1.0, 0)                 // 網罩與內襯
+                }
+            }
+        }
+        if let port = usbPort { add(port.root, SIMD3<Float>(0, -1.0, 0)) }
     }
 
     private func makeScreenBlack() {
@@ -1537,8 +1658,9 @@ final class HomeViewModel {
     /// 拆开进度 t（0 组好 … 1 拆开）。
     func apply(_ t: CGFloat) {
         let e = ease(clamp01(t))
-        baseGroup?.position = SIMD3<Float>(0, -1.6 * Float(e), 0)
+        baseGroup?.position = SIMD3<Float>(0, -3.2 * Float(e), 0)
         screenPivot.position = Self.rigHome + Self.rigOff * Float(e)
+        for m in explodeMovers { m.entity.position = m.origin + m.offset * Float(e) }
     }
 
     /// 自检用：当前圆顶材质的金属度（星光/银＝1，G4 白＝0）。
@@ -2480,8 +2602,8 @@ final class PetView: NSView {
         // 镜头：围着身体转；拆开时退远一点、抬一点，九件都在画面里。
         // RealityKit 默认相机朝 -Z，绕 Y 转 yaw、绕 X 转 -pitch 就正对目标，滚转恒 0。
         let e = ease(clamp01(apartT))
-        let target = SIMD3<Float>(0, Float(8.6 + 1.2 * e), Float(1.8 + 5.5 * e))
-        let fitH = Float(22 + 5 * e)
+        let target = SIMD3<Float>(0, Float(8.6 + 3.4 * e), Float(1.8 + 5.3 * e))
+        let fitH = Float(22 + 20 * e)
         let d = (fitH / 2) / tanf(12 * .pi / 180) * max(1, 0.86 / Float(Pet.aspect))
         let sy = sinf(Float(yaw)), cy = cosf(Float(yaw))
         let sp = sinf(Float(pitch)), cp = cosf(Float(pitch))
@@ -2807,7 +2929,7 @@ final class PetView: NSView {
     // 稿里的两个默认角度：组好时 0.52，拆开时转到 1.08 侧看，九件才不会叠在一条视线上。
     // 用户自己转过就不再替他转。
     private var atHome = true
-    private static let homeYaw: CGFloat = 0.52, apartYaw: CGFloat = 1.08, homePitch: CGFloat = 0.26
+    private static let homeYaw: CGFloat = 0.52, apartYaw: CGFloat = 0.82, homePitch: CGFloat = 0.26
     func setApart(_ on: Bool) {
         apartTarget = on ? 1 : 0
         if on { mood.apart = true }      // 组回到位才放下（见 step）

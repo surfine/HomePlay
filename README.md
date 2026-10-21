@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="https://homeplay.aaronlau.me/media/og-v2.jpg" alt="HomePlay：桌上一台小螢幕，會看著你" width="820">
+  <img src="https://homeplay.aaronlau.me/media/og-v3.jpg" alt="HomePlay：桌上一台小螢幕，會看著你" width="820">
   <h2>桌上一台小螢幕，會看著你。</h2>
   <p><strong>A 3D HomeView desk pet for the Mac that runs real CarPlay.</strong></p>
   <p>
@@ -17,11 +17,11 @@
   </p>
 </div>
 
-## v0.4.0
+## v0.5.0
 
 HomePlay 把一台小小的 3D HomeView 放進 Mac 桌面。平常它顯示時間，用一雙眼睛陪你；用力按一下，螢幕就變成真的 CarPlay。iPhone 的畫面、觸控與聲音都會經過這台小螢幕，不是錄影，也不是假的介面。
 
-這一版重新整理了背面 USB-C 母座、無線交接與權限流程，也更新了官網的全部實拍素材。
+這一版把網站與產品的那雙眼睛統一成 Apple 👀 的語言：網站的品牌眼換上琥珀虹膜，產品的眨眼、睡著與眨眼單眼改成唐老鴨式眼瞼線，保留白色眼白；分享圖也重拍成 v3。
 
 ## 下載
 
