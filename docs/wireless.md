@@ -24,7 +24,8 @@
 ## 步驟
 
 ```sh
-cd ~/Documents/HomePlay && swift build -c release
+git clone https://github.com/surfine/HomePlay.git
+cd HomePlay && swift build -c release
 B=.build/release
 $B/iap2-probe --list                        # 找 iPhone 的藍牙地址
 $B/homeplay-receiver --phones-selftest      # 只讀：列出已配對 iPhone 與本機藍牙名

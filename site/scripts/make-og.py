@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""產生分享圖：og.jpg（繁中）/ og-zh-hans.jpg（简中）/ og-en.jpg（1200x630），以及 share-square.jpg（512x512，給只抓頁內第一張大圖的 IM）。
+"""產生分享圖：og-v3.jpg（繁中）/ og-zh-hans-v3.jpg（简中）/ og-en-v3.jpg（1200x630），以及 share-square.jpg（512x512，給只抓頁內第一張大圖的 IM）。
 標題取自 content.mjs 的 ogTitle；素材取自 public/media/renders（各語言各一套屏幕），字體用 macOS 系統字（找不到就退回 PIL 內建字，版面仍可用）。
 用法：python3 scripts/make-og.py"""
 import glob, json, os, subprocess

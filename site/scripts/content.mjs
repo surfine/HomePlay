@@ -45,6 +45,7 @@ export const copy = {
     download: '下載 App',
     downloadNote: 'v0.5.0，macOS 14 以上，Apple Silicon。有 Developer ID 簽名並通過 Apple 公證，解壓後直接打開。',
     heroNote: 'v0.5.0 · macOS 14+ · Apple Silicon · 已公證',
+    replayFilm: '再看一次',
     heroLabel: 'HomePlay 桌寵，目前的表情：{face}',
     faceNames: { idle: '平常', curious: '好奇', happy: '笑眼', focus: '不耐煩', sleepy: '睏', asleep: '睡著', surprised: '嚇一跳', worried: '擔心', love: '愛心', wink: '眨眼' },
 
@@ -179,6 +180,7 @@ export const copy = {
     download: '下载 App',
     downloadNote: 'v0.5.0，macOS 14 以上，Apple Silicon。有 Developer ID 签名并通过 Apple 公证，解压后直接打开。',
     heroNote: 'v0.5.0 · macOS 14+ · Apple Silicon · 已公证',
+    replayFilm: '再看一次',
     heroLabel: 'HomePlay 桌宠，当前的表情：{face}',
     faceNames: { idle: '平常', curious: '好奇', happy: '笑眼', focus: '不耐烦', sleepy: '犯困', asleep: '睡着', surprised: '吓一跳', worried: '担心', love: '爱心', wink: '眨眼' },
 
@@ -313,6 +315,7 @@ export const copy = {
     download: 'Download the app',
     downloadNote: 'v0.5.0, macOS 14 or later, Apple Silicon. Signed with a Developer ID and notarized by Apple, so it opens right after unzipping.',
     heroNote: 'v0.5.0 · macOS 14+ · Apple Silicon · Notarized',
+    replayFilm: 'Replay',
     heroLabel: 'HomePlay desk pet, current expression: {face}',
     faceNames: { idle: 'resting', curious: 'curious', happy: 'smiling eyes', focus: 'impatient', sleepy: 'sleepy', asleep: 'asleep', surprised: 'startled', worried: 'worried', love: 'hearts', wink: 'wink' },
 

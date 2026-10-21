@@ -162,7 +162,7 @@
   const heroEl = $('#hero-pet');
   const hero = mountPet(heroEl, n => heroEl.setAttribute('aria-label', fmt(I18N.heroLabel, 'face', I18N.faceNames[n])));
   const warm = () => hero.fill();
-  addEventListener('load', () => (window.requestIdleCallback || setTimeout)(warm, { timeout: 1500 }), { once: true });
+  addEventListener('load', () => { const idle = window.requestIdleCallback; if (idle) idle(warm, { timeout: 1500 }); else setTimeout(warm, 200); }, { once: true });
   addEventListener('pointermove', warm, { once: true, passive: true });
   addEventListener('pointerdown', warm, { once: true, passive: true });
   addEventListener('keydown', warm, { once: true });
@@ -193,6 +193,38 @@
   });
   addEventListener('pointerup', () => heroEl.classList.remove('press'));
   addEventListener('pointercancel', () => heroEl.classList.remove('press'));
+
+  // ── Hero film：播一次，落定後交棒給可互動的桌寵 ──
+  (() => {
+    const sec = $('.hero');
+    const panel = $('#hero-film');
+    const video = panel && panel.querySelector('video');
+    const replay = $('#film-replay');
+    if (!sec || !panel || !video || reduce || !matchMedia('(min-width: 821px)').matches) return;
+    let endTimer = 0;
+    const finish = () => {
+      clearTimeout(endTimer);
+      sec.classList.remove('film-on');
+      sec.classList.add('film-done');
+    };
+    const play = () => {
+      sec.classList.add('film-on');
+      sec.classList.remove('film-done');
+      try { video.currentTime = 0; } catch {}
+      const p = video.play();
+      if (p && p.catch) p.catch(finish);
+    };
+    video.addEventListener('playing', () => { clearTimeout(endTimer); endTimer = setTimeout(finish, 7000); });
+    video.addEventListener('pause', () => clearTimeout(endTimer));
+    video.addEventListener('ended', finish);
+    video.addEventListener('error', finish);
+    if (replay) replay.addEventListener('click', play);
+    addEventListener('visibilitychange', () => {
+      if (document.hidden) video.pause();
+      else if (sec.classList.contains('film-on')) video.play().catch(() => {});
+    });
+    play();
+  })();
 
   // ── 表情段：一行一個觸發 ──
   const faceEl = $('#face-pet');
@@ -319,12 +351,6 @@
     const sec = $('#carplay'); if (!sec) return;
     if (reduce) return;
     whileVisible(sec, () => sec.classList.add('live'), () => sec.classList.remove('live'));
-  })();
-
-  // ── Hero：不在畫面上就停下輕輕的浮動 ──
-  (() => {
-    const sec = $('.hero'); if (!sec || reduce) return;
-    whileVisible(sec, () => sec.classList.remove('off'), () => sec.classList.add('off'));
   })();
 
   // ── 轉一圈：36 格預載後畫在 canvas 上，拖曳、慣性、捲動、鍵盤 ──

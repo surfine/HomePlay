@@ -43,6 +43,7 @@ export const excludePaths = [
 /** 快照裡用覆蓋檔取代或新增的檔案：快照路徑 → 倉庫裡的來源。 */
 export const overlays = {
   "README.md": "tooling/public-overlay/README.md",
+  "README.zh-Hant.md": "tooling/public-overlay/README.zh-Hant.md",
 };
 
 /** 公開倉庫。 */

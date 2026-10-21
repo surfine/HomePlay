@@ -154,15 +154,23 @@ ${head(c, { title: c.title, description: c.description, canonicalPath: c.path, i
 <main id="main">
 
 <section class="hero" id="top"><div class="wrap">
+  <div class="hero-film" id="hero-film" aria-hidden="true">
+    <video class="hero-film-video" muted playsinline preload="none" poster="/media/film/site-poster.webp" width="1180" height="760">
+      <source src="/media/film/hero-site.mp4" type="video/mp4">
+    </video>
+  </div>
   <div class="hero-copy">
     <h1>${c.h1}</h1>
     <p class="lede">${c.lede}</p>
     <div class="ctas"><a class="btn btn-primary" href="${releaseDownload}">${c.download}</a><a class="btn btn-ghost" href="${github}">${c.viewSource}</a></div>
     <p class="hero-note">${c.heroNote}</p>
   </div>
-  <div class="hero-bob"><div class="pet hero-pet" id="hero-pet" role="img" aria-label="${attr(fill(c.heroLabel, 'face', c.faceNames[first]))}" data-prefix="face-" data-names="${FACES.join(' ')}" data-first="idle" data-w="${SIZE.face[0]}" data-h="${SIZE.face[1]}" data-blink="auto" data-glance="auto">
-    ${petImg('idle', 'face-', SIZE.face, { on: true, priority: true })}
-  </div></div>
+  <div class="hero-bob">
+    <div class="pet hero-pet" id="hero-pet" role="img" aria-label="${attr(fill(c.heroLabel, 'face', c.faceNames[first]))}" data-prefix="face-" data-names="${FACES.join(' ')}" data-first="idle" data-w="${SIZE.face[0]}" data-h="${SIZE.face[1]}" data-blink="auto" data-glance="auto">
+      ${petImg('idle', 'face-', SIZE.face, { on: true, priority: true })}
+    </div>
+    <button type="button" class="hero-film-replay" id="film-replay">${c.replayFilm}</button>
+  </div>
 </div></section>
 
 <section class="why" id="why"><div class="wrap why-grid">

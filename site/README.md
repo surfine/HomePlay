@@ -53,7 +53,7 @@ python3 scripts/render-media.py --lang en       # 英文屏幕 → renders/en/�
 python3 -I scripts/make-og.py       # 重做分享圖與圖示
 ```
 
-`make-og.py` 產生三張分享卡片 `og.jpg`、`og-zh-hans.jpg`、`og-en.jpg`（1200 × 630，冷白底、右邊是該語言屏幕的 `face-curious.webp`、左邊是 `ogTitle`，用 macOS 系統字），以及 512 × 512 的 `share-square.jpg`。
+`make-og.py` 產生三張分享卡片 `og-v3.jpg`、`og-zh-hans-v3.jpg`、`og-en-v3.jpg`（1200 × 630，冷白底、右邊是該語言屏幕的 `face-curious.webp`、左邊是 `ogTitle`，用 macOS 系統字），以及 512 × 512 的 `share-square.jpg`。
 
 首屏第一張表情圖（`face-idle.webp`）直接寫在 HTML 裡並帶 `fetchpriority="high"`；其餘表情與外觀圖由 `app.js` 在頁面載入後或捲近時才建立，視角與三格場景用 `loading="lazy"`。所有圖都有 width／height，避免版面位移。
 
