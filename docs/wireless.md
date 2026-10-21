@@ -6,8 +6,9 @@
 
 ## 前提
 
-- 身份**自帶**（倉庫 `identity/`，DiPlay 公開實驗性 MFi 身份，見 `identity/SOURCE.txt`；2026-10-18 起 HomePlay 內置，
-  舊的「自備身份」約定已作廢）。要換自己的：`--identity-dir <目錄>` 或 `$HOMEPLAY_IDENTITY_DIR`。
+- 身份：簽名的 Release 已內建公開實驗性配件身份，安裝後即可使用；公開原始碼快照不含 identity。
+  自己從原始碼編譯且要用 CarPlay 時，請自備 `identity.pk8` + `certificate.p7b`，用
+  `--identity-dir <目錄>` 或 `$HOMEPLAY_IDENTITY_DIR`。來源與合法性由使用者自行負責。
 - iPhone 和這台 Mac 配對一次（之後自動無線）。最簡單：用資料線連上 Mac，解鎖 iPhone，
   點「信任」；若 Mac 還沒和 iPhone 配對過，再點一次「配對」。整個過程不用打開 iPhone
   的藍牙設定。沒有線時才需要在 iPhone「設定 › 藍牙」→ 點 Mac 的藍牙名。
@@ -36,7 +37,7 @@ $B/homeplay-receiver --source netinfo       # 看這台 Mac 的 IP、Wi-Fi MAC�
 export HOMEPLAY_WIFI_PASSPHRASE='你的 Wi-Fi 密碼'    # 不放命令列，免得出現在 ps
 $B/homeplay-receiver --source wireless \
   --address <iPhone 藍牙地址> --ssid '<iPhone 所連 Wi-Fi 名稱>' --port 8788
-# 身份默認用倉庫自帶的 identity/；要換自己的加 --identity-dir <目錄>
+# 這行假設你用簽名 Release；從原始碼跑時，加 --identity-dir <目錄>
 ```
 
 另一個終端機：

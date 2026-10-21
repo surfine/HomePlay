@@ -201,7 +201,12 @@
     const video = panel && panel.querySelector('video');
     const replay = $('#film-replay');
     if (!sec || !panel || !video || reduce || !matchMedia('(min-width: 821px)').matches) return;
+    const seenKey = 'homeplay-film-seen-v1';
+    let seen = false;
+    try { seen = sessionStorage.getItem(seenKey) === '1'; } catch {}
+    if (seen) { sec.classList.add('film-done'); return; }
     let endTimer = 0;
+    const markSeen = () => { try { sessionStorage.setItem(seenKey, '1'); } catch {} };
     const finish = () => {
       clearTimeout(endTimer);
       sec.classList.remove('film-on');
@@ -214,7 +219,7 @@
       const p = video.play();
       if (p && p.catch) p.catch(finish);
     };
-    video.addEventListener('playing', () => { clearTimeout(endTimer); endTimer = setTimeout(finish, 7000); });
+    video.addEventListener('playing', () => { markSeen(); clearTimeout(endTimer); endTimer = setTimeout(finish, 7000); });
     video.addEventListener('pause', () => clearTimeout(endTimer));
     video.addEventListener('ended', finish);
     video.addEventListener('error', finish);
