@@ -439,6 +439,81 @@ func hexBytes(_ s: String) -> [UInt8] {
                    "pairing guide acceptance does not depend on the device name")
         }
 
+        // CarPlay 传输策略（纯规则）：USB 链路上 0x4300 回哪种 0x4301、拔线怎么处理、另一台手机插线要不要顶掉
+        do {
+            typealias P = CarPlayTransportPolicy
+            // 0x4301 的选择
+            expect(P.startReply(wiredAvailable: true, wirelessAvailable: true, wifiReady: true, wifiConfigSent: true,
+                                ncmReady: true, wirelessTried: false) == .wireless,
+                   "wireless available + Wi-Fi ready → wireless 0x4301 even when NCM is ready")
+            expect(P.startReply(wiredAvailable: true, wirelessAvailable: true, wifiReady: true, wifiConfigSent: false,
+                                ncmReady: true, wirelessTried: false) == .pushWiFiConfigThenWireless,
+                   "no 0x5703 given yet → push Wi-Fi config first, then wireless 0x4301")
+            expect(P.startReply(wiredAvailable: true, wirelessAvailable: false, wifiReady: true, wifiConfigSent: true,
+                                ncmReady: true, wirelessTried: false) == .wired,
+                   "phone reports wired only → wired 0x4301")
+            expect(P.startReply(wiredAvailable: true, wirelessAvailable: true, wifiReady: false, wifiConfigSent: true,
+                                ncmReady: true, wirelessTried: false) == .wired,
+                   "Mac has no Wi-Fi → wired 0x4301")
+            expect(P.startReply(wiredAvailable: true, wirelessAvailable: false, wifiReady: true, wifiConfigSent: true,
+                                ncmReady: false, wirelessTried: false) == .waitNCM,
+                   "wired only but NCM not ready → waitNCM")
+            expect(P.startReply(wiredAvailable: true, wirelessAvailable: true, wifiReady: true, wifiConfigSent: true,
+                                ncmReady: true, wirelessTried: true) == .wired,
+                   "wireless tried and no reconnect → fall back to wired 0x4301")
+            expect(P.startReply(wiredAvailable: false, wirelessAvailable: true, wifiReady: true, wifiConfigSent: true,
+                                ncmReady: false, wirelessTried: true) == .wireless,
+                   "wireless only and already tried → retry wireless (nothing to fall back to)")
+            expect(P.startReply(wiredAvailable: false, wirelessAvailable: false, wifiReady: true, wifiConfigSent: true,
+                                ncmReady: true, wirelessTried: false) == .none,
+                   "nothing available → none")
+            expect(P.startReply(wiredAvailable: false, wirelessAvailable: true, wifiReady: false, wifiConfigSent: false,
+                                ncmReady: false, wirelessTried: false) == .none,
+                   "wireless only but Mac has no Wi-Fi → none")
+            // 拔线
+            expect(P.onCableGone(live: true, transport: .wifi) == [.freezeFrame, .resumeBluetooth, .keepSession],
+                   "cable gone during a Wi-Fi session: freeze, Bluetooth standby, keep the session")
+            expect(P.onCableGone(live: true, transport: .usbNCM) == [.freezeFrame, .resumeBluetooth, .expectReconnect],
+                   "cable gone during a USB NCM session: freeze, Bluetooth standby, expect reconnect")
+            expect(P.onCableGone(live: true, transport: nil) == [.freezeFrame, .resumeBluetooth, .expectReconnect],
+                   "cable gone with unknown transport behaves like NCM")
+            expect(P.onCableGone(live: false, transport: nil) == [.resumeBluetooth],
+                   "cable gone with no session: only Bluetooth standby")
+            // 另一台 USB 手机
+            expect(P.onNewUSBPhone(liveOwner: nil, newPhone: "E0:C7:67:DE:D7:CE") == .ignore,
+                   "no live owner → nothing to switch")
+            expect(P.onNewUSBPhone(liveOwner: "e0:c7:67:de:d7:ce", newPhone: "E0-C7-67-DE-D7-CE") == .ignore,
+                   "same phone in other case/dash format → ignore")
+            expect(P.onNewUSBPhone(liveOwner: "E0:C7:67:DE:D7:CE", newPhone: "50:3B:70:CB:AE:56") == .switchPhone,
+                   "different phone → switchPhone")
+            expect(P.onNewUSBPhone(liveOwner: "a5a492cc2405feb6c108a72a17a2b5664cfde865",
+                                   newPhone: "a5a492cc2405feb6c108a72a17a2b5664cfde865") == .ignore,
+                   "USB serial compares as-is (same)")
+            expect(P.onNewUSBPhone(liveOwner: "a5a492cc2405feb6c108a72a17a2b5664cfde865",
+                                   newPhone: "000081600006205C1AC00036") == .switchPhone,
+                   "USB serial compares as-is (different)")
+            // 对端地址 → 传输
+            expect(P.transport(forPeer: "fe80::14ca:10ff:7e2f:e038%en13", ncmInterfaces: ["en13"]) == .usbNCM,
+                   "fe80 on the phone's NCM interface → USB NCM")
+            expect(P.transport(forPeer: "fe80::14ca:10ff:7e2f:e038%en0", ncmInterfaces: ["en13"]) == .wifi,
+                   "fe80 on en0 (Wi-Fi link-local fallback) → Wi-Fi")
+            expect(P.transport(forPeer: "192.168.5.28", ncmInterfaces: ["en13"]) == .wifi,
+                   "plain IPv4 → Wi-Fi")
+            expect(P.transport(forPeer: "fe80::1%en13", ncmInterfaces: []) == .wifi,
+                   "no NCM interfaces known → Wi-Fi")
+            // 拔线去抖
+            var cable = CableDebounce(misses: 2)
+            expect(cable.observe(present: true) == true, "device seen → present")
+            expect(cable.observe(present: false) == true, "one empty poll is a glitch, still present")
+            expect(cable.observe(present: false) == false, "two empty polls → unplugged")
+            expect(cable.observe(present: false) == false, "stays unplugged")
+            expect(cable.observe(present: true) == true, "device back → present immediately")
+            expect(cable.observe(present: false) == true && cable.observe(present: false) == false,
+                   "miss counter was reset by the reappearance")
+            var fresh = CableDebounce()
+            expect(fresh.observe(present: false) == false, "never seen a device → not present")
+        }
+
         // MFi：仓库自带的真实身份（identity/，DiPlay 公开实验性身份，2026-10-18 起 HomePlay 自带；
         // 旧约定"不带身份、不读其他项目附带的身份"已由 Aaron 推翻，见 docs/plan.md 边界段）。
         // HOMEPLAY_IDENTITY_DIR 可指向别的目录覆盖。
@@ -459,6 +534,72 @@ func hexBytes(_ s: String) -> [UInt8] {
                            "bundled identity signature verifies")
                 }
             }
+        }
+
+        // 通話狀態 0x4155／通訊狀態 0x4158。receiver.log 只記了訊息 ID（2026-10-22：0x4155 76 次、0x4158 311 次，
+        // 都在訂閱後立刻來、當天沒有電話），沒有位元組；這裡用 MacPlay iap2-csm tests/vectors.txt 的向量，
+        // 加上訂閱後那筆「沒有通話」的形狀（status 0）。之後的 0x4155 會以 raw= 記進 log，可補真機樣本。
+        do {
+            let ringing = Iap2Csm.parse(from: hexBytes(
+                "404000324155001200002b34393137303132333435363700000a0001416c696365000005000202000b0004757569642d3100")).frames
+            expect(ringing.count == 1 && ringing.first?.messageId == Iap2Csm.Communications.callStateUpdate, "0x4155 sample parses as one frame")
+            let call = ringing.first.flatMap(Iap2Csm.callState)
+            expect(call?.remoteID == "+491701234567" && call?.displayName == "Alice" && call?.callUUID == "uuid-1",
+                   "0x4155 remote id, display name and call uuid (NUL stripped)")
+            expect(call?.status == 2 && call?.phase == .ringing && call?.direction == nil, "0x4155 status 2 = ringing")
+            let idle = Iap2Csm.parse(from: hexBytes("4040001641550005000200000b0004757569642d3100")).frames
+            expect(idle.first.flatMap(Iap2Csm.callState)?.phase == .idle, "0x4155 status 0 after subscribe = idle")
+            expect(Iap2Csm.callState(Iap2Csm.Frame(messageId: 0x5001)) == nil, "callState ignores other messages")
+
+            func update(_ uuid: String, status: UInt8, direction: UInt8? = nil, name: String? = nil) -> Iap2Csm.CallState {
+                var params = [Iap2Csm.Parameter(id: 2, payload: [status]),
+                              Iap2Csm.Parameter(id: 4, payload: Array(uuid.utf8) + [0])]
+                if let direction { params.append(Iap2Csm.Parameter(id: 3, payload: [direction])) }
+                if let name { params.append(Iap2Csm.Parameter(id: 1, payload: Array(name.utf8) + [0])) }
+                let encoded = Iap2Csm.Frame(messageId: 0x4155, parameters: params).encoded
+                return Iap2Csm.parse(from: encoded).frames.first.flatMap(Iap2Csm.callState) ?? Iap2Csm.CallState()
+            }
+            var book = Iap2Csm.CallBook()
+            expect(book.json == #"{"state":"idle","type":"call"}"#, "empty call book → idle json")
+            if let first = ringing.first.flatMap(Iap2Csm.callState) { book.apply(first) }
+            book.apply(update("uuid-1", status: 2, direction: 1))
+            expect(book.current?.phase == .ringing && book.current?.displayName == "Alice" && book.current?.incoming == true,
+                   "incremental update keeps the caller name")
+            expect(book.json == #"{"incoming":true,"name":"Alice","number":"+491701234567","state":"ringing","type":"call","uuid":"uuid-1"}"#,
+                   "ringing json for the pet")
+            book.apply(update("uuid-1", status: 3, direction: 1))
+            expect(book.current?.phase == .active, "incoming call connecting after answer = active")
+            book.apply(update("uuid-2", status: 2, direction: 1, name: "Bob"))
+            expect(book.current?.displayName == "Bob" && book.calls.count == 2, "second incoming call (call waiting) wins while ringing")
+            book.apply(update("uuid-2", status: 0))
+            expect(book.current?.callUUID == "uuid-1" && book.calls.count == 1, "declined second call drops out")
+            book.apply(update("uuid-1", status: 6))
+            expect(book.current == nil && book.json.contains(#""state":"idle""#), "disconnecting = idle")
+            book.apply(update("uuid-3", status: 1, direction: 2))
+            expect(book.current?.phase == .dialing, "outgoing sending = dialing")
+            book.apply(update("uuid-3", status: 3, direction: 2))
+            expect(book.current?.phase == .dialing, "outgoing connecting is still dialing")
+
+            let comm = Iap2Csm.parse(from: hexBytes("40400017415800050000040005000200000700046f3200")).frames
+            let c = comm.first.flatMap(Iap2Csm.communications)
+            expect(c?.signalStrength == 4 && c?.airplaneMode == false && c?.carrierName == "o2",
+                   "0x4158 signal, airplane mode and carrier")
+            expect(c?.json == #"{"airplane":false,"carrier":"o2","signal":4,"type":"cellular"}"#, "cellular json for the pet")
+            var merged = c ?? Iap2Csm.CommunicationsState()
+            var signalOnly = Iap2Csm.CommunicationsState(); signalOnly.signalStrength = 2
+            merged.merge(signalOnly)
+            expect(merged.carrierName == "o2" && merged.signalStrength == 2, "0x4158 incremental update keeps carrier")
+            expect(Iap2Csm.CommunicationsState().json == nil, "empty communications → no json")
+        }
+
+        // disableBluetooth 之後：手機沒 SETUP 流 130 就留藍牙 iAP2，斷了也快速重連
+        do {
+            typealias P = CarPlayTransportPolicy
+            expect(P.bluetoothAfterDisable(tunnelSetUp: false) == .keep, "no stream 130 → keep Bluetooth iAP2")
+            expect(P.bluetoothAfterDisable(tunnelSetUp: true) == .tunnelCarries, "stream 130 set up → tunnel carries iAP2")
+            expect(P.bluetoothRetryIsSlow(live: true, keepBluetooth: false), "live session with tunnel → slow Bluetooth keepalive")
+            expect(!P.bluetoothRetryIsSlow(live: true, keepBluetooth: true), "Bluetooth is the only iAP2 path → fast retry while live")
+            expect(!P.bluetoothRetryIsSlow(live: false, keepBluetooth: false), "no session → normal backoff")
         }
 
         if failures > 0 { print("\(failures) FAILED"); exit(1) }

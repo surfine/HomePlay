@@ -79,6 +79,7 @@ extension Face {
     // MARK: 渲染
 
     func renderIslandOptions(_ g: CGContext, _ now: Double) {
+        if era == .y2026 { renderIsland2026(g, now); return }   // 2026：玻璃大數字（Faces/IslandFace.swift）
         let full = CGRect(x: 0, y: 0, width: 1024, height: 1024)
         let rv = reveal, date = snapshotDateOverride ?? Date(), e1988 = era == .y1988
         let bg = background.effective(hasPhoto: photos.current != nil)
@@ -186,7 +187,7 @@ extension Face {
 
     // MARK: 背景
 
-    private func drawIslandBackground(_ g: CGContext, _ bg: IslandBackground, _ now: Double) {
+    func drawIslandBackground(_ g: CGContext, _ bg: IslandBackground, _ now: Double) {
         let full = CGRect(x: 0, y: 0, width: 1024, height: 1024)
         if era == .y1988 {
             switch bg {
@@ -298,7 +299,7 @@ extension Face {
     }
 
     /// 不透视壁纸的深色玻璃胶囊（背景不是随时段时用）：软阴影、顶部内光、细边
-    private func plainPill(_ g: CGContext, _ r: CGRect, tint: NSColor) {
+    func plainPill(_ g: CGContext, _ r: CGRect, tint: NSColor) {
         let rad = r.height / 2
         let path = CGPath(roundedRect: r, cornerWidth: rad, cornerHeight: rad, transform: nil)
         let cs = CGColorSpace(name: CGColorSpace.sRGB)!

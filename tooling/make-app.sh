@@ -25,6 +25,7 @@ for b in .build/release/*.bundle(N); do cp -R "$b" "$APP/Contents/Resources/"; d
 for l in assets/info-plist/*.lproj(N); do cp -R "$l" "$APP/Contents/Resources/"; done   # 權限彈窗的英/簡/繁說明
 [[ -d identity ]] && cp -R identity "$APP/Contents/Resources/identity"   # 公開實驗身份隨包：別的 Mac 開箱即連
 [[ -f assets/icon/AppIcon.icns ]] && cp assets/icon/AppIcon.icns "$APP/Contents/Resources/AppIcon.icns"   # 圖示：晨昏漸層加一雙大眼
+for i in assets/icon/CarPlayIcon-*.png(N); do cp "$i" "$APP/Contents/Resources/"; done   # CarPlay 主畫面上的 HomePlay 圖示（點它回到桌寵錶面）
 
 cat > "$APP/Contents/Info.plist" <<EOF
 <?xml version="1.0" encoding="UTF-8"?>
@@ -39,7 +40,7 @@ cat > "$APP/Contents/Info.plist" <<EOF
   <key>CFBundleExecutable</key><string>HomePlay</string>
   <key>CFBundlePackageType</key><string>APPL</string>
   <key>CFBundleIconFile</key><string>AppIcon</string>
-  <key>CFBundleShortVersionString</key><string>0.5.0</string>
+  <key>CFBundleShortVersionString</key><string>0.6.0</string>
   <key>CFBundleVersion</key><string>${BUILD}</string>
   <key>CFBundleDevelopmentRegion</key><string>en</string>
   <key>CFBundleLocalizations</key><array><string>en</string><string>zh-Hans</string><string>zh-Hant</string></array>

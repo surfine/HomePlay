@@ -81,7 +81,7 @@ extension Face {
         let ff = system6Font(24), fy = ft.minY + 33
         drawLeft(g, "AI System 6", font: ff, x: ft.minX + 19, y: fy, color: K)
         if let end = timerEnd {
-            let txt = L("timer.title", "计时器") + " " + timerClock(max(0, end - now)), w = width(txt, ff)
+            let txt = timerLabel + " " + timerClock(max(0, end - now)), w = width(txt, ff)
             rect(CGRect(x: ft.maxX - 19 - w - 16, y: ft.minY + 8, width: w + 32, height: 36), K)
             drawLeft(g, txt, font: ff, x: ft.maxX - 19 - w, y: fy, color: W)
         } else {

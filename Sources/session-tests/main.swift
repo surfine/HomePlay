@@ -17,6 +17,8 @@ func suite(_ name: String, _ body: () throws -> Void) {
 runCryptoSuites()
 runTransportSuites()
 runSessionE2ESuites()
+runPhoneSuites()
+runCarVideoSuites()
 
 suite("audio") { failures += runAudioTests() }
 

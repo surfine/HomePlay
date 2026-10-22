@@ -27,11 +27,23 @@ final class GazeTracker: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate 
     private let session = AVCaptureSession()
     private let queue = DispatchQueue(label: "homeplay.gaze")
     private var output: AVCaptureVideoDataOutput?
+    // 這幾個狀態同時被主執行緒（start/stop/setPaused）、權限回呼佇列和採集佇列讀寫，
+    // 全部收在同一把鎖下；只求不要有跨執行緒的未定義行為，不改既有的時序語意。
+    private let stateLock = NSLock()
     private var running = false
     private var paused = false
     private var starting = false
     // 每次 start/stop/pause 都换一代：权限框或 configure 晚到的结果不能覆盖用户后来的决定。
     private var generation = 0
+
+    private var isRunningLocked: Bool { stateLock.lock(); defer { stateLock.unlock() }; return running }
+    private var isPaused: Bool { stateLock.lock(); defer { stateLock.unlock() }; return paused }
+    private var isStarting: Bool { stateLock.lock(); defer { stateLock.unlock() }; return starting }
+    private func setPausedFlag(_ v: Bool) { stateLock.lock(); paused = v; stateLock.unlock() }
+    private func setRunningFlag(_ v: Bool) { stateLock.lock(); running = v; stateLock.unlock() }
+    private func setStartingFlag(_ v: Bool) { stateLock.lock(); starting = v; stateLock.unlock() }
+    private func bumpGeneration() { stateLock.lock(); generation += 1; stateLock.unlock() }
+    private func currentGeneration() -> Int { stateLock.lock(); defer { stateLock.unlock() }; return generation }
     private var lastSeen: Double = 0
     private var sentAbsent = true
     private var lastLog: Double = 0
@@ -45,16 +57,57 @@ final class GazeTracker: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate 
     private var smoothRoll: CGFloat = 0
     private var smoothSize: CGFloat = 0
 
-    private override init() { super.init() }
+    private override init() {
+        super.init()
+        watchCameraHealth()
+    }
 
-    var isRunning: Bool { running }
+    /// 相机被别的 App 抢走、或系统媒体服务重置后，session 会静默停住；不清状态的话
+    /// `running` 永远是 true，之后 setPaused(false) 也不会再把相机拉起来。
+    private func watchCameraHealth() {
+        let c = NotificationCenter.default
+        c.addObserver(forName: AVCaptureSession.runtimeErrorNotification, object: session, queue: .main) { [weak self] n in
+            guard let self else { return }
+            let err = n.userInfo?[AVCaptureSessionErrorKey] as? Error
+            appendDiag("gaze.log", "camera runtime error: \(err?.localizedDescription ?? "?")")
+            self.teardown(notify: true)
+            if !self.isPaused { self.scheduleRestart() }
+        }
+        c.addObserver(forName: AVCaptureSession.wasInterruptedNotification, object: session, queue: .main) { [weak self] _ in
+            guard let self else { return }
+            appendDiag("gaze.log", "camera interrupted")
+            self.teardown(notify: true)
+        }
+        c.addObserver(forName: AVCaptureSession.interruptionEndedNotification, object: session, queue: .main) { [weak self] _ in
+            guard let self else { return }
+            appendDiag("gaze.log", "camera interruption ended")
+            if !self.isPaused, !self.isRunningLocked, !self.isStarting { self.start() }
+        }
+    }
+
+    private var restartWork: DispatchWorkItem?
+    private var restartAttempts = 0
+    private func scheduleRestart() {
+        restartWork?.cancel()
+        // 相机持续不可用时会不断收到 runtimeError：退避，别每秒拉一次相机。
+        let delay = min(30.0, pow(2.0, Double(min(restartAttempts, 5))))
+        restartAttempts += 1
+        let w = DispatchWorkItem { [weak self] in
+            guard let self, !self.isPaused, !self.isRunningLocked else { return }
+            self.start()
+        }
+        restartWork = w
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: w)
+    }
+
+    var isRunning: Bool { isRunningLocked }
 
     /// 只开灯估计时跳过 Vision，并把相机降到 5 fps；在采集队列上改，避免跨线程读写。
     func setTrackFaces(_ on: Bool) {
         queue.async { [weak self] in
             guard let self else { return }
             self.trackFaces = on
-            guard self.running, let d = self.device else { return }
+            guard self.isRunningLocked, let d = self.device else { return }
             // 只开灯时输出 320×240（相机格式仍是 640/15，VideoDataOutput 负责缩放）；
             // 追人时恢复 640×480 给 Vision。
             if let out = self.output {
@@ -114,38 +167,38 @@ final class GazeTracker: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate 
 
     /// completion 回主线程：(成功, 失败原因)。未授权时会弹系统摄像头权限。
     func start(completion: ((Bool, String?) -> Void)? = nil) {
-        if running {
+        if isRunningLocked {
             DispatchQueue.main.async { completion?(true, nil) }
             return
         }
-        guard !starting else { return }
-        starting = true
-        paused = false
-        generation += 1
-        let gen = generation
+        guard !isStarting else { return }
+        setStartingFlag(true)
+        setPausedFlag(false)
+        bumpGeneration()
+        let gen = currentGeneration()
         switch AVCaptureDevice.authorizationStatus(for: .video) {
         case .authorized:
             configure(completion, generation: gen)
         case .notDetermined:
             AVCaptureDevice.requestAccess(for: .video) { [weak self] ok in
                 guard let self else { return }
-                guard gen == self.generation else { return }   // 等权限时被关掉/暂停：不启动
+                guard gen == self.currentGeneration() else { return }   // 等权限时被关掉/暂停：不启动
                 if ok {
                     self.configure(completion, generation: gen)
                 } else {
-                    self.starting = false
+                    self.setStartingFlag(false)
                     self.finish(false, "camera permission denied", completion)
                 }
             }
         default:
-            starting = false
+            setStartingFlag(false)
             finish(false, "camera permission denied", completion)
         }
     }
 
     func stop() {
-        generation += 1
-        paused = false
+        bumpGeneration()
+        setPausedFlag(false)
         teardown(notify: true)
     }
 
@@ -153,12 +206,12 @@ final class GazeTracker: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate 
     /// 返回这次是否真的改变了状态，方便调用方只在该记日志时记一行。
     @discardableResult
     func setPaused(_ on: Bool) -> Bool {
-        guard on != paused else { return false }
-        paused = on
+        guard on != isPaused else { return false }
+        setPausedFlag(on)
         if on {
-            generation += 1   // 让正在进行的 start/configure 作废，别在暂停后又把摄像头拉起来
+            bumpGeneration()   // 让正在进行的 start/configure 作废，别在暂停后又把摄像头拉起来
             teardown(notify: true)
-        } else if !running, !starting {
+        } else if !isRunningLocked, !isStarting {
             start()
         }
         return true
@@ -166,15 +219,15 @@ final class GazeTracker: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate 
 
     private func configure(_ completion: ((Bool, String?) -> Void)?, generation gen: Int) {
         queue.async(execute: DispatchWorkItem { [weak self] in
-            guard let self, gen == self.generation else { return }
-            guard !self.running else {
-                self.starting = false
+            guard let self, gen == self.currentGeneration() else { return }
+            guard !self.isRunningLocked else {
+                self.setStartingFlag(false)
                 self.finish(true, nil, completion)
                 return
             }
             guard let device = AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .front)
                     ?? AVCaptureDevice.default(for: .video) else {
-                self.starting = false
+                self.setStartingFlag(false)
                 self.finish(false, "no camera available", completion)
                 return
             }
@@ -189,7 +242,7 @@ final class GazeTracker: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate 
                 self.session.addInput(input)
             } catch {
                 self.session.commitConfiguration()
-                self.starting = false
+                self.setStartingFlag(false)
                 self.finish(false, "cannot open camera: \(error.localizedDescription)", completion)
                 return
             }
@@ -200,7 +253,7 @@ final class GazeTracker: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate 
             out.setSampleBufferDelegate(self, queue: self.queue)
             guard self.session.canAddOutput(out) else {
                 self.session.commitConfiguration()
-                self.starting = false
+                self.setStartingFlag(false)
                 self.finish(false, "cannot add camera output", completion)
                 return
             }
@@ -249,7 +302,7 @@ final class GazeTracker: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate 
             } catch { /* 有些摄像头不让你改，忽略 */ }
             self.session.startRunning()
             // 配置期间可能被暂停/停止：晚到的启动不能把 running 留成 true（否则之后再也 resume 不了）。
-            guard gen == self.generation, !self.paused else {
+            guard gen == self.currentGeneration(), !self.isPaused else {
                 self.session.stopRunning()
                 self.session.beginConfiguration()
                 for input in self.session.inputs { self.session.removeInput(input) }
@@ -257,11 +310,12 @@ final class GazeTracker: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate 
                 self.session.commitConfiguration()
                 self.output?.setSampleBufferDelegate(nil, queue: nil)
                 self.output = nil
-                self.starting = false
+                self.setStartingFlag(false)
                 return
             }
-            self.running = true
-            self.starting = false
+            self.setRunningFlag(true)
+            self.restartAttempts = 0
+            self.setStartingFlag(false)
             if !self.trackFaces {
                 if let f = self.lowFormat { self.setFormat(f, fps: 15, device: device) }
                 else { self.setFrameRate(5, device: device) }
@@ -275,9 +329,9 @@ final class GazeTracker: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate 
     }
 
     private func teardown(notify: Bool) {
-        let wasRunning = running || session.isRunning
-        running = false
-        starting = false
+        let wasRunning = isRunningLocked || session.isRunning
+        setRunningFlag(false)
+        setStartingFlag(false)
         queue.async { [weak self] in
             guard let self else { return }
             if self.session.isRunning { self.session.stopRunning() }
@@ -306,7 +360,7 @@ final class GazeTracker: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate 
 
     func captureOutput(_ output: AVCaptureOutput, didOutput sampleBuffer: CMSampleBuffer,
                        from connection: AVCaptureConnection) {
-        guard running, !paused, let buf = CMSampleBufferGetImageBuffer(sampleBuffer) else { return }
+        guard isRunningLocked, !isPaused, let buf = CMSampleBufferGetImageBuffer(sampleBuffer) else { return }
         let now = CACurrentMediaTime()
         onLightFrame?(buf, now)
         guard trackFaces else { return }

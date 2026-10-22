@@ -3,7 +3,8 @@
 // /auth-setup → 会话级 SETUP（计时口、事件口）→ 流级 SETUP（屏幕 110，音频暂时只占位）→ RECORD。
 // 屏幕流解密后喂 H264Sink（同一套 wire 推给桌宠／App）；桌宠的触控经事件通道变成 HID 报告。
 // 音频（100/101/102）收 ChaCha20-Poly1305 加密的 RTP，AAC-LC 解码进 AVAudioEngine 出声（见 CarPlayAudio.swift）。
-// iAP 数据通道（130）、仪表盘副屏还没做：只回最小应答并记日志。
+// iAP 数据通道（130）：SETUP 时绑数据口、解 APTransportPackage，把原始 iAP2 字节经 IapTunnelLink 交给接收器
+// （反向经事件通道 iAPSendMessage，见 IapTunnel.swift）。仪表盘副屏还没做：只记日志。
 import Foundation
 import Network
 import CryptoKit
@@ -13,8 +14,9 @@ package struct CarPlaySessionConfig {
     package var info: InfoConfig
     package var port: UInt16 = 7000
     package var serviceName = "HomePlay"
-    /// 会话级 SETUP 是否声明 iAPChannel（MacPlay 声明且实现了 iAP 数据通道；我们还没实现，默认不声明）
-    package var advertiseIAPChannel = false
+    /// 会话级 SETUP 是否声明 iAPChannel（流 130 的 iAP 隧道已实现，照 MacPlay 默认声明；
+    /// 接收器用 HOMEPLAY_IAP_CHANNEL=0 关掉）。关掉时手机若仍 SETUP 130，照样绑口服务。
+    package var advertiseIAPChannel = true
     /// 选定的 iPhone 蓝牙地址：只探这台的 _carplay-ctrl
     package var phoneBluetoothAddress: String?
     package var probeForPhone = true
@@ -50,6 +52,13 @@ package final class CarPlaySession {
     package var onEnded: ((String) -> Void)?
     /// 手机的控制连接一接入就叫（比 RECORD 早）：用来取消 IPv6 备用重试
     package var onControlConnected: ((String) -> Void)?
+    /// 手机发来的 `POST /command`（控制口或事件通道），已自动 ack：type 与 params（disableBluetooth、modesChanged…）
+    package var onCommand: ((_ type: String, _ params: [String: Any]) -> Void)?
+    /// 手机 SETUP 了流 130（iAP 数据通道）：交出隧道句柄。在会话队列上叫；上层自己切线程。
+    /// 会话结束或流被 TEARDOWN 时句柄的 onClosed 会叫一次。
+    package var onIapTunnel: ((IapTunnelLink) -> Void)?
+    /// CarPlay 影片：手機要車機播／暫停／跳轉／停（op：play、rate、seek、stop、show），在會話佇列上叫
+    package var onVideo: ((_ op: String, _ fields: [String: Any]) -> Void)?
 
     package init(config: CarPlaySessionConfig, store: PairingStore, signer: AccessorySigner, sink: H264Sink) {
         self.config = config; self.store = store; self.signer = signer; self.sink = sink
@@ -95,11 +104,42 @@ package final class CarPlaySession {
     package func sendMedia(_ button: HID.MediaButton) { queue.async { [self] in live?.event?.sendMedia(button) } }
     /// 桌宠/诊断触发 Siri（与按车机 Siri 键等价）
     /// 会话还没 live 时先挂起，RECORD 之后补发（F5 可以先按、桌宠再连）
-    private var pendingSiri = false
-    package func requestSiri() {
+    private var siriKey = SiriKeyState()
+    /// `.click`＝按一下（buttonDown＋buttonUp）；`.down`／`.up`＝按住說話，放開才結束
+    package func requestSiri(_ action: SiriAction = .click) {
         queue.async { [self] in
-            if let e = live?.event { e.sendSiri() }
-            else { pendingSiri = true }
+            let e = live?.event
+            for a in siriKey.press(action, live: e != nil) { e?.sendSiri(action: a) }
+        }
+    }
+    /// 桌寵的電話鍵（接聽＝hookSwitch、拒接／掛斷＝drop）→ CarPlay 電話 HID。沒有 live 會話就丟。
+    package func sendTelephony(_ button: HID.TelephonyButton) {
+        queue.async { [self] in live?.event?.sendTelephony(button) }
+    }
+
+    // MARK: CarPlay 影片（停車時播影片）
+
+    /// 設定改了：記到 /info 並即時告訴手機（要等 SETUP 啟用、事件通道就緒才真正送）
+    package func setVideoAllowed(_ on: Bool) {
+        queue.async { [self] in
+            config.info.videoAllowed = on
+            for cc in conns.values { cc.videoAllowed(on) }
+        }
+    }
+    /// 桌寵播放器的最新狀態（回答手機每秒一次的 playbackInfo）
+    package func videoState(_ st: CarVideoProtocol.PlayerState) { queue.async { [self] in live?.videoPlayer = st } }
+    /// 車機端（桌寵）自己按了播放／暫停：通知手機（不能當 HID 送，手機會因此結束影片）
+    package func videoUserPlayback(playing: Bool) {
+        queue.async { [self] in
+            guard let cc = live else { return }
+            cc.sendVideo(CarVideoProtocol.playbackStateNotification(playing: playing, itemUUID: cc.videoItem))
+        }
+    }
+    /// 播不了：告訴手機，它會收起 CarPlay 上的播放狀態
+    package func videoError(code: Int) {
+        queue.async { [self] in
+            guard let cc = live else { return }
+            cc.sendVideo(CarVideoProtocol.errorNotification(code: code, itemUUID: cc.videoItem))
         }
     }
 
@@ -155,12 +195,14 @@ package final class CarPlaySession {
         if let old = live, old !== cc {   // 第二条会话顶替旧的：旧的先关，免得两路屏幕流同时喂 sink
             conns[ObjectIdentifier(old)] = nil
             old.close()
+            log("第二条会话顶替旧会话（\(old.peerHost) → \(cc.peerHost)）：任何时刻只保留一个")
         }
         live = cc
         probe?.stop(); probe = nil   // 真的开始了才停叫回连
         log("RECORD：会话开始")
         onActive?()
-        if pendingSiri { pendingSiri = false; cc.event?.sendSiri() }
+        cc.videoBecameLive()
+        for a in siriKey.becameLive() { cc.event?.sendSiri(action: a) }
     }
 
     fileprivate func end(_ why: String) {
@@ -206,6 +248,16 @@ private final class ControlConnection {
     var event: EventChannel?
     var timing: TimingServer?
     var audio: [CarPlayAudioStream] = []
+    var iapTunnel: IapTunnel?
+    var iapLink: IapTunnelLink?
+    // CarPlay 影片
+    var videoGate = CarVideoAllowGate()
+    var videoSettings: CarVideoSettingsChannel?
+    var videoRemoteStreams: Set<Int> = []
+    var nextVideoStreamID = 3
+    var videoStreamID: Int?          // 最近一則播放訊息的 X-Apple-StreamID（應答走同一個）
+    var videoItem: String?
+    var videoPlayer: CarVideoProtocol.PlayerState?
     var lastRead = Date()
     var lastFrame = Date.distantPast
     var closed = false
@@ -249,6 +301,14 @@ private final class ControlConnection {
         timing?.stop(); timing = nil
         for a in audio { a.close() }
         audio = []
+        closeIapTunnel()
+        videoSettings?.stop(); videoSettings = nil
+    }
+
+    /// 流 130 收口：停数据口、告诉上层句柄已失效（只报一次）
+    private func closeIapTunnel() {
+        iapTunnel?.stop(); iapTunnel = nil
+        iapLink?.tearDown(); iapLink = nil
     }
 
     private func receive() {
@@ -338,7 +398,17 @@ private final class ControlConnection {
             return RTSPResponse(status: 200, headers: [("Content-Type", Self.plist)], body: try CarPlayPlist.infoResponse(session.config.info))
         }
         if req.method == "POST", path.hasSuffix("/command") {
-            if let d = try? BPlist.decodeDict(req.body), let t = d["type"] as? String { session.note("command \(t)（ack）") }
+            if let sid = req.headers.first(where: { $0.key.lowercased() == "x-apple-streamid" }).flatMap({ Int($0.value.trimmingCharacters(in: .whitespaces)) }) {
+                handleVideo(streamID: sid, body: req.body)   // 影片遙控會話的訊息；應答走事件通道
+                return RTSPResponse(status: 200)
+            }
+            if let d = try? BPlist.decodeDict(req.body), d["type"] as? String == "requestUI",
+               (d["params"] as? [String: Any])?["url"] as? String == CarVideoProtocol.uiURL {
+                session.note("requestUI videoplayback:（打開車機播放器）")
+                session.onVideo?("show", [:])
+                return RTSPResponse(status: 200)
+            }
+            session.dispatchCommand(req.body, via: "控制口")
             return RTSPResponse(status: 200)
         }
         if req.method == "POST", path.hasSuffix("/feedback") {
@@ -431,9 +501,13 @@ private final class ControlConnection {
                         let framesPerPacket = (sd["framesPerPacket"] as? NSNumber)?.intValue ?? 0
                         let frameMs = framesPerPacket > 0 ? max(5, framesPerPacket * 1000 / rate) : 20
                         let bitrate = rate <= 24000 ? 48000 : (rate <= 32000 ? 64000 : 96000)
+                        // 電話與 Siri 開回音消除：Mac 喇叭的聲音不能被收回去給對方／Siri 聽
+                        let voice = MicUplink.wantsVoiceProcessing(audioType: sd["audioType"] as? String)
                         let m = MicUplink(codec: wire, key: Data(micKey), payloadType: type, sampleRate: rate,
                                           channels: micChannels, frameMs: frameMs, bitrate: bitrate,
-                                          host: peerHost, port: phoneMicPort)
+                                          host: peerHost, port: phoneMicPort,
+                                          voiceProcessing: voice && canPlay,
+                                          downlinkRate: codec.rate, downlinkChannels: codec.channels)
                         m.onLog = { [weak self] s in self?.session.note(s) }
                         mic = m
                     }
@@ -451,6 +525,61 @@ private final class ControlConnection {
                     audio.append(a)
                     resp.append(["type": type, "dataPort": Int(a.dataPort), "controlPort": Int(a.controlPort),
                                  "streamConnectionID": sd["streamConnectionID"] ?? 0])
+                case CarPlayStream.data:
+                    // iAP 数据通道（MacPlay _setupDataStream）：只认 iAP 的 clientTypeUUID；
+                    // 密钥盐用 seed（手机给的；没有就退回 streamConnectionID），Output 方向。
+                    let uuid = (sd["clientTypeUUID"] as? String)?.uppercased() ?? ""
+                    if uuid == CarVideoProtocol.settingsChannelUUID {
+                        // 影片設定資料流：一定要開（拒絕會被拆會話）；讀用 Output、寫用 Input
+                        let seed = (sd["seed"] as? NSNumber)?.uint64Value ?? sid
+                        let salt = StreamKeyInfo.salt(streamConnectionID: seed)
+                        let ch = CarVideoSettingsChannel(readKey: Data(deriveStreamKey(sharedSecret: shared, salt: salt, info: StreamKeyInfo.output)),
+                                                         writeKey: Data(deriveStreamKey(sharedSecret: shared, salt: salt, info: StreamKeyInfo.input)))
+                        ch.onLog = { [weak self] s in self?.session.note(s) }
+                        videoSettings?.stop()
+                        let port = try ch.start()
+                        videoSettings = ch
+                        session.note("SETUP 影片設定資料流（130，streamID 2，dataPort \(port)）")
+                        var r: [String: Any] = ["type": type, "streamID": 2, "dataPort": Int(port)]
+                        if let c = sd["streamConnectionID"] { r["streamConnectionID"] = c }
+                        resp.append(r)
+                        continue
+                    }
+                    if CarVideoProtocol.remoteControlUUIDs.contains(uuid), (sd["controlType"] as? NSNumber)?.intValue == 1 {
+                        // 影片遙控會話：沒有 socket，只給 streamID（3 起）；訊息之後走 /command 的 X-Apple-StreamID
+                        let id = nextVideoStreamID; nextVideoStreamID += 1
+                        videoRemoteStreams.insert(id)
+                        session.note("SETUP 影片遙控會話（\(uuid.prefix(8))，streamID \(id)）")
+                        resp.append(["type": type, "streamID": id])
+                        continue
+                    }
+                    guard uuid == IapTunnel.clientTypeUUID else {
+                        session.note("SETUP 数据流 130（clientTypeUUID \(uuid.isEmpty ? "缺" : uuid)）不是 iAP，不回")
+                        continue
+                    }
+                    let seed = (sd["seed"] as? NSNumber)?.uint64Value ?? sid
+                    let key = deriveStreamKey(sharedSecret: shared, salt: StreamKeyInfo.salt(streamConnectionID: seed),
+                                              info: StreamKeyInfo.output)
+                    closeIapTunnel()   // 重复的 SETUP：旧的先收
+                    let t = IapTunnel(key: Data(key))
+                    let port = try t.start()
+                    let link = IapTunnelLink(dataPort: port, sender: { [weak self] d in
+                        self?.event?.sendIapMessage(d) ?? false
+                    })
+                    t.onConnected = { [weak self, weak link] peer in
+                        self?.session.note("iAP 隧道已连（\(peer)）")
+                        link?.onConnected?(peer)
+                    }
+                    t.onIap = { [weak link] d in link?.onIap?(d) }
+                    t.onClosed = { [weak self, weak link] in
+                        self?.session.note("iAP 隧道数据口断开")
+                        link?.onClosed?()
+                    }
+                    t.onError = { [weak self] e in self?.session.note("iAP 隧道：\(e)") }
+                    iapTunnel = t; iapLink = link
+                    session.note("SETUP iAP 隧道（130，dataPort \(port)，seed \(seed)）")
+                    resp.append(["type": type, "streamID": 1, "dataPort": Int(port)])
+                    session.onIapTunnel?(link)
                 default:
                     session.note("SETUP 流 \(type) 还没实现，不回")
                 }
@@ -474,8 +603,23 @@ private final class ControlConnection {
                 readKey: PairingCrypto.hkdfSHA512(s, salt: "Events-Salt", info: "Events-Read-Encryption-Key"),
                 writeKey: PairingCrypto.hkdfSHA512(s, salt: "Events-Salt", info: "Events-Write-Encryption-Key")))
         })
-        ev.onConnected = { [weak self] in self?.session.note("事件通道已连上") }
-        ev.onRequest = { [weak self] m in self?.session.note("事件通道请求 \(m.method) \(m.path)") }
+        ev.onConnected = { [weak self] in
+            guard let self else { return }
+            self.session.note("事件通道已连上")
+            self.session.controlQueue.async { if let v = self.videoGate.set(eventReady: true) { self.sendAllowed(v) } }
+        }
+        ev.onClosed = { [weak self] in
+            guard let self else { return }
+            self.session.controlQueue.async { _ = self.videoGate.set(eventReady: false) }
+        }
+        ev.onRequest = { [weak self] m in
+            guard let self else { return }
+            if m.method == "POST", m.path.lowercased().hasSuffix("/command") {
+                self.session.controlQueue.async { self.session.dispatchCommand(m.body, via: "事件通道") }
+            } else {
+                self.session.note("事件通道请求 \(m.method) \(m.path)")
+            }
+        }
         ev.onError = { [weak self] e in self?.session.note("事件通道：\(e)") }
         let eventPort = try ev.start()
         event = ev
@@ -485,7 +629,67 @@ private final class ControlConnection {
         if !session.config.advertiseIAPChannel, var f = body["enabledFeatures"] as? [String] {
             f.removeAll { $0 == "iAPChannel" }; body["enabledFeatures"] = f
         }
+        if session.config.info.videoPlayback, CarVideoProtocol.proposed(dict) {
+            body["enabledFeatures"] = ((body["enabledFeatures"] as? [String]) ?? []) + [CarVideoProtocol.feature]
+            _ = videoGate.set(desired: session.config.info.videoAllowed)
+            if let v = videoGate.set(feature: true) { sendAllowed(v) }
+            session.note("SETUP：手機提議 videoPlayback，已啟用（允許＝\(session.config.info.videoAllowed)）")
+        }
         return RTSPResponse(status: 200, headers: [("Content-Type", Self.plist)], body: try BPlist.encode(body))
+    }
+
+    // MARK: CarPlay 影片
+
+    func videoAllowed(_ on: Bool) { if let v = videoGate.set(desired: on) { sendAllowed(v) } }
+    func videoBecameLive() { if let v = videoGate.resend() { sendAllowed(v) } }
+    func sendAllowed(_ on: Bool) {
+        guard let b = try? CarVideoProtocol.setAllowedCommand(on) else { return }
+        event?.sendCommand(b)
+        session.note("setVideoPlaybackAllowed \(on)")
+    }
+    /// 應答／通知：事件通道 POST /command，帶播放那條遙控會話的 streamID
+    func sendVideo(_ message: [String: Any], streamID: Int? = nil) {
+        guard let sid = streamID ?? videoStreamID, let b = try? CarVideoProtocol.wrap(message) else { return }
+        event?.sendCommand(b, streamID: sid)
+    }
+
+    /// 手機的播放訊息（{params:{data:bplist}} 拆開後）
+    func handleVideo(streamID sid: Int, body: Data) {
+        guard let m = CarVideoProtocol.unwrap(body), let type = m["type"] as? String else {
+            session.note("影片訊息（streamID \(sid)）拆不開"); return
+        }
+        let mid = m["messageID"]
+        switch type {
+        case "insertPlayQueueItem":
+            videoStreamID = sid
+            guard let item = CarVideoProtocol.parseItem(m) else {
+                let uuid = ((m["item"] as? [String: Any])?["uuid"]).map { "\($0)" }
+                session.note("影片：這個網址播不了（只收 http/https），回報手機")
+                sendVideo(CarVideoProtocol.errorNotification(code: CarVideoProtocol.errorIncompatible, itemUUID: uuid), streamID: sid)
+                return
+            }
+            videoItem = item.uuid; videoPlayer = nil
+            session.note("影片：insertPlayQueueItem（\(URL(string: item.url)?.host ?? "?")，從 \(item.startMs) ms）")
+            session.onVideo?("play", ["url": item.url, "startMs": item.startMs, "uuid": item.uuid])
+        case "setRate":
+            videoStreamID = sid
+            let r = (m["rate"] as? NSNumber)?.doubleValue ?? 0
+            session.onVideo?("rate", ["rate": r])
+        case "seek":
+            let ms = (m["time"] as? [String: Any]).flatMap(CarVideoProtocol.seconds).map { Int($0 * 1000) } ?? 0
+            session.onVideo?("seek", ["ms": ms])
+            sendVideo(CarVideoProtocol.seekResponse(messageID: mid), streamID: sid)
+        case "playbackInfo":
+            sendVideo(CarVideoProtocol.playbackInfoResponse(messageID: mid, itemUUID: videoItem, state: videoPlayer), streamID: sid)
+        case "property":
+            sendVideo(CarVideoProtocol.propertyResponse(messageID: mid, key: m["property"] as? String, state: videoPlayer), streamID: sid)
+        case "stop", "removePlayQueueItem":
+            session.note("影片：\(type)")
+            session.onVideo?("stop", [:])
+            videoItem = nil; videoPlayer = nil
+        default:
+            session.note("影片訊息 \(type)（streamID \(sid)）略過")
+        }
     }
 
     private func teardown(_ req: RTSPMessage) -> RTSPResponse {
@@ -498,8 +702,8 @@ private final class ControlConnection {
         if !req.headers.isEmpty {
             session.note("TEARDOWN 头：\(req.headers.map { "\($0.0): \($0.1)" }.joined(separator: " | "))")
         }
-        let types = ((try? BPlist.decodeDict(req.body))?["streams"] as? [[String: Any]])?
-            .compactMap { ($0["type"] as? NSNumber)?.intValue } ?? []
+        let entries = ((try? BPlist.decodeDict(req.body))?["streams"] as? [[String: Any]]) ?? []
+        let types = entries.compactMap { ($0["type"] as? NSNumber)?.intValue }
         if types.isEmpty {
             session.note("TEARDOWN（整个会话）")
             endAfterReply = true
@@ -508,6 +712,18 @@ private final class ControlConnection {
         session.note("TEARDOWN 流 \(types)")
         for t in types {
             if t == CarPlayStream.mainScreen { screen?.stop(); screen = nil; adapter = nil }
+            if t == CarPlayStream.data {
+                // 130 有好幾條：streamID 缺省或 1＝iAP 隧道；2＝影片設定資料流；3 起＝影片遙控會話（拆它不能關 iAP）
+                for e in entries where (e["type"] as? NSNumber)?.intValue == t {
+                    let id = (e["streamID"] as? NSNumber)?.intValue ?? 1
+                    if id == 1 { closeIapTunnel() }
+                    else if id == 2 { videoSettings?.stop(); videoSettings = nil }
+                    else {
+                        videoRemoteStreams.remove(id)
+                        if videoStreamID == id { session.onVideo?("stop", [:]); videoStreamID = nil; videoItem = nil }
+                    }
+                }
+            }
             audio.removeAll { a in
                 guard a.type == t else { return false }
                 a.close(); return true
@@ -519,4 +735,85 @@ private final class ControlConnection {
 
 extension CarPlaySession {
     fileprivate func isLive(_ cc: ControlConnection) -> Bool { live === cc }
+
+    /// duckAudio／unduckAudio：手機在導航提示、Siri、來電鈴聲前後要車機自己壓低媒體（102）。
+    /// 參數照實際收到的取（durationMs、volume 0–1 或 dB）；沒給就用 CarPlay 常見的 0.2 倍、0.5 s。
+    fileprivate func applyDucking(_ type: String, _ p: [String: Any]) {
+        guard type == "duckAudio" || type == "unduckAudio" else { return }
+        let ms = (p["durationMs"] as? NSNumber)?.doubleValue ?? (p["duration"] as? NSNumber).map { $0.doubleValue * 1000 } ?? 500
+        var target: Float = 1
+        if type == "duckAudio" {
+            if let v = (p["volume"] as? NSNumber)?.floatValue {
+                target = v <= 0 && v >= -96 && v != 0 ? powf(10, v / 20) : max(0, min(1, v))   // 負數當 dB
+            } else { target = 0.2 }
+        }
+        for a in live?.audio ?? [] where a.type == CarPlayStream.mainHighAudio { a.duck(target, over: max(0.05, min(2, ms / 1000))) }
+    }
+
+    /// `POST /command` 正文（bplist {type, params}）→ 日志 + onCommand。控制口与事件通道共用。
+    fileprivate func dispatchCommand(_ body: Data, via: String) {
+        guard let d = try? BPlist.decodeDict(body), let t = d["type"] as? String else { return }
+        let params = (d["params"] as? [String: Any]) ?? [:]
+        log("command \(t)（\(via)，ack）\(params.isEmpty ? "" : " \(params)")")
+        applyDucking(t, params)
+        onCommand?(t, params)
+    }
+}
+
+/// 桌寵 → 接收器的 Siri 鍵動作
+package enum SiriAction: String, Equatable, CustomStringConvertible {
+    case click, down, up
+    package var description: String { rawValue }
+    /// `{"type":"siri"}` 沒帶 action 的是舊版桌寵：按一下
+    package static func parse(_ text: String) -> SiriAction {
+        if text.contains("\"action\":\"down\"") { return .down }
+        if text.contains("\"action\":\"up\"") { return .up }
+        return .click
+    }
+}
+
+/// 車機 Siri 鍵的狀態機：requestSiri 的 siriAction 2＝按下、3＝放開。
+/// 會話還沒 live 時先記著，RECORD 後補發（F5 可以先按、桌寵再連）：
+/// 放開前就 live 了補「按下」、之後的放開照常送；live 前就放開了補一次「按一下」。
+package struct SiriKeyState: Equatable {
+    package static let buttonDown = 2
+    package static let buttonUp = 3
+
+    private var pending: SiriAction?
+    private var held = false
+
+    package init() {}
+
+    /// 回傳現在要送的 siriAction（live 才會有）
+    package mutating func press(_ action: SiriAction, live: Bool) -> [Int] {
+        guard live else {
+            switch action {
+            case .click: pending = .click
+            case .down: pending = .down
+            case .up: if pending == .down { pending = .click }
+            }
+            return []
+        }
+        switch action {
+        case .click:
+            held = false
+            return [Self.buttonDown, Self.buttonUp]
+        case .down:
+            held = true
+            return [Self.buttonDown]
+        case .up:
+            guard held else { return [] }
+            held = false
+            return [Self.buttonUp]
+        }
+    }
+
+    package mutating func becameLive() -> [Int] {
+        defer { pending = nil }
+        switch pending {
+        case .click: held = false; return [Self.buttonDown, Self.buttonUp]
+        case .down: held = true; return [Self.buttonDown]
+        default: return []
+        }
+    }
 }

@@ -61,7 +61,12 @@ package enum Usbmuxd {
         while offset < buffer.count {
             let n = read(fd, &buffer + offset, buffer.count - offset)
             if n == 0 { throw MuxError.socket("连接被关（读了 \(offset)/\(buffer.count)）") }
-            if n < 0 { throw MuxError.socket("read 出错：\(String(cString: strerror(errno)))") }
+            if n < 0 {
+                if errno == EAGAIN || errno == EWOULDBLOCK {
+                    throw MuxError.socket("读超时（读了 \(offset)/\(buffer.count)）")
+                }
+                throw MuxError.socket("read 出错：\(String(cString: strerror(errno)))")
+            }
             offset += n
         }
     }
@@ -140,7 +145,24 @@ package enum Usbmuxd {
             let message = String(cString: strerror(errno)); Darwin.close(fd)
             throw MuxError.socket("连不上 \(socketPath)：\(message)")
         }
+        setSocketTimeout(fd, controlTimeout)
+        // 对端（usbmuxd／手机）先关时 write() 会发 SIGPIPE 杀掉整个进程——CFStream 以前替我们挡了，
+        // 现在直接写 fd，必须自己挡（2026-10-22 真机：拔线后接收器静默重启）。
+        var one: Int32 = 1
+        setsockopt(fd, SOL_SOCKET, SO_NOSIGPIPE, &one, socklen_t(MemoryLayout<Int32>.size))
         return fd
+    }
+
+    /// 控制阶段（ListDevices、lockdown/carkit 握手）的 socket 超时。到点就抛错，
+    /// 而不是在 usbmuxd 或手机不响应时把调用方永远挂住。
+    static let controlTimeout = timeval(tv_sec: 10, tv_usec: 0)
+
+    /// 流阶段要传 nil（＝永不超时）：carkit 的数据流本来就可能静默很久，
+    /// 读线程把 EAGAIN 当断线，留着超时会被误判成掉线。
+    static func setSocketTimeout(_ fd: Int32, _ timeout: timeval?) {
+        var tv = timeout ?? timeval(tv_sec: 0, tv_usec: 0)
+        setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &tv, socklen_t(MemoryLayout<timeval>.size))
+        setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &tv, socklen_t(MemoryLayout<timeval>.size))
     }
 
     static func writeFully(_ fd: Int32, _ bytes: [UInt8]) throws {
@@ -208,6 +230,8 @@ package enum Usbmuxd {
         package func startReading() {
             guard !reading else { return }
             reading = true
+            // 握手结束、进入流阶段：解除控制阶段的读写超时，避免把安静期误判成掉线。
+            Usbmuxd.setSocketTimeout(fd, nil)
             let thread = Thread { [weak self] in
                 guard let self else { return }
                 var buffer = [UInt8](repeating: 0, count: 64 * 1024)
@@ -255,103 +279,159 @@ package enum Usbmuxd {
     /// carkit 服务流（EnableServiceSSL）也要 TLS。证书/私钥直接来自配对记录（HostCertificate /
     /// HostPrivateKey），临时钥匙串只在本进程内存里用一次；链路本身已经由 usbmuxd 信任，链验证关掉
     /// （和 libimobiledevice 一样只做传输加密）。
+    ///
+    /// 直接用 SecureTransport 的 SSLContext 跑在 fd 上，**不走 CFStream**：CFSocketStream 会把这条
+    /// 已连好的 unix socket 当成「还在连接」，开流 75 秒后其连接逾时计时器一到就报 POSIX ETIMEDOUT（60）
+    /// 并关流（2026-10-22 真机：245 次，全部在开流后 76–78 秒，与是否有数据流动无关），手机随即结束 CarPlay 会话。
     package final class TLSStream: MuxByteStream, @unchecked Sendable {
         package var onBytes: (([UInt8]) -> Void)?
         package var onClosed: (() -> Void)?
         private let fd: Int32
-        private let readStream: CFReadStream
-        private let writeStream: CFWriteStream
+        private let context: SSLContext
+        private let connection: UnsafeMutablePointer<Int32>
         private let writeLock = NSRecursiveLock()
         private var closed = false
         private var reading = false
         private var loggedFirstRead = false
+        private let openedAt = Date()
+        private var pendingWrites: [[UInt8]] = []   // 由 writeLock 保护
 
         package var log: ((String) -> Void)?
         package var role = "TLS"
 
         package init(fd: Int32, pair: [String: Any]) throws {
             self.fd = fd
-            let certificates = try TLSIdentity.certificates(from: pair)
-            var readRef: Unmanaged<CFReadStream>?
-            var writeRef: Unmanaged<CFWriteStream>?
-            CFStreamCreatePairWithSocket(kCFAllocatorDefault, fd, &readRef, &writeRef)
-            guard let r = readRef?.takeRetainedValue(), let w = writeRef?.takeRetainedValue() else {
+            let certificates: [Any]
+            do { certificates = try TLSIdentity.certificates(from: pair) }
+            catch { Darwin.close(fd); throw error }
+            guard let ctx = SSLCreateContext(nil, .clientSide, .streamType) else {
                 Darwin.close(fd)
-                throw MuxError.proto("TLS：CFStream 创建失败")
+                throw MuxError.proto("TLS：SSLContext 创建失败")
             }
-            readStream = r; writeStream = w
-            let settings: [String: Any] = [
-                kCFStreamSSLCertificates as String: certificates,
-                kCFStreamSSLValidatesCertificateChain as String: false,
-                kCFStreamSSLIsServer as String: false,
-            ]
-            _ = CFReadStreamSetProperty(r, CFStreamPropertyKey(kCFStreamPropertyShouldCloseNativeSocket), kCFBooleanFalse)
-            _ = CFReadStreamSetProperty(r, CFStreamPropertyKey(kCFStreamPropertySSLSettings), settings as CFDictionary)
-            _ = CFWriteStreamSetProperty(w, CFStreamPropertyKey(kCFStreamPropertyShouldCloseNativeSocket), kCFBooleanFalse)
-            _ = CFWriteStreamSetProperty(w, CFStreamPropertyKey(kCFStreamPropertySSLSettings), settings as CFDictionary)
-            guard CFReadStreamOpen(r), CFWriteStreamOpen(w) else {
-                CFReadStreamClose(r); CFWriteStreamClose(w); Darwin.close(fd)
-                throw MuxError.proto("TLS：打开失败")
+            context = ctx
+            connection = UnsafeMutablePointer<Int32>.allocate(capacity: 1)
+            connection.pointee = fd
+            var status = SSLSetIOFuncs(ctx, tlsReadCallback, tlsWriteCallback)
+            if status == errSecSuccess { status = SSLSetConnection(ctx, connection) }
+            if status == errSecSuccess { status = SSLSetSessionOption(ctx, .breakOnServerAuth, true) }
+            if status == errSecSuccess { status = SSLSetCertificate(ctx, certificates as CFArray) }
+            guard status == errSecSuccess else {
+                connection.deallocate(); Darwin.close(fd)
+                throw MuxError.proto("TLS：上下文设置失败 \(status)")
+            }
+            // 握手：breakOnServerAuth 会先回 errSSLPeerAuthCompleted（我们不验链），再叫一次继续。
+            repeat {
+                status = SSLHandshake(ctx)
+            } while status == errSSLWouldBlock || status == errSSLPeerAuthCompleted
+            guard status == errSecSuccess else {
+                connection.deallocate(); Darwin.close(fd)
+                throw MuxError.proto("TLS：握手失败 \(status)")
             }
         }
 
+        deinit { connection.deallocate() }
+
+        /// 流阶段：字节排队，由读线程在两次 SSLRead 之间写出。SSLContext 不是线程安全的——
+        /// 读线程卡在 SSLRead 时主线程再 SSLWrite／SSLClose 会把 record 层的写队列重复释放
+        /// （2026-10-22 三份崩溃报告：SSLRead → SSLRecordServiceWriteQueueInternal → free 未分配指针）。
         package func send(_ bytes: [UInt8]) {
-            do { try writeExactly(bytes) }
-            catch { closeNow() }
+            writeLock.lock(); defer { writeLock.unlock() }
+            guard !closed else { return }
+            if reading { pendingWrites.append(bytes); return }
+            do { try writeLocked(bytes) }
+            catch { closeLocked() }
         }
 
+        /// 请求-响应阶段（lockdown）用：同步写，只能在 startReading() 之前调用。
         package func writeExactly(_ bytes: [UInt8]) throws {
             writeLock.lock(); defer { writeLock.unlock() }
             guard !closed else { throw MuxError.socket("TLS 流已关闭") }
+            precondition(!reading, "流阶段请用 send()")
+            try writeLocked(bytes)
+        }
+
+        private func writeLocked(_ bytes: [UInt8]) throws {
             var offset = 0
-            try bytes.withUnsafeBufferPointer { p in
+            try bytes.withUnsafeBytes { p in
                 while offset < p.count {
-                    let n = CFWriteStreamWrite(writeStream, p.baseAddress!.advanced(by: offset), p.count - offset)
-                    if n <= 0 {
-                        let e = CFWriteStreamGetError(writeStream)
-                        throw MuxError.socket("TLS 写失败 \(e.error)")
-                    }
-                    offset += n
+                    var processed = 0
+                    let status = SSLWrite(context, p.baseAddress!.advanced(by: offset), p.count - offset, &processed)
+                    offset += processed
+                    if status == errSecSuccess { continue }
+                    if status == errSSLWouldBlock { if processed == 0 { throw MuxError.socket("TLS 写超时") }; continue }
+                    throw MuxError.socket("TLS 写失败 \(status)")
                 }
             }
         }
 
+        /// 请求-响应阶段用：同步读，只能在 startReading() 之前调用。
         package func readExactly(_ count: Int) throws -> [UInt8] {
+            precondition(!reading, "流阶段由读线程收字节")
             var out = [UInt8](); out.reserveCapacity(count)
             var buf = [UInt8](repeating: 0, count: count)
             while out.count < count {
-                let n = CFReadStreamRead(readStream, &buf, count - out.count)
-                if n > 0 { out += buf[0..<n]; continue }
-                if n == 0 { throw MuxError.proto("TLS：连接被关") }
-                let e = CFReadStreamGetError(readStream)
-                if e.error == 0 { continue }
-                throw MuxError.proto("TLS 读错误 \(e.error)")
+                var processed = 0
+                let status = SSLRead(context, &buf, count - out.count, &processed)
+                if processed > 0 { out += buf[0..<processed] }
+                if status == errSecSuccess { continue }
+                if status == errSSLWouldBlock {
+                    if processed == 0 { throw MuxError.proto("TLS 读超时（读了 \(out.count)/\(count)）") }
+                    continue
+                }
+                if status == errSSLClosedGraceful || status == errSSLClosedNoNotify { throw MuxError.proto("TLS：连接被关") }
+                throw MuxError.proto("TLS 读错误 \(status)")
             }
             return out
         }
 
         package func startReading() {
-            guard !reading else { return }
+            writeLock.lock()
+            guard !reading, !closed else { writeLock.unlock(); return }
             reading = true
+            writeLock.unlock()
+            // 握手结束、进入流阶段：解除控制阶段的读写超时，避免把安静期误判成掉线。
+            Usbmuxd.setSocketTimeout(fd, nil)
             let thread = Thread { [weak self] in
                 guard let self else { return }
-                var buffer = [UInt8](repeating: 0, count: 64 * 1024)
-                while true {
-                    let n = CFReadStreamRead(self.readStream, &buffer, buffer.count)
-                    if n > 0 {
-                        if !self.loggedFirstRead { self.loggedFirstRead = true; self.log?("\(self.role) 收到首包 \(n) 字节") }
-                        self.onBytes?(Array(buffer[0..<n])); continue
-                    }
-                    if n < 0 {
-                        let e = CFReadStreamGetError(self.readStream)
-                        if e.error != 0 { self.log?("\(self.role) 读错误 \(e.error)") }
-                    }
-                    self.closeNow()
-                    return
-                }
+                self.readLoop()
             }
             thread.name = "usbmuxd-tls-read"
             thread.start()
+        }
+
+        /// 读线程：poll 等可读（20 ms 一轮），读到就交出去；每轮把排队的写出去；closed 后收尾。
+        private func readLoop() {
+            var buffer = [UInt8](repeating: 0, count: 64 * 1024)
+            var why = "对方关闭"
+            loop: while true {
+                var pfd = pollfd(fd: fd, events: Int16(POLLIN), revents: 0)
+                let ready = poll(&pfd, 1, 20)
+                writeLock.lock()
+                if closed { writeLock.unlock(); why = "本端关闭"; break }
+                // 先写：send() 排队的字节（iAP2 应答、保活）
+                while !pendingWrites.isEmpty {
+                    let bytes = pendingWrites.removeFirst()
+                    do { try writeLocked(bytes) }
+                    catch { writeLock.unlock(); why = "写失败：\(error)"; break loop }
+                }
+                if ready <= 0 { writeLock.unlock(); continue }
+                var processed = 0
+                let status = SSLRead(context, &buffer, buffer.count, &processed)
+                writeLock.unlock()
+                if processed > 0 {
+                    if !loggedFirstRead { loggedFirstRead = true; log?("\(role) 收到首包 \(processed) 字节") }
+                    onBytes?(Array(buffer[0..<processed]))
+                }
+                if status == errSecSuccess || status == errSSLWouldBlock { continue }
+                if status != errSSLClosedGraceful {
+                    log?("\(role) 读错误 \(status)（流已开 \(Int(Date().timeIntervalSince(openedAt))) 秒）")
+                }
+                break
+            }
+            writeLock.lock()
+            finalizeLocked()
+            writeLock.unlock()
+            _ = why
         }
 
         package func close() { closeNow() }
@@ -359,17 +439,66 @@ package enum Usbmuxd {
         private func closeNow() {
             writeLock.lock()
             defer { writeLock.unlock() }
+            closeLocked()
+        }
+
+        /// 持锁调用。流阶段只把 socket 关半边唤醒读线程，由读线程做 SSLClose/close；控制阶段直接收尾。
+        private func closeLocked() {
             guard !closed else { return }
             closed = true
-            CFReadStreamClose(readStream)
-            CFWriteStreamClose(writeStream)
+            if reading {
+                shutdown(fd, SHUT_RDWR)
+            } else {
+                finalizeLocked()
+            }
+        }
+
+        private var finalized = false
+        private func finalizeLocked() {
+            guard !finalized else { return }
+            finalized = true
+            closed = true
+            pendingWrites.removeAll()
+            SSLClose(context)
             Darwin.close(fd)
             let handler = onClosed
             DispatchQueue.main.async { handler?() }
         }
     }
 
-    /// 配对记录里的 host 证书/私钥 → SecIdentity（TLS 客户端身份）。
+    /// SecureTransport 的 I/O 回调：阻塞读写 fd，读满为止；EAGAIN（控制阶段的 SO_RCVTIMEO）报 wouldBlock 并带上已读字节。
+    private static let tlsReadCallback: SSLReadFunc = { connection, data, length in
+        let fd = connection.assumingMemoryBound(to: Int32.self).pointee
+        let want = length.pointee
+        var got = 0
+        while got < want {
+            let n = Darwin.read(fd, data.advanced(by: got), want - got)
+            if n > 0 { got += n; continue }
+            length.pointee = got
+            if n == 0 { return errSSLClosedGraceful }
+            if errno == EINTR { continue }
+            return (errno == EAGAIN || errno == EWOULDBLOCK) ? errSSLWouldBlock : errSSLClosedAbort
+        }
+        length.pointee = got
+        return errSecSuccess
+    }
+
+    private static let tlsWriteCallback: SSLWriteFunc = { connection, data, length in
+        let fd = connection.assumingMemoryBound(to: Int32.self).pointee
+        let want = length.pointee
+        var sent = 0
+        while sent < want {
+            let n = Darwin.write(fd, data.advanced(by: sent), want - sent)
+            if n > 0 { sent += n; continue }
+            length.pointee = sent
+            if n == 0 { return errSSLClosedGraceful }
+            if errno == EINTR { continue }
+            return (errno == EAGAIN || errno == EWOULDBLOCK) ? errSSLWouldBlock : errSSLClosedAbort
+        }
+        length.pointee = sent
+        return errSecSuccess
+    }
+
     enum TLSIdentity {
         static func certificates(from pair: [String: Any]) throws -> [Any] {
             guard let cert = pair["HostCertificate"] as? Data,

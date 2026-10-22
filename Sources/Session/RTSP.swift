@@ -107,8 +107,9 @@ package func rtspSerialize(_ res: RTSPResponse, for req: RTSPMessage) -> Data {
 }
 
 /// 我们在事件通道上主动发的 `POST /command`（MacPlay `_sendEventCommand`）。头序：Content-Type、Content-Length、CSeq。
-package func rtspEventCommand(body: Data, cseq: Int) -> Data {
-    let head = "POST /command RTSP/1.0\r\nContent-Type: \(plistContentType)\r\nContent-Length: \(body.count)\r\nCSeq: \(cseq)\r\n\r\n"
+package func rtspEventCommand(body: Data, cseq: Int, streamID: Int? = nil) -> Data {
+    let sid = streamID.map { "X-Apple-StreamID: \($0)\r\n" } ?? ""
+    let head = "POST /command RTSP/1.0\r\n\(sid)Content-Type: \(plistContentType)\r\nContent-Length: \(body.count)\r\nCSeq: \(cseq)\r\n\r\n"
     var d = Data(head.utf8); d.append(body)
     return d
 }

@@ -311,7 +311,7 @@ footer .links{display:flex;gap:8px 20px;flex-wrap:wrap}
   nav{display:flex;order:5;flex-basis:100%;gap:8px;overflow-x:auto;padding:8px 0 12px;
     -webkit-overflow-scrolling:touch;scrollbar-width:none}
   /* 手機只留三個入口，避免第五個膠囊被硬切；其餘段落靠滾動到達 */
-  header nav:not(.langs) a:nth-child(1),header nav:not(.langs) a:nth-child(4){display:none}
+  header nav:not(.langs) a:nth-child(2),header nav:not(.langs) a:nth-child(6){display:none}   /* 手機上收起「為什麼是眼睛」「轉一圈」 */
   nav::-webkit-scrollbar{display:none}
   /* 右邊還有膠囊沒滑到時，邊緣漸隱，暗示可以橫滑；滑到底就不再漸隱 */
   nav.fade{-webkit-mask-image:linear-gradient(90deg,#000 calc(100% - 36px),transparent);
@@ -348,3 +348,81 @@ footer .links{display:flex;gap:8px 20px;flex-wrap:wrap}
 @keyframes flow-v-back{0%{transform:translateY(100cqh);opacity:0}12%{opacity:1}88%{opacity:1}100%{transform:translateY(0);opacity:0}}
 
 .share-fallback{display:none}
+
+/* ── 亮點：四張卡，每張一個小動畫（只在捲到時跑；減少動態效果時靜止）── */
+.highlights .lede{margin-top:14px}
+.hl-grid{margin-top:40px;display:grid;grid-template-columns:repeat(4,1fr);gap:14px}
+.hl{background:var(--surface);border-radius:var(--r);padding:26px 24px 28px;box-shadow:inset 0 0 0 1px var(--line);display:flex;flex-direction:column}
+.hl h3{font-size:20px;margin-top:18px}
+.hl .hl-sub{color:var(--ink);font-weight:550;font-size:15px;margin-top:8px}
+.hl p:last-child{color:var(--muted);font-size:15px;line-height:1.65;margin-top:8px}
+.hl-motif{height:80px;color:var(--ink)}
+.hl-motif svg{height:80px;width:auto;display:block;overflow:visible}
+.m-line,.m-cable,.m-waves path{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}
+.m-cable{stroke:var(--accent)}
+.m-waves path{stroke:var(--accent);opacity:.18}
+.m-pill{fill:#15181c}
+.m-white{fill:#fff}
+.m-iris{fill:#5a2a00;stroke:#e2ab00;stroke-width:1.2}
+.m-key{fill:var(--panel);stroke:var(--line);stroke-width:1.2}
+.m-cap{font:600 12px/1 var(--font);fill:var(--muted);text-anchor:middle}
+.m-wave rect{fill:var(--accent);transform-box:fill-box;transform-origin:center;transform:scaleY(.25)}
+.m-blink{transform-box:fill-box;transform-origin:center}
+@media (prefers-reduced-motion:no-preference){
+  .hl-grid.in .m-cable{stroke-dasharray:40;animation:m-unplug 4.8s var(--ease-in-out) infinite}
+  .hl-grid.in .m-waves path{animation:m-wave 4.8s ease-in-out infinite}
+  .hl-grid.in .m-waves path:nth-child(2){animation-delay:.15s} .hl-grid.in .m-waves path:nth-child(3){animation-delay:.3s}
+  .hl-grid.in .m-blink{animation:m-blink 4.2s ease-in-out infinite}
+  .hl-grid.in .hl-siri .m-press{animation:m-hold 3.6s var(--ease-in-out) infinite}
+  .hl-grid.in .m-wave rect{animation:m-talk 3.6s ease-in-out infinite}
+  .hl-grid.in .m-wave .w1{animation-delay:.08s}.hl-grid.in .m-wave .w2{animation-delay:.16s}.hl-grid.in .m-wave .w3{animation-delay:.24s}.hl-grid.in .m-wave .w4{animation-delay:.32s}.hl-grid.in .m-wave .w5{animation-delay:.4s}
+  .hl-grid.in .hl-keys .m-press{animation:m-tap 2.4s var(--spring) infinite}
+  .m-press{transform-box:fill-box;transform-origin:center}
+}
+/* 線先連著，再像拔掉一樣退開；這時 Wi-Fi 三道弧亮起來 */
+@keyframes m-unplug{0%,30%{stroke-dashoffset:0;opacity:1}55%,85%{stroke-dashoffset:40;opacity:0}100%{stroke-dashoffset:0;opacity:1}}
+@keyframes m-wave{0%,40%{opacity:.18}60%,85%{opacity:1}100%{opacity:.18}}
+@keyframes m-blink{0%,44%,52%,100%{transform:scaleY(1)}48%{transform:scaleY(.08)}}
+/* 按住 F5：鍵壓下時聲波起伏，放開就停 */
+@keyframes m-hold{0%,8%{transform:scale(1)}14%,70%{transform:scale(.92)}78%,100%{transform:scale(1)}}
+@keyframes m-talk{0%,12%{transform:scaleY(.25)}22%{transform:scaleY(.9)}32%{transform:scaleY(.45)}42%{transform:scaleY(1)}52%{transform:scaleY(.35)}62%{transform:scaleY(.8)}72%,100%{transform:scaleY(.25)}}
+@keyframes m-tap{0%,20%{transform:scale(1)}28%{transform:scale(.88)}40%,100%{transform:scale(1)}}
+
+/* ── 錶面一覽 ── */
+.styles .lede{margin-top:14px}
+.style-grid{margin:40px 0 0;display:grid;grid-template-columns:repeat(3,1fr);gap:18px 14px}
+.style{margin:0;text-align:center}
+.style img{width:100%;height:auto;transition:transform .5s var(--spring)}
+.style:hover img{transform:translateY(-6px)}
+.style figcaption{margin-top:6px;font-size:15px;font-weight:600;color:var(--muted)}
+@media (prefers-reduced-motion:no-preference){
+  .style-grid .style{opacity:0;transform:translateY(18px);transition:opacity .7s ease,transform .9s var(--ease-out)}
+  .style-grid.in .style{opacity:1;transform:none}
+  .style-grid.in .style:nth-child(2){transition-delay:.08s}.style-grid.in .style:nth-child(3){transition-delay:.16s}
+  .style-grid.in .style:nth-child(4){transition-delay:.24s}.style-grid.in .style:nth-child(5){transition-delay:.32s}.style-grid.in .style:nth-child(6){transition-delay:.4s}
+}
+
+/* ── 使用前須知、開發者的話 ── */
+.notes{padding-top:0}
+.note-grid{margin-top:28px;display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+.note{border-top:1px solid var(--line);padding-top:18px}
+.note h3{font-size:17px}
+.note p{color:var(--muted);font-size:15px;line-height:1.65;margin-top:8px}
+.dev{padding-top:40px}
+.dev-card{margin:0 auto;max-width:760px;text-align:center;background:var(--surface);border-radius:var(--r);padding:48px 40px;box-shadow:inset 0 0 0 1px var(--line)}
+.dev-eyes{font-size:56px;line-height:1}
+.dev-card h2{font-size:clamp(24px,3vw,32px);margin-top:14px}
+.dev-card blockquote{margin:20px 0 0;display:grid;gap:12px}
+.dev-card blockquote p{font-size:18px;line-height:1.75}
+.dev-card figcaption{margin-top:20px;color:var(--muted);font-size:15px}
+@media (prefers-reduced-motion:no-preference){
+  .dev-card.in .dev-eyes{animation:dev-look 6s ease-in-out infinite}
+}
+@keyframes dev-look{0%,40%,100%{transform:translateX(0)}50%,70%{transform:translateX(-6px)}80%,90%{transform:translateX(6px)}}
+
+@media (max-width:980px){.hl-grid{grid-template-columns:repeat(2,1fr)}}
+@media (max-width:760px){
+  .hl-grid,.note-grid{grid-template-columns:1fr}
+  .style-grid{grid-template-columns:repeat(2,1fr)}
+  .dev-card{padding:36px 22px}
+}

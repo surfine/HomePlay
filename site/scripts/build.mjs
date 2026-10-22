@@ -30,6 +30,7 @@ function sizesFor(dir) {
     face: at('face-idle.webp'), finish: at('finish-g4.webp'),
     spin: at('spin/00.webp'), apart: at('view-apart.webp'),
     moment: Object.fromEntries(['hello.webp', 'ambient-night.webp', 'asleep-night.webp'].map((m) => [m, at(m)])),
+    style: at('style-island.webp'),
   };
 }
 let SIZE;
@@ -125,7 +126,16 @@ function petImg(name, prefix, size, { on = false, lazy = false, priority = false
 
 // 品牌的眼睛：照產品的 👀 語言——白色球面眼白、琥珀虹膜、深棕瞳孔、左上大高光；
 // 閉眼仍用唐老鴨式的短下彎眼瞼線。瞳孔與眼皮由 app.js 用 transform 驅動。
-const eye = (cx, cy) => `<g class="eye" data-cx="${cx}" data-cy="${cy}"><ellipse cx="${cx}" cy="${cy}" rx="36" ry="52" fill="url(#eye-sclera)" stroke="#6e737a" stroke-opacity=".22" stroke-width="1.2"/><g class="pupil"><circle cx="${cx}" cy="${cy}" r="19.4" fill="url(#eye-iris)" stroke="#331d08" stroke-width="1.2" stroke-opacity=".9"/><circle cx="${cx - 7.4}" cy="${cy - 7.8}" r="6.2" fill="#fff" opacity=".16"/><circle cx="${cx - 7.4}" cy="${cy - 7.8}" r="5" fill="#fff"/><circle cx="${cx + 7.8}" cy="${cy + 7.4}" r="1.7" fill="#fff" opacity=".42"/></g><path class="lid" d="M ${cx - 24} ${cy + 10} Q ${cx} ${cy + 26} ${cx + 24} ${cy + 10}" fill="none" stroke="#15181c" stroke-width="4.6" stroke-linecap="round" opacity="0"/></g>`;
+// 照 Apple Color Emoji 的 👀 取樣：純白眼白、沿邊一圈枕形灰；虹膜上棕下金、大瞳孔深棕、左上一顆高光
+const eye = (cx, cy) => `<g class="eye" data-cx="${cx}" data-cy="${cy}"><ellipse cx="${cx}" cy="${cy}" rx="36" ry="52" fill="url(#eye-sclera)"/><g class="pupil"><circle cx="${cx}" cy="${cy}" r="19.4" fill="url(#eye-iris)" stroke="#3c1b00" stroke-width="1.1" stroke-opacity=".9"/><circle cx="${cx}" cy="${cy}" r="12.4" fill="#291201"/><circle cx="${cx - 7.3}" cy="${cy - 10.9}" r="5.8" fill="#fff"/></g><path class="lid" d="M ${cx - 24} ${cy + 10} Q ${cx} ${cy + 26} ${cx + 24} ${cy + 10}" fill="none" stroke="#15181c" stroke-width="4.6" stroke-linecap="round" opacity="0"/></g>`;
+
+// 亮點卡上的小動畫（純 SVG＋CSS；減少動態效果時靜止）
+const MOTIF = {
+  cable: `<svg viewBox="0 0 120 80" aria-hidden="true" focusable="false"><rect x="14" y="10" width="30" height="56" rx="7" class="m-line"/><path d="M29 66 V74" class="m-line"/><path class="m-cable" d="M29 74 C 29 78 40 78 52 70"/><g class="m-waves"><path d="M70 30 a 18 18 0 0 1 0 22"/><path d="M80 24 a 28 28 0 0 1 0 34"/><path d="M90 18 a 38 38 0 0 1 0 46"/></g></svg>`,
+  faces: `<svg viewBox="0 0 120 80" aria-hidden="true" focusable="false"><rect x="18" y="16" width="84" height="48" rx="24" class="m-pill"/><g class="m-blink"><ellipse cx="50" cy="40" rx="10" ry="14" class="m-white"/><ellipse cx="72" cy="40" rx="10" ry="14" class="m-white"/><circle cx="46" cy="42" r="5.5" class="m-iris"/><circle cx="68" cy="42" r="5.5" class="m-iris"/></g></svg>`,
+  siri: `<svg viewBox="0 0 120 80" aria-hidden="true" focusable="false"><rect x="10" y="22" width="40" height="36" rx="8" class="m-key m-press"/><text x="30" y="45" class="m-cap">F5</text><g class="m-wave">${[0, 1, 2, 3, 4, 5].map((i) => `<rect x="${62 + i * 9}" y="28" width="5" height="24" rx="2.5" class="w${i}"/>`).join('')}</g></svg>`,
+  keys: `<svg viewBox="0 0 120 80" aria-hidden="true" focusable="false">${['F7', 'F8', 'F9'].map((k, i) => `<g class="${i === 1 ? 'm-press' : ''}"><rect x="${8 + i * 36}" y="22" width="32" height="36" rx="7" class="m-key"/><text x="${24 + i * 36}" y="45" class="m-cap">${k}</text></g>`).join('')}</svg>`,
+};
 
 function page(c) {
   R = rendersFor(c);
@@ -176,6 +186,16 @@ ${head(c, { title: c.title, description: c.description, canonicalPath: c.path, i
   </div>
 </div></section>
 
+<section class="highlights" id="highlights"><div class="wrap">
+  <div class="rise">
+    <h2>${c.highlightsTitle}</h2>
+    <p class="lede">${c.highlightsLede}</p>
+  </div>
+  <div class="hl-grid rise">
+    ${c.highlights.map(([k, t, sub, body]) => `<article class="hl hl-${k}"><div class="hl-motif">${MOTIF[k]}</div><h3>${t}</h3><p class="hl-sub">${sub}</p><p>${body}</p></article>`).join('\n    ')}
+  </div>
+</div></section>
+
 <section class="why" id="why"><div class="wrap why-grid">
   <div class="why-text">
     <h2 class="rise">${c.essayTitle}</h2>
@@ -187,7 +207,7 @@ ${head(c, { title: c.title, description: c.description, canonicalPath: c.path, i
   </div>
   <div class="why-eyes">
     <div class="eyes-card" id="eyes" role="img" aria-label="${attr(c.eyesLabel)}">
-      <svg viewBox="0 0 300 300" aria-hidden="true" focusable="false"><defs><radialGradient id="eye-sclera" cx="38%" cy="32%" r="78%"><stop offset="0" stop-color="#fff"/><stop offset=".62" stop-color="#f8f9fa"/><stop offset="1" stop-color="#c9cfd6"/></radialGradient><radialGradient id="eye-iris" cx="50%" cy="50%" r="50%"><stop offset="0" stop-color="#1a0e05"/><stop offset=".5" stop-color="#291407"/><stop offset=".68" stop-color="#4d2908"/><stop offset=".8" stop-color="#944f09"/><stop offset=".88" stop-color="#d18a0c"/><stop offset=".94" stop-color="#f0a812"/><stop offset="1" stop-color="#4d2b08"/></radialGradient></defs>${eye(98, 142)}${eye(202, 142)}</svg>
+      <svg viewBox="0 0 300 300" aria-hidden="true" focusable="false"><defs><radialGradient id="eye-sclera" cx="50%" cy="50%" r="50%"><stop offset="0" stop-color="#fff"/><stop offset=".8" stop-color="#fdfdfd"/><stop offset=".89" stop-color="#e6e6e6"/><stop offset=".955" stop-color="#c2c2c2"/><stop offset="1" stop-color="#949494"/></radialGradient><linearGradient id="eye-iris" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#5a2a00"/><stop offset=".42" stop-color="#683900"/><stop offset=".62" stop-color="#7a4800"/><stop offset=".8" stop-color="#b78600"/><stop offset=".92" stop-color="#e2ab00"/><stop offset="1" stop-color="#d9a400"/></linearGradient></defs>${eye(98, 142)}${eye(202, 142)}</svg>
     </div>
     <p class="eyes-hint">${c.eyesHint}</p>
   </div>
@@ -203,6 +223,16 @@ ${head(c, { title: c.title, description: c.description, canonicalPath: c.path, i
     <div class="rows" id="rows">
 ${c.rows.map(([f, t, r], i) => `      <button type="button" class="row${i ? '' : ' on'}" aria-pressed="${i === 0}" data-face="${f}"><span class="t">${t}</span><span class="r">${r}</span></button>`).join('\n')}
     </div>
+  </div>
+</div></section>
+
+<section class="styles" id="styles"><div class="wrap">
+  <div class="rise">
+    <h2>${c.stylesTitle}</h2>
+    <p class="lede">${c.stylesLede}</p>
+  </div>
+  <div class="style-grid rise">
+    ${c.styles.map(([k, name]) => `<figure class="style"><img src="${R}style-${k}.webp" width="${SIZE.style[0]}" height="${SIZE.style[1]}" alt="${attr(name)}" loading="lazy" decoding="async"><figcaption>${name}</figcaption></figure>`).join('\n    ')}
   </div>
 </div></section>
 
@@ -288,11 +318,27 @@ ${c.rows.map(([f, t, r], i) => `      <button type="button" class="row${i ? '' :
   </div>
 </div></section>
 
+<section class="notes" id="notes"><div class="wrap">
+  <h2 class="rise">${c.notesTitle}</h2>
+  <div class="note-grid rise">
+    ${c.notes.map(([t, b]) => `<div class="note"><h3>${t}</h3><p>${b}</p></div>`).join('\n    ')}
+  </div>
+</div></section>
+
 <section id="faq"><div class="wrap faq">
   <h2 class="rise">${c.faqTitle}</h2>
   <div class="faq-list">
     ${c.faq.map(([q, a], i) => `<details${i ? '' : ' open'}><summary>${q}</summary><p>${a}</p></details>`).join('\n    ')}
   </div>
+</div></section>
+
+<section class="dev" id="dev"><div class="wrap">
+  <figure class="dev-card rise">
+    <div class="dev-eyes" aria-hidden="true">👀</div>
+    <h2>${c.devTitle}</h2>
+    <blockquote>${c.dev.map((t) => `<p>${t}</p>`).join('')}</blockquote>
+    <figcaption>${c.devSign}</figcaption>
+  </figure>
 </div></section>
 
 </main>

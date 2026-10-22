@@ -8,7 +8,8 @@ import IOBluetooth
 package final class Iap2BluetoothAccessory: NSObject, IOBluetoothRFCOMMChannelDelegate, @unchecked Sendable {
     package let core: Iap2AccessoryCore
     /// RFCOMM 打开超时（秒）；0 关闭。照 MacPlay 的 15s。
-    package var openTimeout: TimeInterval = 15
+    /// 手机愿意回时都在 1 秒内（2026-10-22 真机）；15 秒（MacPlay 值）只是在拉长每次被忽略的代价。
+    package var openTimeout: TimeInterval = 6
     private var channel: IOBluetoothRFCOMMChannel?
     private var openTimer: DispatchSourceTimer?
     /// 打开完成时刻与是否收到过字节：用来识别「开了立刻被手机关闭」——
@@ -174,6 +175,7 @@ package final class Iap2BluetoothAccessory: NSObject, IOBluetoothRFCOMMChannelDe
             return false
         }
         channel = pointer
+        peerDevice = device
         armOpenTimeout()
         return true
     }
@@ -183,6 +185,7 @@ package final class Iap2BluetoothAccessory: NSObject, IOBluetoothRFCOMMChannelDe
     package func adopt(channel newChannel: IOBluetoothRFCOMMChannel) -> Bool {
         guard channel == nil, !core.finished else { return false }
         channel = newChannel
+        peerDevice = newChannel.getDevice()
         newChannel.setDelegate(self)
         openTimer?.cancel(); openTimer = nil
         DispatchQueue.main.async {
@@ -195,6 +198,14 @@ package final class Iap2BluetoothAccessory: NSObject, IOBluetoothRFCOMMChannelDe
     package func close() {
         openTimer?.cancel(); openTimer = nil
         channel?.close(); channel = nil
+    }
+
+    private var peerDevice: IOBluetoothDevice?
+    /// 把到这台手机的基带（ACL）连接也断掉。手机「通道开了立刻关」时多半是它那边还留着上一条
+    /// 链路的状态；重开 RFCOMM 之前先断 ACL，让下一次是干净的新连接（MacPlay 在 disableBluetooth 后也这么做）。
+    package func dropBaseband() -> Bool {
+        guard let device = peerDevice, device.isConnected() else { return false }
+        return device.closeConnection() == kIOReturnSuccess
     }
 
     /// 照 MacPlay：15s 打不开就关了重来（上层退避重连会刷新 SDP）

@@ -151,9 +151,12 @@ package final class H264Sink {
             }
             dumpHandle?.write(annexB)
         }
-        if _frames == 1 || _frames % 150 == 0 {
+        if key {
+            // 关键帧很少：每一个都记（解码端重连后靠它才能出画）
+            FileHandle.standardError.write("\(isHEVC ? "HEVC" : "H.264") 来源：关键帧（第 \(_frames) 帧，\(annexB.count)B）\n".data(using: .utf8)!)
+        } else if _frames == 1 || _frames % 150 == 0 {
             let tag = isHEVC ? "HEVC" : "H.264"
-            FileHandle.standardError.write("\(tag) 来源：已推 \(_frames) 帧（这帧 \(key ? "关键帧" : "P 帧") \(annexB.count)B）\n".data(using: .utf8)!)
+            FileHandle.standardError.write("\(tag) 来源：已推 \(_frames) 帧（这帧 P 帧 \(annexB.count)B）\n".data(using: .utf8)!)
         }
     }
 

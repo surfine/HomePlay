@@ -30,6 +30,15 @@ package enum HID {
         case none = 0, hookSwitch, flash, drop, mute, key0, key1, key2, key3, key4, key5, key6, key7, key8, key9, star, pound, del
     }
 
+    /// 桌寵來電卡的按鍵 → 電話 HID：接聽＝hookSwitch（摘機），拒接／掛斷＝drop（MacPlay sendTelephony 同款）。
+    /// 輸入是 `{"type":"telephony","command":"answer"|"decline"|"hangup"}`；別的回 nil。
+    package static func telephonyButton(forPetMessage text: String) -> TelephonyButton? {
+        guard text.contains("\"type\":\"telephony\"") else { return nil }
+        if text.contains("\"command\":\"answer\"") { return .hookSwitch }
+        if text.contains("\"command\":\"decline\"") || text.contains("\"command\":\"hangup\"") { return .drop }
+        return nil
+    }
+
     // MARK: 描述符
 
     private static func fingerCollection(xMax: Int, yMax: Int) -> [UInt8] {

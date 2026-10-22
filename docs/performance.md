@@ -118,3 +118,65 @@ MacPlay（同類接收器，Rust）的效能相關條目集中在連線韌性與
 - 海报期间房间光/追人摄像头也暂停（绿点灭掉），靠近时恢复；开启「跟随我」时不进入海报，
   避免冻结转头。`HOMEPLAY_POSTER_AFTER` 可覆盖 90 秒阈值（量测用）。
 - 直播和交互帧率未变；这次只动待机路径。
+
+## 2026-10-22 第四轮：按需 3D（閒置 18% → 3%、直播靜止 17% → 0.3%）
+
+Time Profiler 量到桌寵閒置或 CarPlay 畫面靜止時仍 21–27% CPU，主執行緒 54%、Render 執行緒 31%，
+全在 RealityKit 每幀場景更新（`re::MeshVisitor::traverse`、`bucketMeshPart`、`encodeDrawCalls`、ECS DeepCopier），
+桌寵自己的程式碼不到 5%。這一輪先用最小 ARView 探針把「到底什麼能停掉 RealityKit 的幀」量清楚，再改桌寵。
+
+### 控制手段實驗（Darwin 27.0.1，260×317 視窗，載入 apple-homeview.usdz，`SceneEvents.Update` 數幀）
+
+| 手段 | 場景更新 | CPU | 結論 |
+|---|---|---|---|
+| `__enableAutomaticFrameRate` 0／1 × `__preferredFrameRate` 60／6／1／0，engine init 前或後設 | 60/s | ~18% | **全部無效**，恆 60 |
+| `isHidden = true` | 60/s | ~18% | 無效 |
+| 從未掛進任何層級的 ARView | 60/s | ~18% | 引擎在 init 就起跑 |
+| 掛在沒 orderFront 的離屏視窗 | 60/s | ~18% | 無效 |
+| `snapshot()` 當逐幀渲染 | — | 每張 ≈10 ms CPU、20–25 ms 延遲 | 6 張/s 就多 6%，不能當通用出幀 |
+| **掛進視窗後 `removeFromSuperview`** | **0/s** | **0.1%** | 唯一能歸零的手段；掛回去立刻 60/s，無額外尖峰 |
+
+卸下期間 `snapshot()` 不會完成（掛回去才回呼），所以沒有「卸著按需出一幀」這種事；`project()`／hitTest 在卸下期間正常。
+另外量到 `snapshot()` 是另一條離線渲染：和上屏那幀相比，貼圖取樣區域差 1–2 階、機身輪廓覆蓋率偏高（差到 30–56 階），
+拿它當海報每次切換都會微閃。`renderCallbacks.postProcess` 回呼裡的 `sourceColorTexture`（bgra8Unorm_srgb、Display P3）
+就是要上屏的那幀，blit 一份出來逐位相同，回呼本身量不到 CPU。
+
+### 做法（`PetView`，`HOMEPLAY_RENDER_MODE=always` 退回常駐做對照）
+
+- **場景一變才掛回去**：`HomeViewModel.generation`（貼圖／材質）、姿態（yaw／pitch／鉸鏈／拆解／按壓，
+  門檻約 0.1 px，全用 Double 比——Float 四元數點積在 1e-7 以下沒解析度會一直誤報）、光／環境貼圖／視窗尺寸走 `requestFrame()`。
+  掛回去後海報先蓋著，到第 3 次 `SceneEvents.Update` 確定第一幀已上屏才收掉（第 1 幀在下一個 vsync 才出現）。
+- **靜止就卸下**：一次卸下＋掛回約 43 ms CPU，常駐每秒約 200 ms，空檔超過 0.2 s 就值得卸；眨眼結束後 0.12 s 卸。
+  連續兩次變化間隔都短於 0.35 s（Flow 錶面 4 Hz 壁紙、眼睛平滑過場、高幀直播）視為持續變化，改等 0.4 s，
+  免得反覆掛卸比常駐還貴（Flow 實測與常駐持平 20.6% vs 20.5%，沒有變差）。
+- **凍結幀當海報**：卸下前在 `postProcess` 回呼把上屏那幀 blit 到一張 shared 紋理，命令完成後讀回主執行緒做成
+  CGImage（BGRA 預乘、沿用 CAMetalLayer 的色彩空間）直接當海報層的 `contents`，與移出 ARView 在同一個 transaction。
+  螢幕連拍跨切換的配對 diff 為 0（見下）。
+- **浮動不停**：4.5 秒一次的輕微上下浮動是整台機身平移，卸下期間用海報層位移呈現，吸到整個裝置像素不重採樣。
+- **直播**：進幀即掛回去（不等主循環那拍）；畫面靜止半秒沒進幀主循環降 12 Hz、進幀立刻回 60。`targetHz` 其餘語意不變，
+  `__preferredFrameRate` 仍照寫（這版系統無效，留給未來）。
+- **深度閒置海報（90 s）**與**被遮住**改用同一套掛卸：海報模式只負責把主循環降到 5 秒一拍；被遮住時 ARView 直接卸下
+  （以前只 `isHidden`，display link 其實還在跑）。
+- `--snapshot` 仍走 `render.snapshot`（卸著時先掛回去、跑一拍、出過幀再拍），輸出與改前逐位相同。
+
+### 量測（xctrace Time Profiler 10 s 取樣 + `ps` cputime；220×269 視窗；`HOMEPLAY_FAKE_LIVE=<fps>` 餵 1088² 合成直播畫面）
+
+| 情境 | 常駐（改前） | 按需 |
+|---|---|---|
+| 閒置 75 s 後（錶面模式、游標遠離、關掉 90 s 海報） | 18.2%，主執行緒 61 叢/s、Render 47 叢/s | **3.0%**（取樣 4.2%），主 10.5、Render 6.7 叢/s |
+| 直播靜止（只餵一張） | 16.9%，主 61、Render 39 叢/s | **0.3%**，主 2.5 叢/s、Render 0 |
+| 直播 2 fps（偶發更新） | ≈17% | **7.3%**，主 32、Render 12 叢/s（每幀掛回去 7–8 幀再卸） |
+| 直播 30 fps | 36.4% | 37.9%（持平；合成畫面的 CG 繪製佔大頭，真機走零拷貝） |
+| Flow 錶面（4 Hz 壁紙） | 20.5% | 20.6%（持續變化，留在線上） |
+
+閒置時每次眨眼／瞄一眼掛回去 7–16 幀再卸；一分鐘沒人靠近後眼睛直接到位，掛卸次數約每秒一次以下。
+`--bench` 現在多印 `frames3D`（RealityKit 實際出幀）與 `detaches`。
+
+### 驗證
+
+- `swift build -c release` 無新錯誤；`--selftest` OK。
+- 10 種表情 + 9 種錶面 `--snapshot` 與改前二進位逐張對照：16 張逐位相同；analog／flow／pocket／worried 的差異是
+  秒針、壁紙漂動、卡片與動畫隨時間變化（改前二進位自己連拍兩次差更多：flow 31%、worried 32%）。
+- 螢幕連拍（`screencapture` 每 ~0.15 s 一張）：純海報期間逐張相同；跨「3D→海報」切換的配對 diff 0；
+  每 0.8 s 一次 30% 的差異是浮動的整像素位移。常駐與按需在同一分鐘內拍到的畫面逐像素相同。
+- 眨眼、追視、拆解、直播只要在動就是掛著的 60 Hz RealityKit，和改前同一條路；差別只在第一幀前多 2 幀海報。

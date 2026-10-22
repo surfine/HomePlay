@@ -37,6 +37,11 @@ export const excludePaths = [
   { path: "site/.wrangler/", reason: "wrangler 本地快取（wrangler-account.json 含帳號信箱，曾誤提交過一次）" },
   { path: "site/node_modules/", reason: "依賴" },
   { path: "site/deployment.json", reason: "部署收據，含 Pages 預覽網址" },
+  { path: "docs/promo/", reason: "宣傳片的內部企劃、稽核與修訂紀錄，不公開" },
+  { path: "docs/prompt-f5-pinch-handoff.md", reason: "給 agent 的內部交接提示" },
+  { path: "docs/prompt-homeplay-handoff-2026-10-21.md", reason: "給 agent 的內部交接提示" },
+  { path: "docs/prompt-macplay-lessons.md", reason: "給 agent 的內部交接提示" },
+  { path: "docs/prompt-polish-handoff.md", reason: "給 agent 的內部交接提示" },
   { path: "tooling/public-overlay/", reason: "覆蓋檔本身不以原路徑出現，內容改放到快照根目錄" },
 ];
 

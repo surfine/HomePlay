@@ -156,6 +156,9 @@ package final class CarPlayAudioPlayer {
     private var running = false
     package private(set) var played = 0
     package var onLog: ((String) -> Void)?
+    /// 另一台引擎要代放（麥克風開了回音消除：下行得從語音處理引擎出聲才有參考）。
+    /// 回 false＝那邊還沒準備好，照舊用自己的引擎放。
+    package var renderSink: ((AVAudioPCMBuffer) -> Bool)?
 
     package init(codec: Codec) {
         self.codec = codec
@@ -206,11 +209,18 @@ package final class CarPlayAudioPlayer {
         return running && !failed
     }
 
+    /// 距離上一次有音訊多久（秒）。`lastActivity` 在 enqueue 裡由鎖保護寫入，
+    /// 讀也要在同一把鎖下，否則會讀到半寫入的值。
+    private func idleSeconds() -> Double {
+        lock.lock(); defer { lock.unlock() }
+        return CACurrentMediaTime() - lastActivity
+    }
+
     /// 閒置就暫停引擎；有聲音再開（engineQueue 上）
     private func pauseIfIdleOnQueue() {
         guard isRunning() else { return }
         lock.lock(); let empty = pending.isEmpty; lock.unlock()
-        guard empty, engine.isRunning, CACurrentMediaTime() - lastActivity > 12 else { return }
+        guard empty, engine.isRunning, idleSeconds() > 12 else { return }
         node.pause(); engine.pause(); onLog?("音频空闲，暂停引擎")
     }
 
@@ -240,7 +250,7 @@ package final class CarPlayAudioPlayer {
         engine.prepare()
         startRetryAt = 0
         lock.lock(); let waiting = !pending.isEmpty; lock.unlock()
-        guard waiting || CACurrentMediaTime() - lastActivity < 12 else { return }
+        guard waiting || idleSeconds() < 12 else { return }
         do { try engine.start(); node.play(); onLog?("音频引擎已切到新设备") }
         catch {
             startRetryAt = CACurrentMediaTime() + 1
@@ -293,6 +303,21 @@ package final class CarPlayAudioPlayer {
         pump()
     }
 
+    /// 閃避（duckAudio）：在 engineQueue 上把播放音量以 ~60 Hz 線性推到目標，避免喀聲。
+    private var duckGen = 0
+    package func ramp(to volume: Float, over seconds: Double) {
+        engineQueue.async { [self] in
+            duckGen += 1
+            let gen = duckGen, from = node.volume, steps = max(1, Int(seconds * 60))
+            for i in 1...steps {
+                engineQueue.asyncAfter(deadline: .now() + seconds * Double(i) / Double(steps)) { [self] in
+                    guard gen == duckGen else { return }
+                    node.volume = from + (volume - from) * Float(i) / Float(steps)
+                }
+            }
+        }
+    }
+
     package func stop() {
         idleTimer?.cancel(); idleTimer = nil
         if let o = configObserver { NotificationCenter.default.removeObserver(o); configObserver = nil }
@@ -339,6 +364,10 @@ package final class CarPlayAudioPlayer {
         for c in 0..<codec.channels {
             let dst = buf.floatChannelData![c]
             for f in 0..<frames { dst[f] = pcm[f * codec.channels + c] }
+        }
+        if let sink = renderSink, sink(buf) {
+            lock.lock(); played += 1; lock.unlock()
+            return
         }
         let scheduled = engineQueue.sync { () -> Bool in
             guard isRunning(), engine.isRunning else { return false }
@@ -578,6 +607,9 @@ final class CarPlayAudioStream {
         data.onDatagram = { [weak self] d, _, _ in self?.ingest(d) }
         // control 口只收不解析（RTCP/保活，照 MacPlay 直接排掉）
         player?.onLog = { [weak self] s in self?.onLog?(s) }
+        if let mic, mic.voiceProcessing {
+            player?.renderSink = { [weak mic] buf in mic?.playDownlink(buf) ?? false }
+        }
     }
 
     private func ingest(_ d: Data) {
@@ -607,6 +639,9 @@ final class CarPlayAudioStream {
             onLog?("音频心跳：收到 \(packets)、解开 \(decrypted)（type \(type)，\(sampleRate) Hz）｜\(player?.snapshot ?? "无播放器")")
         }
     }
+
+    /// 導航／Siri 插話時壓低媒體流（只有 102 會被呼叫）
+    func duck(_ volume: Float, over seconds: Double) { player?.ramp(to: volume, over: seconds) }
 
     func close() {
         mic?.stop()

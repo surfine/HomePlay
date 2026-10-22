@@ -1,0 +1,264 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>眼睛表情設計稿</title>
+<style>
+/* HomePlay 眼睛第二版：靈感來自唐老鴨漫畫的大眼睛——高高的橢圓、兩眼相貼、粗一點的輪廓、
+   表情主要靠「眼皮那一刀」和瞳孔的大小位置。只取語言，不畫唐老鴨。下面的原型就是規格。 */
+:root{--bg:#f5f5f7;--card:#fff;--ink:#1d1d1f;--muted:#6e6e73;--line:rgba(0,0,0,.08);--accent:#0a84ff;--code:#f0f0f3;color-scheme:light;
+  --f:-apple-system,BlinkMacSystemFont,"PingFang TC","Noto Sans TC",system-ui,sans-serif;--mono:ui-monospace,"SF Mono",Menlo,monospace}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--bg:#0f0f11;--card:#1c1c1e;--ink:#f5f5f7;--muted:#a1a1a6;--line:rgba(255,255,255,.1);--code:#232326;color-scheme:dark}}
+:root[data-theme="dark"]{--bg:#0f0f11;--card:#1c1c1e;--ink:#f5f5f7;--muted:#a1a1a6;--line:rgba(255,255,255,.1);--code:#232326;color-scheme:dark}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.65 var(--f);-webkit-font-smoothing:antialiased}
+main{max-width:1120px;margin:0 auto;padding:48px 16px 120px}
+h1{font-size:38px;line-height:1.15;letter-spacing:-.02em;margin:24px 0 10px}
+h2{font-size:23px;margin:56px 0 12px}
+p{max-width:780px;margin:0 0 12px}.lead{font-size:18px;color:var(--muted)}
+table{border-collapse:collapse;width:100%;font-size:13.5px;margin:10px 0 18px}
+th,td{text-align:left;padding:7px 10px;border-bottom:1px solid var(--line);vertical-align:top}th{color:var(--muted);font-weight:600}
+code{font-family:var(--mono);font-size:13px;background:var(--code);padding:1px 6px;border-radius:5px}
+.stage{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:14px}
+.card h3{margin:0 0 8px;font-size:15px;color:var(--muted);font-weight:600}
+canvas.big{width:100%;aspect-ratio:2/1;display:block;border-radius:12px}
+.chips{display:flex;flex-wrap:wrap;gap:8px;margin:14px 0}
+.chips button{font:inherit;font-size:13px;padding:6px 12px;border-radius:999px;border:1px solid var(--line);background:var(--card);color:var(--ink);cursor:pointer}
+.chips button[aria-pressed="true"]{background:var(--accent);color:#fff;border-color:var(--accent)}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,190px),1fr));gap:12px}
+.cell{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:8px;text-align:center;font-size:13px}
+.cell canvas{width:100%;aspect-ratio:2/1;display:block;border-radius:10px;cursor:pointer}
+.cell b{display:block;margin-top:6px}.cell span{color:var(--muted);font-size:12px}
+.bar{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+button.plain{font:inherit;font-size:13px;padding:5px 12px;border-radius:7px;border:1px solid var(--line);background:var(--card);color:var(--ink);cursor:pointer}
+ul{padding-left:20px}li{margin:3px 0}
+</style>
+</head>
+<body>
+<main>
+<h1>大眼睛，脾氣好</h1>
+<p class="lead">眼睛第二版。靈感來自唐老鴨漫畫：兩隻高高的橢圓眼睛貼在一起、黑色的橢圓瞳孔、一圈輪廓，表情幾乎全靠「眼皮那一刀」和瞳孔的大小與位置。我們只借這套語言，不畫唐老鴨；性格往反方向走——唐老鴨愛生氣，HomePlay 要平和、可愛。</p>
+
+<div class="bar"><button class="plain" id="theme">切換深色</button><button class="plain" id="blinkBtn">眨一下</button><span style="color:var(--muted);font-size:13px">游標移到畫面上，眼睛會跟著看；點下面的表情切換（彈簧過渡）。</span></div>
+<div class="stage" style="margin-top:12px">
+  <div class="card"><h3>現在（第一版 👀）</h3><canvas class="big" id="cur"></canvas></div>
+  <div class="card"><h3>提案（第二版）</h3><canvas class="big" id="neo"></canvas></div>
+</div>
+<div class="chips" id="chips"></div>
+
+<h2>一、從漫畫眼睛學到的五件事</h2>
+<table>
+<tr><th>漫畫的做法</th><th>我們怎麼用</th></tr>
+<tr><td>眼睛是高橢圓，兩眼貼在一起、共用一段輪廓</td><td>眼白高寬比 1.35，兩眼重疊 6%；比現在的 👀 更大更「一體」，在 220 pt 的小桌寵上也讀得出情緒</td></tr>
+<tr><td>有輪廓線</td><td>深棕灰輪廓（不是純黑），粗細是眼寬的 4%，平和不兇</td></tr>
+<tr><td>表情靠眼皮一刀：平切是睏、內低外高是生氣、內高外低是擔心</td><td>上眼皮＝一條可傾斜的直線＋高度；下眼皮＝往上拱的弧（笑）。生氣只留最輕的一檔「嘟嘴」，不做真生氣</td></tr>
+<tr><td>瞳孔是黑色直橢圓，嚇到時縮成小點</td><td>瞳孔大小是一個參數：平常 0.42、專心 0.36、驚訝 0.16；位置跟游標／人臉走</td></tr>
+<tr><td>開心時眼睛閉成弧線，眨單眼是一條弧</td><td>閉眼弧（^ 與 ∪）、單眼眨（雕像那個 pose）都是正式表情</td></tr>
+</table>
+
+<h2>二、十八個表情</h2>
+<p>點任一格，上面的大畫面會切過去。前十個對應現有的 <code>Expression</code>（idle、curious、happy、focus、sleepy、asleep、surprised、worried、love、wink），後八個是新增。</p>
+<div class="grid" id="grid"></div>
+
+<h2>三、參數（Swift 照抄）</h2>
+<table>
+<tr><th>參數</th><th>意思</th><th>範圍</th></tr>
+<tr><td><code>size</code></td><td>眼白大小（相對島高度）</td><td>0.85–1.15</td></tr>
+<tr><td><code>lid</code>, <code>tilt</code></td><td>上眼皮蓋住的比例、往內（+）或往外（−）傾斜</td><td>0–1、−0.35…0.35</td></tr>
+<tr><td><code>low</code></td><td>下眼皮往上拱的高度（笑）</td><td>0–0.45</td></tr>
+<tr><td><code>pupil</code></td><td>瞳孔大小</td><td>0.14–0.5</td></tr>
+<tr><td><code>gx</code>, <code>gy</code></td><td>視線（−1…1），跟游標／人臉，眼睛先到身體後到</td><td></td></tr>
+<tr><td><code>shape</code></td><td>open／arcUp（^）／arcDown（∪）／heart／spiral／star</td><td></td></tr>
+<tr><td><code>blush</code>, <code>extra</code></td><td>腮紅、附加小物（zz、汗滴、淚、亮片）</td><td></td></tr>
+</table>
+<p>過渡：所有數值走同一個彈簧（反應 0.34 s、不回彈）；眨眼 0.13 s 閉、0.16 s 開；平常每 3–8 秒隨機眨一次，偶爾連眨兩下。視線有 0.12 s 的「掃視」跳動，再慢慢回中間——這是讓它看起來活著、又不吵的關鍵。</p>
+
+<h2>四、平和的規矩</h2>
+<ul>
+<li>不出現真正的生氣與恐懼；最強的負面是「嘟嘴」和「擔心」。</li>
+<li>表情停留時間至少 1.2 秒，避免一直變臉。</li>
+<li>驚訝只在真的被戳到時用，0.6 秒內回到平常。</li>
+<li>夜間（22:00–7:00）預設偏睏，眨眼變慢。</li>
+</ul>
+</main>
+
+<script>
+"use strict";
+const TAU = Math.PI * 2;
+let DARK = matchMedia("(prefers-color-scheme: dark)").matches;
+// ── 表情參數 ──
+const E = {
+  idle:     { label:"平常",   note:"現有 idle",   lid:.10, tilt:0,    low:0,   pupil:.42, size:1,    gx:0,   gy:.1 },
+  curious:  { label:"好奇",   note:"現有 curious", lid:0,  tilt:0,    low:0,   pupil:.40, size:1.06, gx:.5, gy:-.5, asym:1.08 },
+  happy:    { label:"開心",   note:"現有 happy",  lid:.05, tilt:0,    low:.34, pupil:.42, size:1,    gx:0,   gy:0,   blush:1 },
+  focus:    { label:"專心",   note:"現有 focus",  lid:.32, tilt:0,    low:.06, pupil:.36, size:.96,  gx:0,   gy:.15 },
+  sleepy:   { label:"睏",     note:"現有 sleepy", lid:.56, tilt:-.12, low:0,   pupil:.40, size:.98,  gx:0,   gy:.5 },
+  asleep:   { label:"睡著",   note:"現有 asleep", shape:"arcDown", extra:"zz" },
+  surprised:{ label:"驚訝",   note:"現有 surprised", lid:0, tilt:0,   low:0,   pupil:.16, size:1.14, gx:0,   gy:-.1 },
+  worried:  { label:"擔心",   note:"現有 worried", lid:.22, tilt:-.3, low:0,   pupil:.36, size:1,    gx:0,   gy:-.6, extra:"sweat" },
+  love:     { label:"喜歡",   note:"現有 love",   shape:"heart", lid:0, low:.12, size:1.02, blush:1 },
+  wink:     { label:"眨單眼", note:"現有 wink（雕像那個）", lid:.04, low:.18, pupil:.42, size:1, gx:.2, gy:0, wink:1, extra:"spark" },
+  joy:      { label:"笑瞇瞇", note:"新：開心到閉眼", shape:"arcUp", blush:1 },
+  shy:      { label:"害羞",   note:"新",   lid:.18, tilt:0,    low:.14, pupil:.38, size:.98,  gx:-.6, gy:.7, blush:1.4 },
+  smug:     { label:"得意",   note:"新：唐老鴨的半瞇眼", lid:.42, tilt:.06, low:.1, pupil:.40, size:1, gx:.75, gy:0 },
+  pout:     { label:"嘟嘴",   note:"新：最輕的一檔脾氣", lid:.3, tilt:.26, low:0, pupil:.38, size:.98, gx:0, gy:.05 },
+  dizzy:    { label:"暈",     note:"新：被轉太多圈", shape:"spiral", size:1 },
+  sad:      { label:"失落",   note:"新：斷線時", lid:.3, tilt:-.34, low:0, pupil:.38, size:.98, gx:0, gy:.6, extra:"tear" },
+  starry:   { label:"期待",   note:"新：連上 CarPlay 前", lid:0, low:.1, pupil:.46, size:1.08, gx:0, gy:-.2, extra:"stars" },
+  thinking: { label:"想一想", note:"新：等待系統框", lid:.18, tilt:0, low:0, pupil:.38, size:1, gx:-.7, gy:-.75, asymLid:.28 },
+};
+const KEYS = Object.keys(E);
+const D = { lid:0, tilt:0, low:0, pupil:.42, size:1, gx:0, gy:0, blush:0, asym:1, asymLid:0, wink:0 };
+const full = k => Object.assign({}, D, E[k]);
+
+// ── 彈簧（反應 0.34 s、臨界阻尼）──
+const NUM = ["lid","tilt","low","pupil","size","gx","gy","blush","asym","asymLid","wink"];
+function spring(st, target, dt){ const w = TAU / 0.34;
+  for (const k of NUM){ const v = st.v[k] || 0, x = st.p[k], a = (target[k] - x) * w * w - v * 2 * w; st.v[k] = v + a * dt; st.p[k] = x + st.v[k] * dt; } }
+
+// ── 畫眼睛（第二版）──
+const COL = () => ({ isl: DARK ? "#0c0d12" : "#15131c", line: "rgba(70,58,54,.85)", white:"#fbfaf7", shade:"#d9dbe3", pupil:"#17110f", blush:"rgba(255,120,140,.45)" });
+function island(ctx, w, h){
+  const c = COL(), r = h * .5, x = w * .14, y = h * .2, iw = w * .72, ih = h * .6;
+  const bg = ctx.createLinearGradient(0, 0, 0, h); bg.addColorStop(0, DARK ? "#2a2440" : "#6f6b9a"); bg.addColorStop(1, DARK ? "#3a2c3c" : "#c99a8a");
+  ctx.fillStyle = bg; ctx.fillRect(0, 0, w, h);
+  ctx.fillStyle = c.isl; ctx.beginPath(); ctx.roundRect(x, y, iw, ih, ih / 2); ctx.fill();
+  ctx.strokeStyle = "rgba(255,255,255,.14)"; ctx.lineWidth = 1.2; ctx.stroke();
+  return { cx: w / 2, cy: y + ih / 2, ih };
+}
+function eyeV2(ctx, cx, cy, ew, eh, p, side, t, blinkK){
+  const c = COL(), lw = ew * .05;
+  const shape = p.shape || "open";
+  if (shape === "arcUp" || shape === "arcDown" || (p.wink > .5 && side < 0)){
+    ctx.strokeStyle = c.white; ctx.lineWidth = lw * 1.6; ctx.lineCap = "round"; ctx.beginPath();
+    if (shape === "arcDown") ctx.arc(cx, cy - eh * .05, ew * .42, .15 * Math.PI, .85 * Math.PI);
+    else ctx.arc(cx, cy + eh * .18, ew * .42, 1.15 * Math.PI, 1.85 * Math.PI);
+    ctx.stroke(); return;
+  }
+  const e = { x: cx, y: cy, rx: ew / 2, ry: eh / 2 };
+  ctx.save();
+  // 眼白（球面：左上亮）
+  ctx.beginPath(); ctx.ellipse(e.x, e.y, e.rx, e.ry, 0, 0, TAU);
+  const g = ctx.createRadialGradient(e.x - e.rx * .3, e.y - e.ry * .35, 0, e.x, e.y, e.ry * 1.15);
+  g.addColorStop(0, "#ffffff"); g.addColorStop(.65, c.white); g.addColorStop(1, c.shade); ctx.fillStyle = g; ctx.fill();
+  ctx.clip();
+  // 瞳孔
+  if (shape === "heart"){
+    const s = ew * .26, x = e.x + p.gx * e.rx * .3, y = e.y + e.ry * .05;
+    ctx.fillStyle = "#e8455f"; ctx.beginPath(); ctx.moveTo(x, y + s * .9);
+    ctx.bezierCurveTo(x - s * 1.4, y - s * .1, x - s * .6, y - s * 1.2, x, y - s * .35);
+    ctx.bezierCurveTo(x + s * .6, y - s * 1.2, x + s * 1.4, y - s * .1, x, y + s * .9); ctx.fill();
+  } else if (shape === "spiral"){
+    ctx.strokeStyle = c.pupil; ctx.lineWidth = lw * .8; ctx.beginPath();
+    for (let a = 0; a < TAU * 2.6; a += .1){ const r = a / (TAU * 2.6) * e.rx * .62, ang = a * side + t * 4 * side; const px = e.x + Math.cos(ang) * r, py = e.y + Math.sin(ang) * r * 1.2; a ? ctx.lineTo(px, py) : ctx.moveTo(px, py); }
+    ctx.stroke();
+  } else {
+    const pw = ew * p.pupil, ph = pw * 1.32;
+    const px = e.x + p.gx * (e.rx - pw * .55) * .9, py = e.y + p.gy * (e.ry - ph * .55) * .8;
+    ctx.fillStyle = c.pupil; ctx.beginPath(); ctx.ellipse(px, py, pw / 2, ph / 2, 0, 0, TAU); ctx.fill();
+    const hr = pw * .2; ctx.fillStyle = "#fff"; ctx.beginPath(); ctx.ellipse(px - pw * .18, py - ph * .2, hr, hr * 1.2, 0, 0, TAU); ctx.fill();
+    ctx.fillStyle = "rgba(255,255,255,.55)"; ctx.beginPath(); ctx.arc(px + pw * .17, py + ph * .22, hr * .4, 0, TAU); ctx.fill();
+    if (p.extra === "spark"){ ctx.fillStyle = "#fff"; star(ctx, px + pw * .05, py - ph * .05, pw * .16, t); }
+  }
+  ctx.restore();
+  // 先畫輪廓，眼皮再把被蓋住的那段輪廓一起蓋掉（眼皮的範圍比眼白大一圈輪廓寬）
+  ctx.strokeStyle = c.line; ctx.lineWidth = lw; ctx.beginPath(); ctx.ellipse(e.x, e.y, e.rx, e.ry, 0, 0, TAU); ctx.stroke();
+  ctx.save();
+  ctx.beginPath(); ctx.ellipse(e.x, e.y, e.rx + lw, e.ry + lw, 0, 0, TAU); ctx.clip();
+  // 上眼皮：一條斜線以上蓋成島色（tilt>0 內側低＝嘟嘴；<0 外側低＝擔心／失落）
+  const lid = Math.min(1, p.lid + (side < 0 ? p.asymLid : 0) + blinkK);
+  if (lid > .005){
+    const inner = side < 0 ? 1 : -1;   // 內側方向（朝鼻樑）
+    const yMid = e.y - e.ry + lid * eh * 1.02, dy = p.tilt * eh * .5;
+    const yIn = yMid + dy, yOut = yMid - dy;
+    const xIn = e.x + inner * e.rx * 1.2, xOut = e.x - inner * e.rx * 1.2;
+    ctx.fillStyle = c.isl; ctx.beginPath(); ctx.moveTo(xIn, e.y - e.ry - lw * 2); ctx.lineTo(xOut, e.y - e.ry - lw * 2); ctx.lineTo(xOut, yOut); ctx.lineTo(xIn, yIn); ctx.closePath(); ctx.fill();
+    ctx.strokeStyle = c.line; ctx.lineWidth = lw * .9; ctx.beginPath(); ctx.moveTo(xOut, yOut); ctx.lineTo(xIn, yIn); ctx.stroke();
+  }
+  // 下眼皮：往上拱（笑）
+  if (p.low > .005){
+    const h0 = e.y + e.ry, top = e.y + e.ry - p.low * eh;
+    ctx.fillStyle = c.isl; ctx.beginPath(); ctx.moveTo(e.x - e.rx * 1.2, h0 + lw * 2);
+    ctx.quadraticCurveTo(e.x, top - (h0 - top) * .9, e.x + e.rx * 1.2, h0 + lw * 2); ctx.closePath(); ctx.fill();
+    // 下眼皮的弧線也描一道輪廓（笑起來的臉頰邊）
+    ctx.strokeStyle = c.line; ctx.lineWidth = lw * .9; ctx.beginPath(); ctx.moveTo(e.x - e.rx * 1.2, h0 + lw * 2); ctx.quadraticCurveTo(e.x, top - (h0 - top) * .9, e.x + e.rx * 1.2, h0 + lw * 2); ctx.stroke();
+  }
+  ctx.restore();
+}
+function star(ctx, x, y, r, t){ ctx.save(); ctx.translate(x, y); ctx.rotate(t * .8); ctx.beginPath();
+  for (let i = 0; i < 8; i++){ const a = i * Math.PI / 4, rr = i % 2 ? r * .35 : r; ctx.lineTo(Math.cos(a) * rr, Math.sin(a) * rr); } ctx.closePath(); ctx.fill(); ctx.restore(); }
+function extras(ctx, o, p, t, w, h){
+  const c = COL();
+  if (p.blush > .01){ ctx.fillStyle = `rgba(255,120,140,${.35 * Math.min(1, p.blush)})`;
+    for (const s of [-1, 1]){ ctx.beginPath(); ctx.ellipse(o.cx + s * o.ih * 1.05, o.cy + o.ih * .3, o.ih * .2, o.ih * .1, 0, 0, TAU); ctx.fill(); } }
+  const ex = p.extra;
+  if (ex === "zz"){ ctx.fillStyle = "rgba(255,255,255,.85)"; ctx.font = `700 ${o.ih * .26}px -apple-system`; const k = (t * .5) % 1;
+    ctx.globalAlpha = 1 - k; ctx.fillText("z", o.cx + o.ih * .9, o.cy - o.ih * .1 - k * o.ih * .4); ctx.globalAlpha = 1; ctx.fillText("Z", o.cx + o.ih * 1.15, o.cy - o.ih * .45); }
+  if (ex === "sweat"){ ctx.fillStyle = "#8fd3ff"; drop(ctx, o.cx + o.ih * 1.05, o.cy - o.ih * .25, o.ih * .09); }
+  if (ex === "tear"){ const k = (t * .4) % 1; ctx.fillStyle = "#8fd3ff"; drop(ctx, o.cx - o.ih * .55, o.cy + o.ih * .25 + k * o.ih * .4, o.ih * .07); }
+  if (ex === "stars"){ ctx.fillStyle = "#ffd76a"; for (const [dx, dy, s] of [[-1.25, -.35, .09], [1.2, -.4, .07], [1.05, .3, .05]]) star(ctx, o.cx + dx * o.ih, o.cy + dy * o.ih, o.ih * s * (1 + .2 * Math.sin(t * 5 + dx)), t); }
+}
+function drop(ctx, x, y, r){ ctx.beginPath(); ctx.moveTo(x, y - r * 1.8); ctx.quadraticCurveTo(x + r * 1.2, y, x, y + r); ctx.quadraticCurveTo(x - r * 1.2, y, x, y - r * 1.8); ctx.fill(); }
+
+function drawV2(ctx, w, h, p, t, blinkK){
+  const o = island(ctx, w, h);
+  const eh = o.ih * .84 * p.size, ew = eh / 1.35, gap = ew * .96;   // 兩眼中心距略小於眼寬：相貼、共用一小段輪廓
+  for (const side of [-1, 1]){
+    const s = side > 0 ? p.asym : 1;
+    eyeV2(ctx, o.cx + side * gap / 2, o.cy + o.ih * .02, ew * s, eh * s, p, side, t, blinkK);
+  }
+  extras(ctx, o, p, t, w, h);
+}
+// ── 第一版（現在的 👀，照 main.swift 的參數）──
+function drawV1(ctx, w, h, p, t, blinkK){
+  const o = island(ctx, w, h), k = o.ih / 156, rx = 31 * k, ry = 50 * k * (1 - .9 * blinkK), sep = 36 * k;
+  for (const side of [-1, 1]){
+    const cx = o.cx + side * sep, cy = o.cy;
+    ctx.save(); ctx.beginPath(); ctx.ellipse(cx, cy, rx, Math.max(1, ry), 0, 0, TAU);
+    const g = ctx.createRadialGradient(cx - rx * .22, cy - ry * .38, 0, cx, cy, Math.max(rx, ry) * 1.22); g.addColorStop(0, "#fff"); g.addColorStop(.62, "#f8f9fa"); g.addColorStop(1, "#c9cfd6");
+    ctx.fillStyle = g; ctx.fill(); ctx.clip();
+    if (blinkK < .6){ const ir = rx * .54, qx = cx - 13 * k + p.gx * 10 * k, qy = cy + 6 * k + p.gy * 8 * k;
+      const ig = ctx.createRadialGradient(qx, qy, 0, qx, qy, ir); ig.addColorStop(0, "#1a0e05"); ig.addColorStop(.5, "#291406"); ig.addColorStop(.8, "#945709"); ig.addColorStop(.94, "#efa812"); ig.addColorStop(1, "#4d2b08");
+      ctx.fillStyle = ig; ctx.beginPath(); ctx.arc(qx, qy, ir, 0, TAU); ctx.fill();
+      ctx.fillStyle = "#fff"; ctx.beginPath(); ctx.arc(qx - ir * .38, qy - ir * .4, ir * .255, 0, TAU); ctx.fill(); }
+    ctx.restore();
+  }
+}
+
+// ── 播放 ──
+const st = { p: full("idle"), v: {} }; let cur = "idle", target = full("idle"), blinkAt = performance.now() + 2500, blinkStart = -1, mouse = { x: 0, y: 0, in: false };
+function blinkK(now){ if (blinkStart < 0) return 0; const e = (now - blinkStart) / 1000; if (e > .29){ blinkStart = -1; return 0; } return e < .13 ? e / .13 : 1 - (e - .13) / .16; }
+function fit(cv){ const dpr = devicePixelRatio || 1, w = cv.clientWidth, h = cv.clientHeight; if (cv.width !== Math.round(w * dpr)){ cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr); } const c = cv.getContext("2d"); c.setTransform(dpr, 0, 0, dpr, 0, 0); return [c, w, h]; }
+const cvCur = document.getElementById("cur"), cvNeo = document.getElementById("neo");
+for (const cv of [cvCur, cvNeo]){ cv.addEventListener("mousemove", e => { const r = cv.getBoundingClientRect(); mouse = { x: (e.clientX - r.left) / r.width * 2 - 1, y: (e.clientY - r.top) / r.height * 2 - 1, in: true }; });
+  cv.addEventListener("mouseleave", () => mouse.in = false); }
+let last = performance.now();
+function frame(now){
+  const dt = Math.min(.05, (now - last) / 1000); last = now; const t = now / 1000;
+  if (now > blinkAt){ blinkStart = now; blinkAt = now + 3000 + Math.random() * 5000; }
+  const tg = Object.assign({}, target);
+  if (mouse.in && !target.shape){ tg.gx = Math.max(-1, Math.min(1, mouse.x * 1.3)); tg.gy = Math.max(-1, Math.min(1, mouse.y * 1.3)); }
+  spring(st, tg, dt);
+  const p = Object.assign({}, st.p, { shape: target.shape, extra: target.extra });
+  const bk = target.shape ? 0 : blinkK(now);
+  let [c, w, h] = fit(cvCur); drawV1(c, w, h, p, t, bk);
+  [c, w, h] = fit(cvNeo); drawV2(c, w, h, p, t, bk);
+  for (const g of cells){ const [cc, ww, hh] = fit(g.cv); drawV2(cc, ww, hh, Object.assign({}, full(g.k)), t, 0); }
+  requestAnimationFrame(frame);
+}
+const chips = document.getElementById("chips"), grid = document.getElementById("grid"), cells = [];
+function pick(k){ cur = k; target = full(k); for (const b of chips.children) b.setAttribute("aria-pressed", b.dataset.k === k); }
+for (const k of KEYS){
+  const b = document.createElement("button"); b.textContent = E[k].label; b.dataset.k = k; b.onclick = () => pick(k); chips.appendChild(b);
+  const d = document.createElement("div"); d.className = "cell"; d.innerHTML = `<canvas></canvas><b>${E[k].label}</b><span>${E[k].note}</span>`; grid.appendChild(d);
+  const cv = d.querySelector("canvas"); cv.onclick = () => { pick(k); scrollTo({ top: 0, behavior: "smooth" }); }; cells.push({ k, cv });
+}
+pick("idle");
+document.getElementById("theme").onclick = () => { DARK = !DARK; document.documentElement.dataset.theme = DARK ? "dark" : "light"; };
+document.getElementById("blinkBtn").onclick = () => { blinkStart = performance.now(); };
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>

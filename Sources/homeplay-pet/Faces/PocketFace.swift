@@ -47,7 +47,7 @@ extension Face {
     func renderPocketFace(_ g: CGContext, _ now: Double) {
         pocketScanPhotos(now)
         let full = CGRect(x: 0, y: 0, width: 1024, height: 1024)
-        let date = Date(), tA = CACurrentMediaTime()
+        let date = Self.displayDate, tA = CACurrentMediaTime()
         let dl = Self.dateLine(date) + " · " + pocketContextWord()
         // 靜態層：壁紙＋日期＋大時鐘＋卡片堆＋玻璃卡。每分鐘／壁紙更新／視窗縮放時才重畫。
         let minute = Int(date.timeIntervalSince1970 / 60)
@@ -60,9 +60,12 @@ extension Face {
             let px = Int((1024 * sc).rounded())
             func drawStatic(_ c: CGContext) {
                 if let wallpaper { drawUpright(c, wallpaper, in: full) }
-                drawCentered(c, dl, font: Self.rounded(35, weight: .semibold), kern: 2,
+                drawCentered(c, dl, font: FaceType.sf(36, .semibold), kern: 0.4,
                              y: 118, color: NSColor.white.withAlphaComponent(0.9))
-                drawCentered(c, Self.clock(date), font: Self.rounded(210, weight: .bold), kern: -6, y: 282, color: .white)
+                // SF Pro 半粗的時間（和其他錶面同一套字），不再用圓體
+                let t = GlyphShape(Self.clock(date), font: FaceType.sf(300, .semibold), kern: -4)
+                    .tall(height: 138, stretch: 1.0, at: CGPoint(x: 512, y: 146), anchorX: 0.5, maxWidth: 800)
+                fillShape(c, t, .white, shadow: 0.18)
                 // 卡片堆：兩層錯位的底，再一張玻璃前卡
                 for (r, a) in [(CGRect(x: 147, y: 528, width: 730, height: 314), 0.10), (CGRect(x: 112, y: 504, width: 800, height: 314), 0.14)] {
                     c.setFillColor(NSColor(white: 1, alpha: a).cgColor)
@@ -104,7 +107,7 @@ extension Face {
         switch kind {
         case .timer:
             let orange = srgb(0xffb340)
-            drawLeft(g, L("timer.title", "计时器"), font: label, x: x, y: r.minY + 78, color: orange)
+            drawLeft(g, timerLabel, font: label, x: x, y: r.minY + 78, color: orange)
             guard let end = timerEnd else { return }
             let left = max(0, end - now), frac = CGFloat(left / max(1, timerTotal))
             let c = CGPoint(x: x + 90, y: r.minY + 212)

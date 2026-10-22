@@ -1,8 +1,9 @@
 <div align="center">
-  <img src="assets/github/hero-v1.gif" alt="HomePlay: an eye close-up pulls back into a tiny 3D HomeView on a Mac desktop" width="720">
+  <img src="assets/github/hero-v2.gif" alt="HomePlay: an eye close-up pulls back into a tiny 3D HomeView on a Mac desktop" width="720">
   <h1>HomePlay</h1>
-  <p><strong>A tiny 3D HomeView on your Mac desktop, with real CarPlay.</strong></p>
-  <p><a href="README.md">简体中文</a> · <a href="https://homeplay.aaronlau.me">Website</a> · <a href="https://homeplay.aaronlau.me/en/">English site</a></p>
+  <p><strong>It looks at you, and brings CarPlay to your Mac.</strong></p>
+  <p>HomeView, made into a desk pet for your Mac: try the HomeView software before the hardware ships.</p>
+  <p><a href="README.md">简体中文</a> · <a href="https://homeplay.aaronlau.me/en/">Website</a></p>
   <p>
     <a href="https://github.com/surfine/HomePlay/releases/latest"><img src="https://img.shields.io/github/v/release/surfine/HomePlay?label=download&style=flat-square" alt="Latest release"></a>
     <img src="https://img.shields.io/badge/macOS-14%2B-15181c?style=flat-square" alt="macOS 14+">
@@ -14,41 +15,61 @@
 
 > Experimental personal project. Not affiliated with, endorsed by, or certified by Apple. CarPlay and HomeView are trademarks of Apple Inc. Use at your own risk.
 
+## ⭐️ Features
+
+- **Plug in once, then wireless.** Pairing works like a Magic accessory: connect the iPhone to the Mac with a cable once, it switches to wireless when pairing is done, and unplugging later doesn't drop CarPlay.
+- **Ten expressions, many faces.** Ten expressions and a set of faces (glass numerals, Flow bubbles, Modular, Analog, Bedside…) to add a little life to ordinary days, and help you feel a bit more calm and at ease.
+- **Press a little harder, and it's CarPlay.** A continuous CarPlay experience on your Mac desktop. Unlike iPhone Mirroring, you can reach your iPhone's Siri through the Mac: hold F5 and just talk, completely hands-free, so work stays focused.
+- **More than CarPlay.** A Pomodoro timer, battery and Now Playing widgets, and an always-on-top window: like the iTunes MiniPlayer, but playing your iPhone's library, more flexible than AirPlay to Mac (F7–F9 skip tracks).
+
+<img src="assets/github/grid-v2.webp" alt="HomePlay front view, back view, real CarPlay music screen, and exploded anatomy" width="100%">
+
+| Faces | Ten expressions |
+|:---:|:---:|
+| <img src="assets/github/styles-v2.webp" alt="Island, Flow, Modular, Analog, Pocket and Bedside faces" width="100%"> | <img src="assets/github/faces-v2.webp" alt="Ten expressions made from the same pair of eyes" width="100%"> |
+
+<img src="assets/github/finishes-v2.webp" alt="G4 white, silver, starlight, rose, and space gray finishes" width="100%">
+
+## 💡 Before you start
+
+- **Tested iPhones:** so far only an iPhone SE (1st generation, Lightning) on iOS 15 and an iPhone 18 Pro (USB-C) on iOS 27. Reports on other models are welcome.
+- **Gestures:** pinch to zoom, two-finger swipe to rotate, three-finger drag to move.
+- **It follows you:** the context menu has a DockKit-style follow mode, like the iMac G4 ad, and can match the room's light.
+
+## 🧑🏻‍💻 From the developer
+
+> 👀 is one of my favorite emoji, for excitement and anticipation. Donald Duck is one of my favorite cartoon characters too: big lively eyes, a bit goofy, adorable.
+>
+> I believe that in the age of AI, staying curious, freeing your imagination, being creative, keeping your judgment and learning to work together matter more than ever. I hope this little desk pet brings you some fun.
+
 ## Install
 
 **Requirements:** macOS 14 or later, Apple Silicon.
 
-[**Download HomePlay-macOS-arm64.zip**](https://github.com/surfine/HomePlay/releases/latest/download/HomePlay-macOS-arm64.zip) (about 10.5 MB), then:
+[**Download HomePlay-macOS-arm64.zip**](https://github.com/surfine/HomePlay/releases/latest/download/HomePlay-macOS-arm64.zip), then:
 
 1. Unzip and drag `HomePlay.app` into Applications.
 2. Open it. The desk pet appears with its clock and eyes. No account, profile, or setup.
 3. For CarPlay, connect an iPhone over USB once and accept Trust and Pair on the iPhone.
-4. Press and hold the pet to enter CarPlay. Unplugging switches to wireless after the first pairing.
+4. Press firmly on the pet to enter CarPlay. Unplugging switches to wireless after the first pairing.
 
 The release is Developer ID signed and notarized by Apple, so Gatekeeper opens it after unzipping. The matching checksum is [`HomePlay-macOS-arm64.zip.sha256`](https://github.com/surfine/HomePlay/releases/latest/download/HomePlay-macOS-arm64.zip.sha256). Verify with `shasum -a 256 -c HomePlay-macOS-arm64.zip.sha256`.
 
-## What's new in 0.5.0
+## What's new in 0.6.0
 
-- **First public release** of the current app.
-- **One pair of eyes**: the website and the device now share the amber 👀 language, and blink, asleep, and wink use a Donald-style lower lid with the white sclera kept.
-- **Refreshed media**: three-language renders, new share cards, and a textless Mark View-style hero film on the website.
+- **Redesigned faces and eyes:** Liquid Glass numerals, Flow bubbles, Modular and Analog rebuilt on Apple's layouts; the Photos face cuts out the subject so the time stands behind them. The eyes are resampled from Apple's 👀 emoji.
+- **A real Pomodoro:** 25 minutes of focus, 5 minutes of rest, a 15-minute long break after four rounds, each phase starting on its own; the island tells you how many you finished today.
+- **Take-apart view on the real construction:** nine layers from the outside in, with a name and spec line for each part.
+- **CarPlay calls and Siri:** a call card to answer, decline and hang up; echo cancellation during calls and Siri; hold F5 to talk.
+- **Video in CarPlay (experimental):** iOS 27 video while parked, or AirPlay straight to this Mac.
+- **Sharper and smoother:** the face texture follows the screen's real pixels, expression transitions run at 30 fps, and gestures no longer hitch on the first touch.
 
-[Full release notes](https://github.com/surfine/HomePlay/releases/tag/v0.5.0)
+[Full release notes](https://github.com/surfine/HomePlay/releases/tag/v0.6.0)
 
-## Screenshots
-
-<img src="assets/github/grid-v1.webp" alt="HomePlay front view, back view, real CarPlay music screen, and exploded anatomy" width="100%">
-
-| Five finishes | Ten faces |
-|:---:|:---:|
-| <img src="assets/github/finishes-v1.webp" alt="G4 white, silver, starlight, rose, and space gray finishes" width="100%"> | <img src="assets/github/faces-v1.webp" alt="Ten expressions made from the same eye geometry" width="100%"> |
-
-## Features
+## Technical details
 
 - **Real CarPlay**: wireless (Bluetooth iAP2 to Wi-Fi) or wired USB, H.264 and HEVC video, touch sent back to the iPhone, sound through the Mac, and Now Playing in Control Center.
-- **Pair once, then wireless**: the first pairing is over USB; after it settles the session moves to Wi-Fi and unplugging does not end it. When two iPhones are connected, the later one gets the single CarPlay session.
-- **Built from the official product**: Apple's HomeView USDZ geometry and materials, five finishes, a nine-part exploded view, a back USB-C port, and RealityKit IBL at Quick Look quality.
-- **A desk pet that looks back**: ten expressions, nine faces, drag and two-finger gestures, three-finger move, pinch, force press, and long press. The optional Follow Me and Room Light features use the camera only while enabled.
+- **Built from the official product**: Apple's HomeView USDZ geometry and materials, five finishes, a back USB-C port, and RealityKit IBL at Quick Look quality.
 - **Quiet and power-aware**: idle turns into a static poster and the ARView leaves the window; occlusion and display sleep stop rendering. No notifications, no feedback, no telemetry.
 - **Zero setup**: the receiver finds the current Wi-Fi and matches the phone; pairing and unplugging switch automatically. No Keychain access and no admin password.
 - **Public-facing**: one instance, VoiceOver labels, English, Simplified Chinese and Traditional Chinese, localized permission strings, GPL source.

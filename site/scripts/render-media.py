@@ -32,6 +32,10 @@ GROUPS = {
         ("ambient-night", ["--finish", "gray", "--face", "idle", "--yaw", "0.28", "--pitch", "0.1", "--hour", "22", "--time", "23:12"]),
         ("asleep-night", ["--finish", "gray", "--face", "asleep", "--yaw", "0.28", "--pitch", "0.1", "--hour", "2", "--time", "02:07"]),
     ],
+    # 錶面一覽：正面、同一個時間（10:09，像 Apple 的產品圖），六款各一張
+    "styles": [(f"style-{st}", ["--finish", "silver", "--face", "idle", "--style", st, "--clock", "bold", "--yaw", "0", "--pitch", "0.04",
+                                "--near", "--hour", "16", "--time", "10:09", "--pointer", "0,0"])
+               for st in "island flow modular analog pocket bedside".split()],
     # 轉一圈：每 10° 一張，官網拖動／捲動時逐張換
     "spin": [(f"spin/{i:02d}", ["--finish", "g4", "--face", "idle", "--yaw", f"{i * 2 * math.pi / 36:.4f}", "--pitch", "0.1", "--near", "--hour", "10"])
              for i in range(36)],
@@ -39,8 +43,8 @@ GROUPS = {
     "hello-seq": [(f"hello/{i:02d}", ["--finish", "g4", "--yaw", "0.28", "--pitch", "0.1", "--near", "--hello", "--snapshot-at", f"{0.3 + i * 0.11:.2f}"])
                   for i in range(16)],
 }
-SHARED_BOX = ("faces", "finish", "spin", "hello-seq")   # 這些組逐張疊放，要共用裁切框，機身才不會跳
-WIDTH = {"faces": 1200, "finish": 1200, "spin": 640, "hello-seq": 640}
+SHARED_BOX = ("faces", "finish", "spin", "hello-seq", "styles")   # 這些組逐張疊放，要共用裁切框，機身才不會跳
+WIDTH = {"faces": 1200, "finish": 1200, "spin": 640, "hello-seq": 640, "styles": 640}
 # 只有這些表情拍眨眼／瞄一眼；睡著已經閉眼、眨眼沒有意義
 NO_BLINK = {"face-asleep"}
 NO_GLANCE = {"face-asleep", "face-wink"}

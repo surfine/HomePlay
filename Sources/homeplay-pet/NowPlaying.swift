@@ -149,7 +149,16 @@ final class NowPlayingPoller {
     private var busy = false
     private var results: [String: NowPlayingInfo] = [:]
     private let queue = DispatchQueue(label: "homeplay.nowplaying", qos: .utility)
+    /// 编译过的 AppleScript 留着复用：每 3 秒重编一次是白白烧 CPU。只在 queue 上访问。
+    private var scripts: [String: NSAppleScript] = [:]
     private weak var face: Face?
+
+    private func script(for p: Player) -> NSAppleScript? {
+        if let s = scripts[p.bundle] { return s }
+        guard let s = NSAppleScript(source: p.source) else { return nil }
+        scripts[p.bundle] = s
+        return s
+    }
 
     func start(face: Face) {
         guard !Self.disabled, timer == nil else { return }
@@ -177,7 +186,7 @@ final class NowPlayingPoller {
             var out: [(Player, NowPlayingInfo?, Bool)] = []
             for p in todo {
                 var err: NSDictionary?
-                let r = NSAppleScript(source: p.source)?.executeAndReturnError(&err)
+                let r = self?.script(for: p)?.executeAndReturnError(&err)
                 let code = (err?[NSAppleScript.errorNumber] as? Int) ?? 0
                 out.append((p, r?.stringValue.flatMap { NowPlayingLogic.parse($0, durationScale: p.scale, now: CACurrentMediaTime()) }, code == -1743))
             }

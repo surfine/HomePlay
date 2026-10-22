@@ -85,11 +85,11 @@ package final class EventChannel {
     }
 
     /// 发一条 `POST /command`，正文是 bplist。通道没连上就丢。
-    package func sendCommand(_ bplistBody: Data) {
+    package func sendCommand(_ bplistBody: Data, streamID: Int? = nil) {
         queue.async { [self] in
             guard conn != nil else { return }
             cseq += 1
-            write(rtspEventCommand(body: bplistBody, cseq: cseq))
+            write(rtspEventCommand(body: bplistBody, cseq: cseq, streamID: streamID))
         }
     }
 
@@ -110,9 +110,12 @@ package final class EventChannel {
 
     /// 车机 Siri 键：requestSiri buttonDown(2) + buttonUp(3)（MacPlay invokeSiri 同款）
     package func sendSiri() {
-        for action in [2, 3] {
-            if let b = try? CarPlayPlist.requestSiri(action: action) { sendCommand(b) }
-        }
+        for action in [2, 3] { sendSiri(action: action) }
+    }
+
+    /// 單一 Siri 鍵動作：2＝按下（開始聽）、3＝放開（結束）。按住說話時分開送。
+    package func sendSiri(action: Int) {
+        if let b = try? CarPlayPlist.requestSiri(action: action) { sendCommand(b) }
     }
 
     package func sendMedia(_ b: HID.MediaButton) {
@@ -123,6 +126,15 @@ package final class EventChannel {
     package func sendTelephony(_ b: HID.TelephonyButton) {
         sendHIDReport(uuid: HID.telephonyUID, report: HID.telephonyReport(b.rawValue))
         sendHIDReport(uuid: HID.telephonyUID, report: HID.telephonyReport(0))
+    }
+
+    /// iAP2 隧道（流 130）的反向路径：原始 iAP2 字节包成 `iAPSendMessage` 命令（MacPlay _sendIapMessage 同款）。
+    /// 通道没连上返回 false，字节丢弃（链路层靠定时器重发 marker/SYNC）。
+    @discardableResult
+    package func sendIapMessage(_ data: Data) -> Bool {
+        guard isConnected, let b = try? CarPlayPlist.iAPSendMessage(data) else { return false }
+        sendCommand(b)
+        return true
     }
 
     package func forceKeyFrame(displayUUID: String = CarPlayPlist.mainDisplayUUID) {

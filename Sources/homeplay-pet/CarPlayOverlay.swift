@@ -275,7 +275,7 @@ extension Face {
 /// CarPlay 目前的狀態。存的是狀態本身，不是譯好的字：語言切換後下一次畫就是新語言，
 /// 判斷「連線中」也不用去比對字串。
 enum CarPlayStatus {
-    case notConnected, live, paused, reconnecting, connecting, pausedResume
+    case notConnected, live, paused, reconnecting, connecting, pausedResume, background
     var text: String {
         switch self {
         case .notConnected:
@@ -290,6 +290,7 @@ enum CarPlayStatus {
         case .reconnecting: return L("status.reconnecting", "CarPlay 未连接 · 稍后重连")
         case .connecting: return L("status.connecting", "CarPlay 连接中…")
         case .pausedResume: return L("status.pausedResume", "CarPlay 已暂停 · 空格继续")
+        case .background: return L("status.background", "CarPlay 在后台 · 重按返回")
         }
     }
 }

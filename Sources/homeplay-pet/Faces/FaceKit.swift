@@ -1,0 +1,359 @@
+// 錶面共用的「工藝層」：字體、字形路徑、液態玻璃數字。
+// 參考：apple.com/apple-homeview 的錶面圖（Portraits 的玻璃大數字、Flow 的玻璃泡泡字、Typograph 的疊字）
+// 與 watchOS 錶面說明的配圖。原則：
+// - 數字用 SF 的寬度軸（compressed／condensed）而不是一律圓體：iOS 26 鎖定畫面和 HomeView 的大時間都是窄高的 SF；
+// - 玻璃 = 背景的模糊折射（中間輕放大、邊緣更多）＋霜白抬亮＋左上亮右下暗的斜面細邊＋很淡的落影；
+// - 畫布是 1024 邏輯單位、左上原點（makeImage 已翻轉）；陰影的 offset 走裝置座標（y 朝上），往下要給負值。
+
+import AppKit
+import CoreText
+
+enum FaceType {
+    nonisolated(unsafe) private static var cache: [String: NSFont] = [:]
+
+    /// SF Pro（可選寬度軸）、等寬數字：數字每分鐘跳動時不會左右晃
+    static func sf(_ size: CGFloat, _ weight: NSFont.Weight, width: NSFont.Width = .standard, mono: Bool = true) -> NSFont {
+        let key = "sf|\(size)|\(weight.rawValue)|\(width.rawValue)|\(mono)"
+        if let f = cache[key] { return f }
+        let base = NSFont.systemFont(ofSize: size, weight: weight, width: width)
+        let f = mono ? monoDigits(base) : base
+        cache[key] = f
+        return f
+    }
+    /// SF Pro Rounded
+    static func rounded(_ size: CGFloat, _ weight: NSFont.Weight, mono: Bool = true) -> NSFont {
+        let key = "rd|\(size)|\(weight.rawValue)|\(mono)"
+        if let f = cache[key] { return f }
+        let base = NSFont.systemFont(ofSize: size, weight: weight)
+        let d = base.fontDescriptor.withDesign(.rounded) ?? base.fontDescriptor
+        let r = NSFont(descriptor: d, size: size) ?? base
+        let f = mono ? monoDigits(r) : r
+        cache[key] = f
+        return f
+    }
+    /// New York（系統襯線）：Typograph 的「古典」數字
+    static func serif(_ size: CGFloat, _ weight: NSFont.Weight) -> NSFont {
+        let key = "ny|\(size)|\(weight.rawValue)"
+        if let f = cache[key] { return f }
+        let base = NSFont.systemFont(ofSize: size, weight: weight)
+        let d = base.fontDescriptor.withDesign(.serif) ?? base.fontDescriptor
+        let f = NSFont(descriptor: d, size: size) ?? base
+        cache[key] = f
+        return f
+    }
+    private static func monoDigits(_ f: NSFont) -> NSFont {
+        let d = f.fontDescriptor.addingAttributes([.featureSettings: [[
+            NSFontDescriptor.FeatureKey.typeIdentifier: kNumberSpacingType,
+            NSFontDescriptor.FeatureKey.selectorIdentifier: kMonospacedNumbersSelector]]])
+        return NSFont(descriptor: d, size: f.pointSize) ?? f
+    }
+}
+
+/// 一串字的字形外框（畫布座標：左上原點、y 朝下），基線在 y = 0、起筆在 x = 0
+extension NSColor {
+    /// 灰階值（不是灰階色彩空間也不會崩）
+    var whiteComponentSafe: CGFloat { (usingColorSpace(.deviceGray) ?? self).whiteComponent }
+}
+
+struct GlyphShape {
+    let path: CGPath
+    /// 實際墨跡的外框（不是排版框）
+    var ink: CGRect { path.boundingBoxOfPath }
+
+    nonisolated(unsafe) private static var cache: [String: CGPath] = [:]
+
+    init(_ s: String, font: NSFont, kern: CGFloat = 0) {
+        let key = "\(s)|\(font.fontName)|\(font.pointSize)|\(kern)"
+        if let p = Self.cache[key] { path = p; return }
+        let line = CTLineCreateWithAttributedString(NSAttributedString(string: s, attributes: [.font: font, .kern: kern]))
+        let out = CGMutablePath()
+        for run in CTLineGetGlyphRuns(line) as! [CTRun] {
+            let n = CTRunGetGlyphCount(run)
+            guard n > 0 else { continue }
+            let attrs = CTRunGetAttributes(run) as NSDictionary
+            let runFont = attrs[kCTFontAttributeName as String] as! CTFont
+            var glyphs = [CGGlyph](repeating: 0, count: n), pos = [CGPoint](repeating: .zero, count: n)
+            CTRunGetGlyphs(run, CFRange(location: 0, length: n), &glyphs)
+            CTRunGetPositions(run, CFRange(location: 0, length: n), &pos)
+            for i in 0..<n {
+                var t = CGAffineTransform(a: 1, b: 0, c: 0, d: -1, tx: pos[i].x, ty: -pos[i].y)
+                if let gp = CTFontCreatePathForGlyph(runFont, glyphs[i], &t) { out.addPath(gp) }
+            }
+        }
+        path = out
+        if Self.cache.count > 400 { Self.cache.removeAll() }
+        Self.cache[key] = out
+    }
+    init(path: CGPath) { self.path = path }
+
+    /// 把墨跡外框等比（或分別縮放 x／y）塞進 r：大數字填滿高度時用
+    func fitted(into r: CGRect, keepAspect: Bool = true, align: CGFloat = 0.5) -> GlyphShape {
+        let b = ink
+        guard b.width > 0, b.height > 0 else { return self }
+        var sx = r.width / b.width, sy = r.height / b.height
+        if keepAspect { let s = min(sx, sy); sx = s; sy = s }
+        let w = b.width * sx
+        var t = CGAffineTransform(translationX: r.minX + (r.width - w) * align, y: r.minY)
+            .scaledBy(x: sx, y: sy).translatedBy(x: -b.minX, y: -b.minY)
+        return GlyphShape(path: path.copy(using: &t) ?? path)
+    }
+    func transformed(_ t0: CGAffineTransform) -> GlyphShape {
+        var t = t0
+        return GlyphShape(path: path.copy(using: &t) ?? path)
+    }
+    /// 等比縮放到墨跡高 = h，再縱向拉長 stretch 倍（iOS 26 鎖定畫面那種窄高大數字），
+    /// 墨跡的 (anchorX, 頂) 對到 at；anchorX 0＝左、0.5＝中、1＝右
+    func tall(height h: CGFloat, stretch: CGFloat, at p: CGPoint, anchorX: CGFloat, maxWidth: CGFloat = .infinity) -> GlyphShape {
+        let b = ink
+        guard b.height > 0, b.width > 0 else { return self }
+        let sy = h / b.height, sx = min(sy / stretch, maxWidth / b.width)   // 放不下就再拉窄一點，不出框
+        let t = CGAffineTransform(translationX: p.x - b.width * sx * anchorX, y: p.y)
+            .scaledBy(x: sx, y: sy).translatedBy(x: -b.minX, y: -b.minY)
+        return transformed(t)
+    }
+    func moved(_ dx: CGFloat, _ dy: CGFloat) -> GlyphShape {
+        var t = CGAffineTransform(translationX: dx, y: dy)
+        return GlyphShape(path: path.copy(using: &t) ?? path)
+    }
+    /// 置中：墨跡中心對到 c
+    func centered(at c: CGPoint) -> GlyphShape { moved(c.x - ink.midX, c.y - ink.midY) }
+}
+
+/// 液態玻璃的參數（Portraits 的數字偏霜白、Flow 的泡泡偏飽滿）
+struct GlassLook {
+    var lift: CGFloat = 0.045         // 霜白抬亮
+    var tint: NSColor = .clear        // 額外染色（Flow 用一點紫）
+    var refraction: CGFloat = 1.05    // 中間的放大
+    var edgeRefraction: CGFloat = 1.16
+    var edgeBand: CGFloat = 0.06      // 邊緣折射帶寬（相對字高）
+    var rim: CGFloat = 0.9            // 斜面高光強度
+    var rimWidth: CGFloat = 0.010     // 斜面寬（相對字高）
+    var shade: CGFloat = 0.16         // 右下內陰影
+    var shadow: CGFloat = 0.16        // 落影
+    var gloss: CGFloat = 0.0          // 上半部的鏡面高光（泡泡用）
+    var saturation: CGFloat = 1.35    // 透出來的背景更鮮、更亮（vibrancy），不是蓋一層白變灰
+    var brightness: CGFloat = 0.045
+    var thickness: CGFloat = 0.14     // 內緣一圈暗帶（玻璃的厚度）
+    static let portrait = GlassLook()
+    static let bubble = GlassLook(lift: 0.04, refraction: 1.14, edgeRefraction: 1.40, edgeBand: 0.14, rim: 1.0, rimWidth: 0.018,
+                                  shade: 0.22, shadow: 0.20, gloss: 0.42, saturation: 1.7, brightness: 0.05, thickness: 0.16)
+}
+
+extension Face {
+    /// 錶面上顯示的「現在」：快照可用 --time 固定
+    static var displayDate: Date { snapshotDateOverride ?? Date() }
+
+    nonisolated(unsafe) private static var formatters: [String: DateFormatter] = [:]
+    /// 快取的 DateFormatter（每分鐘重畫時不要每次新建）
+    static func formatter(_ template: String, raw: Bool = false) -> DateFormatter {
+        let loc = L10n.language.locale
+        let key = "\(template)|\(raw)|\(loc.identifier)"
+        if let f = formatters[key] { return f }
+        let f = DateFormatter(); f.locale = loc
+        f.dateFormat = raw ? template : (DateFormatter.dateFormat(fromTemplate: template, options: 0, locale: loc) ?? template)
+        formatters[key] = f
+        return f
+    }
+    /// 時與分（尊重系統 12／24 小時制，但大數字不帶 am/pm）
+    static func hourMinute(_ d: Date) -> (h: String, m: String) {
+        let c = Calendar.current.dateComponents([.hour, .minute], from: d)
+        var h = c.hour ?? 0
+        let uses12 = (DateFormatter.dateFormat(fromTemplate: "j", options: 0, locale: Locale.current) ?? "H").contains("h")
+        if uses12 { h = h % 12; if h == 0 { h = 12 } }
+        return (String(h), String(format: "%02d", c.minute ?? 0))
+    }
+
+    /// 液態玻璃字：path 是畫布座標的字形；backdrop 是整張 1024² 背景（最好已模糊）。
+    /// 給 cacheKey 時，只跟字形有關的部分（落影、斜面、厚度、霜白、鏡面）快取成一張透明圖，
+    /// 每幀只重畫「透出來的背景」——Flow 這種背景一直在動的錶面才不會每幀重算一堆模糊陰影。
+    func drawGlass(_ g: CGContext, _ shape: GlyphShape, backdrop: CGImage?, look: GlassLook = .portrait, cacheKey: String? = nil) {
+        guard shape.ink.width > 1, shape.ink.height > 1 else { return }
+        glassBody(g, shape, backdrop: backdrop, look: look)
+        guard let cacheKey else { glassDecor(g, shape, look: look); return }
+        let sc = renderPixelScale
+        let key = "\(cacheKey)|\(Int(sc * 100))"
+        let img: CGImage
+        if let hit = Self.decorCache[key] { img = hit } else {
+            let px = Int((1024 * sc).rounded())
+            img = makeImage(px, px) { c in
+                if sc != 1 { c.scaleBy(x: sc, y: sc) }
+                self.glassDecor(c, shape, look: look)
+            }
+            if Self.decorCache.count > 12 { Self.decorCache.removeAll() }
+            Self.decorCache[key] = img
+        }
+        drawUpright(g, img, in: CGRect(x: 0, y: 0, width: 1024, height: 1024))
+    }
+    nonisolated(unsafe) private static var decorCache: [String: CGImage] = [:]
+
+    /// 玻璃本體：字形裡透出背景（折射：中間輕放大，邊緣一圈放大更多）
+    private func glassBody(_ g: CGContext, _ shape: GlyphShape, backdrop: CGImage?, look: GlassLook) {
+        let path = shape.path, b = shape.ink
+        let h = b.height, c = CGPoint(x: b.midX, y: b.midY)
+        g.saveGState()
+        g.addPath(path); g.clip()
+        if let raw = backdrop {
+            let backdrop = vibrant(raw, saturation: look.saturation, brightness: look.brightness)
+            lens(g, backdrop, around: c, look.refraction)
+            let band = h * look.edgeBand
+            if band > 0.5 {
+                g.saveGState()
+                g.addPath(path); g.setLineWidth(band * 2); g.replacePathWithStrokedPath(); g.clip()
+                g.setAlpha(0.85)
+                lens(g, backdrop, around: c, look.edgeRefraction)
+                g.restoreGState()
+            }
+        } else {
+            g.setFillColor(NSColor(white: 0.5, alpha: 0.4).cgColor); g.fill(b)
+        }
+        g.restoreGState()
+    }
+
+    /// 玻璃的其餘部分（只跟字形有關）：落影、霜白、鏡面、厚度、斜面、外緣亮線
+    private func glassDecor(_ g: CGContext, _ shape: GlyphShape, look: GlassLook) {
+        let path = shape.path, b = shape.ink
+        let h = b.height
+        let cs = CGColorSpace(name: CGColorSpace.sRGB)
+        // 1. 落影：很淡、很散，只為了讓字浮起來一點
+        if look.shadow > 0 {
+            g.saveGState()
+            g.setShadow(offset: CGSize(width: 0, height: -h * 0.02), blur: h * 0.07, color: NSColor(white: 0, alpha: look.shadow).cgColor)
+            g.beginTransparencyLayer(auxiliaryInfo: nil)
+            g.addPath(path); g.setFillColor(NSColor(white: 0, alpha: 1).cgColor); g.fillPath()
+            g.setBlendMode(.clear); g.addPath(path); g.fillPath()   // 字裡面挖空，只留外面的影子
+            g.endTransparencyLayer()
+            g.restoreGState()
+        }
+        // 2. 霜白：上面多一點、下面少一點；染色；泡泡的鏡面
+        g.saveGState()
+        g.addPath(path); g.clip()
+        let lift = CGGradient(colorsSpace: cs, colors: [NSColor(white: 1, alpha: look.lift * 1.25).cgColor,
+                                                         NSColor(white: 1, alpha: look.lift * 0.75).cgColor] as CFArray, locations: [0, 1])!
+        g.drawLinearGradient(lift, start: CGPoint(x: 0, y: b.minY), end: CGPoint(x: 0, y: b.maxY), options: [])
+        if look.tint.alphaComponent > 0 { g.setFillColor(look.tint.cgColor); g.fill(b) }
+        if look.gloss > 0 {
+            let gl = CGGradient(colorsSpace: cs, colors: [NSColor(white: 1, alpha: look.gloss).cgColor, NSColor(white: 1, alpha: 0).cgColor] as CFArray,
+                                locations: [0, 1])!
+            g.drawLinearGradient(gl, start: CGPoint(x: 0, y: b.minY), end: CGPoint(x: 0, y: b.minY + h * 0.45), options: [])
+        }
+        g.restoreGState()
+        // 3. 斜面：用兩道「內陰影」做——字外面的區域往右下挪、投一圈白色柔光進字的左上內緣；
+        //    再往左上挪、投一圈暗影進右下內緣。邊是柔的，像玻璃厚度，不像描邊字。
+        let rw = max(1.5, h * look.rimWidth)
+        if look.thickness > 0 {
+            innerShadow(g, path, b, offset: .zero, blur: rw * 4, color: NSColor(white: 0, alpha: look.thickness))
+        }
+        innerShadow(g, path, b, offset: CGSize(width: rw * 0.9, height: -rw * 0.9), blur: rw * 1.6,
+                    color: NSColor(white: 1, alpha: min(1, look.rim)))
+        innerShadow(g, path, b, offset: CGSize(width: rw * 0.25, height: -rw * 0.25), blur: rw * 0.35,
+                    color: NSColor(white: 1, alpha: min(1, look.rim * 0.7)))
+        if look.shade > 0 {
+            innerShadow(g, path, b, offset: CGSize(width: -rw * 1.2, height: rw * 1.2), blur: rw * 2.2,
+                        color: NSColor(white: 0, alpha: look.shade))
+        }
+        // 4. 外面一圈極淡的亮暈，讓玻璃在暗底上也分得出邊
+        g.saveGState()
+        g.addPath(path); g.setLineWidth(max(1, h * 0.0025)); g.setStrokeColor(NSColor(white: 1, alpha: 0.16).cgColor); g.strokePath()
+        g.restoreGState()
+    }
+
+    /// 內陰影：只在 path 裡面看得到；offset 走裝置座標（y 朝上）
+    func innerShadow(_ g: CGContext, _ path: CGPath, _ b: CGRect, offset: CGSize, blur: CGFloat, color: NSColor) {
+        // 透明圖層裡：整片不透明、再用 .clear 挖掉字形（非零規則，SF 可變字型的輪廓會互相重疊，不能用奇偶）；
+        // 圖層帶著陰影合成，而圖層本體在 clip 外，字裡只看得到陰影。
+        g.saveGState()
+        g.addPath(path); g.clip()
+        g.setShadow(offset: offset, blur: blur, color: color.cgColor)
+        g.beginTransparencyLayer(auxiliaryInfo: nil)
+        let big = b.insetBy(dx: -blur * 4 - 40, dy: -blur * 4 - 40)
+        g.setFillColor(NSColor(white: color.whiteComponentSafe, alpha: 1).cgColor); g.fill(big)
+        g.setBlendMode(.clear); g.addPath(path); g.fillPath()
+        g.endTransparencyLayer()
+        g.restoreGState()
+    }
+
+    /// 單色實心字（Typograph、床頭）：可帶極細的描邊與陰影
+    func fillShape(_ g: CGContext, _ shape: GlyphShape, _ color: NSColor, shadow: CGFloat = 0) {
+        g.saveGState()
+        if shadow > 0 {
+            g.setShadow(offset: CGSize(width: 0, height: -shape.ink.height * 0.01), blur: shape.ink.height * 0.04,
+                        color: NSColor(white: 0, alpha: shadow).cgColor)
+        }
+        g.addPath(shape.path); g.setFillColor(color.cgColor); g.fillPath()
+        g.restoreGState()
+    }
+
+    /// 玻璃裡透出來的背景：提高飽和與亮度（同一張圖只算一次）
+    func vibrant(_ img: CGImage, saturation: CGFloat, brightness: CGFloat) -> CGImage {
+        let key = "\(ObjectIdentifier(img).hashValue)|\(saturation)|\(brightness)"
+        if let c = Self.vibrantCache, c.key == key { return c.image }
+        let ci = CIImage(cgImage: img).applyingFilter("CIColorControls", parameters: [
+            kCIInputSaturationKey: saturation, kCIInputBrightnessKey: brightness, kCIInputContrastKey: 1.0])
+        let r = Face.ciContext.createCGImage(ci, from: CGRect(x: 0, y: 0, width: img.width, height: img.height)) ?? img
+        Self.vibrantCache = (key, r)
+        return r
+    }
+    nonisolated(unsafe) private static var vibrantCache: (key: String, image: CGImage)?
+
+    /// 背景的模糊版（給玻璃折射用）：同一張背景只算一次
+    func blurredBackdrop(_ img: CGImage, sigma: CGFloat, key: String) -> CGImage {
+        if let c = Self.backdropCache, c.key == key { return c.image }
+        let ci = CIImage(cgImage: img)
+        let s = CGFloat(img.width) / 1024
+        let out = ci.clampedToExtent().applyingGaussianBlur(sigma: sigma * s).cropped(to: ci.extent)
+        let r = Face.ciContext.createCGImage(out, from: ci.extent) ?? img
+        Self.backdropCache = (key, r)
+        return r
+    }
+    nonisolated(unsafe) private static var backdropCache: (key: String, image: CGImage)?
+    nonisolated(unsafe) static let ciContext = CIContext(options: [.cacheIntermediates: false])
+
+    /// 畫出目前畫布的一個區域成圖（給玻璃當背景）：把同一段繪製再跑一次到小圖上
+    func snapshotBackdrop(px: Int = 512, _ draw: (CGContext) -> Void) -> CGImage {
+        makeImage(px, px) { c in
+            c.scaleBy(x: CGFloat(px) / 1024, y: CGFloat(px) / 1024)
+            draw(c)
+        }
+    }
+}
+
+extension Face {
+    /// 在畫布上畫一個 SF Symbol（單色），r 是左上原點的框；符號等比置中
+    func drawSymbol(_ g: CGContext, _ name: String, in r: CGRect, color: NSColor, weight: NSFont.Weight = .semibold) {
+        let cfg = NSImage.SymbolConfiguration(pointSize: r.height, weight: weight)
+            .applying(NSImage.SymbolConfiguration(paletteColors: [color]))
+        guard let img = NSImage(systemSymbolName: name, accessibilityDescription: nil)?.withSymbolConfiguration(cfg) else { return }
+        let s = img.size, k = min(r.width / max(1, s.width), r.height / max(1, s.height))
+        let dst = CGRect(x: r.midX - s.width * k / 2, y: r.midY - s.height * k / 2, width: s.width * k, height: s.height * k)
+        NSGraphicsContext.saveGraphicsState()
+        NSGraphicsContext.current = NSGraphicsContext(cgContext: g, flipped: true)
+        img.draw(in: dst, from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: true, hints: nil)
+        NSGraphicsContext.restoreGraphicsState()
+    }
+    /// 按詞折行（英文用空白，中文逐字），最多 maxLines 行，最後一行放不下就截「…」
+    static func wrap(_ s: String, _ font: NSFont, _ width: CGFloat, maxLines: Int) -> [String] {
+        func w(_ t: String) -> CGFloat { (t as NSString).size(withAttributes: [.font: font]).width }
+        if w(s) <= width { return [s] }
+        let tokens: [String] = s.contains(" ") ? s.split(separator: " ").map(String.init) : s.map(String.init)
+        let sep = s.contains(" ") ? " " : ""
+        var lines: [String] = [], cur = ""
+        for t in tokens {
+            let next = cur.isEmpty ? t : cur + sep + t
+            if w(next) <= width || cur.isEmpty { cur = next } else { lines.append(cur); cur = t }
+        }
+        if !cur.isEmpty { lines.append(cur) }
+        if lines.count > maxLines {
+            let rest = lines[(maxLines - 1)...].joined(separator: sep)
+            lines = Array(lines[..<(maxLines - 1)]) + [clipped(rest, font, width)]
+        }
+        return lines
+    }
+    /// 一行字太長就截成「…」
+    static func clipped(_ s: String, _ font: NSFont, _ width: CGFloat) -> String {
+        func w(_ t: String) -> CGFloat { (t as NSString).size(withAttributes: [.font: font]).width }
+        if w(s) <= width { return s }
+        var t = s
+        while !t.isEmpty && w(t + "…") > width { t.removeLast() }
+        return t + "…"
+    }
+}

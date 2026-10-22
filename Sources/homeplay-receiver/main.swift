@@ -374,6 +374,30 @@ func wpa3OnlyNetwork(ssid: String) -> Bool? {
     return nil
 }
 
+private var wifiSecurityCacheURL: URL {
+    FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+        .appendingPathComponent("HomePlay/wifi-security.json")
+}
+/// 按 SSID 缓存的 0x4301 安全类型（只存枚举值，不存密码）。
+func cachedWiFiSecurity(ssid: String) -> Iap2Csm.WiFiSecurity? {
+    guard !ssid.isEmpty, let data = try? Data(contentsOf: wifiSecurityCacheURL),
+          let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Int],
+          let raw = obj[ssid], let value = Iap2Csm.WiFiSecurity(rawValue: UInt8(clamping: raw)) else { return nil }
+    return value
+}
+func saveWiFiSecurity(ssid: String, value: Iap2Csm.WiFiSecurity) {
+    guard !ssid.isEmpty else { return }
+    var obj: [String: Int] = [:]
+    if let data = try? Data(contentsOf: wifiSecurityCacheURL),
+       let saved = try? JSONSerialization.jsonObject(with: data) as? [String: Int] { obj = saved }
+    if obj[ssid] == Int(value.rawValue) { return }
+    obj[ssid] = Int(value.rawValue)
+    guard let out = try? JSONSerialization.data(withJSONObject: obj, options: [.sortedKeys]) else { return }
+    try? FileManager.default.createDirectory(at: wifiSecurityCacheURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+    try? out.write(to: wifiSecurityCacheURL, options: .atomic)
+    try? FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: wifiSecurityCacheURL.path)
+}
+
 /// 0x4301 里的 security：纯 WPA3 发 4（Wpa3Only），WPA2/混合发 2（实测混合网络发 2 能回连）。
 /// 显式 --security 优先（调试用）。
 func resolveWiFiSecurity(ssid: String, iface: String, explicit: Bool, current: Iap2Csm.WiFiSecurity) -> Iap2Csm.WiFiSecurity {
@@ -537,6 +561,9 @@ app.setActivationPolicy(.prohibited)
 // SIGTERM / SIGINT：先收掉 CarPlay 会话再退出。桌宠的 ReceiverLauncher.stop() 和 Ctrl-C 都走这里，
 // 不让手机留下一個沒人關的控制連線。
 var shutdownSources: [DispatchSourceSignal] = []
+// SIGPIPE：对端先关的 socket 上 write() 会让默认处理直接杀进程、不留痕迹（2026-10-22 拔线实测）。
+// 写失败会以 EPIPE 回到调用方自己处理，所以这里忽略它。
+signal(SIGPIPE, SIG_IGN)
 for sig in [SIGTERM, SIGINT] {
     signal(sig, SIG_IGN)
     let src = DispatchSource.makeSignalSource(signal: sig, queue: .main)
@@ -583,7 +610,8 @@ if sourceKind == "wireless" || sourceKind == "usb" || sourceKind == "auto" {
           --ssid <名称>           iPhone 所连 Wi-Fi（和 Mac 同一个局域网）
           身份：默认用仓库自带的 identity/，或 --identity-dir <目录> 指定自己的 identity.pk8 + certificate.p7b
           密码：环境变量 HOMEPLAY_WIFI_PASSPHRASE 或 --passphrase
-          可选：--channel N  --iface en0  --control-port 17000  --size 1200x1200  --security wpa2|wpa3|wpa3-only|none  --iap-channel
+          可选：--channel N  --iface en0  --control-port 17000  --size 1200x1200  --security wpa2|wpa3|wpa3-only|none
+                --no-iap-channel（或 HOMEPLAY_IAP_CHANNEL=0）：不声明 iAP 数据通道（流 130），排障用
         --source usb（插线即连，不需要 Wi-Fi）；--source auto＝有线优先
 
         """.data(using: .utf8)!)
@@ -621,7 +649,20 @@ if sourceKind == "wireless" || sourceKind == "usb" || sourceKind == "auto" {
     case "none": o.security = .none; o.securityExplicit = true
     default:
         // 没显式指定就按 AP 的真实能力选：纯 WPA3 → 4，WPA2/混合 → 2（见 resolveWiFiSecurity）。
-        o.security = resolveWiFiSecurity(ssid: o.ssid, iface: o.iface, explicit: false, current: o.security)
+        // 探测要 CoreWLAN 扫描＋system_profiler，4–34 秒；同一个 SSID 的结果缓存起来，启动先用缓存、
+        // 后台再刷新（结果只影响下一次启动）。没有缓存才同步探测。
+        if let cached = cachedWiFiSecurity(ssid: o.ssid) {
+            o.security = cached
+            Wireless.note("Wi-Fi 安全类型用缓存：\(Wireless.securityLabel(cached))（后台重新探测）")
+            let ssid = o.ssid, iface = o.iface, current = o.security
+            DispatchQueue.global(qos: .utility).async {
+                let fresh = resolveWiFiSecurity(ssid: ssid, iface: iface, explicit: false, current: current)
+                saveWiFiSecurity(ssid: ssid, value: fresh)
+            }
+        } else {
+            o.security = resolveWiFiSecurity(ssid: o.ssid, iface: o.iface, explicit: false, current: o.security)
+            saveWiFiSecurity(ssid: o.ssid, value: o.security)
+        }
     }
     let secName: String
     switch o.security {
@@ -637,7 +678,10 @@ if sourceKind == "wireless" || sourceKind == "usb" || sourceKind == "auto" {
         Iap2BluetoothAccessory.ignoredAddresses = Set(ignoredPhones)
         Wireless.note("已忘记 \(ignoredPhones.count) 台 iPhone（应用层忽略，不再尝试连接）")
     }
-    o.advertiseIAPChannel = CommandLine.arguments.contains("--iap-channel")
+    // iAP 数据通道（流 130）默认声明并实现；HOMEPLAY_IAP_CHANNEL=0 或 --no-iap-channel 关掉（排障用）。
+    o.advertiseIAPChannel = ProcessInfo.processInfo.environment["HOMEPLAY_IAP_CHANNEL"] != "0"
+        && !CommandLine.arguments.contains("--no-iap-channel")
+    if CommandLine.arguments.contains("--iap-channel") { o.advertiseIAPChannel = true }
     if !o.ssid.isEmpty, !isUsableSSID(o.ssid) {
         // 旧版本曾把 macOS 的脱敏占位符写进 wireless.json；那种值发出去等于让手机去连
         // 一个不存在的网络，0x4300 永远不会来。宁可当作未知、提示用户填。

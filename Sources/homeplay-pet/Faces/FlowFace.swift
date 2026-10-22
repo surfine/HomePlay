@@ -1,48 +1,94 @@
-// 錶面「Flow」——照「HomePlay 屏幕介面稿」的 Flow.dc.html 实现。
-// 深紫底上四团柔光随游标视差漂动，大时间在上、日期在下、玻璃岛居中。
+// 錶面「Flow」：照 HomeView／watchOS 的 Flow——上時下分兩行「吹出來」的玻璃泡泡字，
+// 底下是會流動的色彩（洋紅、電光藍、青、紫），字裡透出被折射、放大過的同一片色彩；游標（人）靠近時色彩跟著漂。
+// 島（👀）夾在兩行數字之間，像泡泡中間的一顆小石頭。
 
 import AppKit
 
-// 上次重画的 0.1 秒刻度（扩展里不能加存储属性）
+// 上次重畫的 0.1 秒刻度（擴展裡不能加儲存屬性）
 nonisolated(unsafe) private var flowFaceLastTick = -1.0
+/// 色彩流動用的時鐘：只在有人靠近時往前走（沒人看就停住、3D 可以卸下省電；回來時接著流，不會跳）
+nonisolated(unsafe) private var flowAnimT = 0.0, flowAnimLast = -1.0, flowLastMinute = -1
+nonisolated(unsafe) private var flowDigitCache: (key: String, top: GlyphShape, bottom: GlyphShape)?
 
 extension Face {
-    /// 四团光：中心、半径、纵向压扁、颜色、起始透明度、游标视差幅度、自主漂动周期（秒）
-    private static let flowBlobs: [(c: CGPoint, r: CGFloat, sy: CGFloat, rgb: (CGFloat, CGFloat, CGFloat), a: CGFloat, par: CGFloat, per: Double)] = [
-        (CGPoint(x: 224, y: 288), 416, 1.0, (1.00, 0.36, 0.67), 0.95, 70, 31),
-        (CGPoint(x: 800, y: 448), 384, 1.0, (0.36, 0.55, 1.00), 0.95, 46, 23),
-        (CGPoint(x: 544, y: 848), 448, 0.82, (1.00, 0.73, 0.36), 0.85, 90, 37),
-        (CGPoint(x: 768, y: 816), 240, 1.0, (0.47, 0.94, 0.86), 0.80, 120, 27),
+    /// 色團：中心、半徑、縱向壓扁、顏色、透明度、游標視差、自主漂動週期（秒）
+    private static let flowBlobs: [(c: CGPoint, r: CGFloat, sy: CGFloat, rgb: UInt32, a: CGFloat, par: CGFloat, per: Double)] = [
+        (CGPoint(x: 250, y: 300), 430, 1.0, 0xff3fb8, 0.95, 70, 31),    // 洋紅
+        (CGPoint(x: 780, y: 420), 420, 0.9, 0x3d4dff, 0.95, 52, 23),    // 電光藍
+        (CGPoint(x: 520, y: 820), 470, 0.8, 0x9a5cff, 0.85, 90, 37),    // 紫
+        (CGPoint(x: 820, y: 860), 260, 1.0, 0x7fdcff, 0.80, 120, 27),   // 青
+        (CGPoint(x: 160, y: 760), 240, 1.0, 0xff8fd6, 0.70, 60, 41),    // 粉
     ]
 
-    func renderFlowFace(_ g: CGContext, _ now: Double) {
+    private func drawFlowField(_ g: CGContext, _ now0: Double) {
+        let now = flowAnimT
         let cs = CGColorSpace(name: CGColorSpace.sRGB)!
-        g.setFillColor(NSColor(srgbRed: 0.071, green: 0.047, blue: 0.165, alpha: 1).cgColor)   // #120c2a
-        g.fill(CGRect(x: 0, y: 0, width: 1024, height: 1024))
+        // 底：淡紫到粉的漸層（亮底，不是深夜）
+        let base = CGGradient(colorsSpace: cs, colors: [srgb(0xb9a2f2).cgColor, srgb(0xd7a6e6).cgColor, srgb(0xf1b3d9).cgColor] as CFArray,
+                              locations: [0, 0.55, 1])!
+        g.drawLinearGradient(base, start: CGPoint(x: 0, y: 0), end: CGPoint(x: 1024, y: 1024), options: [])
         for (i, b) in Self.flowBlobs.enumerated() {
             let ph = Double(i) * 1.7
-            let cx = b.c.x + flow.x * b.par + CGFloat(sin(now * 2 * .pi / b.per + ph)) * 34
-            let cy = b.c.y + flow.y * b.par * 0.8 + CGFloat(cos(now * 2 * .pi / (b.per * 1.3) + ph)) * 28
-            let col = [b.rgb.0, b.rgb.1, b.rgb.2, b.a], zero = [b.rgb.0, b.rgb.1, b.rgb.2, 0]
-            guard let grad = CGGradient(colorSpace: cs, colorComponents: col + zero, locations: [0, 1], count: 2) else { continue }
+            let cx = b.c.x + flow.x * b.par + CGFloat(sin(now * 2 * .pi / b.per + ph)) * 40
+            let cy = b.c.y + flow.y * b.par * 0.8 + CGFloat(cos(now * 2 * .pi / (b.per * 1.3) + ph)) * 34
+            let col = srgb(b.rgb)
+            let grad = CGGradient(colorsSpace: cs, colors: [col.withAlphaComponent(b.a).cgColor, col.withAlphaComponent(b.a * 0.5).cgColor,
+                                                            col.withAlphaComponent(0).cgColor] as CFArray, locations: [0, 0.45, 1])!
             g.saveGState()
             g.translateBy(x: cx, y: cy); g.scaleBy(x: 1, y: b.sy)
-            g.drawRadialGradient(grad, startCenter: .zero, startRadius: 0, endCenter: .zero, endRadius: b.r * 0.96, options: [])
+            g.drawRadialGradient(grad, startCenter: .zero, startRadius: 0, endCenter: .zero, endRadius: b.r, options: [])
             g.restoreGState()
         }
-        let date = Date()
-        // 大时间：柔和投影
-        g.saveGState()
-        g.setShadow(offset: CGSize(width: 0, height: -6), blur: 48, color: NSColor.black.withAlphaComponent(0.25).cgColor)
-        drawCentered(g, Self.clock(date), font: Self.rounded(154, weight: .semibold), kern: -3, y: 212, color: .white)
-        g.restoreGState()
-        drawCentered(g, Self.dateLine(date), font: Self.rounded(32, weight: .semibold), kern: 1.6, y: 930,
-                     color: NSColor.white.withAlphaComponent(0.85))
-        drawIsland(g, at: CGPoint(x: 512, y: 600), scale: 0.78, liveAt: CGPoint(x: 512, y: 760), now: now)
     }
 
-    /// 光团一直在漂，限 10fps 重画
+    func renderFlowFace(_ g: CGContext, _ now: Double) {
+        drawFlowField(g, now)
+        // 四周一圈很淡的白霧，讓畫面像隔著一層玻璃
+        let cs = CGColorSpace(name: CGColorSpace.sRGB)!
+        let vig = CGGradient(colorsSpace: cs, colors: [NSColor(white: 1, alpha: 0).cgColor, NSColor(white: 1, alpha: 0.22).cgColor] as CFArray,
+                             locations: [0.55, 1])!
+        g.drawRadialGradient(vig, startCenter: CGPoint(x: 512, y: 512), startRadius: 0, endCenter: CGPoint(x: 512, y: 512), endRadius: 760, options: [])
+
+        let date = Self.displayDate
+        let (hh, mm) = Self.hourMinute(date)
+        let hh2 = hh.count == 1 ? "0" + hh : hh   // 泡泡字兩行對齊：小時補零
+        let key = "\(hh2)\(mm)"
+        let shapes: (GlyphShape, GlyphShape)
+        if let c = flowDigitCache, c.key == key { shapes = (c.top, c.bottom) } else {
+            // SF 圓體最粗，再沿外框鼓起一圈（圓角描邊與原形聯集）＝吹脹的泡泡
+            let f = FaceType.rounded(400, .black)
+            func bubble(_ s: String, top: CGFloat) -> GlyphShape {
+                let raw = GlyphShape(s, font: f, kern: 6).tall(height: 360, stretch: 1.0, at: CGPoint(x: 512, y: top), anchorX: 0.5, maxWidth: 780)
+                let puffed = raw.path.copy(strokingWithWidth: 26, lineCap: .round, lineJoin: .round, miterLimit: 1)
+                return GlyphShape(path: raw.path.union(puffed))
+            }
+            shapes = (bubble(hh2, top: 80), bubble(mm, top: 560))
+            flowDigitCache = (key, shapes.0, shapes.1)
+        }
+        // 折射用的背景：同一片色彩畫到小圖再模糊（色團在漂，所以每次都取）
+        let small = snapshotBackdrop(px: 192) { c in self.drawFlowField(c, now) }
+        let backdrop = blurredBackdrop(small, sigma: 10, key: "flowface|\(Int(flowAnimT * 10))")
+        drawGlass(g, shapes.0, backdrop: backdrop, look: .bubble, cacheKey: "flow-top|\(key)")
+        drawGlass(g, shapes.1, backdrop: backdrop, look: .bubble, cacheKey: "flow-bottom|\(key)")
+
+        drawIsland(g, at: CGPoint(x: 512, y: 500), scale: 0.62, liveAt: CGPoint(x: 512, y: 500), now: now)
+        // 日期：靠近才浮出（右下一行小字，不搶泡泡）
+        if reveal > 0.02 {
+            g.saveGState(); g.setAlpha(reveal)
+            drawCentered(g, Self.dateLine(date), font: FaceType.sf(32, .semibold, mono: false), kern: 0.4, y: 990,
+                         color: NSColor.white.withAlphaComponent(0.92))
+            g.restoreGState()
+        }
+    }
+
+    /// 有人靠近時色團在漂（10fps）；沒人時停住，只在換分鐘時重畫
     func tickFlowFace(_ now: Double) -> Bool {
+        let active = flowActive || reveal > 0.05
+        if flowAnimLast >= 0, active { flowAnimT += min(0.25, now - flowAnimLast) }
+        flowAnimLast = now
+        let minute = Int(Self.displayDate.timeIntervalSince1970 / 60)
+        if minute != flowLastMinute { flowLastMinute = minute; return true }
+        guard active else { return false }
         let t = floor(now * 10)
         if t == flowFaceLastTick { return false }
         flowFaceLastTick = t

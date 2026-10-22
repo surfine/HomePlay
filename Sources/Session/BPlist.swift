@@ -75,6 +75,10 @@ package struct InfoConfig: Sendable {
     package var manufacturer = "LIVI"
     package var rightHandDrive = false
     package var hevc = false
+    /// iOS 27「停車時在 CarPlay 播影片」：/info 帶 videoPlaybackInfo（見 CarVideo.swift）
+    package var videoPlayback = false
+    /// /info 當下的允許狀態（Mac 不會動：預設允許；使用者可在設定關掉）
+    package var videoAllowed = true
     package var disableAudioOutput = false
     package var entertainmentSampleRate = 44100
     package var main: DisplayConfig
@@ -210,6 +214,9 @@ package enum CarPlayPlist {
                                               "heightPixels": $0.heightPixels, "prerendered": true] as [String: Any] }
         }
         if c.hevc { info["hevcInfo"] = [String: Any]() }
+        if c.videoPlayback {
+            info["videoPlaybackInfo"] = CarVideoProtocol.info(legacyFeatures: (info["features"] as? Int) ?? features, allowed: c.videoAllowed)
+        }
         return info
     }
 

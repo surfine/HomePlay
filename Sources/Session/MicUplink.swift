@@ -4,6 +4,9 @@
 //   12B RTP 頭（0x80、PT=流類型、seq/timestamp 大端、SSRC=0）
 //   + 密文 + 16B tag + 8B 小端 nonce 計數；AAD = header[4..12]；nonce = 4 個零 + 8B 小端計數。
 // 啟動時機：手機為 type 100（MainAudio）SETUP 出 dataPort＝它要麥克風（Siri/電話）。
+// 回音消除：100/telephony 與 100/speechRecognition 開 AVAudioEngine 的語音處理（VPIO：回音消除＋降噪）。
+// VPIO 的回音參考是同一台引擎的輸出，所以這一路的下行（對方說話／Siri 回話）改從這台引擎放
+//（`playDownlink`）；媒體 102 不在參考裡，但通話與 Siri 期間它已被 duckAudio 壓低。
 import AVFoundation
 import CryptoKit
 import Foundation
@@ -23,6 +26,9 @@ package final class MicUplink {
     private let bitrate: Int
     private let host: String
     private let port: UInt16
+    /// 開語音處理（回音消除）；下行要從這台引擎放才有參考
+    package let voiceProcessing: Bool
+    private let downlinkFormat: AVAudioFormat?
     private let queue = DispatchQueue(label: "session.mic.uplink")
     package var onLog: ((String) -> Void)?
 
@@ -39,9 +45,13 @@ package final class MicUplink {
     private var started = false
     private var stopped = false
     private var conn: NWConnection?
+    /// 下行放音節點（語音處理開著且引擎已起時才有）；播放執行緒與 queue 都會碰，用鎖
+    private let echoLock = NSLock()
+    private var echoNode: AVAudioPlayerNode?
 
     package init(codec: WireCodec = .opus, key: Data, payloadType: Int, sampleRate: Int,
-                 channels: Int = 1, frameMs: Int, bitrate: Int, host: String, port: UInt16) {
+                 channels: Int = 1, frameMs: Int, bitrate: Int, host: String, port: UInt16,
+                 voiceProcessing: Bool = false, downlinkRate: Int = 0, downlinkChannels: Int = 1) {
         self.wireCodec = codec
         self.key = SymmetricKey(data: key)
         self.payloadType = UInt8(clamping: payloadType) & 0x7f
@@ -51,11 +61,35 @@ package final class MicUplink {
         self.bitrate = bitrate
         self.host = host
         self.port = port
+        self.voiceProcessing = voiceProcessing
+        self.downlinkFormat = voiceProcessing && downlinkRate > 0
+            ? AVAudioFormat(standardFormatWithSampleRate: Double(downlinkRate),
+                            channels: AVAudioChannelCount(max(1, downlinkChannels)))
+            : nil
+    }
+
+    /// 哪些 100 流要開語音處理：電話與 Siri（語音辨識）。`HOMEPLAY_NO_AEC=1` 關掉，對照用。
+    package static func wantsVoiceProcessing(audioType: String?,
+                                             environment: [String: String] = ProcessInfo.processInfo.environment) -> Bool {
+        guard environment["HOMEPLAY_NO_AEC"] != "1" else { return false }
+        return audioType == "telephony" || audioType == "speechRecognition"
     }
 
     private var codecLabel: String { wireCodec == .opus ? "Opus" : "PCM" }
 
-    package var description: String { "\(codecLabel) \(Int(sampleRate)) Hz → \(host):\(port)" }
+    package var description: String {
+        "\(codecLabel) \(Int(sampleRate)) Hz → \(host):\(port)\(voiceProcessing ? "，回音消除" : "")"
+    }
+
+    /// 把一段下行 PCM 交給語音處理引擎放（當回音參考）。引擎還沒起／沒開語音處理就回 false，
+    /// 呼叫方照舊用自己的引擎放。格式必須是 init 給的下行率與聲道。
+    package func playDownlink(_ buffer: AVAudioPCMBuffer) -> Bool {
+        echoLock.lock(); let node = echoNode; echoLock.unlock()
+        guard let node, !stopped, buffer.format == downlinkFormat else { return false }
+        node.scheduleBuffer(buffer)
+        if !node.isPlaying { node.play() }
+        return true
+    }
 
     package func start() {
         queue.async { [weak self] in self?.startOnQueue() }
@@ -65,6 +99,7 @@ package final class MicUplink {
         queue.async { [weak self] in
             guard let self else { return }
             self.stopped = true
+            self.echoLock.lock(); self.echoNode = nil; self.echoLock.unlock()
             if let e = self.engine {
                 e.inputNode.removeTap(onBus: 0)
                 e.stop()
@@ -100,7 +135,21 @@ package final class MicUplink {
         guard !stopped, engine == nil else { return }
         let e = AVAudioEngine()
         let input = e.inputNode
-        let inFormat = input.inputFormat(forBus: 0)
+        // 要在讀格式、裝 tap 之前開；開了以後 tap 用 outputFormat（處理後的格式）。
+        let processed: Bool
+        if voiceProcessing {
+            do {
+                try input.setVoiceProcessingEnabled(true)
+                // VPIO 預設會把其他聲音壓很低；媒體已由 duckAudio 管，這裡只留最輕的。
+                input.voiceProcessingOtherAudioDuckingConfiguration =
+                    .init(enableAdvancedDucking: false, duckingLevel: .min)
+                processed = true
+            } catch {
+                onLog?("回音消除开不起来（\(error)），麦克风照原样上行")
+                processed = false
+            }
+        } else { processed = false }
+        let inFormat = processed ? input.outputFormat(forBus: 0) : input.inputFormat(forBus: 0)
         guard inFormat.sampleRate > 0, inFormat.channelCount > 0 else {
             onLog?("没有可用的麦克风输入设备")
             return
@@ -125,7 +174,8 @@ package final class MicUplink {
             let n = Int(buf.frameLength), channels = Int(buf.format.channelCount)
             guard n > 0, channels > 0 else { return }
             var mono = [Float](repeating: 0, count: n)
-            if channels == 1 {
+            // 語音處理的輸出在第 0 聲道（有些機型回報多聲道，其餘是空的），不能平均
+            if channels == 1 || processed {
                 mono.withUnsafeMutableBufferPointer { dst in
                     dst.baseAddress?.update(from: ch[0], count: n)
                 }
@@ -139,11 +189,23 @@ package final class MicUplink {
             let rate = buf.format.sampleRate
             self.queue.async { self.resampleAndEncode(mono, inputRate: rate) }
         }
+        var node: AVAudioPlayerNode?
+        if processed, let fmt = downlinkFormat {
+            let n = AVAudioPlayerNode()
+            e.attach(n)
+            e.connect(n, to: e.mainMixerNode, format: fmt)
+            node = n
+        }
         e.prepare()
         do {
             try e.start()
             engine = e
-            onLog?("麦克风上行已启动（\(Int(inFormat.sampleRate)) Hz → \(codecLabel) \(Int(sampleRate)) Hz，\(host):\(port)）")
+            if let node {
+                node.play()
+                echoLock.lock(); echoNode = node; echoLock.unlock()
+            }
+            let aec = processed ? "，回音消除开" : ""
+            onLog?("麦克风上行已启动（\(Int(inFormat.sampleRate)) Hz → \(codecLabel) \(Int(sampleRate)) Hz，\(host):\(port)\(aec)）")
         } catch {
             onLog?("麦克风引擎起不来：\(error)")
         }

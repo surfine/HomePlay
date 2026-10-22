@@ -33,7 +33,10 @@ package enum Wire {
 
 // AVCC（4 字节大端长度前缀）→ Annex B（00 00 00 01 起始码）。
 package func avccToAnnexB(_ avcc: Data) -> Data {
-    var out = Data(); var i = 0
+    var out = Data()
+    // 每个 NAL 多 4 字节起始码；先按上限预留，避免逐段 append 反复扩容。
+    out.reserveCapacity(avcc.count + 16)
+    var i = 0
     let bytes = [UInt8](avcc)
     while i + 4 <= bytes.count {
         let len = Int(bytes[i]) << 24 | Int(bytes[i+1]) << 16 | Int(bytes[i+2]) << 8 | Int(bytes[i+3])
@@ -59,7 +62,16 @@ package func avcCRecord(from fmt: CMFormatDescription) -> Data? {
 package final class WSServer {
     private let listener: NWListener
     private let queue = DispatchQueue(label: "ws.server")
+    /// 只在 queue 上读写：listener / 连接的回调本来就在这条队列上跑。
     private var conns: [NWConnection] = []
+    /// 每条连接还有多少帧没被底层收掉。只在 queue 上读写。
+    private var inflight: [ObjectIdentifier: Int] = [:]
+    /// 一条连接压在路上的帧数上限。接收端卡死时 NWConnection 会无限长发送缓冲，
+    /// 到这里就认定这条路已经没救：断掉，让桌宠重连重新拿关键帧。
+    private let maxInflight = 60
+    /// 已就绪连接。broadcast 在别的线程上被调用、看不到 conns，所以单独用锁维护。
+    private let countLock = NSLock()
+    private var readyIDs: Set<ObjectIdentifier> = []   // 由 countLock 保护
     package var onConnect: ((NWConnection) -> Void)?
     package var onText: ((String) -> Void)?
 
@@ -76,16 +88,31 @@ package final class WSServer {
             guard let self else { return }
             self.conns.append(conn)
             conn.stateUpdateHandler = { state in
-                if case .ready = state { self.onConnect?(conn); self.receive(conn) }
-                if case .failed = state { self.drop(conn) }
-                if case .cancelled = state { self.drop(conn) }
+                switch state {
+                case .ready:
+                    self.countLock.lock()
+                    self.readyIDs.insert(ObjectIdentifier(conn))
+                    self.countLock.unlock()
+                    self.onConnect?(conn)
+                    self.receive(conn)
+                case .failed, .cancelled:
+                    self.drop(conn)
+                default:
+                    break
+                }
             }
             conn.start(queue: self.queue)
         }
         listener.start(queue: queue)
     }
 
-    private func drop(_ conn: NWConnection) { conns.removeAll { $0 === conn } }
+    private func drop(_ conn: NWConnection) {
+        conns.removeAll { $0 === conn }
+        inflight[ObjectIdentifier(conn)] = nil
+        countLock.lock()
+        readyIDs.remove(ObjectIdentifier(conn))
+        countLock.unlock()
+    }
 
     private func receive(_ conn: NWConnection) {
         conn.receiveMessage { [weak self] data, ctx, _, error in
@@ -106,19 +133,12 @@ package final class WSServer {
     }
 
     package func broadcastText(_ s: String) {
-        let md = NWProtocolWebSocket.Metadata(opcode: .text)
-        let ctx = NWConnection.ContentContext(identifier: "text", metadata: [md])
-        for conn in conns where conn.state == .ready {
-            conn.send(content: s.data(using: .utf8), contentContext: ctx, isComplete: true, completion: .contentProcessed { _ in })
-        }
+        guard let data = s.data(using: .utf8) else { return }
+        queue.async { [weak self] in self?.sendLocked(data, opcode: .text) }
     }
 
     package func broadcastBinary(_ data: Data) {
-        let md = NWProtocolWebSocket.Metadata(opcode: .binary)
-        let ctx = NWConnection.ContentContext(identifier: "bin", metadata: [md])
-        for conn in conns where conn.state == .ready {
-            conn.send(content: data, contentContext: ctx, isComplete: true, completion: .contentProcessed { _ in })
-        }
+        queue.async { [weak self] in self?.sendLocked(data, opcode: .binary) }
     }
 
     package func sendBinary(_ data: Data, to conn: NWConnection) {
@@ -127,6 +147,32 @@ package final class WSServer {
         conn.send(content: data, contentContext: ctx, isComplete: true, completion: .contentProcessed { _ in })
     }
 
-    package var hasClients: Bool { conns.contains { $0.state == .ready } }
+    /// 必须在 queue 上调用。`inflight` 的加减也都在这条队列上，不需要额外加锁。
+    private func sendLocked(_ payload: Data, opcode: NWProtocolWebSocket.Opcode) {
+        guard !conns.isEmpty else { return }
+        let md = NWProtocolWebSocket.Metadata(opcode: opcode)
+        let ctx = NWConnection.ContentContext(identifier: opcode == .text ? "text" : "bin", metadata: [md])
+        for conn in conns where conn.state == .ready {
+            let id = ObjectIdentifier(conn)
+            let pending = inflight[id] ?? 0
+            if pending >= maxInflight {
+                inflight[id] = nil
+                conn.cancel()
+                continue
+            }
+            inflight[id] = pending + 1
+            conn.send(content: payload, contentContext: ctx, isComplete: true,
+                      completion: .contentProcessed { [weak self] _ in
+                guard let self else { return }
+                let cur = self.inflight[id] ?? 0
+                if cur <= 1 { self.inflight[id] = nil } else { self.inflight[id] = cur - 1 }
+            })
+        }
+    }
+
+    package var hasClients: Bool {
+        countLock.lock(); defer { countLock.unlock() }
+        return !readyIDs.isEmpty
+    }
 }
 

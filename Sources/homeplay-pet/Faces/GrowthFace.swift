@@ -12,7 +12,7 @@ extension Face {
             g.drawRadialGradient(grad, startCenter: CGPoint(x: 512, y: 532), startRadius: 0,
                                  endCenter: CGPoint(x: 512, y: 532), endRadius: 720, options: [.drawsAfterEndLocation])
         }
-        let cal = Calendar.current, date = Date()
+        let cal = Calendar.current, date = Self.displayDate
         let days = cal.range(of: .day, in: .month, for: date)?.count ?? 30
         let today = cal.component(.day, from: date)
         let on = CompanionLog.daysThisMonth()
@@ -33,7 +33,9 @@ extension Face {
             g.fillEllipse(in: CGRect(x: c.x - 13, y: c.y - 13, width: 26, height: 26))
             g.restoreGState()
         }
-        drawCentered(g, Self.clock(date), font: Self.rounded(118, weight: .semibold), kern: -3, y: 330, color: .white)
+        let t = GlyphShape(Self.clock(date), font: FaceType.sf(300, .semibold), kern: -4)
+            .tall(height: 92, stretch: 1.0, at: CGPoint(x: 512, y: 238), anchorX: 0.5, maxWidth: 520)
+        fillShape(g, t, .white)
         drawIsland(g, at: CGPoint(x: 512, y: 500), scale: 0.62, liveAt: CGPoint(x: 512, y: 640), now: now)
         // 计时器长出来时让位给胶囊
         let fade = 1 - liveT

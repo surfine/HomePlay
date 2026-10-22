@@ -15,10 +15,14 @@ import H264
 import Wire
 
 enum Wireless {
-    static func note(_ s: String) {
-        let t = Date(), f = DateFormatter()
+    /// 日誌行會從多條佇列冒出來（USB/藍牙/會話），格式化器只建一次。
+    private static let noteFormatter: DateFormatter = {
+        let f = DateFormatter()
         f.dateFormat = "HH:mm:ss.SSS"
-        FileHandle.standardError.write(("[\(f.string(from: t))] 无线：" + s + "\n").data(using: .utf8)!)
+        return f
+    }()
+    static func note(_ s: String) {
+        FileHandle.standardError.write(("[\(noteFormatter.string(from: Date()))] 无线：" + s + "\n").data(using: .utf8)!)
     }
 
     /// 日志用的安全类型名（不含任何凭据）
@@ -57,13 +61,16 @@ enum Wireless {
         // HOMEPLAY_DISPLAY_W/H 可覆盖（含比例实验，如 900×1200 直屏）——接收器由桌寵拉起，環境變量會傳下去
         var width = ProcessInfo.processInfo.environment["HOMEPLAY_DISPLAY_W"].flatMap { Int($0) } ?? 1088
         var height = ProcessInfo.processInfo.environment["HOMEPLAY_DISPLAY_H"].flatMap { Int($0) } ?? 1088
-        var advertiseIAPChannel = false
+        /// iAP 数据通道（流 130）：默认声明并在双模里接核心；HOMEPLAY_IAP_CHANNEL=0 关
+        var advertiseIAPChannel = true
     }
 
     // 运行期对象全局持有
     nonisolated(unsafe) static var session: CarPlaySession?
     nonisolated(unsafe) static var accessory: Iap2BluetoothAccessory?
     nonisolated(unsafe) static var accessoryUsb: Iap2UsbAccessory?
+    /// 流 130 隧道上的 iAP2 配件（Wi-Fi 会话里、disableBluetooth 之后手机走的那条）
+    nonisolated(unsafe) static var accessoryTunnel: Iap2TunnelAccessory?
     nonisolated(unsafe) static var beacon: BluetoothBeacon?
     nonisolated(unsafe) static var sink: H264Sink?
     nonisolated(unsafe) static var live = false
@@ -174,6 +181,28 @@ enum Wireless {
     }
 
     /// 首次配对的第一张卡：优先请用户插一根数据线。20 秒没插再自动改走蓝牙设置。
+    /// CarPlay 主画面上那颗「车厂 App」图标：换成 HomePlay 的图标和名字。手机点它会送 `requestUI`，
+    /// 我们让桌宠回到自己的表面（见 runDual 的 onCommand）——和「重按进入 CarPlay」形成闭环。
+    /// 图标是满版方图（CarPlay 自己套圆角），放在接收器执行档旁边（make-app.sh 拷进 Contents/Resources）；
+    /// 开发版找不到就不宣告，手机照旧显示空白图标。
+    static func applyHomeIcon(_ info: inout InfoConfig) {
+        let dir = URL(fileURLWithPath: CommandLine.arguments[0]).resolvingSymlinksInPath().deletingLastPathComponent()
+        let icons: [OEMIcon] = [120, 180, 256].compactMap { s in
+            guard let data = try? Data(contentsOf: dir.appendingPathComponent("CarPlayIcon-\(s).png")) else { return nil }
+            return OEMIcon(widthPixels: s, heightPixels: s, data: data)
+        }
+        guard !icons.isEmpty else { return }
+        info.icons = icons
+        info.oemLabel = "HomePlay"
+    }
+
+    /// 手机上点了 HomePlay 图标（requestUI）：叫桌宠回到表面，CarPlay 留在后台
+    static func requestUIPayload() -> String? {
+        let payload: [String: Any] = ["type": "requestUI"]
+        guard let data = try? JSONSerialization.data(withJSONObject: payload) else { return nil }
+        return String(data: data, encoding: .utf8)
+    }
+
     static func needCablePayload() -> String? {
         guard let data = try? JSONSerialization.data(withJSONObject: ["type": "needCable"]) else { return nil }
         return String(data: data, encoding: .utf8)
@@ -228,6 +257,46 @@ enum Wireless {
         } catch {
             note("恢复 iPhone 的 ignoredPhones 失败：\(error.localizedDescription)")
         }
+    }
+
+    /// USB 序号 → 手机蓝牙地址（有线会话 0x4E0E 学到的）。有了它，已配对的手机再插线时
+    /// 不用先开 carkit 识别就知道「这台走蓝牙/Wi-Fi 就好」。文件 0600，只存地址。
+    private static var usbPhoneMapURL: URL {
+        FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("HomePlay/usb-phones.json")
+    }
+    static func usbPhoneAddress(serial: String) -> String? {
+        guard let data = try? Data(contentsOf: usbPhoneMapURL),
+              let obj = try? JSONSerialization.jsonObject(with: data) as? [String: String] else { return nil }
+        return obj[serial]
+    }
+    static func rememberUSBPhone(serial: String, address: String) {
+        let normalized = PairingRules.normalize(address)
+        var obj: [String: String] = [:]
+        if let data = try? Data(contentsOf: usbPhoneMapURL),
+           let saved = try? JSONSerialization.jsonObject(with: data) as? [String: String] { obj = saved }
+        if obj[serial] == normalized { return }
+        obj[serial] = normalized
+        guard let out = try? JSONSerialization.data(withJSONObject: obj, options: [.prettyPrinted, .sortedKeys]) else { return }
+        try? FileManager.default.createDirectory(at: usbPhoneMapURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try? out.write(to: usbPhoneMapURL, options: .atomic)
+        try? FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: usbPhoneMapURL.path)
+        note("已记住这条数据线上的手机（序号 \(String(serial.prefix(8)))… → 蓝牙地址）：下次插线只充电")
+    }
+
+    /// 这台是不是以前连过的手机（wireless.json 记住的那台，或 usb-phones.json 对应过的）。
+    /// 刚启动／刚重签名时 IOBluetoothDevice.pairedDevices() 可能暂时是空的（真机样本 2026-10-22 17:26：
+    /// 19 次启动里 1 次），不能凭那一次空清单就当成首次配对、结束 USB、开配对引导。
+    static func isKnownPhone(_ address: String) -> Bool {
+        let normalized = PairingRules.normalize(address)
+        guard !Iap2BluetoothAccessory.isIgnored(normalized) else { return false }
+        if let data = try? Data(contentsOf: configURL),
+           let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+           let saved = obj["phone"] as? String, PairingRules.normalize(saved) == normalized { return true }
+        if let data = try? Data(contentsOf: usbPhoneMapURL),
+           let obj = try? JSONSerialization.jsonObject(with: data) as? [String: String],
+           obj.values.contains(where: { PairingRules.normalize($0) == normalized }) { return true }
+        return false
     }
 
     static func persistPhone(_ address: String) {
@@ -295,8 +364,112 @@ enum Wireless {
         nowPlayingSeek = nil
         phoneNowPlaying = Iap2Csm.PhoneNowPlaying()
         nowPlayingLock.unlock()
+        clearTelephony(server: server)
         guard had else { return }
         server.broadcastText(#"{"type":"nowplaying","clear":true}"#)
+    }
+
+    // MARK: 通話與通訊狀態（iAP2 0x4155／0x4158 → 桌寵）
+
+    private static let telephonyLock = NSLock()
+    private static var callBook = Iap2Csm.CallBook()
+    private static var communications = Iap2Csm.CommunicationsState()
+    private static var callJSON: String?
+    private static var cellularJSON: String?
+
+    /// 桌寵剛連上時補發：還在響或通話中的電話、電信商與訊號
+    static func cachedTelephony() -> [String] {
+        telephonyLock.lock(); defer { telephonyLock.unlock() }
+        return [callJSON, cellularJSON].compactMap { $0 }
+    }
+
+    /// 0x4155 合併進 CallBook 後推 `{"type":"call",...}`；0x4158 推 `{"type":"cellular",...}`。
+    /// 0x4155 連原始位元組一起記（離線測試的封包樣本從這裡取）。
+    static func publishTelephony(_ frame: Iap2Csm.Frame, server: WSServer) {
+        if let update = Iap2Csm.callState(frame) {
+            let hex = frame.encoded.map { String(format: "%02x", $0) }.joined()
+            note("CallState 0x4155：status=\(update.status.map(String.init) ?? "-") dir=\(update.direction.map(String.init) ?? "-") raw=\(hex)")
+            telephonyLock.lock()
+            callBook.apply(update)
+            let text = callBook.json
+            let changed = text != (callJSON ?? Iap2Csm.CallBook().json)
+            callJSON = callBook.current == nil ? nil : text
+            telephonyLock.unlock()
+            if changed { server.broadcastText(text) }
+        } else if let update = Iap2Csm.communications(frame) {
+            telephonyLock.lock()
+            communications.merge(update)
+            let text = communications.json
+            let changed = text != cellularJSON
+            cellularJSON = text
+            telephonyLock.unlock()
+            if changed, let text {
+                note("Communications 0x4158：signal=\(update.signalStrength.map(String.init) ?? "-") carrier=\(update.carrierName ?? "-")")
+                server.broadcastText(text)
+            }
+        }
+    }
+
+    /// iAP2 鏈路斷了：通話狀態不再可信，桌寵收起來電卡
+    static func clearTelephony(server: WSServer) {
+        telephonyLock.lock()
+        let had = callJSON != nil
+        callBook.reset(); callJSON = nil
+        communications = Iap2Csm.CommunicationsState(); cellularJSON = nil
+        telephonyLock.unlock()
+        if had { server.broadcastText(Iap2Csm.CallBook().json) }
+    }
+
+    // MARK: CarPlay 影片（停車時播影片）
+
+    /// 設定檔 Application Support/HomePlay/carplay-video.json（桌寵寫）；沒有檔＝允許
+    static func carVideoAllowed() -> Bool {
+        let url = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("HomePlay/carplay-video.json")
+        guard let d = try? Data(contentsOf: url), let o = try? JSONSerialization.jsonObject(with: d) as? [String: Any] else { return true }
+        return (o["allowed"] as? Bool) ?? true
+    }
+    /// 手機要播／暫停／跳轉／停 → 轉給桌寵的播放器
+    static func wireCarVideo(_ s: CarPlaySession, server: WSServer) {
+        s.onVideo = { op, fields in
+            var d = fields; d["type"] = "carVideo"; d["op"] = op
+            if let data = try? JSONSerialization.data(withJSONObject: d), let text = String(data: data, encoding: .utf8) {
+                server.broadcastText(text)
+            }
+        }
+    }
+    /// 桌寵播放器回報：狀態、自己按的播放暫停、播不了、設定開關
+    static func carVideoFromPet(_ text: String, session s: CarPlaySession) {
+        guard text.contains("\"type\":\"carVideo"), let data = text.data(using: .utf8),
+              let o = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return }
+        func num(_ k: String) -> Double { (o[k] as? NSNumber)?.doubleValue ?? 0 }
+        switch o["type"] as? String {
+        case "carVideoState":
+            if o["stopped"] as? Bool == true { s.videoUserPlayback(playing: false); s.videoState(.init()); return }
+            s.videoState(.init(prepared: o["prepared"] as? Bool ?? false, playing: o["playing"] as? Bool ?? false,
+                               position: num("position"), duration: num("duration"), buffered: num("buffered")))
+        case "carVideoUser": s.videoUserPlayback(playing: o["playing"] as? Bool ?? false)
+        case "carVideoError": s.videoError(code: (o["code"] as? NSNumber)?.intValue ?? -12927)
+        case "carVideoAllowed":
+            let on = o["allowed"] as? Bool ?? true
+            note("CarPlay 影片允許＝\(on)")
+            s.setVideoAllowed(on)
+        default: break
+        }
+    }
+
+    /// 桌寵的 Siri 鍵與電話鍵。`{"type":"siri"}` 是按一下；帶 `"action":"down"/"up"` 是按住說話。
+    /// `{"type":"telephony","command":"answer"|"decline"|"hangup"}` → 電話 HID（hookSwitch／drop）。
+    static func phoneControl(_ text: String, session s: CarPlaySession) {
+        if text.contains("\"type\":\"siri\"") {
+            let action = SiriAction.parse(text)
+            note("触发 Siri（requestSiri \(action)）")
+            s.requestSiri(action)
+        }
+        if let b = HID.telephonyButton(forPetMessage: text) {
+            note("桌宠电话键 → HID \(b)")
+            s.sendTelephony(b)
+        }
     }
 
     /// {"type":"seek","positionMs":12345,"trackId":"..."}；trackId 不匹配就丢弃，防止旧滑杆跳新歌。
@@ -333,7 +506,12 @@ enum Wireless {
 
     /// 停止/退出时把两条 iAP2 链路干净关掉。手机会收到正常的 RFCOMM/流关闭；
     /// 否则它会以为配件还在会话里，下一次 Bluetooth iAP2 直接"开了就关"。
+    /// 这些状态都归主執行緒管，从 WebSocket / 蓝牙回调线程调进来时先派回去再关。
     static func shutdown() {
+        guard Thread.isMainThread else {
+            DispatchQueue.main.async { shutdown() }
+            return
+        }
         accessory?.close()
         accessory = nil
         accessoryUsb?.close()
@@ -371,9 +549,11 @@ enum Wireless {
                               bluetoothMAC: Iap2BluetoothAccessory.localBluetoothAddress, name: "HomePlay",
                               main: main)
         info.model = "HomePlay"; info.manufacturer = "HomePlay"
+        Wireless.applyHomeIcon(&info)
         // HEVC 真機驗證通過（v0.3.0）：/info 與會話 SETUP 的 enabledFeatures 必須一致，
         // 否則手機會在 RECORD 後立刻 TEARDOWN。HOMEPLAY_HEVC=0 可回退 H.264。
         info.hevc = ProcessInfo.processInfo.environment["HOMEPLAY_HEVC"] != "0"
+        info.videoPlayback = true; info.videoAllowed = Wireless.carVideoAllowed()   // CarPlay 影片（停車時播影片）
         note(PetDisplay.describe(o.width, o.height))
         info.entertainmentSampleRate = 48000   // MacPlay 同款
         // 音频照实宣告（手机要求 /info 完整才会来要屏幕流；MacPlay 同款）。
@@ -384,6 +564,7 @@ enum Wireless {
         cfg.phoneBluetoothAddress = o.phoneAddress
         cfg.advertiseIAPChannel = o.advertiseIAPChannel
         let s = CarPlaySession(config: cfg, store: store, signer: MfiSigner(identity: identity), sink: h264)
+        wireCarVideo(s, server: server)
         let alternateHost = NetInfo.linkLocalIPv6(o.iface)
         if alternateHost != nil { note("IPv6 备用地址就绪（链路本地）") }
         var fallbackItem: DispatchWorkItem?
@@ -518,6 +699,7 @@ enum Wireless {
             if let cfg = h264.lastConfig { server.sendBinary(cfg, to: conn) }
             if let json = Wireless.cachedNowPlaying() { server.sendText(json, to: conn) }
             if let art = Wireless.cachedArtwork() { server.sendText(art, to: conn) }
+            for text in Wireless.cachedTelephony() { server.sendText(text, to: conn) }
             if let phones = Wireless.cachedPhones() { server.sendText(phones, to: conn) }
             s.requestKeyframe()
         }
@@ -577,7 +759,8 @@ enum Wireless {
             if text.contains("\"keyframe\"") { s.requestKeyframe() }
             if let t = Touch.parse(text) { s.sendTouch(x: t.x, y: t.y, down: t.down) }
             if let b = mediaButton(text) { s.sendMedia(b) }
-            if text.contains("\"type\":\"siri\"") { note("触发 Siri（requestSiri）"); s.requestSiri() }
+            phoneControl(text, session: s)
+            carVideoFromPet(text, session: s)
             applySeek(text)
         }
 
@@ -763,6 +946,9 @@ enum Wireless {
                         if let help = Wireless.wifiHelpPayload(ssid: ssidName, passphraseMissing: passphrase.isEmpty) { server.broadcastText(help) }
                     }
                     return [startMessage([ip])]
+                case Iap2Csm.Communications.callStateUpdate, Iap2Csm.Communications.update:
+                    publishTelephony(frame, server: server)
+                    return []
                 case Iap2Csm.NowPlaying.update:
                     publishNowPlaying(frame, server: server, seek: { [weak acc] ms in
                         acc?.core.send(Iap2Csm.setNowPlayingInformation(elapsedMs: ms))
@@ -917,9 +1103,11 @@ enum Wireless {
                               bluetoothMAC: Iap2BluetoothAccessory.localBluetoothAddress, name: "HomePlay",
                               main: main)
         info.model = "HomePlay"; info.manufacturer = "HomePlay"
+        Wireless.applyHomeIcon(&info)
         // HEVC 真機驗證通過（v0.3.0）：/info 與會話 SETUP 的 enabledFeatures 必須一致，
         // 否則手機會在 RECORD 後立刻 TEARDOWN。HOMEPLAY_HEVC=0 可回退 H.264。
         info.hevc = ProcessInfo.processInfo.environment["HOMEPLAY_HEVC"] != "0"
+        info.videoPlayback = true; info.videoAllowed = Wireless.carVideoAllowed()   // CarPlay 影片（停車時播影片）
         note(PetDisplay.describe(o.width, o.height))
         info.entertainmentSampleRate = 48000   // MacPlay 同款
         info.disableAudioOutput = false   // 音频已能播（AAC/PCM）；Opus/麦克风仍未接
@@ -928,6 +1116,7 @@ enum Wireless {
         cfg.probeForPhone = false          // 有线不用 _carplay-ctrl 探测，手机直接连回来
         cfg.advertiseIAPChannel = o.advertiseIAPChannel
         let s = CarPlaySession(config: cfg, store: store, signer: MfiSigner(identity: identity), sink: h264)
+        wireCarVideo(s, server: server)
         s.onLog = { note($0) }
         s.onActive = { live = true; DispatchQueue.main.async { server.broadcastText(#"{"type":"session","state":"started"}"#) }; note("会话开始，等画面") }
         s.onEnded = { why in live = false; DispatchQueue.main.async { server.broadcastText(#"{"type":"session","state":"ended"}"#) }; note("会话结束：\(why)") }
@@ -947,6 +1136,7 @@ enum Wireless {
             if let config = h264.lastConfig { server.sendBinary(config, to: conn) }
             if let json = Wireless.cachedNowPlaying() { server.sendText(json, to: conn) }
             if let art = Wireless.cachedArtwork() { server.sendText(art, to: conn) }
+            for text in Wireless.cachedTelephony() { server.sendText(text, to: conn) }
             s.requestKeyframe()
         }
         server.onText = { text in
@@ -959,7 +1149,8 @@ enum Wireless {
             if text.contains("\"keyframe\"") { s.requestKeyframe() }
             if let t = Touch.parse(text) { s.sendTouch(x: t.x, y: t.y, down: t.down) }
             if let b = mediaButton(text) { s.sendMedia(b) }
-            if text.contains("\"type\":\"siri\"") { note("触发 Siri（requestSiri）"); s.requestSiri() }
+            phoneControl(text, session: s)
+            carVideoFromPet(text, session: s)
             applySeek(text)
         }
         server.start()
@@ -1021,6 +1212,9 @@ enum Wireless {
                     return [Iap2Csm.carPlayStartSessionWired(
                         ipAddresses: [fe80], port: UInt32(o.controlPort),
                         deviceIdentifier: mac, publicKey: store.identity.pairingId, sourceVersion: "950.7.1")]
+                case Iap2Csm.Communications.callStateUpdate, Iap2Csm.Communications.update:
+                    publishTelephony(frame, server: server)
+                    return []
                 case Iap2Csm.NowPlaying.update:
                     publishNowPlaying(frame, server: server, seek: { [weak acc] ms in
                         acc?.core.send(Iap2Csm.setNowPlayingInformation(elapsedMs: ms))
@@ -1077,9 +1271,11 @@ enum Wireless {
                               bluetoothMAC: Iap2BluetoothAccessory.localBluetoothAddress, name: "HomePlay",
                               main: main)
         info.model = "HomePlay"; info.manufacturer = "HomePlay"
+        Wireless.applyHomeIcon(&info)
         // HEVC 真機驗證通過（v0.3.0）：/info 與會話 SETUP 的 enabledFeatures 必須一致，
         // 否則手機會在 RECORD 後立刻 TEARDOWN。HOMEPLAY_HEVC=0 可回退 H.264。
         info.hevc = ProcessInfo.processInfo.environment["HOMEPLAY_HEVC"] != "0"
+        info.videoPlayback = true; info.videoAllowed = Wireless.carVideoAllowed()   // CarPlay 影片（停車時播影片）
         note(PetDisplay.describe(o.width, o.height))
         info.entertainmentSampleRate = 48000
         info.disableAudioOutput = false   // 音频已能播（AAC/PCM）；Opus/麦克风仍未接
@@ -1088,15 +1284,25 @@ enum Wireless {
         cfg.phoneBluetoothAddress = o.phoneAddress
         cfg.advertiseIAPChannel = o.advertiseIAPChannel
         let s = CarPlaySession(config: cfg, store: store, signer: MfiSigner(identity: identity), sink: h264)
+        wireCarVideo(s, server: server)
         let alternateHost = NetInfo.linkLocalIPv6(o.iface)
         if alternateHost != nil { note("IPv6 备用地址就绪（链路本地）") }
         var fallbackItem: DispatchWorkItem?
         var handoffGeneration = 0
         var wifiWaitItem: DispatchWorkItem?   // 手机说无线可用、但迟迟不发 0x4300：多半没加入 Wi-Fi
         var controlSeen = false   // 手机连回控制口（不代表已经出画面）
+        // 会话走的是 Wi-Fi 还是 USB NCM、属于哪台手机（蓝牙地址或 USB 序号）：
+        // 拔线时据此决定「保持」还是「等重连」，另一台手机插线时据此决定要不要顶掉。
+        var pendingTransport: CarPlayTransport?
+        var liveTransport: CarPlayTransport?
+        var pendingOwner: String?
+        var liveOwner: String?
+        var unplugFreeze = false            // 拔线后桌宠在冻帧，等会话确认还活着或新会话到来
+        var unplugCheckItem: DispatchWorkItem?
+        var lastUnplugAt = Date.distantPast
         var lastControlAt = Date.distantPast   // 最近一次控制连接接入时刻（Wi-Fi 短断恢复用）
         var lastSessionEndedAt = Date.distantPast   // 最近一次会话结束时刻（Wi-Fi 短断快速自愈）
-        var backoff = BackoffSchedule(ladder: [5, 10, 20, 30, 60], slow: 60)
+        var backoff = BackoffSchedule(ladder: [2, 5, 10, 20, 30, 60], slow: 60)
         var sawAvailability = false          // 本轮 iAP2 会话收到过 0x4300
         var lastNudgeAt = Date.distantPast   // 自动「第二次连接」节流（5 分钟）
         /// 0x4301 用的安全类型：纯 WPA3 → 4，WPA2/混合 → 2（0x5703 由消息层钳到 ≤2）
@@ -1174,6 +1380,7 @@ enum Wireless {
         }
         s.onLog = { note($0) }
         var handoffOnWirelessActive: (() -> Void)?
+        var tunnelOnActive: (() -> Void)?   // RECORD 后在流 130 隧道上起 iAP2（下面接线）
         s.onActive = {
             live = true
             Wireless.setPairingHint(nil)
@@ -1186,11 +1393,29 @@ enum Wireless {
                 .appendingPathComponent("HomePlay/selfheal.stamp")
             try? FileManager.default.removeItem(at: stamp)
             note("会话开始，等画面")
-            DispatchQueue.main.async { handoffOnWirelessActive?() }
+            DispatchQueue.main.async {
+                liveTransport = pendingTransport
+                liveOwner = pendingOwner
+                switch liveTransport {
+                case .wifi where Wireless.accessoryUsb != nil: note("会话建立：Wi-Fi（USB 仅充电＋iAP2 控制，随时可拔）")
+                case .wifi: note("会话建立：Wi-Fi")
+                case .usbNCM: note("会话建立：USB 有线（拔线会结束，之后蓝牙重连）")
+                case nil: break
+                }
+                handoffOnWirelessActive?()
+                tunnelOnActive?()
+                // 换手机／桌宠重连时第 1 帧的关键帧常被错过，而桌宠的健康检查不一定会去要：
+                // 会话建立 1.5 秒后主动再要一次（iOS 26 真机：forceKeyFrame 立刻回一个关键帧）。
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+                    guard live, server.hasClients else { return }
+                    note("会话建立 1.5 秒：主动要一次关键帧")
+                    s.requestKeyframe()
+                }
+            }
         }
         s.onEnded = { why in
             live = false
-            DispatchQueue.main.async { cancelFallback() }
+            DispatchQueue.main.async { cancelFallback(); liveTransport = nil; liveOwner = nil }
             note("会话结束：\(why)")
             DispatchQueue.main.async { server.broadcastText(#"{"type":"session","state":"ended"}"#) }
             // Wi-Fi 短断的恢复：会话因「15 秒没有控制消息也没有画面」结束后，手机不会自己
@@ -1217,6 +1442,9 @@ enum Wireless {
                 lastControlAt = Date()
                 cancelFallback()
                 wifiWaitItem?.cancel(); wifiWaitItem = nil
+                // 对端是手机 NCM 网口的链路本地地址 → USB 有线；否则是 Wi-Fi（Wi-Fi 也可能给 fe80，所以看网口名）
+                let ncm = Wireless.accessoryUsb.map { UsbNet.ncmInterfaces(udid: $0.device.serial) } ?? []
+                pendingTransport = CarPlayTransportPolicy.transport(forPeer: host, ncmInterfaces: ncm)
             }
             note("手机连入控制口 \(host)：取消 0x4301 重试")
         }
@@ -1240,11 +1468,14 @@ enum Wireless {
         var uiEngaged = false
         var cableFirstClientConnected: (() -> Void)?
         server.onConnect = { conn in
+            // 桌宠中途连上/重连：旧关键帧早过了，主动向手机要一个，别等解码端自己发现解不出来
+            if live { note("桌宠连上且会话进行中 → 主动要关键帧"); s.requestKeyframe() }
             server.sendText(Wire.helloJSON(name: "CarPlay（双模）", width: o.width, height: o.height), to: conn)
             if let info = Wireless.wifiInfoPayload(ssid: ssid) { server.sendText(info, to: conn) }
             if let config = h264.lastConfig { server.sendBinary(config, to: conn) }
             if let json = Wireless.cachedNowPlaying() { server.sendText(json, to: conn) }
             if let art = Wireless.cachedArtwork() { server.sendText(art, to: conn) }
+            for text in Wireless.cachedTelephony() { server.sendText(text, to: conn) }
             // 配对引导可能早于桌宠连上：新连进来的客户端立刻补一张卡片，不用等下一轮广播。
             if let hint = Wireless.cachedHandoffHint() { server.sendText(hint, to: conn) }
             if let hint = Wireless.cachedCableHint() { server.sendText(hint, to: conn) }
@@ -1277,10 +1508,12 @@ enum Wireless {
                 if let data = text.data(using: .utf8),
                    let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
                    let value = obj["value"] as? Bool {
-                    let after = BluetoothDiscoverable.set(value)
-                    note("可发现性命令：value=\(value) getter=\(after.map(String.init) ?? "不可用")")
-                    let getter = after.map(String.init) ?? "null"
-                    server.broadcastText("{\"type\":\"discoverable\",\"value\":\(value),\"getter\":\(getter)}")
+                    // 这个回调跑在 WebSocket 线程上：确认可发现性要等几百毫秒，不能在这里等。
+                    BluetoothDiscoverable.setAsync(value) { after in
+                        note("可发现性命令：value=\(value) getter=\(after.map(String.init) ?? "不可用")")
+                        let getter = after.map(String.init) ?? "null"
+                        server.broadcastText("{\"type\":\"discoverable\",\"value\":\(value),\"getter\":\(getter)}")
+                    }
                 }
                 return
             }
@@ -1330,10 +1563,11 @@ enum Wireless {
                 restorePhonesHandler?()
                 return
             }
-            if text.contains("\"keyframe\"") { s.requestKeyframe() }
+            if text.contains("\"keyframe\"") { note("桌宠要关键帧 → forceKeyFrame"); s.requestKeyframe() }
             if let t = Touch.parse(text) { s.sendTouch(x: t.x, y: t.y, down: t.down) }
             if let b = mediaButton(text) { s.sendMedia(b) }
-            if text.contains("\"type\":\"siri\"") { note("触发 Siri（requestSiri）"); s.requestSiri() }
+            phoneControl(text, session: s)
+            carVideoFromPet(text, session: s)
             applySeek(text)
         }
 
@@ -1343,6 +1577,7 @@ enum Wireless {
         var phoneLocked = o.phoneAddress != nil
         var beacon: BluetoothBeacon?
         var immediateCloseStreak = 0   // 连续「RFCOMM 开了立刻被关」次数：用于自动重发 SDP / 自愈
+        var btFailStreak = 0   // 连续「没认证就结束」（开不开/逾时/立刻被关）次数：两次就自愈重启，新进程 2 秒内能连上
         var republishDone = false      // 本轮已重发过 SDP（避免每个周期都重发）
         var lastUsbEndedAt = Date.distantPast   // 拔线时刻：用于「拔线后手机拒绝 iAP2」的快速自愈
         /// 手机把 iAP2 通道「接受后立刻关闭」且 SDP 重发无效时，真机验证只有「接收器
@@ -1374,6 +1609,12 @@ enum Wireless {
         var startBeaconIfNeeded: (() -> Void)?
         var handleBeaconIncoming: ((IOBluetoothDevice, IOBluetoothRFCOMMChannel) -> Void)?
         var btPaused = false
+        // disableBluetooth 之後手機沒 SETUP 流 130：藍牙是唯一的 iAP2 路徑（通話狀態、正在播放），
+        // 會話進行中斷了也走快速重連，不降成 60 秒慢速保活。RECORD／流 130 SETUP 時重置。
+        var keepBluetoothIap2 = false
+        func bluetoothRetrySlow() -> Bool {
+            CarPlayTransportPolicy.bluetoothRetryIsSlow(live: live, keepBluetooth: keepBluetoothIap2)
+        }
         var lastPairNotify = Date.distantPast
         // 首次配对引导：一台 iPhone 都没配对过时，打开系统蓝牙设置（Mac 在蓝牙面板打开时可被发现），
         // 轮询系统配对列表；新 iPhone 一出现就刷新 SDP 直接连——不用先插 USB。
@@ -1403,7 +1644,7 @@ enum Wireless {
             // 恢复系统默认：配对引导结束就不要再可被发现（安全默认）。
             if discoverableHeld {
                 discoverableHeld = false
-                _ = BluetoothDiscoverable.set(false)
+                BluetoothDiscoverable.setAsync(false)
             }
         }
 
@@ -1444,11 +1685,11 @@ enum Wireless {
                 if !discoverableHeld {
                     discoverableHeld = true
                     lastDiscoverableAssert = Date()
-                    _ = BluetoothDiscoverable.set(true)
+                    BluetoothDiscoverable.setAsync(true)
                     note("已把 Mac 设为可被发现（配对引导期间，结束后恢复）")
                 } else if Date().timeIntervalSince(lastDiscoverableAssert) > 60 {
                     lastDiscoverableAssert = Date()
-                    _ = BluetoothDiscoverable.set(true)
+                    BluetoothDiscoverable.setAsync(true)
                 }
             } else if Date().timeIntervalSince(lastPaneOpen) > 60 {
                 lastPaneOpen = Date()
@@ -1509,6 +1750,7 @@ enum Wireless {
         // 首次配对先给 20 秒插线窗口：有线会话能拿到手机蓝牙地址并自动发起配对，
         // 用户不用打开 iPhone 设置。没插线再自动走原来的蓝牙引导。
         var cableFirst = false
+        var notPairedRechecks = 0
         var cableFirstItem: DispatchWorkItem?
         func cancelCableFirst(_ reason: String? = nil) {
             cableFirstItem?.cancel(); cableFirstItem = nil
@@ -1735,7 +1977,7 @@ enum Wireless {
                         if let preferred = preferredAddress {
                             note("\(e.description)；刷新 \(preferred) 的 SDP 后重试")
                             SDPRefresh.refresh(address: preferred) {
-                                scheduleBluetoothRetry(after: backoff.next(live: live), because: "SDP 已刷新")
+                                scheduleBluetoothRetry(after: backoff.next(live: bluetoothRetrySlow()), because: "SDP 已刷新")
                             }
                         } else {
                             let phones = Iap2BluetoothAccessory.pairedPhones()
@@ -1746,11 +1988,17 @@ enum Wireless {
                             case .refreshSDP(let address):
                                 note("\(e.description)；刷新 \(address) 的 SDP 后重试")
                                 SDPRefresh.refresh(address: address) {
-                                    scheduleBluetoothRetry(after: backoff.next(live: live), because: "SDP 已刷新")
+                                    scheduleBluetoothRetry(after: backoff.next(live: bluetoothRetrySlow()), because: "SDP 已刷新")
                                 }
                             }
                         }
                     case .notPaired:
+                        if let known = preferredAddress, Wireless.isKnownPhone(known), notPairedRechecks < 5 {
+                            notPairedRechecks += 1
+                            note("系统配对清单暂时读不到 \(known)（刚启动？）：3 秒后重查，不当成首次配对（第 \(notPairedRechecks) 次）")
+                            scheduleBluetoothRetry(after: 3, because: "配对清单重查")
+                            return
+                        }
                         beginCableFirst("没有已配对的 iPhone")
                         scheduleBluetoothRetry(after: 60, because: "未配对")
                     default:
@@ -1759,6 +2007,7 @@ enum Wireless {
                     }
                     return
                 case .success(let located):
+                    notPairedRechecks = 0
                     device = located.0
                     channelID = located.1
                     address = PairingRules.normalize(located.2)
@@ -1803,12 +2052,26 @@ enum Wireless {
                 clearNowPlaying(server: server)
                 DispatchQueue.main.async { cancelFallback() }
                 note("蓝牙 iAP2 结束（\(code)）")
+                // 整天的规律：接收器刚启动那次 RFCOMM 2 秒内必成，之后的重连常被手机拒绝（逾时或开了就关）。
+                // 没有会话可保时，连续两次连不上就自愈重启（10 分钟节流；会话成功会清掉节流戳）。
+                if !live, [3, 9, 10, 11].contains(code) {
+                    btFailStreak += 1
+                    if btFailStreak >= 2 { selfHeal("蓝牙连续 \(btFailStreak) 次连不上手机（新进程 2 秒内能连上）") }
+                } else {
+                    btFailStreak = 0
+                }
                 if code == 11 {
-                    // 通道开了立刻被手机关掉、零字节。若是刚拔线（120 秒内），这是已知模式：
-                    // 手机还没收完有线会话，会连续拒绝 BT iAP2——直接自愈重启（10 分钟节流），
-                    // 比等 4 轮退避快得多。其余情况先刷新 SDP / 重发车机 SDP，再考虑自愈。
-                    if Date().timeIntervalSince(lastUsbEndedAt) < 120 {
-                        selfHeal("拔线后手机拒绝 iAP2（有线会话收尾）")
+                    // 通道开了立刻被手机关掉、零字节。刚拔线（120 秒内）时这是正常现象：
+                    // 手机还在收有线/USB 那边的尾巴，几秒后就会接受——走退避重连，绝不能在这里
+                    // 退出进程（会连 Wi-Fi 上还活着的会话一起杀掉）。只有配件自己关过 USB
+                    // （插线配对）或 Wi-Fi 短断之后的连续拒绝，才考虑自愈重启（10 分钟节流）。
+                    let justUnplugged = Date().timeIntervalSince(lastUnplugAt) < 120
+                    if justUnplugged {
+                        // 真机 2026-10-22 14:59–15:00：拔线后手机连续拒绝超过一分钟，而接收器重启后 2 秒内就连上。
+                        // 第一次被拒先退避；第二次就自愈重启（会话本来已被手机结束，没有东西可保）。
+                        if immediateCloseStreak >= 1, !live { selfHeal("拔线后手机连续拒绝 iAP2") }
+                    } else if Date().timeIntervalSince(lastUsbEndedAt) < 120 {
+                        selfHeal("配件关掉 USB 后手机拒绝 iAP2（有线会话收尾）")
                     } else if Date().timeIntervalSince(lastSessionEndedAt) < 180 {
                         selfHeal("会话刚结束（如 Wi-Fi 短断）后手机拒绝 iAP2")
                     }
@@ -1821,14 +2084,15 @@ enum Wireless {
                     if immediateCloseStreak >= 4 {
                         selfHeal("连续 \(immediateCloseStreak) 次被手机立刻关闭（SDP 重发无效）")
                     }
+                    if acc.dropBaseband() { note("已断开到 \(address) 的基带连接，下次重开 RFCOMM 走干净的新连接") }
                     note("刷新 \(address) 的 SDP（通道过期）")
                     SDPRefresh.refresh(address: address) {
-                        scheduleBluetoothRetry(after: backoff.next(live: live), because: "SDP 已刷新（通道过期）")
+                        scheduleBluetoothRetry(after: backoff.next(live: bluetoothRetrySlow()), because: "SDP 已刷新（通道过期）")
                     }
                 } else {
                     immediateCloseStreak = 0
                     republishDone = false
-                    scheduleBluetoothRetry(after: backoff.next(live: live), because: live ? "会话进行中，慢速" : "退避重连")
+                    scheduleBluetoothRetry(after: backoff.next(live: bluetoothRetrySlow()), because: bluetoothRetrySlow() ? "会话进行中，慢速" : (live ? "会话进行中，蓝牙是唯一 iAP2 路径" : "退避重连"))
                 }
             }
             acc.onMessage = { frame in
@@ -1888,7 +2152,11 @@ enum Wireless {
                         note("iPhone 未连回控制口：确认 iPhone 与 Mac 在同一个 Wi-Fi（\(ssidName)）；若仍不行，右键 → Wi-Fi 设置 里核对 SSID 与密码（系统设置 › Wi-Fi › 详细信息可查看密码）")
                         if let help = Wireless.wifiHelpPayload(ssid: ssidName, passphraseMissing: passphrase.isEmpty) { server.broadcastText(help) }
                     }
+                    pendingOwner = address
                     return [startMessage([liveIP])]
+                case Iap2Csm.Communications.callStateUpdate, Iap2Csm.Communications.update:
+                    publishTelephony(frame, server: server)
+                    return []
                 case Iap2Csm.NowPlaying.update:
                     publishNowPlaying(frame, server: server, seek: { [weak acc] ms in
                         acc?.core.send(Iap2Csm.setNowPlayingInformation(elapsedMs: ms))
@@ -1903,7 +2171,7 @@ enum Wireless {
                 if acc.start(device: device, channelID: channelID) {
                     accessory = acc
                 } else {
-                    scheduleBluetoothRetry(after: backoff.next(live: live), because: "RFCOMM 打开失败")
+                    scheduleBluetoothRetry(after: backoff.next(live: bluetoothRetrySlow()), because: "RFCOMM 打开失败")
                 }
             } else if let incoming {
                 if acc.adopt(channel: incoming.channel) {
@@ -1931,7 +2199,7 @@ enum Wireless {
             DispatchQueue.main.async { cancelFallback() }
             accessory = nil
             backoff.reset()   // 干净的拔线-插线循环不走长退避
-            note("拔线了，回蓝牙")
+            note("USB iAP2 已结束：蓝牙恢复待命")
             startBluetooth()
         }
 
@@ -1950,6 +2218,7 @@ enum Wireless {
             guard let address = String(bytes: bytes, encoding: .utf8)?.uppercased(), address.contains(":") else { return }
             cancelCableFirst("USB 已报到手机地址")
             Wireless.unignorePhone(address)
+            if let serial = accessoryUsb?.device.serial { Wireless.rememberUSBPhone(serial: serial, address: address) }
             if address != preferredAddress {
                 preferredAddress = address
                 phoneLocked = true
@@ -1972,7 +2241,7 @@ enum Wireless {
             case .failure(let error):
                 // USB CarPlay 期间手机会临时关蓝牙/SDP 不可用；系统配对记录还在时
                 // 不要当成「没配对」再弹一次配对窗，拔线后的蓝牙重连会刷新。
-                if Iap2BluetoothAccessory.isSystemPaired(address) {
+                if Iap2BluetoothAccessory.isSystemPaired(address) || Wireless.isKnownPhone(address) {
                     Wireless.persistPhone(address)
                     if let text = Wireless.currentPhonePayload(address: address) { server.broadcastText(text) }
                     note("这台手机在系统里已配对（\(error)）；拔线后蓝牙重连会刷新，不再重复发起配对")
@@ -1997,6 +2266,13 @@ enum Wireless {
         // 手机不总会重发 0x4300，只查一次就放弃等于永远不回）。
         var usbStartRetry: DispatchWorkItem?
         var usbStartSent = false
+        var wifiConfigSentUSB = false     // 本段 USB 会话里已把 0x5703 Wi-Fi 配置给过手机
+        var wirelessTriedUSB = false      // 本段 USB 会话里无线版 0x4301 已试过、12 秒内没回连
+        var usbWirelessFallback: DispatchWorkItem?
+        func ncmReady(_ device: Usbmuxd.Device) -> Bool {
+            guard let iface = UsbNet.ncmInterfaces(udid: device.serial).first else { return false }
+            return UsbNet.linkLocalV6(iface) != nil
+        }
         /// NCM 网口与链路本地地址都就绪才构造有线 0x4301。
         func wiredStartReply(_ device: Usbmuxd.Device) -> Iap2Csm.Frame? {
             guard let iface = UsbNet.ncmInterfaces(udid: device.serial).first else { return nil }
@@ -2019,6 +2295,7 @@ enum Wireless {
                 guard !usbStartSent, !live, let acc, !acc.core.finished else { return }
                 if let reply = wiredStartReply(device) {
                     usbStartSent = true
+                    pendingOwner = preferredAddress ?? device.serial
                     note("NCM 就绪：补发 0x4301（手机停在可用性通知上等）")
                     acc.core.send(reply)
                     return
@@ -2045,6 +2322,70 @@ enum Wireless {
             DispatchQueue.main.asyncAfter(deadline: .now() + 2, execute: item)
         }
 
+        /// 把策略结果变成要回给手机的帧。无线版 0x4301 走 USB iAP2 链路送出，手机会直接用
+        /// Wi-Fi 开会话（真机 2026-10-22 12:21 样本：235 ms 回连），线只剩充电＋iAP2 控制。
+        /// 12 秒没回连就退回有线版（NCM），像真车一样插着线走有线，拔线再回蓝牙。
+        func usbStartFrames(_ reply: CarPlayTransportPolicy.StartReply, device: Usbmuxd.Device,
+                            acc: Iap2UsbAccessory?, owner: String) -> [Iap2Csm.Frame] {
+            func wirelessFrames(pushConfig: Bool) -> [Iap2Csm.Frame] {
+                usbStartSent = true
+                pendingOwner = owner
+                var frames: [Iap2Csm.Frame] = []
+                if pushConfig {
+                    wifiConfigSentUSB = true
+                    frames.append(Iap2Csm.accessoryWiFiConfiguration(ssid: ssid, passphrase: passphrase,
+                                                                     security: currentSecurity(), channel: currentChannel()))
+                    note("手机还没拿过 Wi-Fi 配置：先推 0x5703")
+                }
+                let liveIP = currentIP() ?? ip
+                note("手机报无线可用 → 用无线版 0x4301 开 Wi-Fi 会话 \(liveIP):\(o.controlPort)（USB 仅充电）")
+                frames.append(startMessage([liveIP]))
+                let fallback = DispatchWorkItem { [weak acc] in
+                    guard !live, !controlSeen, let acc, !acc.core.finished, accessoryUsb === acc else { return }
+                    wirelessTriedUSB = true
+                    usbStartSent = false
+                    if ncmReady(device), let wired = wiredStartReply(device) {
+                        usbStartSent = true
+                        note("12 秒没等到 Wi-Fi 回连：改送有线版 0x4301（插着线走有线）")
+                        acc.core.send(wired)
+                    } else if let alt = alternateHost ?? NetInfo.linkLocalIPv6(o.iface) {
+                        note("12 秒没等到 Wi-Fi 回连、NCM 也未就绪：用链路本地 IPv6 再叫一次无线，并等 NCM")
+                        usbStartSent = true
+                        acc.core.send(startMessage([alt]))
+                        usbStartSent = false
+                        scheduleUSBStartRetry(device, acc: acc)
+                    } else {
+                        scheduleUSBStartRetry(device, acc: acc)
+                    }
+                }
+                usbWirelessFallback = fallback
+                DispatchQueue.main.asyncAfter(deadline: .now() + 12, execute: fallback)
+                return frames
+            }
+            switch reply {
+            case .wireless:
+                return wirelessFrames(pushConfig: false)
+            case .pushWiFiConfigThenWireless:
+                return wirelessFrames(pushConfig: true)
+            case .wired:
+                guard let wired = wiredStartReply(device) else {
+                    scheduleUSBStartRetry(device, acc: acc)
+                    return []
+                }
+                usbStartSent = true
+                pendingOwner = owner
+                return [wired]
+            case .waitNCM:
+                // 有线可用、NCM 还没就绪：60 秒内重查并补发（手机不一定会重发 0x4300）。
+                note("手机报有线可用，但 NCM 网口还没就绪：60 秒内重查并补发 0x4301")
+                scheduleUSBStartRetry(device, acc: acc)
+                return []
+            case .none:
+                note("手机没有报可用的传输（或 Mac 没有 Wi-Fi 且 NCM 未就绪）：先不回 0x4301")
+                return []
+            }
+        }
+
         // 有线监督：1s 一看 USB；carkit 开成才让蓝牙让位（开不成不动蓝牙）
         func wiredMessageHandler(_ device: Usbmuxd.Device, acc: Iap2UsbAccessory) -> ((Iap2Csm.Frame) -> [Iap2Csm.Frame]) {
             { [weak acc] frame in
@@ -2052,7 +2393,6 @@ enum Wireless {
                 switch frame.messageId {
                 case Iap2Csm.CarPlay.availability:
                     wifiWaitItem?.cancel(); wifiWaitItem = nil
-                    if live { return [] }
                     // 先把手机报的属性记下来（MacPlay 同款）：经 USB 链路报 0x4300 也可能
                     // 只说无线可用（刚拿过 Wi-Fi 配置）。看不清它报了什么就无法判断该回
                     // 有线还是无线版 0x4301（2026-10-19 22:15/22:31 真机样本）。
@@ -2060,27 +2400,35 @@ enum Wireless {
                     if let a = availability {
                         note("USB CarPlay 可用性（0x4300）：\(a.summary)")
                     }
+                    // 这台手机的身份：USB 序号，以及它在 0x4E0E 里报的蓝牙地址（若已学到）。
+                    let owner = preferredAddress ?? device.serial
+                    if live {
+                        // 已有会话：是同一台手机重发（例如它自己的 Wi-Fi 会话还活着）就不理；
+                        // 是另一台手机插线就先结束旧会话——后插的拿会话，任何时刻只有一个。
+                        let candidates = [device.serial, preferredAddress].compactMap { $0 }
+                        let sameOwner = candidates.contains {
+                            CarPlayTransportPolicy.onNewUSBPhone(liveOwner: liveOwner, newPhone: $0) == .ignore
+                        }
+                        if sameOwner { return [] }
+                        note("另一台 iPhone 插线（\(String(owner.prefix(17)))）：结束 \(liveOwner ?? "?") 的会话，由它接管")
+                        s.switchPhone(to: preferredAddress ?? "")
+                    }
                     usbStartRetry?.cancel(); usbStartRetry = nil
-                    if !usbStartSent, let reply = wiredStartReply(device) {
-                        usbStartSent = true
-                        return [reply]
-                    }
-                    if availability?.wirelessAvailable == true {
-                        // 手机报无线可用：用无线版 0x4301 交接（它已经拿过 0x5703 的凭据）。
-                        note("没看到 NCM 网口，但手机报无线可用 → 用无线版 0x4301 交接 \(ip):\(o.controlPort)")
-                        return [startMessage([ip])]
-                    }
-                    if availability?.wiredAvailable == true {
-                        // 有线可用、NCM 还没就绪：60 秒内重查并补发（手机不一定会重发 0x4300）。
-                        note("手机报有线可用，但 NCM 网口还没就绪：60 秒内重查并补发 0x4301")
-                        scheduleUSBStartRetry(device, acc: acc)
-                    } else {
-                        note("还没看到手机的 NCM 网口，先不回 0x4301")
-                    }
-                    return []
+                    usbWirelessFallback?.cancel(); usbWirelessFallback = nil
+                    let wifiReady = currentIP() != nil && !ssid.isEmpty
+                    let reply = CarPlayTransportPolicy.startReply(
+                        wiredAvailable: availability?.wiredAvailable ?? false,
+                        wirelessAvailable: availability?.wirelessAvailable ?? false,
+                        wifiReady: wifiReady, wifiConfigSent: wifiConfigSentUSB,
+                        ncmReady: ncmReady(device), wirelessTried: wirelessTriedUSB)
+                    return usbStartFrames(reply, device: device, acc: acc, owner: owner)
                 case Iap2Csm.CarPlay.wifiConfigRequest:
-                    note("有线会话里手机要 Wi-Fi 配置（少见），照回")
-                    return [Iap2Csm.accessoryWiFiConfiguration(ssid: ssid, passphrase: passphrase, security: o.security, channel: currentChannel())]
+                    note("USB 会话里手机要 Wi-Fi 配置 → 回 \(ssid)（密码不打印）")
+                    wifiConfigSentUSB = true
+                    return [Iap2Csm.accessoryWiFiConfiguration(ssid: ssid, passphrase: passphrase, security: currentSecurity(), channel: currentChannel())]
+                case Iap2Csm.Communications.callStateUpdate, Iap2Csm.Communications.update:
+                    publishTelephony(frame, server: server)
+                    return []
                 case Iap2Csm.NowPlaying.update:
                     publishNowPlaying(frame, server: server, seek: { [weak acc] ms in
                         acc?.core.send(Iap2Csm.setNowPlayingInformation(elapsedMs: ms))
@@ -2096,83 +2444,77 @@ enum Wireless {
         var usbRetryAt: TimeInterval = 0
         var usbTrustHintShown = false   // needTrust 卡片是否在外（成功打开/拔线时收起，别重复广播）
 
-        // 插线稳定后静默切无线：先结束 USB CarPlay，让蓝牙/Wi-Fi 接管；线继续充电。
-        // 成功后抑制 carkit，避免 usbWatch 又把手机拉回有线；失败则回退有线。
-        var handoffScheduled: DispatchWorkItem?
-        var handoffInFlight = false
-        var handoffTimeout: DispatchWorkItem?
+        // 会话从一开始就走 Wi-Fi（无线版 0x4301 经 USB iAP2 送出），不再「有线稳定后关 USB 等蓝牙」：
+        // 那条路插着线时手机多半拒绝蓝牙 iAP2（2026-10-22 日志：20 次里 2 次成功，且每次都砍掉正在用的会话）。
+        // usbSuppressed 只剩插线配对用：配对期间 USB 让位给手机的蓝牙，不重开 carkit。
         var usbSuppressed = false
         var suppressedSerial: String?
-        var wirelessLostSince: TimeInterval = 0
-        var handoffDisabledUntil: TimeInterval = 0
+        var replacingUSB = false      // 后插的手机顶掉先插的：关旧 USB 时别把蓝牙恢复到旧手机
+        var usbClosedByUs = false     // 配件自己关的 USB（插线配对），不是拔线
+        var cableDebounce = CableDebounce(misses: 2)
+        var cablePresent = false
+        // 已配对手机的数据线只充电：不开 carkit，会话由蓝牙→Wi-Fi 建立，插拔线对会话没有影响
+        //（真机 2026-10-22 14:59：只要 USB 上有 iAP2 链路，手机就把会话绑在它上面，拔线 115 ms 内结束会话）。
+        // HOMEPLAY_USB_CARKIT=1 可强制走 carkit（排障／偏好有线）。
+        let preferCarkit = ProcessInfo.processInfo.environment["HOMEPLAY_USB_CARKIT"] == "1"
+        var chargeOnlySerial: String?
+        var chargeOnlySince: TimeInterval = 0
+        var chargeOnlyFallbackUsed = false
         var pairingHandoffInFlight = false
         var pairingHandoffTimeout: DispatchWorkItem?
         // USB 到达顺序：后插入的设备在数组末尾，拥有唯一的 CarPlay 会话优先权。
         var usbArrival: [String] = []
         var activeUSBSerial: String?
+        /// listDevices() 与 carkit 握手都是阻塞 socket I/O，放在这条队列上跑，
+        /// 只把结果送回主线程：主线程一卡，蓝牙回调、iAP2 tick 和 WebSocket 全跟着停。
+        let usbQueue = DispatchQueue(label: "homeplay.usb.poll")
+        var usbPollInFlight = false
+        var usbOpening = false
 
-        func finishHandoff(_ ok: Bool, why: String) {
-            guard handoffInFlight else { return }
-            handoffInFlight = false
-            handoffTimeout?.cancel(); handoffTimeout = nil
+        /// 拔线后桌宠的冻帧解除：会话还活着（Wi-Fi 会话本来就不受线影响）或新会话已到。
+        func releaseUnplugFreeze(_ why: String) {
+            guard unplugFreeze else { return }
+            unplugFreeze = false
+            unplugCheckItem?.cancel(); unplugCheckItem = nil
             Wireless.setHandoffHint(nil)
-            if ok {
-                note("已切到无线（\(why)）：数据线保持插着，随时可拔")
-                if let text = Wireless.handoffPayload("done") { server.broadcastText(text) }
-            } else {
-                usbSuppressed = false
-                suppressedSerial = nil
-                wirelessLostSince = 0
-                handoffDisabledUntil = CACurrentMediaTime() + 300
-                note("静默切无线失败（\(why)）：回退 USB CarPlay，5 分钟内不再试")
-                if let text = Wireless.handoffPayload("failed") { server.broadcastText(text) }
+            note("拔线后画面已确认（\(why)）")
+            if let text = Wireless.handoffPayload("done") { server.broadcastText(text) }
+        }
+
+        /// 线真的拔了（连续两次轮询都没看到装置）。会话在 Wi-Fi 上就不碰它；
+        /// 会话在 USB NCM 上会由手机结束，蓝牙重连接管。两种情况桌宠都先冻住最后一帧，
+        /// 不要回到「担心脸／连接中」。
+        func onCableGone() {
+            lastUnplugAt = Date()
+            for action in CarPlayTransportPolicy.onCableGone(live: live, transport: liveTransport) {
+                switch action {
+                case .freezeFrame:
+                    unplugFreeze = true
+                    let start = Wireless.handoffPayload("start")
+                    Wireless.setHandoffHint(start)
+                    if let start { server.broadcastText(start) }
+                    unplugCheckItem?.cancel()
+                    let check = DispatchWorkItem {
+                        guard unplugFreeze else { return }
+                        if live { releaseUnplugFreeze("拔线 3 秒后会话仍在") }
+                        else { note("拔线后会话已结束：保持冻帧，等蓝牙重连开新会话") }
+                    }
+                    unplugCheckItem = check
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 3, execute: check)
+                case .keepSession:
+                    note("拔线：会话在 Wi-Fi 上，保持（iAP2 随线走，正在播放会过期）")
+                case .expectReconnect:
+                    note("拔线：有线会话会结束，等蓝牙重连接管")
+                case .resumeBluetooth:
+                    backoff.reset()
+                    resumeBluetooth()
+                }
             }
-        }
-
-        func cancelHandoffSchedule(_ reason: String) {
-            guard let item = handoffScheduled else { return }
-            item.cancel(); handoffScheduled = nil
-            note("取消切无线（\(reason)）")
-        }
-
-        func maybeScheduleHandoff() {
-            guard !handoffInFlight, !pairingHandoffInFlight, handoffScheduled == nil, !usbSuppressed,
-                  CACurrentMediaTime() >= handoffDisabledUntil,
-                  accessoryUsb != nil, live,
-                  let address = preferredAddress,
-                  Iap2BluetoothAccessory.isSystemPaired(address) else { return }
-            note("有线会话稳定：4 秒后静默切无线（数据线保持插着）")
-            let item = DispatchWorkItem { beginHandoff() }
-            handoffScheduled = item
-            DispatchQueue.main.asyncAfter(deadline: .now() + 4, execute: item)
-        }
-
-        func beginHandoff() {
-            handoffScheduled = nil
-            guard !handoffInFlight, !pairingHandoffInFlight, live, let usb = accessoryUsb,
-                  let address = preferredAddress,
-                  Iap2BluetoothAccessory.isSystemPaired(address) else { return }
-            let serial = usb.device.serial
-            handoffInFlight = true
-            usbSuppressed = true
-            suppressedSerial = serial
-            wirelessLostSince = 0
-            let start = Wireless.handoffPayload("start")
-            Wireless.setHandoffHint(start)
-            if let start { server.broadcastText(start) }
-            note("静默切无线：结束 USB CarPlay（线保持插着），等蓝牙/Wi-Fi 接管")
-            let timeout = DispatchWorkItem {
-                guard handoffInFlight else { return }
-                finishHandoff(false, why: "18 秒内无线没接管")
-            }
-            handoffTimeout = timeout
-            DispatchQueue.main.asyncAfter(deadline: .now() + 18, execute: timeout)
-            usb.close()
         }
 
         func beginPairingHandoff(_ address: String) {
             // 0x4E0E 通常早于控制会话 live；插线配对不需要等画面，拿到地址就让 USB 让位。
-            guard !pairingHandoffInFlight, !handoffInFlight, let usb = accessoryUsb else {
+            guard !pairingHandoffInFlight, let usb = accessoryUsb else {
                 pairInFlight = false
                 return
             }
@@ -2191,7 +2533,6 @@ enum Wireless {
                 Wireless.setHandoffHint(nil)
                 usbSuppressed = false
                 suppressedSerial = nil
-                handoffDisabledUntil = CACurrentMediaTime() + 300
                 stopPairingGuide()
                 Wireless.setPairingHint(nil)
                 note("插线配对 200 秒未完成：回退 USB CarPlay（本段插线不再自动尝试）")
@@ -2199,6 +2540,7 @@ enum Wireless {
             }
             pairingHandoffTimeout = safety
             DispatchQueue.main.asyncAfter(deadline: .now() + 200, execute: safety)
+            usbClosedByUs = true
             usb.close()
             DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
                 guard pairingHandoffInFlight else { return }
@@ -2215,8 +2557,16 @@ enum Wireless {
                         if let text = Wireless.currentPhonePayload(address: address) { server.broadcastText(text) }
                         server.broadcastText(#"{"type":"pairingDone"}"#)
                         publishPhones(force: true)
+                        // 配对成了就不等蓝牙 iAP2（插着线时手机多半不接）：下一轮 usbWatch 重开
+                        // carkit，手机在 USB 链路上报 0x4300，我们回无线版 0x4301 → Wi-Fi 会话。
+                        pairingHandoffInFlight = false
+                        pairingHandoffTimeout?.cancel(); pairingHandoffTimeout = nil
+                        Wireless.setHandoffHint(nil)
+                        usbSuppressed = false
+                        suppressedSerial = nil
                         backoff.reset()
-                        startBluetooth()
+                        note("插线配对完成：重开 USB，走 Wi-Fi 会话（线可继续插着充电）")
+                        if let text = Wireless.handoffPayload("done") { server.broadcastText(text) }
                     } else {
                         note("插线配对没成（\(detail)）：转到蓝牙配对引导")
                         if let text = Wireless.bluetoothPairFailedPayload() { server.broadcastText(text) }
@@ -2228,37 +2578,22 @@ enum Wireless {
         pairingHandoffRequest = { beginPairingHandoff($0) }
 
         func abortUSBHandoffs(_ why: String) {
-            cancelHandoffSchedule(why)
-            var failed = false
-            if pairingHandoffInFlight {
-                pairingHandoffInFlight = false
-                pairingHandoffTimeout?.cancel(); pairingHandoffTimeout = nil
-                stopPairingGuide()
-                Wireless.setPairingHint(nil)
-                usbSuppressed = false
-                suppressedSerial = nil
-                pairInFlight = false
-                failed = true
-                note("USB 更换：放弃旧手机的插线配对（\(why)）")
-            }
-            if handoffInFlight {
-                handoffInFlight = false
-                handoffTimeout?.cancel(); handoffTimeout = nil
-                usbSuppressed = false
-                suppressedSerial = nil
-                failed = true
-                note("USB 更换：放弃旧手机的无线切换（\(why)）")
-            }
-            if failed {
-                Wireless.setHandoffHint(nil)
-                if let text = Wireless.handoffPayload("failed") { server.broadcastText(text) }
-            }
+            guard pairingHandoffInFlight else { return }
+            pairingHandoffInFlight = false
+            pairingHandoffTimeout?.cancel(); pairingHandoffTimeout = nil
+            stopPairingGuide()
+            Wireless.setPairingHint(nil)
+            usbSuppressed = false
+            suppressedSerial = nil
+            pairInFlight = false
+            note("USB 更换：放弃旧手机的插线配对（\(why)）")
+            Wireless.setHandoffHint(nil)
+            if let text = Wireless.handoffPayload("failed") { server.broadcastText(text) }
         }
 
         /// 只取“最后插入”的 USB 设备；先到的保留为充电设备，不再抢 carkit。
         /// 活动设备变化时结束旧会话，保证同一时间只有一个 CarPlay。
-        func pollActiveUSB() -> Usbmuxd.Device? {
-            let devices = (try? Usbmuxd.listDevices()) ?? []
+        func pollActiveUSB(_ devices: [Usbmuxd.Device]) -> Usbmuxd.Device? {
             let present = Set(devices.map(\.serial))
             usbArrival.removeAll { !present.contains($0) }
             pairingAttemptedSerials.formIntersection(present)
@@ -2273,70 +2608,114 @@ enum Wireless {
             if let old = activeUSBSerial, old != serial {
                 note("USB 后到设备顶掉先到设备（\(String(serial.prefix(8))) 取代 \(String(old.prefix(8)))），只保留一个 CarPlay 会话")
                 abortUSBHandoffs("USB 更换")
-                if let acc = accessoryUsb, acc.device.serial != serial { acc.close() }
+                if let acc = accessoryUsb, acc.device.serial != serial {
+                    replacingUSB = true   // 关旧链路时不要把蓝牙恢复到旧手机（会和新手机抢会话）
+                    acc.close()
+                }
                 s.switchPhone(to: "")
                 usbSuppressed = false
                 suppressedSerial = nil
-                handoffDisabledUntil = 0
             }
             activeUSBSerial = serial
             return device
         }
 
         handoffOnWirelessActive = {
-            if pairingHandoffInFlight, live, accessoryUsb == nil {
-                pairingHandoffInFlight = false
-                pairingHandoffTimeout?.cancel(); pairingHandoffTimeout = nil
-                Wireless.setHandoffHint(nil)
-                note("插线配对完成：无线已接管（数据线可继续插着）")
-                if let text = Wireless.handoffPayload("done") { server.broadcastText(text) }
-                return
-            }
-            guard handoffInFlight, live, accessoryUsb == nil else { return }
-            finishHandoff(true, why: "蓝牙/Wi-Fi 已接管")
+            // 拔线后手机结束了旧会话、蓝牙重连开出新会话：解除桌宠冻帧。
+            releaseUnplugFreeze("新会话已开始")
         }
 
         func usbWatch() {
             defer { DispatchQueue.main.asyncAfter(deadline: .now() + 1, execute: usbWatchTick) }
-            guard let device = pollActiveUSB() else {
-                cancelHandoffSchedule("拔线")
+            // listDevices() 是阻塞 socket，放主執行緒會在最壞情況下卡住整個接收器。
+            guard !usbPollInFlight else { return }
+            usbPollInFlight = true
+            usbQueue.async {
+                let devices = (try? Usbmuxd.listDevices()) ?? []
+                DispatchQueue.main.async {
+                    usbPollInFlight = false
+                    usbTick(devices)
+                }
+            }
+        }
+
+        func usbTick(_ devices: [Usbmuxd.Device]) {
+            // usbmuxd 偶尔丢错会被当成空清单：连续两次没看到才算拔线，一次抖动不动任何状态。
+            let wasPresent = cablePresent
+            cablePresent = cableDebounce.observe(present: !devices.isEmpty)
+            if devices.isEmpty, cablePresent { return }
+            guard let device = pollActiveUSB(devices) else {
                 pairingAttemptedSerials.removeAll()
                 activeUSBSerial = nil
-                if !handoffInFlight, !pairingHandoffInFlight {
+                if !pairingHandoffInFlight {
                     usbSuppressed = false
                     suppressedSerial = nil
                 }
-                wirelessLostSince = 0
-                handoffDisabledUntil = 0
                 if usbTrustHintShown {
                     usbTrustHintShown = false
                     Wireless.setTrustHint(nil)
                     server.broadcastText(#"{"type":"trustDone"}"#)   // 拔线：收起「点信任」卡片
                 }
                 pairAttempt = .distantPast   // 拔线再插＝新的重试机会，不必等 30 秒冷却
-                resumeBluetooth()   // 没插线：确保蓝牙在工作
+                chargeOnlySerial = nil
+                if wasPresent { onCableGone() }   // 真拔线：会话在 Wi-Fi 上就保持，桌宠先冻帧
+                else { resumeBluetooth() }        // 没插线：确保蓝牙在工作
                 return
             }
-            if usbSuppressed, let suppressedSerial, device.serial == suppressedSerial {
-                // 数据线只充电：不要重新打开 carkit，否则 iPhone 又会被拉回有线。
-                if !handoffInFlight, !pairingHandoffInFlight {
-                    if !live {
-                        if wirelessLostSince == 0 { wirelessLostSince = CACurrentMediaTime() }
-                        else if CACurrentMediaTime() - wirelessLostSince > 8 {
-                            usbSuppressed = false
-                            handoffDisabledUntil = CACurrentMediaTime() + 300
-                            note("无线掉了 8 秒：重新打开 USB CarPlay（数据线还在）")
-                        }
-                    } else { wirelessLostSince = 0 }
-                }
+            if usbSuppressed, let suppressedSerial, device.serial == suppressedSerial, pairingHandoffInFlight {
+                // 插线配对进行中：USB 让位给手机的蓝牙，不重开 carkit。
                 return
             }
             if usbSuppressed { usbSuppressed = false; suppressedSerial = nil }
-            maybeScheduleHandoff()
-            guard accessoryUsb == nil, CACurrentMediaTime() >= usbRetryAt else { return }
+            if !preferCarkit, accessoryUsb == nil,
+               let known = Wireless.usbPhoneAddress(serial: device.serial),
+               Iap2BluetoothAccessory.isSystemPaired(known) {
+                if chargeOnlySerial != device.serial {
+                    chargeOnlySerial = device.serial
+                    chargeOnlySince = CACurrentMediaTime()
+                    chargeOnlyFallbackUsed = false
+                    cancelCableFirst("USB 已插入（已配对手机，只充电）")
+                    note("USB 只充电：这台手机（\(known)）已配对，会话走蓝牙/Wi-Fi，不开 carkit；插拔线不影响会话")
+                    let target = PairingRules.normalize(known)
+                    let currentPhone = PairingRules.normalize(preferredAddress ?? "")
+                    let liveIsOther = liveOwner.map { PairingRules.normalize($0) != target } ?? false
+                    if currentPhone != target || liveIsOther {
+                        // 插线是明确的「用这台」：后插的拿会话——结束旧手机的会话，蓝牙改连它。
+                        note("另一台已配对的 iPhone 插线（\(known)）：切换到它，后插的拿会话")
+                        selectPhone(known)
+                    } else {
+                        resumeBluetooth()
+                    }
+                }
+                // 退路：插线 20 秒还没有会话、蓝牙也没认证成功，再开 carkit（这段插线只试一次）。
+                let stuck = !live && CACurrentMediaTime() - chargeOnlySince > 20
+                    && Wireless.accessory?.phase != .authenticated
+                guard stuck, !chargeOnlyFallbackUsed else { return }
+                chargeOnlyFallbackUsed = true
+                note("插线 20 秒仍没有会话：改开 USB carkit（本段插线只试这一次）")
+            }
+            guard accessoryUsb == nil, !usbOpening, CACurrentMediaTime() >= usbRetryAt else { return }
             cancelCableFirst("USB 已插入")
-            do {
-                let acc = try Iap2UsbAccessory(device: device, identity: identity, stopAfterAuth: false) { note("USB " + $0) }
+            // carkit 開流含 lockdown/TLS 握手，是阻塞呼叫：放背景開好再回主執行緒接上。
+            usbOpening = true
+            let ident = identity
+            usbQueue.async {
+                let opened = Result { try Iap2UsbAccessory(device: device, identity: ident, stopAfterAuth: false) { note("USB " + $0) } }
+                DispatchQueue.main.async {
+                    usbOpening = false
+                    adoptUSB(opened, device: device)
+                }
+            }
+        }
+
+        /// 背景開好的 carkit 在這裡接上（主執行緒）。期間插拔過就丟掉這條。
+        func adoptUSB(_ opened: Result<Iap2UsbAccessory, Error>, device: Usbmuxd.Device) {
+            switch opened {
+            case .success(let acc):
+                guard accessoryUsb == nil, activeUSBSerial == device.serial, !acc.finished else {
+                    acc.close()
+                    return
+                }
                 if usbTrustHintShown {
                     usbTrustHintShown = false
                     Wireless.setTrustHint(nil)
@@ -2345,22 +2724,31 @@ enum Wireless {
                 pauseBluetooth("USB 设备在（\(String(device.serial.prefix(8)))）")
                 accessoryUsb = acc
                 usbStartSent = false
+                wifiConfigSentUSB = false
+                wirelessTriedUSB = false
                 usbStartRetry?.cancel(); usbStartRetry = nil
+                usbWirelessFallback?.cancel(); usbWirelessFallback = nil
                 acc.onLog = { note("USB " + $0) }
                 acc.onPhase = { if $0 == .authenticated { backoff.reset() } }
                 acc.onFinished = { code in
                     accessoryUsb = nil
                     usbStartSent = false
                     usbStartRetry?.cancel(); usbStartRetry = nil
-                    lastUsbEndedAt = Date()
+                    usbWirelessFallback?.cancel(); usbWirelessFallback = nil
+                    if usbClosedByUs { usbClosedByUs = false; lastUsbEndedAt = Date() }
                     clearNowPlaying(server: server)
                     note("USB iAP2 结束（\(code)）")
+                    if replacingUSB {
+                        // 后插的手机正在接管：蓝牙留着让位状态，由新链路决定去留。
+                        replacingUSB = false
+                        return
+                    }
                     resumeBluetooth()
                 }
                 acc.onMessage = wiredMessageHandler(device, acc: acc)
                 acc.onArtwork = { id, data in publishArtwork(id: id, data: data, server: server) }
                 acc.start()
-            } catch {
+            case .failure(let error):
                 note("carkit 打不开（\(error)）——确认 iPhone 已解锁、点「信任」，且数据线能传数据")
                 if !usbTrustHintShown {   // 桌宠显示「点信任」卡片；轮询每 5 秒来一次，别刷屏
                     usbTrustHintShown = true
@@ -2389,10 +2777,107 @@ enum Wireless {
         // 车机类 + iAP2/CarPlay SDP 必须在配对前就广播：iPhone 在配对时做 SDP 发现，
         // 那一刻看不到 CarPlay 服务，就只会把 Mac 当普通电脑，之后也不再提示 CarPlay。
         // （MacPlay 的蓝牙桥就是启动即发布；这里不再等"配对成功后"才发。）
+        // ---- iAP 数据通道（流 130）：Wi-Fi 会话里的 iAP2 路径，拔线后仍在 ----
+        // 手机 SETUP 130 后拿到隧道句柄；RECORD 一到就在隧道上跑一套完整的 iAP2 bring-up
+        // （MacPlay 在 RECORD 时开 relay，同样由配件先发 marker＋SYNC，经事件通道 iAPSendMessage），
+        // 手机连上数据口后回包就来。disableBluetooth 是手机宣告「iAP2 改走隧道」的信号：记日志，
+        // 不以它为起跑条件——配件是链路发起方，等它再起会和手机互等。
+        var tunnelLink: IapTunnelLink?
+        func startTunnelCore(_ why: String) {
+            guard let link = tunnelLink else { return }
+            if let acc = Wireless.accessoryTunnel, !acc.finished { return }
+            var coreInfo = Iap2AccessoryCore.Info()
+            coreInfo.ssid = ssid
+            let acc = Iap2TunnelAccessory(identity: identity, info: coreInfo) { [weak link] bytes in
+                if link?.send(Data(bytes)) != true { note("隧道 iAP2：事件通道未连，\(bytes.count) 字节未发") }
+            }
+            acc.onLog = { note("隧道 iAP2 " + $0) }
+            acc.onPhase = { phase in
+                if phase == .authenticated { note("隧道 iAP2 已认证：iAP2 现在走 Wi-Fi 会话（拔线不影响）") }
+            }
+            acc.onFinished = { code in
+                if Wireless.accessoryTunnel === acc { Wireless.accessoryTunnel = nil }
+                note("隧道 iAP2 结束（\(code)）")
+            }
+            acc.onArtwork = { id, data in publishArtwork(id: id, data: data, server: server) }
+            acc.onMessage = { [weak acc] frame in
+                learnPhoneBluetooth(frame)
+                switch frame.messageId {
+                case Iap2Csm.CarPlay.availability:
+                    // 会话进行中不再回 0x4301；会话没了（拔线后手机重评）才用无线版开会话
+                    if live { note("隧道 iAP2：手机报 CarPlay 可用（会话进行中，忽略）"); return [] }
+                    let liveIP = currentIP() ?? ip
+                    note("隧道 iAP2：手机报 CarPlay 可用 → 开会话 \(liveIP):\(o.controlPort)")
+                    return [startMessage([liveIP])]
+                case Iap2Csm.CarPlay.wifiConfigRequest:
+                    note("隧道 iAP2：手机要 Wi-Fi 配置 → 回 \(ssid)（密码不打印）")
+                    return [Iap2Csm.accessoryWiFiConfiguration(ssid: ssid, passphrase: passphrase, security: currentSecurity(), channel: currentChannel())]
+                case Iap2Csm.Communications.callStateUpdate, Iap2Csm.Communications.update:
+                    publishTelephony(frame, server: server)
+                    return []
+                case Iap2Csm.NowPlaying.update:
+                    publishNowPlaying(frame, server: server, seek: { ms in acc?.core.send(Iap2Csm.setNowPlayingInformation(elapsedMs: ms)) })
+                    return []
+                default:
+                    note(String(format: "隧道 iAP2 消息 0x%04x（未处理）", frame.messageId))
+                    return []
+                }
+            }
+            Wireless.accessoryTunnel = acc
+            note("隧道 iAP2 起跑（\(why)）")
+            acc.start()
+        }
+        s.onIapTunnel = { link in
+            DispatchQueue.main.async {
+                Wireless.accessoryTunnel?.close()
+                tunnelLink = link
+                keepBluetoothIap2 = false
+                note("iAP 隧道就绪（dataPort \(link.dataPort)）")
+                link.onConnected = { _ in DispatchQueue.main.async { startTunnelCore("手机连上数据口") } }
+                link.onIap = { d in DispatchQueue.main.async { Wireless.accessoryTunnel?.feed([UInt8](d)) } }
+                link.onClosed = { [weak link] in
+                    DispatchQueue.main.async {
+                        Wireless.accessoryTunnel?.transportClosed()
+                        if let link, link.isTornDown, tunnelLink === link { tunnelLink = nil }
+                    }
+                }
+                if live { startTunnelCore("流 130 在 RECORD 之后 SETUP") }
+            }
+        }
+        tunnelOnActive = { keepBluetoothIap2 = false; startTunnelCore("RECORD") }
+        s.onCommand = { type, params in
+            if type == "requestUI" {
+                DispatchQueue.main.async {
+                    note("手机上点了 HomePlay 图标（requestUI\(params.isEmpty ? "" : "，" + params.keys.sorted().joined(separator: ","))）：桌宠回到表面，CarPlay 留在后台")
+                    if let text = Wireless.requestUIPayload() { server.broadcastText(text) }
+                }
+                return
+            }
+            guard type == "disableBluetooth" else { return }
+            DispatchQueue.main.async {
+                let state = Wireless.accessoryTunnel.map { "隧道 iAP2 \($0.phase.rawValue)" }
+                    ?? (tunnelLink == nil ? "手机没 SETUP 流 130，拔线后没有 iAP2 路径" : "隧道等手机连")
+                note("手机要求停用蓝牙 iAP2（disableBluetooth，deviceID \(params["deviceID"] ?? "?")）：\(state)")
+                // 流 130 常在 disableBluetooth 前後一秒內 SETUP；等 8 秒再判，沒來就把藍牙留作 iAP2 路徑
+                DispatchQueue.main.asyncAfter(deadline: .now() + 8) {
+                    guard live, CarPlayTransportPolicy.bluetoothAfterDisable(tunnelSetUp: tunnelLink != nil) == .keep else { return }
+                    keepBluetoothIap2 = true
+                    if accessory == nil, !btPaused {
+                        note("手机没 SETUP 流 130：保留蓝牙 iAP2（通话状态、正在播放走它），现在重连")
+                        retryItem?.cancel(); retryItem = nil
+                        backoff.reset()
+                        startBluetooth()
+                    } else {
+                        note("手机没 SETUP 流 130：保留蓝牙 iAP2（通话状态、正在播放走它），断线快速重连")
+                    }
+                }
+            }
+        }
+
         startBeaconIfNeeded?()
         startBluetooth()
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.5, execute: usbWatchTick)
-        note("双模：插线即有线，拔线即蓝牙（自动切换）；首次插线会自动发起蓝牙配对")
+        note("双模：插线在 USB 上开 Wi-Fi 会话（线只充电），拔线会话保持；没插线走蓝牙；首次插线会自动发起蓝牙配对")
         RunLoop.main.run()
         exit(0)
     }
@@ -2540,7 +3025,12 @@ struct MfiSigner: AccessorySigner {
 /// 照 MacPlay iap2-wired/mac_network.rs 的做法解析 ioreg。
 enum UsbNet {
     /// 这台 iPhone 的 AppleUSBNCMData 接口（enX）。通常是两个，AV 用第一个。
+    /// 呼叫它的地方在主執行緒上的 iAP2 訊息處理裡，而 ioreg 是外部程序：只讀背景快照。
     static func ncmInterfaces(udid: String) -> [String] {
+        NcmSnapshot.shared.interfaces(for: udid)
+    }
+
+    fileprivate static func probeNcmInterfaces(udid: String) -> [String] {
         let want = udid.lowercased().filter { $0.isLetter || $0.isNumber }
         let p = Process()
         p.executableURL = URL(fileURLWithPath: "/usr/sbin/ioreg")
@@ -2578,6 +3068,56 @@ enum UsbNet {
             return ifaces
         }
         return []
+    }
+
+    /// ioreg 一次几十到几百毫秒，而调用点都在主执行绪的 iAP2 讯息处理里。
+    /// 背景每 0.5 秒刷一次快照，调用端只做一次加锁读取（最多旧半秒，够用）。
+    fileprivate final class NcmSnapshot {
+        static let shared = NcmSnapshot()
+        private let queue = DispatchQueue(label: "homeplay.ncm", qos: .utility)
+        private let lock = NSLock()
+        private var byUDID: [String: [String]] = [:]
+        private var timer: DispatchSourceTimer?
+        private var watching = ""
+        private var lastRequest: Double = 0
+
+        func interfaces(for udid: String) -> [String] {
+            let key = Self.key(udid)
+            lock.lock(); let hit = byUDID[key]; lastRequest = CACurrentMediaTime(); lock.unlock()
+            start(udid)
+            return hit ?? []
+        }
+
+        private static func key(_ udid: String) -> String {
+            udid.lowercased().filter { $0.isLetter || $0.isNumber }
+        }
+
+        /// 只监视当前这台：换机时重建计时器，旧机的值留在字典里也没人再读。
+        private func start(_ udid: String) {
+            lock.lock()
+            let changed = watching != udid
+            if changed { watching = udid }
+            lock.unlock()
+            guard changed else { return }
+            queue.async { [self] in
+                lock.lock(); timer?.cancel(); lock.unlock()
+                let t = DispatchSource.makeTimerSource(queue: queue)
+                t.schedule(deadline: .now(), repeating: 0.5, leeway: .milliseconds(200))
+                t.setEventHandler { [weak self] in
+                    guard let self else { return }
+                    // 没人再问了（有线会话结束）就停下来：ioreg 是外部程序，不能让它常驻轮询。
+                    self.lock.lock()
+                    let idle = CACurrentMediaTime() - self.lastRequest > 30
+                    if idle { self.timer?.cancel(); self.timer = nil; self.watching = "" }
+                    self.lock.unlock()
+                    guard !idle else { return }
+                    let value = UsbNet.probeNcmInterfaces(udid: udid)
+                    self.lock.lock(); self.byUDID[Self.key(udid)] = value; self.lock.unlock()
+                }
+                lock.lock(); timer = t; lock.unlock()
+                t.resume()
+            }
+        }
     }
 
     /// 接口的 IPv6 链路本地地址（fe80::），有线 AV 回连靠它。

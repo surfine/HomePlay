@@ -225,6 +225,48 @@ func runTransportSuites() {
         expect(nals.count > 8 && nals[4] & 0x1f == 7, "avcC → length-prefixed SPS,PPS")
     }
 
+    // MARK: iAP 隧道（流 130）解析：帧层与 ControlCipher 同形、nonce 与屏幕流同形、APTransportPackage 32B 头
+    suite("transport-iap-tunnel-parser") {
+        let key = unhex(fx_screenKey)
+        let plain = [fx_screenPlain1, fx_screenPlain2, fx_screenPlain3].map(unhex)
+        // nonce：4 零字节 + 8 字节小端计数——与 ScreenStreamParser.nonce 逐字节一致
+        var nonceOK = true
+        for n: UInt64 in [0, 1, 7, 1007, 0x1_0000_0001] {
+            let a: [UInt8] = PairingCrypto.nonce64(n)
+            let b: [UInt8] = [UInt8](ScreenStreamParser.nonce(counter: n))
+            if a != b { nonceOK = false }
+        }
+        expect(nonceOK, "tunnel nonce == ScreenStreamParser.nonce (4 zero + 8 LE)")
+        // 明文流：3 个 'comm' 包夹一个别的类型（应被忽略但不打断解析）
+        var other = APTransportPackage.comm(Data([9, 9, 9])); other[16] = 0x74; other[17] = 0x65; other[18] = 0x73; other[19] = 0x74   // 'test'
+        let stream = APTransportPackage.comm(plain[0]) + other + APTransportPackage.comm(plain[1]) + APTransportPackage.comm(plain[2])
+        // 帧层用 ControlCipher 的写方向封（>16 KiB 自动拆帧）：解析器必须能解它
+        let sealed = Data(try! ControlCipher(readKey: [UInt8](key), writeKey: [UInt8](key)).encrypt([UInt8](stream)))
+        let frames = (stream.count + ControlCipher.maxPayload - 1) / ControlCipher.maxPayload
+        var okAll = true
+        for seed in 1...30 {
+            let p = try! IapTunnelParser(key: key); var got: [APTransportPackage] = []
+            for c in chunks(sealed, seed: UInt64(seed), maxChunk: seed % 6 == 0 ? 3 : 700) { got += try! p.feed(c) }
+            let bodies = got.filter(\.isIap).map(\.body)
+            if bodies != plain || got.count != 4 || got[1].isIap || Int(p.counter) != frames { okAll = false }
+        }
+        expect(okAll, "30 random chunkings: 3 iAP bodies out, 'test' package ignored, counter == \(frames) frames")
+        let single = try! IapTunnelParser(key: key)
+        let got = try! single.feed(sealed)
+        expect(got.first?.size == UInt32(32 + plain[0].count) && got.first?.messageType == APTransportPackage.messageTypeComm, "header: size@0 BE, 'comm'@16")
+        var bad = sealed; bad[bad.count - 40] ^= 1
+        let tampered = try! IapTunnelParser(key: key)
+        var threw = false
+        do { _ = try tampered.feed(bad) } catch { threw = true }
+        expect(threw, "tampered frame → throws (connection must drop)")
+        let bogus = try! IapTunnelParser(key: key)
+        let tiny = Data(try! ControlCipher(readKey: [UInt8](key), writeKey: [UInt8](key)).encrypt([0, 0, 0, 8] + [UInt8](repeating: 0, count: 28)))
+        var threwSize = false
+        do { _ = try bogus.feed(tiny) } catch IapTunnelError.implausiblePackage(let n) { threwSize = n == 8 } catch {}
+        expect(threwSize, "package size < 32 → implausiblePackage")
+        expect((try? IapTunnelParser(key: Data(count: 16))) == nil, "key must be 32 bytes")
+    }
+
     // MARK: ScreenStream → H264Sink
     suite("transport-screen-adapter") {
         let ws = try! WSServer(port: 0)

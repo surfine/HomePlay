@@ -1,0 +1,472 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>HomePlay 名副其實</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* 沿用「桌寵表情與行為」稿的色票與字體；一頁對照推送的每一句話：說法 → 現況 → 差距 → 設計 → 驗收 */
+:root{
+  --bg:#e8eceb; --paper:#f6f8f7; --ink:#172225; --muted:#5a6a6b; --line:#cdd7d5;
+  --teal:#2f6a63; --blush:#d9798c; --warm:#c7823e; --shell:#fbfbfa; --shell-edge:#dfe3e2; --bezel:#0e0f10;
+  --ok:#2f6a63; --part:#b07a1f; --no:#b2453b;
+  --shadow:rgba(20,40,40,.18);
+  --f-display:"Fredoka","PingFang TC","Noto Sans TC",system-ui,sans-serif;
+  --f-body:"PingFang TC","Noto Sans TC","Microsoft JhengHei",system-ui,sans-serif;
+  --f-mono:"JetBrains Mono",ui-monospace,"SF Mono",Menlo,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#101718; --paper:#172123; --ink:#e4ecea; --muted:#93a3a2; --line:#2a3739;
+  --teal:#74b6ab; --blush:#ee9aab; --warm:#e0a466; --shell:#eceeed; --shell-edge:#c9cfcd; --bezel:#050606;
+  --ok:#74b6ab; --part:#e0b45a; --no:#ec8a80;
+  --shadow:rgba(0,0,0,.5); color-scheme:dark }}
+:root[data-theme="dark"]{
+  --bg:#101718; --paper:#172123; --ink:#e4ecea; --muted:#93a3a2; --line:#2a3739;
+  --teal:#74b6ab; --blush:#ee9aab; --warm:#e0a466; --shell:#eceeed; --shell-edge:#c9cfcd; --bezel:#050606;
+  --ok:#74b6ab; --part:#e0b45a; --no:#ec8a80;
+  --shadow:rgba(0,0,0,.5); color-scheme:dark }
+
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:15px;line-height:1.65;
+  padding:32px max(16px,env(safe-area-inset-right,0px)) 72px max(16px,env(safe-area-inset-left,0px))}
+.wrap{max-width:1080px;margin:0 auto;display:flex;flex-direction:column;gap:72px}
+h1,h2,h3{font-family:var(--f-display);font-weight:600;text-wrap:balance;margin:0;line-height:1.2}
+h1{font-size:clamp(34px,6vw,54px);letter-spacing:-.01em}
+h2{font-size:26px}
+h3{font-size:17px}
+p{margin:0}
+.eyebrow{font-family:var(--f-mono);font-size:12px;letter-spacing:.08em;color:var(--muted);text-transform:uppercase}
+.lede{max-width:64ch;color:var(--muted);font-size:16px}
+section{display:flex;flex-direction:column;gap:20px}
+.sec-head{display:flex;flex-direction:column;gap:6px;max-width:68ch}
+.sec-head p{color:var(--muted)}
+code,.mono{font-family:var(--f-mono);font-size:12.5px;overflow-wrap:anywhere}
+.card{background:var(--paper);border:1px solid var(--line);border-radius:16px;padding:20px}
+.grid{display:grid;gap:16px}
+.g2{grid-template-columns:repeat(auto-fit,minmax(300px,1fr))}
+.g3{grid-template-columns:repeat(auto-fit,minmax(220px,1fr))}
+.note{color:var(--muted);font-size:13.5px}
+ul.tight{margin:0;padding-left:1.2em}
+ul.tight li{margin:.2em 0}
+
+/* ---------- 對照表 ---------- */
+.table-scroll{overflow-x:auto;border:1px solid var(--line);border-radius:16px;background:var(--paper)}
+table{border-collapse:collapse;width:100%;min-width:760px;font-size:14px}
+th,td{text-align:left;vertical-align:top;padding:12px 14px;border-bottom:1px solid var(--line)}
+th{font-family:var(--f-mono);font-size:11.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);font-weight:500}
+tr:last-child td{border-bottom:0}
+.tag{display:inline-block;font-family:var(--f-mono);font-size:11px;padding:2px 8px;border-radius:999px;border:1px solid currentColor;white-space:nowrap}
+.tag.ok{color:var(--ok)} .tag.part{color:var(--part)} .tag.no{color:var(--no)}
+
+/* ---------- HomeView 小樣（正面） ---------- */
+.device{display:flex;flex-direction:column;align-items:center;gap:0}
+.screen{position:relative;width:200px;aspect-ratio:1;border-radius:34px;background:var(--bezel);padding:9px;
+  box-shadow:0 1px 0 var(--shell-edge),0 18px 30px -18px var(--shadow)}
+.glass{position:relative;width:100%;height:100%;border-radius:26px;overflow:hidden;
+  background:radial-gradient(120% 90% at 30% 10%,#2a3a52 0%,#16202e 60%,#0d131c 100%)}
+.base{width:120px;height:26px;margin-top:-2px;border-radius:0 0 60px 60px/0 0 26px 26px;background:var(--shell);
+  border:1px solid var(--shell-edge);border-top:0}
+.time{position:absolute;inset:auto 0 46% 0;text-align:center;font-family:var(--f-display);font-size:56px;color:#e9eef5;opacity:.92;letter-spacing:-.02em}
+.date{position:absolute;top:16px;left:0;right:0;text-align:center;font-size:11px;color:#c6d0dc;opacity:.8}
+.island{position:absolute;left:50%;bottom:34px;transform:translateX(-50%);height:40px;min-width:92px;padding:0 12px;
+  border-radius:999px;background:rgba(10,12,14,.82);box-shadow:inset 0 1px 0 rgba(255,255,255,.12),0 6px 14px rgba(0,0,0,.35);
+  display:flex;align-items:center;justify-content:center;gap:9px}
+.eye{width:15px;height:23px;border-radius:50%;background:#f6f7f8;position:relative;overflow:hidden}
+.eye::after{content:"";position:absolute;width:8px;height:12px;border-radius:50%;background:#2b1d14;left:4px;top:7px;
+  box-shadow:inset 0 0 0 1.5px #c9922e}
+.eye.down::after{top:10px} .eye.left::after{left:1px} .eye.right::after{left:6px}
+.eye.happy{height:9px;border-radius:9px 9px 2px 2px;background:transparent;border-top:3px solid #f6f7f8}
+.eye.happy::after{display:none}
+.eye.closed{height:3px;margin-top:8px;border-radius:2px}
+.eye.closed::after{display:none}
+.hud{position:absolute;left:12px;right:12px;bottom:84px;border-radius:14px;padding:8px 10px;
+  background:rgba(240,244,248,.16);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);
+  border:1px solid rgba(255,255,255,.18);color:#eef3f8;font-size:11.5px;line-height:1.35;display:flex;gap:8px;align-items:center}
+.hud b{font-weight:600}
+.glass:has(.hud) .time{opacity:.18}
+.hud .ic{width:22px;height:22px;flex:none;border-radius:6px;background:rgba(255,255,255,.18);display:grid;place-items:center;font-size:12px}
+.bat{display:inline-block;width:20px;height:9px;border:1.5px solid #e9eef5;border-radius:3px;position:relative;vertical-align:-1px;margin-left:4px}
+.bat::before{content:"";position:absolute;left:1px;top:1px;bottom:1px;width:var(--lvl,70%);background:#e9eef5;border-radius:1px}
+.bat::after{content:"";position:absolute;right:-4px;top:2px;width:2px;height:3px;background:#e9eef5;border-radius:0 1px 1px 0}
+.cap{min-width:150px;justify-content:flex-start;padding:0 12px 0 8px}
+.cap .art{width:26px;height:26px;border-radius:6px;background:linear-gradient(135deg,#d9798c,#7b5ea7)}
+.cap .meta{display:flex;flex-direction:column;line-height:1.15;color:#e9eef5;font-size:10px;text-align:left}
+.cap .meta b{font-size:10.5px}
+.ring{position:absolute;left:50%;bottom:28px;transform:translateX(-50%);width:120px;height:52px;border-radius:999px;
+  border:2.5px solid var(--teal);opacity:.9;mask:linear-gradient(90deg,#000 62%,transparent 62%);-webkit-mask:linear-gradient(90deg,#000 62%,transparent 62%)}
+.ring.brk{border-color:var(--warm);mask:linear-gradient(90deg,#000 30%,transparent 30%);-webkit-mask:linear-gradient(90deg,#000 30%,transparent 30%)}
+.orb{position:absolute;left:50%;bottom:30px;transform:translateX(-50%);width:120px;height:48px;border-radius:999px;
+  background:rgba(10,12,14,.86);display:flex;align-items:center;justify-content:center;gap:3px}
+.orb i{display:block;width:4px;border-radius:2px;background:#e9eef5;opacity:.85}
+.carplay{position:absolute;inset:0;background:linear-gradient(160deg,#20262e,#0f1318);display:grid;grid-template-columns:30px 1fr;}
+.carplay .dock{background:rgba(0,0,0,.35);display:flex;flex-direction:column;gap:6px;padding:10px 6px;align-items:center}
+.carplay .dock i{width:16px;height:16px;border-radius:5px;background:#3d4652;display:block}
+.carplay .dock i:nth-child(1){background:#3bbf6e} .carplay .dock i:nth-child(2){background:#3b82f6} .carplay .dock i:nth-child(3){background:#f2545b}
+.carplay .apps{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;padding:16px 12px;align-content:start}
+.carplay .apps i{aspect-ratio:1;border-radius:9px;background:#2f3844;display:block}
+.frozen{filter:saturate(.6) brightness(.8)}
+.label{position:absolute;left:50%;top:12px;transform:translateX(-50%);font-size:10.5px;color:#eef3f8;background:rgba(0,0,0,.45);
+  padding:3px 9px;border-radius:999px;white-space:nowrap}
+
+/* ---------- 分鏡 ---------- */
+.board{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:18px}
+.frame{display:flex;flex-direction:column;align-items:center;gap:12px;text-align:center}
+.frame .cap-text{max-width:30ch;font-size:13.5px}
+.frame .cap-text b{display:block;font-family:var(--f-display);font-size:15px;margin-bottom:2px}
+.step{font-family:var(--f-mono);font-size:11px;color:var(--muted)}
+.rule{border-left:3px solid var(--teal);padding:4px 0 4px 14px;color:var(--ink)}
+.rule.warn{border-color:var(--no)}
+
+/* ---------- 計畫 ---------- */
+.plan{counter-reset:p;display:flex;flex-direction:column;gap:12px}
+.plan .card{display:grid;grid-template-columns:auto 1fr;gap:6px 14px}
+.prio{font-family:var(--f-mono);font-size:12px;font-weight:500;padding:3px 8px;border-radius:8px;background:var(--bg);height:max-content}
+.plan h3{grid-column:2}
+.plan .body{grid-column:2;display:flex;flex-direction:column;gap:6px}
+.kv{display:grid;grid-template-columns:5.5em 1fr;gap:2px 10px;font-size:13.5px}
+.kv dt{color:var(--muted)} .kv dd{margin:0}
+@media (max-width:520px){ .screen{width:170px} .time{font-size:46px} }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header style="display:flex;flex-direction:column;gap:14px">
+  <span class="eyebrow">設計稿 · 2026-10-22 · 對照推送逐句落地</span>
+  <h1>名副其實</h1>
+  <p class="lede">推送寫了五件事：插線連接然後無線、會看著你的十種表情、用力一按就是 CarPlay、按住 F5 跟 Siri 說話、番茄鐘與迷你播放器。這份稿把每一句話對到產品現況，標出哪裡還做不到，給出設計與驗收方法。原則不變：Mac 是效率工具，桌寵少動、動得準；連線的事最好讓人感覺不到。</p>
+</header>
+
+<!-- ============ 1. 對照 ============ -->
+<section>
+  <div class="sec-head">
+    <span class="eyebrow">01 · 現況盤點</span>
+    <h2>每一句話，現在做到幾分</h2>
+    <p>「現況」以 2026-10-22 的程式碼和真機日誌為準（iPhone SE 第 1 代 iOS 15、iPhone 18 Pro iOS 27）。</p>
+  </div>
+  <div class="table-scroll">
+  <table>
+    <thead><tr><th style="width:22%">推送的說法</th><th style="width:9%">狀態</th><th style="width:34%">現況</th><th>差距與設計方向</th></tr></thead>
+    <tbody>
+      <tr><td>插線連接，然後無線，像妙控配件</td><td><span class="tag ok">已達成</span></td>
+        <td>已配對手機插線只充電，拔插不影響會話；後插的手機 5 秒內接管；純無線 0.7–4 秒連上。</td>
+        <td>連線本身做到了，但<b>那一刻沒有回饋</b>：妙控鍵盤插線會跳「已連接」與電量，HomePlay 什麼都不顯示。補上連接提示卡（§02）。首次配對流程還沒用未配對手機實測。</td></tr>
+      <tr><td>它會看著你；十種表情、多款錶面</td><td><span class="tag ok">已達成</span></td>
+        <td>10 種表情、9 款錶面；游標追視、攝影機追人（預設關）。</td>
+        <td>插線、配對成功、換手機這些「有人在跟它互動」的時刻，臉沒有反應。讓眼睛看向接口、配對成功點頭（§02）。</td></tr>
+      <tr><td>稍微用力按下屏幕，連貫的 CarPlay</td><td><span class="tag part">部分</span></td>
+        <td>Force Touch 進出 CarPlay；接收器保底要關鍵幀，換手機不再卡在「正在連線」。</td>
+        <td>進出時用的是「正在連線」卡片，不夠「連貫」。設計島長大成 CarPlay 的過場，並規定任何等待都說清楚在等誰（§03）。</td></tr>
+      <tr><td>按住 F5 直接開口說話，全程免提</td><td><span class="tag no">名不副實</span></td>
+        <td>F5 按下就立刻送出按下＋放開（等於點一下），放開事件被吞掉；手機自己判斷什麼時候停。</td>
+        <td>改成真的「按住說話」：按住＝按住車上的語音鍵，放開＝說完；短按維持現在的喚起。島變成聆聽波形（§04）。</td></tr>
+      <tr><td>番茄鐘</td><td><span class="tag part">部分</span></td>
+        <td>只有 1／3／5／10／25 分鐘的單次倒數。</td>
+        <td>做成真正的番茄工作法：25 分鐘專注、5 分鐘休息、四輪後長休 15 分鐘，輪次記進「陪伴的痕跡」（§05）。</td></tr>
+      <tr><td>電量顯示</td><td><span class="tag part">部分</span></td>
+        <td>只有 Mac 電量（IOKit）。iPhone 的電量訊息（iAP2 <code>0xAE01</code>）每次連線都收到，日誌標「未處理」。</td>
+        <td>像妙控配件那樣顯示 iPhone 電量：連接提示卡和模組錶面各一處。需先在真機核對 <code>0xAE01</code> 是否帶電量欄位（§05）。</td></tr>
+      <tr><td>正在播放、窗口置頂、iTunes 迷你播放器、F7–F9 切歌</td><td><span class="tag part">部分</span></td>
+        <td>手機的正在播放已接到膠囊與系統控制中心；F7–F9 經系統媒體鍵優先控手機。視窗固定浮在最上層，沒有開關。</td>
+        <td>「置頂」做成可見的選單開關；加「迷你播放器」尺寸，只留屏幕與膠囊（§05）。</td></tr>
+      <tr><td>雙指縮放、雙指旋轉、三指換位置；DockKit 式跟隨、匹配室內光線</td><td><span class="tag ok">已達成</span></td>
+        <td>手勢都在；「跟隨我（攝影機）」與「房間光線」在偏好設定，預設關。</td>
+        <td>不改行為。效能：閒置時 RealityKit 仍每秒畫 60 幀、CPU 21–27%，另一個工作階段正在處理（§06）。</td></tr>
+      <tr><td>使用前須知：只測過兩台</td><td><span class="tag no">缺</span></td>
+        <td>App 裡沒有任何相容性說明。</td>
+        <td>「關於」面板列出已測機型；未測機型第一次連上時不打擾，但在「關於」裡邀請回報（§07）。</td></tr>
+    </tbody>
+  </table>
+  </div>
+</section>
+
+<!-- ============ 2. 插線連接，然後無線 ============ -->
+<section>
+  <div class="sec-head">
+    <span class="eyebrow">02 · 插線連接，然後無線</span>
+    <h2>像妙控鍵盤一樣，插一次就記住</h2>
+    <p>妙控配件的體驗只有兩個瞬間：插上那一刻告訴你「已連接」與電量，之後拔線什麼都不發生。HomePlay 的連線已經做到第二點，這裡補第一點。</p>
+  </div>
+  <div class="board">
+    <div class="frame">
+      <div class="device"><div class="screen"><div class="glass">
+        <div class="date">10 月 22 日 星期四</div><div class="time">9:41</div>
+        <div class="hud"><span class="ic">⌁</span><span><b>在 iPhone 上點「信任」</b>解鎖後會跳出提示</span></div>
+        <div class="island"><span class="eye down"></span><span class="eye down"></span></div>
+      </div></div><div class="base"></div></div>
+      <span class="step">A · 第一次插線</span>
+      <p class="cap-text"><b>眼睛看向接口</b>好奇臉，瞳孔往下看底座的 USB-C；卡片只說一件事。</p>
+    </div>
+    <div class="frame">
+      <div class="device"><div class="screen"><div class="glass">
+        <div class="date">10 月 22 日 星期四</div><div class="time">9:41</div>
+        <div class="hud"><span class="ic">ᛒ</span><span><b>再點一次「配對」</b>之後拔線也能用</span></div>
+        <div class="island"><span class="eye down"></span><span class="eye down"></span></div>
+      </div></div><div class="base"></div></div>
+      <span class="step">B · 藍牙配對</span>
+      <p class="cap-text"><b>只在 Mac 和這台手機沒配對過時出現</b>60 秒沒確認，才改成「設定 › 藍牙」引導。</p>
+    </div>
+    <div class="frame">
+      <div class="device"><div class="screen"><div class="glass">
+        <div class="date">10 月 22 日 星期四</div><div class="time">9:41</div>
+        <div class="hud"><span class="ic">✓</span><span><b>已連接 Aaron 的 iPhone</b>87%<i class="bat" style="--lvl:87%"></i> · 之後不用插線</span></div>
+        <div class="island"><span class="eye happy"></span><span class="eye happy"></span></div>
+      </div></div><div class="base"></div></div>
+      <span class="step">C · 配對完成</span>
+      <p class="cap-text"><b>點頭、笑眼 1.2 秒</b>卡片 2.4 秒後收起；這是全流程唯一一次「慶祝」。</p>
+    </div>
+    <div class="frame">
+      <div class="device"><div class="screen"><div class="glass">
+        <div class="date">10 月 22 日 星期四</div><div class="time">9:41</div>
+        <div class="hud"><span class="ic">⚡︎</span><span><b>Aaron 的 iPhone</b>正在充電 87%<i class="bat" style="--lvl:87%"></i></span></div>
+        <div class="island"><span class="eye"></span><span class="eye"></span></div>
+      </div></div><div class="base"></div></div>
+      <span class="step">D · 之後每次插線</span>
+      <p class="cap-text"><b>只告訴你在充電</b>1.5 秒，不換表情。會話本來就走 Wi-Fi，插線不改任何狀態。</p>
+    </div>
+    <div class="frame">
+      <div class="device"><div class="screen"><div class="glass">
+        <div class="date">10 月 22 日 星期四</div><div class="time">9:41</div>
+        <div class="island"><span class="eye"></span><span class="eye"></span></div>
+      </div></div><div class="base"></div></div>
+      <span class="step">E · 拔線</span>
+      <p class="cap-text"><b>什麼都不顯示</b>拔線不該被注意到。直播中的畫面與聲音不斷（2026-10-22 真機已驗）。</p>
+    </div>
+    <div class="frame">
+      <div class="device"><div class="screen"><div class="glass">
+        <div class="carplay frozen"><div class="dock"><i></i><i></i><i></i></div><div class="apps"><i></i><i></i><i></i><i></i><i></i><i></i></div></div>
+        <div class="label">切換到 Lin 的 iPhone…</div>
+      </div></div><div class="base"></div></div>
+      <span class="step">F · 另一台插線</span>
+      <p class="cap-text"><b>凍住上一幀、標出換給誰</b>新手機出畫就換過去（實測約 5 秒）；舊手機上的 CarPlay 正常退出。</p>
+    </div>
+  </div>
+  <div class="grid g2">
+    <div class="card"><h3>規則</h3><ul class="tight">
+      <li>提示卡只在桌寵可見時出現，位置固定在島上方；不出聲、不彈系統通知。</li>
+      <li>一次只顯示一張卡；新的取代舊的，不排隊。</li>
+      <li>名字用手機自己的裝置名（iAP2 識別裡就有），不顯示藍牙位址。</li>
+      <li>直播中插線、拔線都不顯示卡片，免得蓋住 CarPlay。</li>
+    </ul></div>
+    <div class="card"><h3>接線方式</h3><ul class="tight">
+      <li>接收器新增一則 WebSocket 訊息 <code>{"type":"phone","event":"charging|connected|switched","name":…,"battery":…}</code>，在「USB 只充電」「藍牙認證成功」「切換手機」三處發出。</li>
+      <li>桌寵在 <code>CarPlayOverlay</code> 加一個 <code>hud</code> 狀態，沿用玻璃卡樣式；眼睛方向用現有的 gaze 目標（瞳孔指向底座）。</li>
+    </ul></div>
+  </div>
+</section>
+
+<!-- ============ 3. CarPlay ============ -->
+<section>
+  <div class="sec-head">
+    <span class="eyebrow">03 · 稍微用力按下屏幕</span>
+    <h2>連貫：島長大，就是 CarPlay</h2>
+    <p>進出 CarPlay 不換場景，用同一個元素帶過去：島是會話的「門」。任何等待都要說清楚在等誰、等什麼。</p>
+  </div>
+  <div class="board">
+    <div class="frame">
+      <div class="device"><div class="screen" style="transform:scale(.975)"><div class="glass">
+        <div class="date">10 月 22 日 星期四</div><div class="time">9:41</div>
+        <div class="island"><span class="eye closed"></span><span class="eye closed"></span></div>
+      </div></div><div class="base"></div></div>
+      <span class="step">1 · 按下（0 ms）</span>
+      <p class="cap-text"><b>整機縮 2.5%、觸覺回饋、閉眼</b>沿用現在的按壓手感。</p>
+    </div>
+    <div class="frame">
+      <div class="device"><div class="screen"><div class="glass">
+        <div class="date" style="opacity:.3">10 月 22 日 星期四</div><div class="time" style="opacity:.25">9:41</div>
+        <div class="island" style="min-width:150px;height:60px;bottom:26px"></div>
+      </div></div><div class="base"></div></div>
+      <span class="step">2 · 島展開（0–220 ms）</span>
+      <p class="cap-text"><b>時間淡出，島向四周長大</b>彈簧：阻尼 0.85、響應 0.3 秒。</p>
+    </div>
+    <div class="frame">
+      <div class="device"><div class="screen"><div class="glass">
+        <div class="carplay"><div class="dock"><i></i><i></i><i></i></div><div class="apps"><i></i><i></i><i></i><i></i><i></i><i></i></div></div>
+      </div></div><div class="base"></div></div>
+      <span class="step">3 · 第一幀（通常 &lt; 300 ms）</span>
+      <p class="cap-text"><b>交叉淡入 180 ms</b>會話本來就在背景掛著，按下時只是把畫面接上。</p>
+    </div>
+    <div class="frame">
+      <div class="device"><div class="screen"><div class="glass">
+        <div class="date" style="opacity:.3">10 月 22 日 星期四</div>
+        <div class="island" style="min-width:160px;height:48px;bottom:40%"><span style="color:#e9eef5;font-size:11px">正在等 Aaron 的 iPhone…</span></div>
+      </div></div><div class="base"></div></div>
+      <span class="step">3′ · 超過 1 秒還沒畫面</span>
+      <p class="cap-text"><b>島停在中間，寫明在等誰</b>10 秒後換成原因與一個動作（例如「iPhone 不在同一個 Wi-Fi」）。不出現空白屏。</p>
+    </div>
+  </div>
+  <p class="rule">退出是倒放：畫面縮回島、島收回原位、睜眼，接 0.6 秒笑眼。直播中斷時凍住最後一幀，不立刻切回擔心臉；3 秒內恢復就當沒發生。</p>
+</section>
+
+<!-- ============ 4. Siri ============ -->
+<section>
+  <div class="sec-head">
+    <span class="eyebrow">04 · 按住 F5 直接開口說話</span>
+    <h2>按住就聽，放開就停</h2>
+    <p>車上的語音鍵有兩種用法：短按喚起、長按講到放手。CarPlay 協定本來就分開「按下」和「放開」兩個動作，現在的實作把兩個綁在一起送了。</p>
+  </div>
+  <div class="grid g2">
+    <div class="frame card">
+      <div class="device"><div class="screen"><div class="glass">
+        <div class="date">10 月 22 日 星期四</div><div class="time" style="opacity:.35">9:41</div>
+        <div class="orb"><i style="height:8px"></i><i style="height:18px"></i><i style="height:28px"></i><i style="height:16px"></i><i style="height:24px"></i><i style="height:10px"></i><i style="height:6px"></i></div>
+      </div></div><div class="base"></div></div>
+      <p class="cap-text"><b>聆聽中</b>島變成波形，振幅跟著 Mac 麥克風的音量。不進 CarPlay 也能用：只要會話在背景掛著。</p>
+    </div>
+    <div class="card"><h3>按鍵語意</h3>
+      <dl class="kv">
+        <dt>按住</dt><dd>按下滿 250 ms 送「按下」（siriAction 2），持續到放開才送「放開」（3）。手機在按住期間一直聽。</dd>
+        <dt>短按</dt><dd>不到 250 ms 就放開：送一組「按下＋放開」，等同現在的行為，手機自己判斷說完沒。</dd>
+        <dt>自動重複</dt><dd>按住時鍵盤會一直送自動重複事件，全部忽略。</dd>
+        <dt>沒有會話</dt><dd>島左右輕晃一下，卡片「iPhone 未連接」1.5 秒；不打開 Mac 的聽寫。</dd>
+        <dt>沒有麥克風權限</dt><dd>第一次按住時由桌寵請求授權；拒絕後在卡片裡說明到哪裡打開。</dd>
+      </dl>
+      <p class="note" style="margin-top:10px">接線：<code>SystemKeyTap</code> 的按下／放開分別送 <code>{"type":"siri","phase":"down|up"}</code>；接收器把它對到 <code>EventChannel</code> 的 2／3，取代現在一次送兩個的 <code>requestSiri()</code>。驗收看 <code>siri.log</code>：按住 3 秒應該看到 down 與 up 相隔約 3 秒，且麥克風上行在這段時間內持續送包。</p>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 5. 番茄鐘、電量、迷你播放器 ============ -->
+<section>
+  <div class="sec-head">
+    <span class="eyebrow">05 · CarPlay 之外</span>
+    <h2>番茄鐘、電量、迷你播放器</h2>
+    <p>三樣東西都住在島裡或錶面上，不另開視窗。</p>
+  </div>
+  <div class="board">
+    <div class="frame">
+      <div class="device"><div class="screen"><div class="glass">
+        <div class="date">專注 · 第 2 輪</div><div class="time" style="font-size:44px">15:42</div>
+        <div class="ring"></div>
+        <div class="island"><span class="eye" style="height:14px;margin-top:4px"></span><span class="eye" style="height:14px;margin-top:4px"></span></div>
+      </div></div><div class="base"></div></div>
+      <span class="step">番茄鐘 · 專注</span>
+      <p class="cap-text"><b>25 分鐘，專注臉</b>島外圈一條青色細環走完一圈；不閃、不出聲。</p>
+    </div>
+    <div class="frame">
+      <div class="device"><div class="screen"><div class="glass">
+        <div class="date">休息 · 起來走走</div><div class="time" style="font-size:44px">3:10</div>
+        <div class="ring brk"></div>
+        <div class="island"><span class="eye happy"></span><span class="eye happy"></span></div>
+      </div></div><div class="base"></div></div>
+      <span class="step">番茄鐘 · 休息</span>
+      <p class="cap-text"><b>5 分鐘，笑眼，暖色環</b>四輪後長休 15 分鐘。到點只眨單眼一次，橫幅 12 秒自己收。</p>
+    </div>
+    <div class="frame">
+      <div class="device"><div class="screen"><div class="glass">
+        <div class="date">10 月 22 日 星期四</div><div class="time">9:41</div>
+        <div class="island cap"><span class="art"></span><span class="meta"><b>控制狂（二十年一刻 Live）</b><span>張敬軒 · iPhone</span></span></div>
+      </div></div><div class="base"></div></div>
+      <span class="step">迷你播放器</span>
+      <p class="cap-text"><b>膠囊標出來源「iPhone」</b>點一下播放／暫停，F7–F9 切歌；選單「迷你播放器」把整機縮到 160 pt 並置頂。</p>
+    </div>
+    <div class="frame">
+      <div class="device"><div class="screen"><div class="glass" style="background:#15181d">
+        <div style="position:absolute;inset:14px;display:grid;grid-template-columns:1fr 1fr;gap:8px">
+          <div style="border-radius:12px;background:#23282f;padding:8px;color:#e9eef5;font-size:10px">番茄鐘<br><b style="font-size:20px;font-family:var(--f-display)">15:42</b></div>
+          <div style="border-radius:12px;background:#23282f;padding:8px;color:#e9eef5;font-size:10px">電量<br>Mac 64%<i class="bat" style="--lvl:64%"></i><br>iPhone 87%<i class="bat" style="--lvl:87%"></i></div>
+          <div style="border-radius:12px;background:#23282f;padding:8px;color:#e9eef5;font-size:10px">CarPlay<br><b>Aaron 的 iPhone</b><br>Wi-Fi · 線在充電</div>
+          <div style="border-radius:12px;background:#23282f;padding:8px;color:#e9eef5;font-size:10px">今天<br><b style="font-size:16px">🍅 × 3</b></div>
+        </div>
+      </div></div><div class="base"></div></div>
+      <span class="step">模組錶面</span>
+      <p class="cap-text"><b>電量格同時顯示 Mac 與 iPhone</b>像系統的電池小工具列出妙控配件那樣。</p>
+    </div>
+  </div>
+  <div class="grid g3">
+    <div class="card"><h3>番茄鐘</h3><ul class="tight">
+      <li>選單「番茄鐘」開始／跳過休息／結束；原「計時器」保留單次倒數。</li>
+      <li>專注時自動暫停攝影機追人與表情小動作，只留眨眼。</li>
+      <li>完成的輪次記進「陪伴的痕跡」，那天的圓點多一顆番茄。</li>
+    </ul></div>
+    <div class="card"><h3>iPhone 電量</h3><ul class="tight">
+      <li>來源：iAP2 <code>0xAE01</code>（電源更新，已訂閱 <code>0xAE00</code>）。</li>
+      <li><b>先驗證</b>：真機記錄兩台手機的 <code>0xAE01</code> 參數，確認有電量欄位再做 UI；沒有就只顯示 Mac。</li>
+      <li>低於 20% 時連接提示卡改成「記得充電」，不另外打擾。</li>
+    </ul></div>
+    <div class="card"><h3>置頂與迷你播放器</h3><ul class="tight">
+      <li>選單加「置頂」勾選（預設開，等於現況）；關掉時視窗回到一般層級。</li>
+      <li>「迷你播放器」：160 pt、置頂、錶面固定為島＋膠囊；再點一次回原尺寸。</li>
+      <li>F7–F9 規則不變：手機在播優先控手機，否則控 Music／Spotify。</li>
+    </ul></div>
+  </div>
+</section>
+
+<!-- ============ 6. 手勢與效能 ============ -->
+<section>
+  <div class="sec-head">
+    <span class="eyebrow">06 · 手勢、跟隨與效能</span>
+    <h2>行為不改，代價降下來</h2>
+    <p>雙指張合縮放、雙指滑動旋轉、三指拖移換位置、跟隨我、房間光線都已實作，這版不動。要改的是它們背後的成本。</p>
+  </div>
+  <div class="grid g2">
+    <div class="card"><h3>效能預算</h3>
+      <dl class="kv">
+        <dt>閒置</dt><dd>桌寵 &lt; 5% CPU（現在 21–27%：RealityKit 每秒仍畫 60 幀，<code>__preferredFrameRate</code> 在這版 macOS 無效）。</dd>
+        <dt>直播靜止</dt><dd>&lt; 8%（畫面不變時不重繪 3D）。</dd>
+        <dt>直播動態</dt><dd>60 fps，解碼走 VideoToolbox 硬體、貼圖零拷貝（已是）。</dd>
+        <dt>接收器</dt><dd>1–2% CPU、13 MB（已是）。</dd>
+      </dl>
+      <p class="note" style="margin-top:8px">「畫面沒變就不畫」由另一個工作階段處理中，驗收用 Instruments Time Profiler 量 Render 執行緒每秒幾叢。</p>
+    </div>
+    <div class="card"><h3>命名</h3>
+      <p>推送稱「DockKit 式跟隨」，選單現在叫「跟隨我（攝影機）」。保留選單名（DockKit 是蘋果給實體雲台的框架，桌寵沒用它），在「關於」裡用一句話說明這是 iMac G4 廣告那種轉頭跟著你的效果。</p>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 7. 使用前須知 ============ -->
+<section>
+  <div class="sec-head">
+    <span class="eyebrow">07 · 使用前須知</span>
+    <h2>把已測機型寫進 App</h2>
+  </div>
+  <div class="card" style="max-width:640px">
+    <h3>「關於 HomePlay」面板加一段</h3>
+    <ul class="tight">
+      <li>已測：iPhone SE（第 1 代，Lightning，iOS 15）、iPhone 18 Pro（USB-C，iOS 27）。</li>
+      <li>其他機型「應該可以，但沒測過」，附回報連結（GitHub Issues）。</li>
+      <li>需要：iPhone 與 Mac 在同一個個人 Wi-Fi；企業網路與需要網頁登入的網路不行。</li>
+      <li>手勢速查：雙指張合縮放、雙指滑動旋轉、三指拖移、用力按下進出 CarPlay、按住 F5 跟 Siri 說話。</li>
+    </ul>
+    <p class="note" style="margin-top:8px">未測機型第一次連上時不跳任何提示；首次使用提示（hello 之後那張玻璃卡）多加一條「按住 F5 說話」。</p>
+  </div>
+</section>
+
+<!-- ============ 8. 計畫 ============ -->
+<section>
+  <div class="sec-head">
+    <span class="eyebrow">08 · 實作順序</span>
+    <h2>先補名不副實，再補體感</h2>
+    <p>每項都能單獨驗收、單獨回退；一次只改一個變量。</p>
+  </div>
+  <div class="plan">
+    <div class="card"><span class="prio">P0</span><h3>F5 按住說話</h3><div class="body">
+      <dl class="kv"><dt>改哪裡</dt><dd>桌寵 <code>SystemKeyTap</code>、接收器 <code>siri</code> 訊息、<code>EventChannel</code> 拆開 2／3。</dd>
+      <dt>驗收</dt><dd>按住 3 秒：<code>siri.log</code> 的 down／up 相隔約 3 秒，手機在這段時間內持續收音；短按行為與現在相同。</dd></dl></div></div>
+    <div class="card"><span class="prio">P0</span><h3>連接提示卡與眼神</h3><div class="body">
+      <dl class="kv"><dt>改哪裡</dt><dd>接收器發 <code>phone</code> 事件；桌寵 <code>CarPlayOverlay</code> 加 hud 狀態、眼睛看向接口與配對成功點頭。</dd>
+      <dt>驗收</dt><dd>真機：插已配對手機出「正在充電」1.5 秒；換手機出「切換到…」；拔線無任何 UI；直播中插拔不出卡。</dd></dl></div></div>
+    <div class="card"><span class="prio">P1</span><h3>CarPlay 進出過場</h3><div class="body">
+      <dl class="kv"><dt>改哪裡</dt><dd>桌寵的直播切換：島展開動畫、等待文案寫明手機名與原因。</dd>
+      <dt>驗收</dt><dd>錄屏逐幀看：按下到第一幀之間沒有空白屏；超過 1 秒時出現「正在等 …」。</dd></dl></div></div>
+    <div class="card"><span class="prio">P1</span><h3>番茄鐘輪次</h3><div class="body">
+      <dl class="kv"><dt>改哪裡</dt><dd>計時器擴成工作法狀態機（專注／休息／長休），陪伴的痕跡記輪次。</dd>
+      <dt>驗收</dt><dd><code>--timer</code> 快照參數加輪次；用縮短的時間跑完四輪，確認狀態順序與每個到點只提示一次。</dd></dl></div></div>
+    <div class="card"><span class="prio">P1</span><h3>iPhone 電量</h3><div class="body">
+      <dl class="kv"><dt>先做</dt><dd>真機記下兩台手機的 <code>0xAE01</code> 參數。</dd>
+      <dt>驗收</dt><dd>電量數字與手機設定裡顯示的一致（誤差 1%）；拔線、換手機時更新。</dd></dl></div></div>
+    <div class="card"><span class="prio">P2</span><h3>置頂開關、迷你播放器、關於面板</h3><div class="body">
+      <dl class="kv"><dt>驗收</dt><dd>關掉置頂後別的視窗能蓋過桌寵；迷你模式 160 pt 仍能點膠囊播放／暫停；本地化檢查通過。</dd></dl></div></div>
+    <div class="card"><span class="prio">P2</span><h3>首次配對實測</h3><div class="body">
+      <dl class="kv"><dt>需要</dt><dd>一台從沒和這台 Mac 配對過的 iPhone（或先在兩邊都「忘記」）。</dd>
+      <dt>驗收</dt><dd>分鏡 A→B→C 依序出現；配對完成後拔線，60 秒內無線出畫。</dd></dl></div></div>
+  </div>
+</section>
+
+</div>
+</body>
+</html>

@@ -11,6 +11,8 @@ enum Onboarding {
     static var active = false
     static var until = 0.0
     static var forced = false         // 快照用（--onboarding）：不读也不写偏好
+    /// 用户收起提示后（不是快照）：AppDelegate 接着说明「输入监控」（F5 叫 Siri 要用）
+    static var onDismiss: (() -> Void)?
     static var done: Bool { UserDefaults.standard.bool(forKey: defaultsKey) }
 }
 
@@ -23,7 +25,7 @@ extension Face {
     func dismissOnboarding() {
         guard Onboarding.active || Onboarding.armed else { return }
         Onboarding.active = false; Onboarding.armed = false
-        if !Onboarding.forced { UserDefaults.standard.set(true, forKey: Onboarding.defaultsKey) }
+        if !Onboarding.forced { UserDefaults.standard.set(true, forKey: Onboarding.defaultsKey); Onboarding.onDismiss?() }
         forceDirty = true
     }
 
@@ -38,21 +40,24 @@ extension Face {
     }
 
     func drawOnboarding(_ g: CGContext, _ now: Double) {
-        let r = CGRect(x: 77, y: 330, width: 870, height: 449)
+        // 桌宠默认只有 220 pt 宽：字要够大（正文 ≈ 9 pt），一行一件事
+        let r = CGRect(x: 64, y: 190, width: 896, height: 668)   // 「点一下开始」也收在卡片里，不压到屏幕底下的提示胶囊
         glass(g, r, radius: 64, tint: NSColor(white: 1, alpha: 0.18), band: 14)
-        let x = r.minX + 51
-        drawLeft(g, L("onboarding.title", "嗨，我是 HomePlay"), font: Self.rounded(48, weight: .bold), x: x, y: r.minY + 48 + 40, color: .white)
+        let x = r.minX + 56
+        let title = L("onboarding.title", "嗨，我是 HomePlay")
+        drawLeft(g, title, font: Self.fitted(title, size: 80, weight: .bold, maxWidth: r.width - 112), x: x, y: r.minY + 108, color: .white)
         let rows = [L("onboarding.carplay", "重按进入 CarPlay"), L("onboarding.menu", "右键看菜单"), L("onboarding.drag", "拖动转身体，双击回正")]
         for (i, text) in rows.enumerated() {
-            let top = r.minY + 48 + 56 + 29 + CGFloat(i) * (70 + 29)
-            let box = CGRect(x: x, y: top, width: 70, height: 70)
+            let top = r.minY + 150 + CGFloat(i) * (104 + 24)
+            let box = CGRect(x: x, y: top, width: 104, height: 104)
             g.setFillColor(NSColor(white: 1, alpha: 0.18).cgColor)
-            g.addPath(CGPath(roundedRect: box, cornerWidth: 19, cornerHeight: 19, transform: nil)); g.fillPath()
+            g.addPath(CGPath(roundedRect: box, cornerWidth: 28, cornerHeight: 28, transform: nil)); g.fillPath()
             drawTipGlyph(g, i, in: box)
-            drawLeft(g, text, font: Self.rounded(34, weight: .semibold), x: box.maxX + 22, y: box.midY + 12, color: .white)
+            let font = Self.fitted(text, size: 60, weight: .semibold, maxWidth: r.maxX - 56 - (box.maxX + 30))
+            drawLeft(g, text, font: font, x: box.maxX + 30, y: box.midY + font.capHeight / 2, color: .white)
         }
-        drawCentered(g, L("onboarding.start", "点一下开始"), font: Self.rounded(27, weight: .semibold), kern: 0, y: 950,
-                     color: NSColor.white.withAlphaComponent(0.75))
+        drawCentered(g, L("onboarding.start", "点一下开始"), font: Self.rounded(44, weight: .semibold), kern: 0, y: r.maxY - 46,
+                     color: NSColor.white.withAlphaComponent(0.72))
     }
 
     /// 24 点方格里的线稿小图标（重按、菜单、回转箭头），放大到 box 中间

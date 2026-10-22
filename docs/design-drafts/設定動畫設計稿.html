@@ -1,0 +1,412 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>設定插畫設計稿</title>
+<style>
+/* 設定視窗的動畫說明，第二版：插畫。
+   版式借系統設定「觸控式軌跡板／滑鼠」：左格線稿輸入、右格平塗結果；造型照 apple-homeview.usdz 的比例抽象化。
+   下面的原型就是規格本身；Swift（Settings/DemoKit.swift、SettingsDemos.swift）逐項照抄。 */
+:root{
+  --bg:#f5f5f7; --card:#ffffff; --ink:#1d1d1f; --muted:#6e6e73; --line:rgba(0,0,0,.08); --accent:#0a84ff; --code:#f0f0f3; color-scheme:light;
+  --f:-apple-system,BlinkMacSystemFont,"PingFang TC","Noto Sans TC",system-ui,sans-serif; --mono:ui-monospace,"SF Mono",Menlo,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){ --bg:#0f0f11; --card:#1c1c1e; --ink:#f5f5f7; --muted:#a1a1a6; --line:rgba(255,255,255,.1); --code:#232326; color-scheme:dark }}
+:root[data-theme="dark"]{ --bg:#0f0f11; --card:#1c1c1e; --ink:#f5f5f7; --muted:#a1a1a6; --line:rgba(255,255,255,.1); --code:#232326; color-scheme:dark }
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.65 var(--f);-webkit-font-smoothing:antialiased}
+main{max-width:1120px;margin:0 auto;padding:56px 16px 120px}
+h1{font-size:40px;line-height:1.15;letter-spacing:-.02em;margin:36px 0 10px}
+h2{font-size:24px;letter-spacing:-.01em;margin:64px 0 14px}
+h3{font-size:17px;margin:0 0 8px}
+p{margin:0 0 12px;max-width:780px}
+.lead{font-size:18px;color:var(--muted);max-width:800px}
+code,.mono{font-family:var(--mono);font-size:13px} code{background:var(--code);padding:1px 6px;border-radius:5px}
+table{border-collapse:collapse;width:100%;font-size:13.5px;margin:10px 0 18px}
+th,td{text-align:left;padding:7px 10px;border-bottom:1px solid var(--line);vertical-align:top} th{color:var(--muted);font-weight:600}
+.bar{position:sticky;top:0;z-index:5;background:color-mix(in srgb,var(--bg) 82%,transparent);backdrop-filter:blur(14px);border-bottom:1px solid var(--line);margin:0 -16px;padding:10px 16px;display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.bar .t{font-weight:600;margin-right:auto}
+button{font:inherit;font-size:13px;padding:5px 12px;border-radius:7px;border:1px solid var(--line);background:var(--card);color:var(--ink);cursor:pointer}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,520px),1fr));gap:18px}
+.card{background:var(--card);border-radius:16px;padding:16px;border:1px solid var(--line)}
+.pair{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.pair canvas{width:100%;aspect-ratio:1.6;display:block;border-radius:10px}
+.meta{display:flex;align-items:center;gap:10px;margin-top:10px}
+.meta input{flex:1;accent-color:var(--accent)} .time{font-family:var(--mono);font-size:12px;color:var(--muted);width:92px;text-align:right}
+details{margin-top:8px;font-size:13px} summary{cursor:pointer;color:var(--accent)}
+.sw{display:flex;gap:8px;flex-wrap:wrap;margin:6px 0 14px}
+.sw span{display:inline-flex;align-items:flex-end;width:112px;height:60px;border-radius:10px;padding:6px 8px;font:11px var(--mono);color:#fff;border:1px solid var(--line)}
+.formula{background:var(--code);border-radius:10px;padding:12px 14px;font-family:var(--mono);font-size:13px;white-space:pre-wrap;overflow-x:auto}
+.two{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,360px),1fr));gap:18px}
+ul{padding-left:20px;margin:0 0 12px} li{margin:3px 0}
+</style>
+</head>
+<body>
+<main>
+<div class="bar"><span class="t">設定插畫設計稿</span>
+  <button id="themeBtn">切換深色</button><button id="keyBtn">全部停在關鍵幀</button><button id="playBtn">全部播放</button></div>
+
+<h1>抽象，但一眼認得出是它</h1>
+<p class="lead">第二版把動畫說明改成插畫。版式借系統設定的「觸控式軌跡板」與「滑鼠」：左邊一格是你的手怎麼動，右邊一格是 HomeView 怎麼回應。造型照實物 USDZ 的比例收成幾何形，色彩用後現代的平塗色塊，動作仍然是同一套彈簧。</p>
+
+<h2>一、插畫語言</h2>
+<div class="two">
+<div><ul>
+<li><b>左格是因，線稿。</b>淺灰底、一種線寬（2.4）、圓角圓頭。只有手指是實心的藍點，動起來帶殘影，像系統設定那樣。</li>
+<li><b>右格是果，色塊。</b>天藍底，白、珊瑚紅、紫羅蘭、向日葵黃、薄荷綠五種平塗色。不畫寫實反光，明暗只用兩三階色帶。</li>
+<li><b>後現代的點綴要克制。</b>每格最多兩個幾何小物：光暈圓、半圓、網點、鋸齒線。它們不動，只當構圖的重心。</li>
+</ul></div>
+<div><ul>
+<li><b>具象來自比例。</b>螢幕幾乎正方、後仰 19°，底座是直徑 0.58 的圓柱、上半藏在螢幕後。輪廓對了，細節再少也認得出。</li>
+<li><b>抽象來自內容。</b>錶面不寫字：一大一小兩個圓疊在深藍上，下面是島和一雙眼睛。CarPlay 是三個色塊圖示、一條路線、一張專輯。</li>
+<li><b>底座的網點會轉。</b>網孔畫成半色調網點，跟著轉向往兩側縮小，這是「它在轉」最直接的線索。</li>
+</ul></div>
+</div>
+
+<h2>二、實物比例（apple-homeview.usdz）</h2>
+<table>
+<tr><th>部位</th><th>實物（模型單位）</th><th>插畫（螢幕寬 = 1）</th></tr>
+<tr><td>外框</td><td>寬 14.6，含後仰高 13.9</td><td>方圓角 1 × 1，角半徑 0.19，白色平塗＋0.6 灰描邊</td></tr>
+<tr><td>黑邊／顯示區</td><td>玻璃 12.6 × 11.8（後仰後）</td><td>黑邊內縮 0.035；顯示區 0.86 見方、角半徑 0.13</td></tr>
+<tr><td>後仰</td><td>玻璃深度 4.3 ÷ 高 11.8</td><td>19°，鉸鏈 (y 0.23, z 0.40)</td></tr>
+<tr><td>底座</td><td>直徑 8.4、高 9.0，中心在螢幕後方</td><td>圓柱半徑 0.29、高 0.62；只露出螢幕下緣以下</td></tr>
+<tr><td>相機</td><td>—</td><td>俯角 6°，透視距離 6</td></tr>
+</table>
+
+<h2>三、色票</h2>
+<div class="sw" id="swatches"></div>
+<div class="formula">左格（淺）底 #F4F4F6，線 #C3C3C8，次線 #DADADF，手指 #3B7CF5（殘影 10 個樣本 × 12 ms，透明度 0.20 → 0）
+左格（深）底 #2B2B2E，線 #5E5E64，次線 #46464B，手指 #4A8BFF
+右格（淺）天藍 #82BFF6 → #5AA2EE；右格（深）#33629F → #244C85
+平塗      白 #FFFFFF · 珊瑚 #FF4E62 · 紫羅蘭 #8B7BF7 → #5E54E0 · 向日葵 #FFC23D · 薄荷 #34C795 · 深藍 #1E3A8A
+機身      外框 #FFFFFF（描邊 #D3D3D9）· 側面 #D9D9DF · 黑邊 #131316 · 底座 #E5E5EA / 暗帶 #CBCBD2 / 亮帶 #F2F2F5 · 網點 #A8A8B2
+錶面      深藍 #3557C6 → #5B80E6；紫圓 r 0.30；珊瑚圓 r 0.25；島 #0E1430 0.85；眼白 #FFFFFF；瞳孔 #141414
+影子      平塗橢圓，不模糊：藍底上 #0A2A5A 0.20，房間裡 #000 0.14</div>
+
+<h2>四、兩格分鏡</h2>
+<p>每格邏輯畫布 200 × 125（1.6 : 1），兩格並排。拖時間軸逐幀看；「關鍵幀」是播完 3 輪後停住的那一幀。</p>
+<div class="grid" id="demos"></div>
+
+<h2>五、設定視窗的版式</h2>
+<ul>
+<li>每頁最上面一組兩格插畫，下面一句標題和說明，然後才是設定卡片。</li>
+<li>手勢頁比照系統設定：上面一組插畫，下面四列手勢；指標滑過哪一列，插畫就換成那一段從頭播。選中的列有淡淡的強調色底。</li>
+<li>播 3 輪停在關鍵幀；滑過插畫重播；減少動態效果時直接停在關鍵幀，右下角有播放鍵。</li>
+</ul>
+</main>
+
+<script>
+"use strict";
+// ───────── 彈簧（同第一版） ─────────
+const TAU = Math.PI * 2, DEG = Math.PI / 180;
+const SPRING = { calm:[0.34,1], settle:[0.38,1], glide:[0.42,0.88], bloom:[0.42,0.84], pop:[0.30,0.75], walk:[1.4,1] };
+function sstep(tau, [resp, z]){ if (tau <= 0) return 0; const w = TAU / resp;
+  if (z >= 1) return 1 - Math.exp(-w * tau) * (1 + w * tau);
+  const wd = w * Math.sqrt(1 - z * z); return 1 - Math.exp(-z * w * tau) * (Math.cos(wd * tau) + (z * w / wd) * Math.sin(wd * tau)); }
+function track(keys){ return t => { let v = keys[0], prev = keys[0];
+  for (let i = 1; i < keys.length; i++){ const [tk, vk, sp] = keys[i]; v += (vk - prev) * sstep(t - tk, SPRING[sp || "calm"]); prev = vk; } return v; }; }
+const clamp = (x, a = 0, b = 1) => Math.max(a, Math.min(b, x)), lerp = (a, b, t) => a + (b - a) * t;
+const outCubic = x => 1 - Math.pow(1 - clamp(x), 3);
+const presence = (t, a, b) => clamp(sstep(t - a, SPRING.calm) - sstep(t - b, SPRING.calm));
+const blinkAt = (t, at) => { const x = (t - at) / 0.16; return x > 0 && x < 1 ? Math.sin(Math.PI * x) : 0; };
+function aimAt(t, target, follow){ const dt = 1 / 120, w = TAU / (follow ? 0.5 : 1.2), vmax = 70 * DEG, dead = 3 * DEG;
+  let a = target(0), v = 0, held = a;
+  for (let s = 0; s < t; s += dt){ let tg = target(s); if (follow && Math.abs(tg - held) < dead) tg = held; held = tg;
+    v += ((tg - a) * w * w - v * 2 * w) * dt; v = clamp(v, -vmax, vmax); a += v * dt; } return a; }
+const followTarget = g => clamp(Math.atan(g * Math.tan(32.5 * DEG)), -25 * DEG, 25 * DEG);
+
+// ───────── 色票 ─────────
+const PAL = {
+  light:{ inBg:"#F4F4F6", line:"#C3C3C8", line2:"#DADADF", dot:"#3B7CF5", out0:"#82BFF6", out1:"#5AA2EE", shadow:"rgba(10,42,90,0.20)", deco:"rgba(255,255,255,0.22)" },
+  dark: { inBg:"#2B2B2E", line:"#5E5E64", line2:"#46464B", dot:"#4A8BFF", out0:"#33629F", out1:"#244C85", shadow:"rgba(0,8,24,0.35)", deco:"rgba(255,255,255,0.10)" } };
+const C = { white:"#FFFFFF", coral:"#FF4E62", violet0:"#8B7BF7", violet1:"#5E54E0", sun:"#FFC23D", mint:"#34C795", navy:"#1E3A8A",
+  frame:"#FFFFFF", frameEdge:"#D3D3D9", side:"#D9D9DF", bezel:"#131316", base:"#E5E5EA", baseDark:"#CBCBD2", baseLight:"#F2F2F5", dots:"#A8A8B2" };
+let THEME = matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+const P = () => PAL[THEME];
+const W = 200, H = 125;
+
+// ───────── HomeView 平塗（螢幕寬 = 1） ─────────
+const ELEV = 6 * DEG, PERSP = 6, TILT = 19 * DEG, HINGE = { y: 0.23, z: 0.40 }, BASE_R = 0.29, BASE_H = 0.62;
+function makeProj(ox, oy, S, yaw){ const cy = Math.cos(yaw), sy = Math.sin(yaw), ce = Math.cos(ELEV), se = Math.sin(ELEV);
+  const f = (x, y, z) => { const x1 = x * cy + z * sy, z1 = -x * sy + z * cy, y2 = y * ce - z1 * se, z2 = z1 * ce + y * se, k = PERSP / (PERSP - z2);
+    return [ox + x1 * k * S, oy - y2 * k * S]; };
+  f.screen = (u, v, w = 0) => { const ly = v + 0.5, ct = Math.cos(TILT), st = Math.sin(TILT);
+    return f(u, HINGE.y + ly * ct + w * st, HINGE.z - ly * st + w * ct); };
+  return f; }
+function squircle(half, r, n = 10){ const pts = [], cs = [[1,1],[-1,1],[-1,-1],[1,-1]];
+  for (let c = 0; c < 4; c++){ const cx = cs[c][0] * (half - r), cy = cs[c][1] * (half - r);
+    for (let i = 0; i <= n; i++){ const a = (c * 90 + 90 * i / n) * DEG, ca = Math.cos(a), sa = Math.sin(a);
+      pts.push([cx + r * Math.sign(ca) * Math.sqrt(Math.abs(ca)), cy + r * Math.sign(sa) * Math.sqrt(Math.abs(sa))]); } }
+  return pts; }
+const SQ = { frame: squircle(0.5, 0.19), bezel: squircle(0.465, 0.165), disp: squircle(0.43, 0.13) };
+const poly = (ctx, pts) => { ctx.beginPath(); pts.forEach(([x, y], i) => i ? ctx.lineTo(x, y) : ctx.moveTo(x, y)); ctx.closePath(); };
+const rr = (ctx, x, y, w, h, r) => { ctx.beginPath(); ctx.roundRect(x, y, w, h, r); };
+const circ = (ctx, x, y, r) => { ctx.beginPath(); ctx.arc(x, y, r, 0, TAU); };
+
+// o: { x, y, S, yaw, scale, reveal, look:[x,y], blink, camOn, phase, dim, tint, room }
+function drawHome(ctx, o){
+  const S = o.S * (o.scale || 1), yaw = o.yaw || 0, pr = makeProj(o.x, o.y, S, yaw);
+  const g0 = pr(0, 0, 0);
+  ctx.fillStyle = o.room ? "rgba(0,0,0,0.14)" : P().shadow; ctx.beginPath(); ctx.ellipse(g0[0], g0[1], 0.50 * S, 0.075 * S, 0, 0, TAU); ctx.fill();
+  const top = pr(0, BASE_H, 0), rx = BASE_R * S, ry = BASE_R * Math.sin(ELEV) * S;
+  const sil = () => { ctx.beginPath(); ctx.moveTo(top[0] - rx, top[1]); ctx.lineTo(g0[0] - rx, g0[1]); ctx.ellipse(g0[0], g0[1], rx, ry, 0, Math.PI, 0, true); ctx.lineTo(top[0] + rx, top[1]); ctx.closePath(); };
+  ctx.save(); sil(); ctx.fillStyle = C.base; ctx.fill(); ctx.clip();
+  ctx.fillStyle = C.baseDark; ctx.fillRect(g0[0] - rx, top[1] - 2, rx * 0.34, g0[1] - top[1] + ry + 4);
+  ctx.fillStyle = C.baseLight; ctx.fillRect(g0[0] - rx * 0.42, top[1] - 2, rx * 0.36, g0[1] - top[1] + ry + 4);
+  ctx.fillStyle = C.dots;
+  for (let j = 0; j < 14; j++){ const y = 0.035 + j * 0.042;
+    for (let a = (j % 2) * 7.5; a < 360; a += 15){ const ang = a * DEG, c = Math.cos(ang + yaw); if (c < 0.12) continue;
+      const p = pr(BASE_R * Math.sin(ang), y, BASE_R * Math.cos(ang)), r = 0.0105 * S * (0.35 + 0.65 * c);
+      ctx.beginPath(); ctx.ellipse(p[0], p[1], r * (0.4 + 0.6 * c), r, 0, 0, TAU); ctx.fill(); } }
+  if (o.tint){ ctx.fillStyle = o.tint; ctx.fillRect(g0[0] - rx, top[1] - 2, rx * 2, g0[1] - top[1] + ry + 4); }
+  ctx.restore();
+  const back = SQ.frame.map(([u, v]) => pr.screen(u, v, -0.06)), front = SQ.frame.map(([u, v]) => pr.screen(u, v));
+  poly(ctx, back); ctx.fillStyle = C.side; ctx.fill();
+  ctx.beginPath(); for (let i = 0; i < front.length; i++){ const j = (i + 1) % front.length;
+    ctx.moveTo(...front[i]); ctx.lineTo(...front[j]); ctx.lineTo(...back[j]); ctx.lineTo(...back[i]); ctx.closePath(); }
+  ctx.fillStyle = C.side; ctx.fill();
+  poly(ctx, front); ctx.fillStyle = C.frame; ctx.fill(); if (o.tint){ ctx.fillStyle = o.tint; ctx.fill(); }
+  ctx.strokeStyle = C.frameEdge; ctx.lineWidth = 0.6; ctx.stroke();
+  poly(ctx, SQ.bezel.map(([u, v]) => pr.screen(u, v))); ctx.fillStyle = C.bezel; ctx.fill();
+  const TL = pr.screen(-0.43, 0.43), TR = pr.screen(0.43, 0.43), BL = pr.screen(-0.43, -0.43);
+  ctx.save(); poly(ctx, SQ.disp.map(([u, v]) => pr.screen(u, v))); ctx.clip();
+  ctx.transform((TR[0] - TL[0]) / 100, (TR[1] - TL[1]) / 100, (BL[0] - TL[0]) / 100, (BL[1] - TL[1]) / 100, TL[0], TL[1]);
+  face(ctx, o);
+  const rv = o.reveal || 0;
+  if (rv > 0.001){ ctx.save(); circ(ctx, 50, 64, rv * 80); ctx.clip(); carplay(ctx, o); ctx.restore(); }
+  if (o.dim){ ctx.fillStyle = `rgba(0,0,0,${o.dim})`; ctx.fillRect(0, 0, 100, 100); }
+  ctx.restore();
+  const cam = pr.screen(0, 0.482);
+  ctx.fillStyle = o.camOn ? C.mint : "#2A2A2E"; circ(ctx, cam[0], cam[1], Math.max(0.8, S * 0.011)); ctx.fill();
+  return { pr, center: pr.screen(0, 0), top: pr.screen(0, 0.5), eyes: pr.screen(0, -0.14), base: top, ground: g0, S };
+}
+function face(ctx, o){
+  let g = ctx.createLinearGradient(0, 0, 0, 100); g.addColorStop(0, "#3557C6"); g.addColorStop(1, "#5B80E6"); ctx.fillStyle = g; ctx.fillRect(0, 0, 100, 100);
+  g = ctx.createLinearGradient(10, 10, 50, 60); g.addColorStop(0, C.violet0); g.addColorStop(1, C.violet1); ctx.fillStyle = g; circ(ctx, 34, 36, 30); ctx.fill();
+  ctx.fillStyle = C.coral; ctx.globalAlpha = 0.94; circ(ctx, 66, 25, 24); ctx.fill(); ctx.globalAlpha = 1;
+  ctx.fillStyle = "rgba(14,20,48,0.85)"; rr(ctx, 22, 54, 56, 21, 10.5); ctx.fill();
+  const look = o.look || [0, 0], bl = o.blink || 0;
+  for (const dx of [-8.5, 8.5]){ const ex = 50 + dx, ey = 64.5, eh = 7 * (1 - 0.9 * bl);
+    ctx.fillStyle = "#fff"; ctx.beginPath(); ctx.ellipse(ex, ey, 5.4, eh, 0, 0, TAU); ctx.fill();
+    if (bl < 0.7){ ctx.save(); ctx.beginPath(); ctx.ellipse(ex, ey, 5.4, eh, 0, 0, TAU); ctx.clip();
+      ctx.fillStyle = "#141414"; circ(ctx, ex + look[0] * 1.9, ey + 1 + look[1] * 1.4, 3.6); ctx.fill(); ctx.restore(); } }
+  ctx.fillStyle = "rgba(255,255,255,0.35)"; rr(ctx, 38, 86, 24, 5, 2.5); ctx.fill();
+}
+function carplay(ctx, o){
+  ctx.fillStyle = "#0D1117"; ctx.fillRect(0, 0, 100, 100);
+  ctx.fillStyle = "#1A1F29"; ctx.fillRect(0, 0, 20, 100);
+  [C.mint, C.coral, "#4C9BFF"].forEach((c, k) => { ctx.fillStyle = c; rr(ctx, 4, 18 + k * 20, 12, 12, 3.5); ctx.fill(); });
+  ctx.fillStyle = "#22304A"; rr(ctx, 25, 6, 70, 54, 6); ctx.fill();
+  ctx.save(); rr(ctx, 25, 6, 70, 54, 6); ctx.clip();
+  ctx.strokeStyle = "#2E3D5C"; ctx.lineWidth = 3.4; for (const [a, b, c, d] of [[25, 24, 95, 32], [25, 47, 95, 41], [46, 6, 53, 60], [76, 6, 72, 60]]){ ctx.beginPath(); ctx.moveTo(a, b); ctx.lineTo(c, d); ctx.stroke(); }
+  const route = [[32, 54], [49, 50], [52, 34], [73, 30], [89, 14]];
+  ctx.strokeStyle = "#4C9BFF"; ctx.lineWidth = 3.4; ctx.lineCap = "round"; ctx.lineJoin = "round"; ctx.beginPath(); route.forEach(([x, y], i) => i ? ctx.lineTo(x, y) : ctx.moveTo(x, y)); ctx.stroke();
+  const at = along(route, (o.phase || 0) % 1); ctx.fillStyle = "#fff"; circ(ctx, at[0], at[1], 3.4); ctx.fill(); ctx.fillStyle = "#4C9BFF"; circ(ctx, at[0], at[1], 2); ctx.fill();
+  ctx.restore();
+  ctx.fillStyle = "#1A1F29"; rr(ctx, 25, 65, 70, 29, 6); ctx.fill();
+  const g = ctx.createLinearGradient(29, 69, 49, 89); g.addColorStop(0, C.violet0); g.addColorStop(1, C.coral); ctx.fillStyle = g; rr(ctx, 29, 69, 21, 21, 4); ctx.fill();
+  ctx.fillStyle = "rgba(255,255,255,0.85)"; rr(ctx, 55, 73, 30, 4, 2); ctx.fill(); ctx.fillStyle = "rgba(255,255,255,0.4)"; rr(ctx, 55, 80, 20, 3.4, 1.7); ctx.fill();
+}
+function along(pts, f){ let tot = 0; const seg = []; for (let i = 1; i < pts.length; i++){ const d = Math.hypot(pts[i][0] - pts[i-1][0], pts[i][1] - pts[i-1][1]); seg.push(d); tot += d; }
+  let s = f * tot; for (let i = 0; i < seg.length; i++){ if (s <= seg[i]){ const k = s / seg[i]; return [lerp(pts[i][0], pts[i+1][0], k), lerp(pts[i][1], pts[i+1][1], k)]; } s -= seg[i]; } return pts[pts.length - 1]; }
+
+// ───────── 左格：線稿與手指 ─────────
+function inBg(ctx){ ctx.fillStyle = P().inBg; ctx.fillRect(0, 0, W, H); }
+function stroke(ctx, w = 2.4, c){ ctx.strokeStyle = c || P().line; ctx.lineWidth = w; ctx.lineCap = "round"; ctx.lineJoin = "round"; ctx.stroke(); }
+const PAD = { x: 42, y: 22, w: 116, h: 80 };
+const padPt = (u, v) => [PAD.x + PAD.w * u, PAD.y + PAD.h * v];
+function trackpad(ctx){ rr(ctx, PAD.x, PAD.y, PAD.w, PAD.h, 11); stroke(ctx); }
+function hexA(hex, a){ const n = parseInt(hex.slice(1), 16); return `rgba(${n >> 16},${(n >> 8) & 255},${n & 255},${a})`; }
+// 手指：實心藍點＋殘影（往回 10 個樣本 × 12 ms）
+function finger(ctx, t, down, up, pos, scale = 1){
+  const appear = sstep(t - (down - 0.1), SPRING.calm), gone = sstep(t - up, SPRING.calm), a = clamp(appear - gone);
+  if (a < 0.01) return;
+  const R = 6.6 * scale * (1.25 - 0.25 * sstep(t - (down - 0.1), SPRING.settle) + 0.15 * gone);
+  for (let k = 10; k >= 1; k--){ const s = t - k * 0.012; if (s < down || s > up) continue;
+    const p = pos(s); ctx.fillStyle = hexA(P().dot, 0.20 * (1 - k / 11) * a); circ(ctx, p[0], p[1], R * (1 - k * 0.025)); ctx.fill(); }
+  const p = pos(t);
+  ctx.fillStyle = hexA(P().dot, 0.18 * a); circ(ctx, p[0], p[1], R * 1.35); ctx.fill();
+  ctx.fillStyle = hexA(P().dot, a); circ(ctx, p[0], p[1], R); ctx.fill();
+}
+
+// ───────── 右格：背景與點綴 ─────────
+function outBg(ctx){ const g = ctx.createLinearGradient(0, 0, 0, H); g.addColorStop(0, P().out0); g.addColorStop(1, P().out1); ctx.fillStyle = g; ctx.fillRect(0, 0, W, H); }
+const deco = {
+  halo(ctx, x, y, r){ ctx.fillStyle = P().deco; circ(ctx, x, y, r); ctx.fill(); },
+  sun(ctx, x, y, r = 7){ ctx.fillStyle = C.sun; circ(ctx, x, y, r); ctx.fill(); },
+  half(ctx, x, y, r, c = C.coral){ ctx.fillStyle = c; ctx.beginPath(); ctx.arc(x, y, r, Math.PI, 0); ctx.closePath(); ctx.fill(); },
+  dots(ctx, x, y, cols = 4, rows = 3, gap = 6){ ctx.fillStyle = "rgba(255,255,255,0.55)"; for (let i = 0; i < cols; i++) for (let j = 0; j < rows; j++){ circ(ctx, x + i * gap, y + j * gap, 1.2); ctx.fill(); } },
+  zig(ctx, x, y, n = 5, w = 5, h = 4){ ctx.beginPath(); ctx.moveTo(x, y); for (let i = 1; i <= n; i++) ctx.lineTo(x + i * w, y + (i % 2 ? -h : 0)); stroke(ctx, 1.8, "rgba(255,255,255,0.7)"); },
+};
+function desktop(ctx, dock = true){ ctx.fillStyle = THEME === "dark" ? "rgba(255,255,255,0.22)" : "rgba(255,255,255,0.55)"; ctx.fillRect(0, 0, W, 7);
+  if (!dock) return;
+  ctx.fillStyle = "rgba(255,255,255,0.45)"; rr(ctx, W / 2 - 42, H - 14, 84, 10, 4); ctx.fill();
+  ["#4C9BFF", C.sun, C.coral, C.mint, C.violet0, "#fff"].forEach((c, i) => { ctx.fillStyle = c; rr(ctx, W / 2 - 38 + i * 13, H - 12, 7, 7, 2); ctx.fill(); }); }
+function flatWindow(ctx, x, y, w, h){ ctx.fillStyle = "#FFFFFF"; rr(ctx, x, y, w, h, 5); ctx.fill();
+  ctx.fillStyle = "#E9EEF6"; ctx.fillRect(x, y + 9, w * 0.28, h - 9); ctx.fillRect(x, y, w, 9);
+  [C.coral, C.sun, C.mint].forEach((c, k) => { ctx.fillStyle = c; circ(ctx, x + 6 + k * 5.5, y + 4.5, 1.8); ctx.fill(); });
+  ctx.fillStyle = "#D7E0EE"; for (let i = 0; i < 4; i++){ rr(ctx, x + w * 0.34, y + 15 + i * 8, w * 0.56 - (i % 2) * 12, 3.4, 1.7); ctx.fill(); } }
+function person(ctx, x, y, s, head = C.coral, body = C.navy){ ctx.fillStyle = body; ctx.beginPath(); ctx.arc(x, y + 14 * s, 17 * s, Math.PI, 0); ctx.closePath(); ctx.fill();
+  ctx.fillStyle = head; circ(ctx, x, y - 6 * s, 9 * s); ctx.fill(); }
+
+// ───────── 九段（左格 L、右格 R；t 秒） ─────────
+const DEMOS = [
+{ id:"pinch", title:"雙指張合：縮放", cycle:3.4, key:1.15, notes:"左：兩指沿對角線張開（settle）再合攏。右：HomeView 晚 70 ms 跟上到 124%，背後兩圈虛線標出原尺寸與新尺寸。",
+  L(ctx, t){ inBg(ctx); trackpad(ctx);
+    const sep = track([0.09, [0.55, 0.30, "settle"], [1.55, 0.09, "settle"]]), d = [Math.cos(-32 * DEG), Math.sin(-32 * DEG) * 1.4];
+    [[1, 0.30], [-1, 0.34]].forEach(([s, dn]) => finger(ctx, t, dn, 2.25, u => padPt(0.5 + s * d[0] * sep(u), 0.52 + s * d[1] * sep(u)))); },
+  R(ctx, t){ outBg(ctx); deco.sun(ctx, 26, 24); deco.dots(ctx, 160, 92);
+    const sc = track([1, [0.62, 1.24, "settle"], [1.62, 1.0, "settle"]])(t), g = presence(t, 0.6, 1.62);
+    if (g > 0.01){ ctx.save(); ctx.setLineDash([3, 3]); ctx.strokeStyle = `rgba(255,255,255,${0.7 * g})`; ctx.lineWidth = 1.4;
+      circ(ctx, 100, 66, 34); ctx.stroke(); circ(ctx, 100, 66, 34 * sc); ctx.stroke(); ctx.restore(); }
+    drawHome(ctx, { x: 100, y: 104, S: 52, scale: sc, look: [0, -0.2], blink: blinkAt(t, 2.7) }); } },
+{ id:"slide", title:"雙指一起滑：轉身體", cycle:3.8, key:0.85, notes:"左：兩指並排往右滑、抬起，再落下往左滑。右：身體轉到 30°，放手後慣性到 38°；底座前的弧線跟角速度亮起，網點往一側縮。",
+  L(ctx, t){ inBg(ctx); trackpad(ctx);
+    const cx = track([0.34, [0.42, 0.66, "glide"], [1.82, 0.34, "glide"]]);
+    for (const [dx, d1, u1] of [[-0.075, 0.25, 1.05], [0.075, 0.28, 1.07]]){ const sec = t >= 1.5;
+      finger(ctx, t, sec ? d1 + 1.5 : d1, sec ? u1 + 1.4 : u1, u => padPt(cx(u) + dx, 0.54)); } },
+  R(ctx, t){ outBg(ctx); deco.half(ctx, 22, H, 22); deco.zig(ctx, 150, 22);
+    const yf = track([0, [0.47, 30 * DEG, "glide"], [1.05, 38 * DEG, "glide"], [1.86, 4 * DEG, "glide"], [2.47, 0, "glide"]]), yaw = yf(t), vel = (yaw - yf(t - 0.016)) / 0.016;
+    const look = track([0, [0.40, 1], [1.5, 0.2], [1.80, -1], [2.7, 0]])(t);
+    const h = drawHome(ctx, { x: 100, y: 102, S: 56, yaw, look: [look, -0.1], blink: blinkAt(t, 3.2) });
+    const va = clamp(Math.abs(vel) / (110 * DEG));
+    if (va > 0.02){ const c = h.ground, rx = 0.5 * 56 + 6, ry = rx * 0.16; ctx.beginPath(); ctx.ellipse(c[0], c[1] + 2, rx, ry, 0, 0.2 * Math.PI, 0.8 * Math.PI); stroke(ctx, 2, `rgba(255,255,255,${0.85 * va})`);
+      const a = vel > 0 ? 0.2 * Math.PI : 0.8 * Math.PI, px = c[0] + rx * Math.cos(a), py = c[1] + 2 + ry * Math.sin(a), dir = vel > 0 ? 1 : -1;
+      ctx.fillStyle = `rgba(255,255,255,${0.85 * va})`; ctx.beginPath(); ctx.moveTo(px + dir * 5, py - 1); ctx.lineTo(px - dir * 1, py - 4.5); ctx.lineTo(px - dir * 1, py + 3); ctx.closePath(); ctx.fill(); } } },
+{ id:"three", title:"三指拖移：搬視窗", cycle:4.2, key:1.0, notes:"左：三指落下（錯開 30 ms）往右拖，再拖回來。右：桌面上的 HomeView 跟著走（glide），搬到哪邊就朝中央轉（Aim 的視窗基準）。",
+  L(ctx, t){ inBg(ctx); trackpad(ctx); const cx = track([0.3, [0.5, 0.7, "glide"], [2.05, 0.3, "glide"]]), off = [[-0.13, 0.05], [0, -0.05], [0.13, 0.05]];
+    for (let k = 0; k < 3; k++){ const f = t < 1.6; finger(ctx, t, (f ? 0.30 : 1.85) + k * 0.03, (f ? 1.35 : 3.1) + k * 0.02, u => padPt(cx(u) + off[k][0], 0.52 + off[k][1]), 0.9); } },
+  R(ctx, t){ outBg(ctx); desktop(ctx); flatWindow(ctx, 18, 22, 70, 52);
+    const px = track([0.22, [0.5, 0.80, "glide"], [2.05, 0.22, "glide"]]), lift = track([0, [0.32, 1], [1.38, 0], [1.88, 1], [3.12, 0]])(t);
+    const yaw = aimAt(t, s => Math.atan(-(2 * px(s) - 1) * 0.33), false);
+    drawHome(ctx, { x: 30 + 140 * px(t), y: 104 - lift * 3, S: 34 * (1 + 0.04 * lift), yaw, reveal: 1, phase: t / 4.2 }); } },
+{ id:"force", title:"稍微用力按下：進入／退出 CarPlay", cycle:4.4, key:0.98, notes:"左：一指落下，壓力環填滿就「喀」，迸出八條短線。右：從島中心圓形揭開成 CarPlay（bloom）；再按一次收回錶面。",
+  L(ctx, t){ inBg(ctx); trackpad(ctx);
+    const p = track([0, [0.45, 1, "settle"], [0.98, 0], [2.45, 1, "settle"], [2.98, 0]])(t), c = padPt(0.5, 0.52), f = t < 1.8, dn = f ? 0.30 : 2.30, up = f ? 1.25 : 3.25;
+    const a = clamp(sstep(t - (dn - 0.1), SPRING.calm) - sstep(t - up, SPRING.calm));
+    if (a > 0.01){ const held = (t > 0.78 && t < up) || (t > 2.78 && t < up); circ(ctx, c[0], c[1], 14); stroke(ctx, 2.4, P().line2);
+      ctx.beginPath(); ctx.arc(c[0], c[1], 14, -Math.PI / 2, -Math.PI / 2 + TAU * (held ? 1 : clamp(p / 0.93))); stroke(ctx, 2.4, hexA(P().dot, a)); }
+    for (const s of [0.78, 2.78]){ const age = t - s; if (age > 0 && age < 0.45){ const e = outCubic(age / 0.45);
+      for (let i = 0; i < 8; i++){ const an = i * TAU / 8, r0 = 18 + 6 * e, r1 = 22 + 10 * e; ctx.beginPath(); ctx.moveTo(c[0] + Math.cos(an) * r0, c[1] + Math.sin(an) * r0); ctx.lineTo(c[0] + Math.cos(an) * r1, c[1] + Math.sin(an) * r1); stroke(ctx, 2, hexA(P().dot, 1 - e)); } } }
+    const dip = sstep(t - 0.78, SPRING.pop) - sstep(t - 0.87, SPRING.pop) + sstep(t - 2.78, SPRING.pop) - sstep(t - 2.87, SPRING.pop);
+    finger(ctx, t, dn, up, () => c, 1 - 0.1 * dip); },
+  R(ctx, t){ outBg(ctx); deco.halo(ctx, 100, 64, 48); deco.sun(ctx, 170, 24, 6);
+    const rv = track([0, [0.80, 1, "bloom"], [2.80, 0, "settle"]])(t);
+    const dip = sstep(t - 0.78, SPRING.pop) - sstep(t - 0.87, SPRING.pop) + sstep(t - 2.78, SPRING.pop) - sstep(t - 2.87, SPRING.pop);
+    drawHome(ctx, { x: 100, y: 104, S: 58, scale: 1 - 0.02 * dip, reveal: clamp(rv, 0, 1.2), look: [0, 0.2], blink: blinkAt(t, 3.7), phase: t / 4.4 }); } },
+{ id:"facing", title:"朝向：朝著螢幕中央", cycle:4.8, key:1.6, variant:true, notes:"左：Mac 螢幕的線稿，藍點是桌寵的位置，下面的圓是坐在中間的你。右：桌面上 HomeView 被拖到右邊就朝左轉（Aim 基準，最多約 18°）。正面固定：恆為 0，右上角鎖。",
+  L(ctx, t, v){ inBg(ctx); rr(ctx, 30, 14, 140, 86, 8); stroke(ctx); rr(ctx, 92, 14, 16, 5, 2.5); ctx.fillStyle = P().line; ctx.fill();
+    ctx.beginPath(); ctx.moveTo(84, 100); ctx.lineTo(80, 112); ctx.lineTo(120, 112); ctx.lineTo(116, 100); stroke(ctx);
+    const px = track([0.16, [0.5, 0.84, "glide"], [2.6, 0.16, "glide"]]);
+    ctx.save(); ctx.setLineDash([2, 4]); ctx.beginPath(); ctx.moveTo(100, 22); ctx.lineTo(100, 92); stroke(ctx, 1.4, P().line2); ctx.restore();
+    finger(ctx, t, -1, 99, s => [40 + 120 * px(s), 76], 0.8);
+    circ(ctx, 100, 119, 4); stroke(ctx, 2); },
+  R(ctx, t, v){ outBg(ctx); desktop(ctx, false); deco.dots(ctx, 14, 18);
+    const px = track([0.16, [0.5, 0.84, "glide"], [2.6, 0.16, "glide"]]), x = 36 + 128 * px(t);
+    const yaw = v ? 0 : aimAt(t, s => Math.atan(-(2 * px(s) - 1) * 0.33), false);
+    const h = drawHome(ctx, { x, y: 86, S: 42, yaw, look: [v ? 0 : clamp((100 - x) / 70, -1, 1), 0.3], blink: blinkAt(t, 4.3) });
+    ctx.save(); ctx.setLineDash([2, 3]); ctx.beginPath(); ctx.moveTo(h.eyes[0], h.eyes[1] + 6); ctx.lineTo(v ? h.eyes[0] : 100, 106); stroke(ctx, 1.4, "rgba(255,255,255,0.8)"); ctx.restore();
+    person(ctx, 100, 116, 0.62);
+    if (v){ ctx.fillStyle = "#fff"; circ(ctx, 182, 22, 9); ctx.fill(); ctx.strokeStyle = C.navy; ctx.lineWidth = 1.4; ctx.beginPath(); ctx.arc(182, 20.4, 2.4, Math.PI, 0); ctx.stroke(); ctx.fillStyle = C.navy; rr(ctx, 178.4, 20.4, 7.2, 5.4, 1.2); ctx.fill(); } } },
+{ id:"follow", title:"跟隨我", cycle:6.0, key:1.7, notes:"左：Mac 鏡頭的取景框，藍色角框鎖住你的臉。右：人走過，HomeView 轉過來看（App 的 Aim：死區 3°、回應 0.5 s、限速 70°/s、最多 25°）；白色視線扇形指向人。",
+  L(ctx, t){ inBg(ctx); rr(ctx, 30, 14, 140, 96, 10); stroke(ctx);
+    const px = track([46, [0.4, 214, "walk"], [2.6, 205, "walk"], [3.4, 108, "walk"], [4.4, 46, "walk"]]), fx = 100 + (px(t) - 130) * 0.5;
+    ctx.beginPath(); ctx.arc(fx, 66, 14, 0, TAU); stroke(ctx); ctx.beginPath(); ctx.arc(fx, 112, 27, Math.PI * 1.15, Math.PI * 1.85); stroke(ctx);
+    const bx = 100 + (px(t - 0.08) - 130) * 0.5, b = 21, L = 6; ctx.strokeStyle = P().dot; ctx.lineWidth = 2.2; ctx.lineCap = "round";
+    for (const [sx, sy] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]){ ctx.beginPath(); ctx.moveTo(bx + sx * b, 66 + sy * b - sy * L); ctx.lineTo(bx + sx * b, 66 + sy * b); ctx.lineTo(bx + sx * b - sx * L, 66 + sy * b); ctx.stroke(); }
+    ctx.fillStyle = C.mint; circ(ctx, 100, 20, 2.2); ctx.fill(); },
+  R(ctx, t){ outBg(ctx); deco.sun(ctx, 24, 24, 6); deco.zig(ctx, 150, 22);
+    const px = track([46, [0.4, 214, "walk"], [2.6, 205, "walk"], [3.4, 108, "walk"], [4.4, 46, "walk"]]), gx = s => clamp((px(s) - 130) / 120, -1, 1);
+    const yaw = aimAt(t, s => followTarget(gx(s)), true), x = 30 + (px(t) - 46) / 168 * 140;
+    const pr = makeProj(100, 92, 50, yaw), c = pr.screen(0, 0.05), head = [x, 104], ang = Math.atan2(head[1] - c[1], head[0] - c[0]);
+    ctx.fillStyle = "rgba(255,255,255,0.22)"; ctx.beginPath(); ctx.moveTo(c[0], c[1]); ctx.arc(c[0], c[1], 110, ang - 8 * DEG, ang + 8 * DEG); ctx.closePath(); ctx.fill();
+    drawHome(ctx, { x: 100, y: 92, S: 50, yaw, look: [gx(t - 0.05) * 1.1, 0.35], camOn: true, blink: blinkAt(t, 2.2) });
+    const moving = Math.abs(px(t) - px(t - 0.05)) > 0.4; person(ctx, x, 116 - (moving ? Math.abs(Math.sin(t * 9)) * 1.4 : 0), 0.9); } },
+{ id:"charge", title:"插線一次，之後無線", cycle:6.0, key:2.2, notes:"左：iPhone 線稿，線在 0.6 插上、3.6 拔掉，閃電描成藍色。右：HomeView 一直在播 CarPlay，路線上的點不停；手機與機身之間的白色弧線一直在。",
+  L(ctx, t){ inBg(ctx); rr(ctx, 80, 12, 40, 78, 9); stroke(ctx); rr(ctx, 93, 17, 14, 4, 2); ctx.fillStyle = P().line; ctx.fill();
+    const plug = track([0, [0.6, 1, "settle"], [3.6, 0, "settle"]])(t), y = lerp(122, 94, plug);
+    rr(ctx, 95, y, 10, 9, 2); stroke(ctx); ctx.beginPath(); ctx.moveTo(100, y + 9); ctx.lineTo(100, 140); stroke(ctx);
+    const b = track([0, [0.95, 1, "bloom"], [3.7, 0]])(t);
+    if (b > 0.01){ ctx.save(); ctx.translate(100, 50); ctx.scale(0.8 + 0.4 * b, 0.8 + 0.4 * b); ctx.beginPath(); ctx.moveTo(2, -10); ctx.lineTo(-6, 2); ctx.lineTo(0, 2); ctx.lineTo(-2, 10); ctx.lineTo(6, -2); ctx.lineTo(0, -2); ctx.closePath(); stroke(ctx, 2.2, hexA(P().dot, b)); ctx.restore(); } },
+  R(ctx, t){ outBg(ctx); deco.dots(ctx, 16, 16);
+    drawHome(ctx, { x: 74, y: 104, S: 60, reveal: 1, phase: t / 6 });
+    for (let k = 0; k < 3; k++){ const f = ((t / 6 * 5 - k * 0.22) % 1 + 1) % 1; ctx.beginPath(); ctx.arc(150, 60, 10 + f * 20, Math.PI * 0.82, Math.PI * 1.18); stroke(ctx, 2, `rgba(255,255,255,${Math.sin(Math.PI * f) * 0.85})`); }
+    ctx.fillStyle = C.navy; rr(ctx, 152, 28, 30, 60, 7); ctx.fill(); const g = ctx.createLinearGradient(152, 28, 182, 88); g.addColorStop(0, C.violet0); g.addColorStop(1, C.coral);
+    ctx.fillStyle = g; rr(ctx, 154, 30, 26, 56, 5.5); ctx.fill(); ctx.fillStyle = "#0B0B10"; rr(ctx, 162, 33, 10, 3, 1.5); ctx.fill();
+    const b = track([0, [0.95, 1, "bloom"], [3.7, 0]])(t);
+    if (b > 0.01){ ctx.save(); ctx.translate(167, 58); ctx.scale(b, b); ctx.fillStyle = C.sun; ctx.beginPath(); ctx.moveTo(2, -9); ctx.lineTo(-5.5, 2); ctx.lineTo(-0.5, 2); ctx.lineTo(-2, 9); ctx.lineTo(5.5, -2); ctx.lineTo(0.5, -2); ctx.closePath(); ctx.fill(); ctx.restore(); } } },
+{ id:"ontop", title:"浮在最上層", cycle:4.4, key:1.4, notes:"左：兩個視窗線稿，一個滑過來；藍色小方塊（桌寵）始終畫在最上面。右：白色視窗從左滑到 HomeView 下面，影子落在視窗上。",
+  L(ctx, t){ inBg(ctx); const wx = track([-60, [0.4, 0, "glide"], [2.6, -60, "glide"]])(t);
+    rr(ctx, 70, 30, 96, 66, 7); stroke(ctx, 2.4, P().line2);
+    ctx.fillStyle = P().inBg; rr(ctx, 34 + wx, 22, 96, 66, 7); ctx.fill(); stroke(ctx);
+    for (let k = 0; k < 3; k++){ circ(ctx, 44 + wx + k * 7, 30, 2); stroke(ctx, 1.4); }
+    ctx.fillStyle = P().dot; rr(ctx, 118, 58, 22, 22, 6); ctx.fill(); },
+  R(ctx, t){ outBg(ctx); desktop(ctx); const wx = track([-110, [0.4, 0, "glide"], [2.6, -110, "glide"]])(t);
+    flatWindow(ctx, 40 + wx, 18, 104, 76); deco.sun(ctx, 176, 22, 6);
+    drawHome(ctx, { x: 136, y: 102, S: 44, yaw: -10 * DEG, blink: blinkAt(t, 3.6) }); } },
+{ id:"light", title:"跟著房間的光", cycle:6.0, key:2.3, notes:"左：日晷線稿，太陽沿虛線弧落下，夜裡換成月亮，檯燈亮起。右：整格是房間，牆色、窗外、機身染色、螢幕亮度在白天、黃昏、夜晚三組色票間插值。",
+  L(ctx, t){ inBg(ctx); const ph = track([0, [0.5, 1, "walk"], [2.6, 2, "walk"], [4.3, 0, "walk"]])(t);
+    ctx.beginPath(); ctx.moveTo(24, 96); ctx.lineTo(176, 96); stroke(ctx);
+    ctx.save(); ctx.setLineDash([2, 5]); ctx.beginPath(); ctx.arc(100, 96, 62, Math.PI, 0); stroke(ctx, 1.6, P().line2); ctx.restore();
+    const a = Math.PI + 0.12 + clamp(ph / 1.2) * Math.PI * 0.76, sx = 100 + 62 * Math.cos(a), sy = 96 + 62 * Math.sin(a);
+    const sunA = clamp(1.5 - ph), moonA = clamp(ph - 1.2);
+    if (sunA > 0.01){ ctx.globalAlpha = sunA; circ(ctx, sx, sy, 8); stroke(ctx, 2.4, P().dot); for (let i = 0; i < 8; i++){ const an = i * TAU / 8; ctx.beginPath(); ctx.moveTo(sx + Math.cos(an) * 12, sy + Math.sin(an) * 12); ctx.lineTo(sx + Math.cos(an) * 15, sy + Math.sin(an) * 15); stroke(ctx, 2, P().dot); } ctx.globalAlpha = 1; }
+    if (moonA > 0.01){ ctx.globalAlpha = moonA; ctx.beginPath(); ctx.arc(70, 50, 9, 0.35 * Math.PI, 1.65 * Math.PI); ctx.arc(74, 46, 7, 1.5 * Math.PI, 0.5 * Math.PI, true); stroke(ctx, 2.2, P().dot); ctx.globalAlpha = 1; }
+    ctx.beginPath(); ctx.moveTo(150, 96); ctx.lineTo(150, 70); stroke(ctx); ctx.beginPath(); ctx.moveTo(140, 70); ctx.lineTo(160, 70); ctx.lineTo(155, 58); ctx.lineTo(145, 58); ctx.closePath();
+    if (moonA > 0.01){ ctx.fillStyle = hexA("#FFC23D", moonA); ctx.fill(); } stroke(ctx); },
+  R(ctx, t){ const ph = track([0, [0.5, 1, "walk"], [2.6, 2, "walk"], [4.3, 0, "walk"]])(t);
+    const pal = [ { wall:[226,236,248], sky0:[130,191,246], sky1:[214,234,255], tint:[255,255,255,0], dim:0 },
+                  { wall:[255,214,170], sky0:[255,120,98], sky1:[255,196,120], tint:[255,150,80,0.18], dim:0.05 },
+                  { wall:[44,48,86], sky0:[20,26,60], sky1:[70,56,130], tint:[255,186,120,0.14], dim:0.4 } ];
+    const i = Math.min(1, Math.floor(clamp(ph, 0, 1.999))), f = clamp(ph - i), A = pal[i], B = pal[i + 1], mix = (a, b) => a.map((v, k) => lerp(v, b[k], f)), rgb = c => `rgb(${c[0] | 0},${c[1] | 0},${c[2] | 0})`;
+    const wall = mix(A.wall, B.wall), s0 = mix(A.sky0, B.sky0), s1 = mix(A.sky1, B.sky1), ti = mix(A.tint, B.tint), dim = lerp(A.dim, B.dim, f);
+    ctx.fillStyle = rgb(wall); ctx.fillRect(0, 0, W, H); ctx.fillStyle = "rgba(0,0,0,0.08)"; ctx.fillRect(0, 100, W, 25);
+    const g = ctx.createLinearGradient(0, 16, 0, 76); g.addColorStop(0, rgb(s0)); g.addColorStop(1, rgb(s1)); ctx.fillStyle = g; rr(ctx, 126, 16, 56, 60, 6); ctx.fill();
+    ctx.save(); rr(ctx, 126, 16, 56, 60, 6); ctx.clip(); const sunA = clamp(1.4 - ph), moonA = clamp(ph - 1.3);
+    ctx.fillStyle = hexA("#FFE08A", sunA); circ(ctx, 146 + 14 * clamp(ph), 34 + 30 * clamp(ph), 9); ctx.fill();
+    if (moonA > 0.01){ ctx.fillStyle = `rgba(240,242,255,${moonA})`; circ(ctx, 166, 30, 5); ctx.fill(); ctx.fillStyle = rgb(s0); circ(ctx, 168.5, 28.5, 4.3); ctx.fill(); }
+    ctx.restore(); ctx.fillStyle = "rgba(255,255,255,0.75)"; ctx.fillRect(153, 16, 2, 60);
+    const night = clamp(ph - 1);
+    ctx.fillStyle = C.navy; ctx.fillRect(30, 70, 3, 30); ctx.fillStyle = night > 0.01 ? C.sun : "#FFFFFF"; ctx.beginPath(); ctx.moveTo(20, 70); ctx.lineTo(43, 70); ctx.lineTo(38, 56); ctx.lineTo(25, 56); ctx.closePath(); ctx.fill();
+    if (night > 0.01){ const lg = ctx.createRadialGradient(31, 72, 0, 31, 72, 70); lg.addColorStop(0, `rgba(255,194,61,${0.45 * night})`); lg.addColorStop(1, "rgba(255,194,61,0)"); ctx.fillStyle = lg; ctx.fillRect(0, 0, W, H); }
+    drawHome(ctx, { x: 86, y: 104, S: 58, yaw: 8 * DEG, dim, room: true, blink: blinkAt(t, 4.8), tint: ti[3] > 0.005 ? `rgba(${ti[0] | 0},${ti[1] | 0},${ti[2] | 0},${ti[3]})` : null }); } }
+];
+
+// ───────── 版面、播放、審稿 ─────────
+const host = document.getElementById("demos");
+const cards = DEMOS.flatMap(d => d.variant ? [[d, false], [d, true]] : [[d, false]]).map(([d, variant]) => {
+  const el = document.createElement("div"); el.className = "card";
+  el.innerHTML = `<h3>${d.title}${variant ? "（正面固定）" : ""}</h3><div class="pair"><canvas></canvas><canvas></canvas></div>
+  <div class="meta"><button class="pp">暫停</button><input type="range" min="0" max="${d.cycle}" step="0.01" value="0"><span class="time"></span><button class="kb">關鍵幀</button></div>
+  <details><summary>分鏡</summary><p>${d.notes}</p><p class="mono">週期 ${d.cycle} s · 關鍵幀 ${d.key} s</p></details>`;
+  host.appendChild(el);
+  const [cl, cr] = el.querySelectorAll("canvas");
+  const c = { d, variant, cl, cr, range: el.querySelector("input"), time: el.querySelector(".time"), pp: el.querySelector(".pp"), start: performance.now(), playing: true, t: d.key };
+  c.range.oninput = () => { c.playing = false; c.t = +c.range.value; c.pp.textContent = "播放"; };
+  c.pp.onclick = () => { c.playing = !c.playing; c.start = performance.now() - c.t * 1000; c.pp.textContent = c.playing ? "暫停" : "播放"; };
+  el.querySelector(".kb").onclick = () => { c.playing = false; c.t = d.key; c.pp.textContent = "播放"; };
+  return c;
+});
+function paint(cv, fn, t, v){ const dpr = devicePixelRatio || 1, w = cv.clientWidth, h = cv.clientHeight;
+  if (cv.width !== Math.round(w * dpr)){ cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr); }
+  const ctx = cv.getContext("2d"); ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.scale(w / W, h / H); fn(ctx, t, v); }
+function frame(now){ for (const c of cards){
+    if (c.playing){ const el = (now - c.start) / 1000; if (el / c.d.cycle >= 3){ c.playing = false; c.t = c.d.key; c.pp.textContent = "播放"; } else c.t = el % c.d.cycle; }
+    paint(c.cl, c.d.L, c.t, c.variant); paint(c.cr, c.d.R, c.t, c.variant); c.range.value = c.t; c.time.textContent = `${c.t.toFixed(2)} / ${c.d.cycle.toFixed(1)} s`; }
+  requestAnimationFrame(frame); }
+requestAnimationFrame(frame);
+// 審稿：主控台呼叫 solo("段名", 秒, 正面固定?, "dark"?) 把那一組放大到整個視窗
+window.solo = (id, t, v = false, theme = null) => { if (theme) THEME = theme;
+  let box = document.getElementById("solo"); if (!box){ box = document.createElement("div"); box.id = "solo";
+    box.style.cssText = "position:fixed;inset:0;z-index:99;display:grid;grid-template-columns:1fr 1fr;gap:12px;padding:12px;align-content:center;background:var(--bg)";
+    box.innerHTML = '<canvas style="width:100%;aspect-ratio:1.6;border-radius:12px"></canvas><canvas style="width:100%;aspect-ratio:1.6;border-radius:12px"></canvas>'; document.body.appendChild(box); }
+  const d = DEMOS.find(x => x.id === id), [a, b] = box.querySelectorAll("canvas"); paint(a, d.L, t, v); paint(b, d.R, t, v); return d.title; };
+const sw = [["左格", "#F4F4F6", "#555"], ["線", "#C3C3C8", "#333"], ["手指", "#3B7CF5"], ["右格", "linear-gradient(#82BFF6,#5AA2EE)"], ["珊瑚", "#FF4E62"], ["紫羅蘭", "linear-gradient(135deg,#8B7BF7,#5E54E0)"], ["向日葵", "#FFC23D", "#333"], ["薄荷", "#34C795"], ["深藍", "#1E3A8A"], ["錶面", "linear-gradient(#3557C6,#5B80E6)"]];
+const swh = document.getElementById("swatches"); for (const [n, bg, ink] of sw){ const s = document.createElement("span"); s.style.background = bg; if (ink) s.style.color = ink; s.textContent = n; swh.appendChild(s); }
+document.getElementById("themeBtn").onclick = () => { THEME = THEME === "dark" ? "light" : "dark"; document.documentElement.dataset.theme = THEME; };
+document.getElementById("keyBtn").onclick = () => { for (const c of cards){ c.playing = false; c.t = c.d.key; c.pp.textContent = "播放"; } };
+document.getElementById("playBtn").onclick = () => { for (const c of cards){ c.playing = true; c.start = performance.now(); c.pp.textContent = "暫停"; } };
+</script>
+</body>
+</html>

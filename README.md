@@ -1,8 +1,9 @@
 <div align="center">
-  <img src="assets/github/hero-v1.gif" alt="HomePlay：从眼睛特写拉远到 Mac 桌面上的一台小 HomeView" width="720">
+  <img src="assets/github/hero-v2.gif" alt="HomePlay：从眼睛特写拉远到 Mac 桌面上的一台小 HomeView" width="720">
   <h1>HomePlay</h1>
-  <p><strong>桌上一台小屏幕，会看着你。Mac 上的 3D HomeView 桌宠，按下去是真的 CarPlay。</strong></p>
-  <p><a href="README.en.md">English</a> · <a href="https://homeplay.aaronlau.me/zh-hans/">官网</a></p>
+  <p><strong>它会看着你，并将 CarPlay 带到 Mac 上。</strong></p>
+  <p>把 HomeView 做成 Mac 上的桌宠，让你在实体发售之前，率先体验 HomeView software 的交互。</p>
+  <p><a href="README.en.md">English</a> · <a href="https://homeplay.aaronlau.me/zh-hans/">产品页面</a></p>
   <p>
     <a href="https://github.com/surfine/HomePlay/releases/latest"><img src="https://img.shields.io/github/v/release/surfine/HomePlay?label=download&style=flat-square" alt="最新版本"></a>
     <img src="https://img.shields.io/badge/macOS-14%2B-15181c?style=flat-square" alt="macOS 14+">
@@ -14,11 +15,38 @@
 
 > 个人实验项目，与 Apple Inc. 无关，也未经 Apple 认证或背书。CarPlay 与 HomeView 是 Apple Inc. 的商标，这里只用来说明兼容性。请自行评估使用风险。
 
+## ⭐️ Features
+
+- **插线连接，然后无线。** 如同妙控系列配件一样的配对体验：第一次用数据线连上 Mac，配好就自动换成无线，之后拔线 CarPlay 也不会断。
+- **十种表情和多款表盘。** 初步设计了十种表情和多款表盘（玻璃大数字、Flow 泡泡字、模块、指针、床头夜灯……），旨在为平凡的日常注入一丝活力，帮助你收获更多平静、自在和从容。
+- **稍微用力按下屏幕，就是 CarPlay。** 在 Mac 桌面上获得连贯的 CarPlay 车载体验。与 iPhone 镜像不同的是，你可以通过 Mac 访问 iPhone 上的 Siri：按住 F5 直接开口说话，全程免提操作，在工作时减少分心。
+- **不只是 CarPlay。** 还整合了番茄钟、电量显示和“正在播放”小组件，并支持窗口置顶，相当于 iTunes 迷你播放器，但播的是 iPhone 上的曲库，比 AirPlay to Mac 更灵活和主动（F7–F9 媒体键切歌）。
+
+<img src="assets/github/grid-v2.webp" alt="HomePlay 正面、背面、真实 CarPlay 音乐画面与拆开图" width="100%">
+
+| 多款表盘 | 十种表情 |
+|:---:|:---:|
+| <img src="assets/github/styles-v2.webp" alt="岛、Flow、模块、指针、岛的口袋与床头夜灯六款表盘" width="100%"> | <img src="assets/github/faces-v2.webp" alt="同一双眼睛做出的十种表情" width="100%"> |
+
+<img src="assets/github/finishes-v2.webp" alt="G4 白、银、星光、玫瑰与深空灰五种外观" width="100%">
+
+## 💡 使用前须知
+
+- **测试过的 iPhone：** 只测试了运行 iOS 15、配备 Lightning 接口的 iPhone SE（第 1 代）和运行 iOS 27、配备 USB-C 接口的 iPhone 18 Pro，其他机型待反馈。
+- **手势：** 双指张合以缩放，双指滑动以旋转，三指拖移换位置。
+- **跟着你转：** 右键菜单还有一个类似 iMac G4 广告的 DockKit 跟随效果，并可匹配室内光线。
+
+## 🧑🏻‍💻 开发者的话
+
+> “👀”是我很喜欢的一个 emoji，可以用来表达兴奋和期待。唐老鸭是我最喜爱的卡通角色之一，一双灵动的大眼睛，呆萌呆萌的，可爱极了。
+>
+> 私以为在 AI 时代，拥有好奇心、释放想象力、发挥创造力、保持判断力和锻炼协同能力是至关重要的。希望 HomePlay 这只桌宠能带给大家一些乐趣。
+
 ## 安装
 
 **需求：** macOS 14 以上、Apple Silicon。
 
-[**下载 HomePlay-macOS-arm64.zip**](https://github.com/surfine/HomePlay/releases/latest/download/HomePlay-macOS-arm64.zip)（约 10.5 MB），然后：
+[**下载 HomePlay-macOS-arm64.zip**](https://github.com/surfine/HomePlay/releases/latest/download/HomePlay-macOS-arm64.zip)，然后：
 
 1. 解压，把 `HomePlay.app` 拖进「应用程序」。
 2. 打开。桌宠会带着时间与眼睛出现；不需要账号、配置文件或任何设置。
@@ -27,28 +55,21 @@
 
 Release 有 Developer ID 签名并通过 Apple 公证，解压后 Gatekeeper 会直接放行。对应的 checksum 是 [`HomePlay-macOS-arm64.zip.sha256`](https://github.com/surfine/HomePlay/releases/latest/download/HomePlay-macOS-arm64.zip.sha256)，可用 `shasum -a 256 -c HomePlay-macOS-arm64.zip.sha256` 验证。
 
-## 0.5.0 的新东西
+## 0.6.0 的新东西
 
-- **第一次公开发布**目前的 App。
-- **同一双眼睛**：网站与设备都使用 Apple 👀 的琥珀虹膜语言；眨眼、睡着与单眼眨眼改成唐老鸭式下弯眼睑，保留白色眼白。
-- **素材重拍**：三语实拍、新的分享卡，以及官网上一支无声、文字分离的 Mark View 式 hero film。
+- **重新设计的表盘与眼睛：** 液态玻璃大数字、Flow 泡泡字、按 Apple 版式重做的模块与指针；照片表盘会把人物抠出来，让时间站在人后面。眼睛照 Apple 的 👀 emoji 重新取样。
+- **真正的番茄钟：** 专注 25 分钟、休息 5 分钟，四轮后长休息 15 分钟，自动接下一段；岛会告诉你今天完成了几个。
+- **照真实构造的「拆开看看」：** 由外向内九层，点一下零件就有名称和规格。
+- **CarPlay 来电与 Siri：** 来电卡可接听、拒接、挂断；通话与 Siri 时开启回音消除；F5 改成按住说话。
+- **在 CarPlay 里播放视频（实验）：** iOS 27 停车时播视频；也可以直接用 AirPlay 投到这台 Mac。
+- **更清楚、更顺：** 表盘贴图跟着屏幕真实像素走，表情过渡 30fps，手势起手不再卡一下。
 
-[完整 Release notes](https://github.com/surfine/HomePlay/releases/tag/v0.5.0)
+[完整 Release notes](https://github.com/surfine/HomePlay/releases/tag/v0.6.0)
 
-## 实拍
-
-<img src="assets/github/grid-v1.webp" alt="HomePlay 正面、背面、真实 CarPlay 音乐画面与拆开图" width="100%">
-
-| 五种外观 | 十种表情 |
-|:---:|:---:|
-| <img src="assets/github/finishes-v1.webp" alt="G4 白、银、星光、玫瑰与深空灰" width="100%"> | <img src="assets/github/faces-v1.webp" alt="同一套眼睛几何做出的十种表情" width="100%"> |
-
-## 特色
+## 特色（技术细节）
 
 - **真的 CarPlay**：无线（蓝牙 iAP2 到 Wi-Fi）或有线 USB；H.264 与 HEVC；触控回传；声音走 Mac 扬声器；iPhone 的「正在播放」接到 Mac 系统 Now Playing 与控制中心。
-- **插线一次，之后无线**：第一次用 USB 完成配对，稳定后自动切到无线；拔线不中断会话。同时接两台 iPhone 时，后到的那台取得唯一的 CarPlay 会话。
-- **从官方产品出发**：Apple 官方 HomeView USDZ 几何与材质、五种机身外观、可拆九件、背面 USB-C 母座；RealityKit 实时渲染与 Quick Look 同级 IBL。
-- **会看人的桌宠**：十种表情、九种表盘；拖动、双指滑、三指拖移、捏合、重按、长按。可选的「跟随我」与「房间光线」只在开启时使用相机。
+- **从官方产品出发**：Apple 官方 HomeView USDZ 几何与材质、五种机身外观、背面 USB-C 母座；RealityKit 实时渲染与 Quick Look 同级 IBL。
 - **安静、省电**：闲置后换成静态海报，ARView 离开画面；被遮住或屏幕休眠时停止渲染。没有通知、没有反馈、没有 telemetry。
 - **零设置**：自动取得当前 Wi-Fi、自动匹配手机、插线与拔线自动切换；不读系统钥匙串，不弹管理员密码。
 - **面向公开**：单一实例、VoiceOver 可按、英／简／繁、权限说明本地化、GPL 开源。

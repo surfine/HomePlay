@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""產生分享圖：og-v3.jpg（繁中）/ og-zh-hans-v3.jpg（简中）/ og-en-v3.jpg（1200x630），以及 share-square.jpg（512x512，給只抓頁內第一張大圖的 IM）。
+"""產生分享圖：og-v4.jpg（繁中）/ og-zh-hans-v4.jpg（简中）/ og-en-v4.jpg（1200x630），以及 share-square.jpg（512x512，給只抓頁內第一張大圖的 IM）。
 標題取自 content.mjs 的 ogTitle；素材取自 public/media/renders（各語言各一套屏幕），字體用 macOS 系統字（找不到就退回 PIL 內建字，版面仍可用）。
 用法：python3 scripts/make-og.py"""
 import glob, json, os, subprocess
@@ -90,8 +90,18 @@ def card(kind, headline, sub, out, renders="", tc=True):
         lines = [headline[:i], headline[i:]] if i else wrap(d, headline, hf, 540, kind)
     else:
         lines = wrap(d, headline, hf, 540, kind)
-    lh = 88 if kind == "zh" else 80
-    y = 200 - (len(lines) - 2) * 40
+    # 標題放不下就多折一行（中文在逗號後、再在「帶到／带到」前；英文逐詞），字號維持
+    room = W - pw - 56 - 40 - x
+    size = 62 if kind == "zh" else 60
+    hf = font(kind, size, tc)
+    if kind == "zh":
+        lines = [ln for part in lines for ln in ([part[:part.find("帶到")], part[part.find("帶到"):]] if "帶到" in part and d.textlength(part, font=hf) > room
+                                               else [part[:part.find("带到")], part[part.find("带到"):]] if "带到" in part and d.textlength(part, font=hf) > room else [part])]
+        lines = [ln.strip() for ln in lines]
+    else:
+        lines = wrap(d, headline, hf, room, kind)
+    lh = round(size * (88 / 66 if kind == "zh" else 80 / 68))
+    y = 200 - (len(lines) - 2) * 44
     for ln in lines:
         d.text((x, y), ln, font=hf, fill=INK)
         y += lh
@@ -105,9 +115,9 @@ def card(kind, headline, sub, out, renders="", tc=True):
     im.save(os.path.join(MEDIA, out), "JPEG", quality=90, optimize=True)
 
 T = titles()
-card("zh", T["zh-Hant"], "Mac 上的 3D HomeView 桌寵", "og-v3.jpg", "", tc=True)
-card("zh", T["zh-Hans"], "Mac 上的 3D HomeView 桌宠", "og-zh-hans-v3.jpg", "zh-Hans", tc=False)
-card("en", T["en"], "A 3D HomeView desktop pet for Mac", "og-en-v3.jpg", "en")
+card("zh", T["zh-Hant"], "Mac 上的 3D HomeView 桌寵", "og-v4.jpg", "", tc=True)
+card("zh", T["zh-Hans"], "Mac 上的 3D HomeView 桌宠", "og-zh-hans-v4.jpg", "zh-Hans", tc=False)
+card("en", T["en"], "A 3D HomeView desktop pet for Mac", "og-en-v4.jpg", "en")
 
 # 方形分享圖：不透明 512x512，圖示置中約 78%，底色同網站背景
 sq = Image.new("RGB", (512, 512), BG)

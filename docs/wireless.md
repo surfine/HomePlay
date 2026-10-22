@@ -65,8 +65,38 @@ iPhone 上如果跳「要使用 CarPlay 嗎」之類的提示，按允許。
 
 ## 雙模（妙控配件式）：配對一次，之後永遠無感
 
-`--source auto`（重按拉起、開機自啟都用它）現在是**真雙模**：插線瞬間切有線（usbmuxd carkit），
-拔線瞬間回藍牙，運行中實時切換，兩邊共用同一條會話控制面。
+`--source auto`（重按拉起、開機自啟都用它）的規則（2026-10-22 真機定案）：
+
+- **已配對的手機：數據線只充電，不開 carkit。** 接收器用 `usb-phones.json`（USB 序號 → 藍牙地址，0600）
+  認出這條線上的手機已和 Mac 配對，就不碰 USB，會話照常由藍牙 iAP2 → Wi-Fi 建立（插著線 2–3 秒內
+  `会话建立：Wi-Fi`）。因為根本沒有 USB 上的 iAP2 鏈路，**插線、拔線對會話完全沒有影響**
+  （真機 15:07–15:08：拔→插→拔三次，會話與音訊連續，日誌只多 `USB 只充电` 與 `拔线：会话在 Wi-Fi 上，保持`）。
+  插線 45 秒都沒會話、藍牙也沒認證成功，才退回開 carkit；`HOMEPLAY_USB_CARKIT=1` 強制走 carkit。
+- **第一次（序號還沒記過）**：開 carkit 走 USB iAP2，手機報 0x4E0E 時記下序號→地址；手機報 0x4300 時
+  回**無線版 0x4301**，手機 0.2–0.5 秒內從 Wi-Fi 連入開會話（線只剩充電＋iAP2 控制）；12 秒沒回連才退回
+  有線版 0x4301（NCM 鏈路本地）。這條會話是綁在 USB 鏈路上的：**第一次拔線手機會在 115 ms 內結束它**，
+  接著藍牙重連再開一條；從第二次插線起就是上面的只充電模式。
+- 沒插線走藍牙 iAP2 → Wi-Fi。兩邊共用同一個控制口與會話物件。
+
+為什麼不能像舊做法那樣「插著線切無線」：只要 USB 上有 iAP2 鏈路，手機就把 CarPlay 會話綁在它上面
+（哪怕會話原本是藍牙起的，中途插線完成 USB 識別後也一樣），那條鏈路一斷（配件關、拔線）手機 20–115 ms 內
+結束會話；而插著線時手機又多半拒絕藍牙 iAP2。舊的「有線穩定 4 秒後關 USB 等藍牙」約 20 次只成功 2 次，
+且每 5 分鐘砍一次正在用的會話，2026-10-22 移除。
+
+**carkit 流 76 秒必斷（已修）**：10/20 起每條 USB carkit TLS 流開啟後 76–78 秒就 `TLS 读错误 60`
+（POSIX ETIMEDOUT，245 次樣本，與是否有資料流動、會話走哪條路無關）。元兇是 CFStream：
+`CFStreamCreatePairWithSocket` 把已連好的 usbmuxd unix socket 當成「仍在連線」，其 75 秒連線逾時一到就報錯關流。
+`TLSStream` 改用 SecureTransport 的 `SSLContext` 直接跑在 fd 上，所有 SSL 呼叫都在讀執行緒上（`SSLContext`
+不是執行緒安全的，主執行緒並發 `SSLWrite`/`SSLClose` 會讓 record 層重複釋放而 SIGABRT）；usbmuxd socket 設
+`SO_NOSIGPIPE`、接收器忽略 SIGPIPE（對端先關時 `write()` 會把程序靜默殺掉）。改後會話 15 分鐘以上無斷線。
+
+拔線（連續兩次 1 秒輪詢都沒看到裝置才算，避免 usbmuxd 抖動誤判）：
+- 會話在 Wi-Fi 上：接收器不碰會話，桌寵先凍住最後一幀（`handoff:start`），3 秒後會話還在就解除
+  （`handoff:done`）。只充電模式下會話必然還在。
+- 會話綁在 USB 上（第一次插線那條）：手機結束它，桌寵保持凍幀，藍牙 iAP2 重連 → 無線 0x4301 → 新會話。
+  拔線後手機常把 RFCOMM「開了就關」：先斷到它的基帶連接再重開，第二次仍被拒就自愈重啟（新進程 2 秒內連上）。
+- 啟動時的 Wi-Fi 安全類型探測（CoreWLAN 掃描＋system_profiler，4–34 秒）按 SSID 緩存在 `wifi-security.json`，
+  第二次啟動起直接用緩存、後台刷新。
 
 - **第一次配對先等插線（有線優先）**：一台 iPhone 都沒配對過時，receiver 不會立刻打開
   「系統設定 › 藍牙」，而是先廣播一張「用資料線連一次」卡；20 秒計時從桌寵連上、
@@ -98,8 +128,8 @@ iPhone 上如果跳「要使用 CarPlay 嗎」之類的提示，按允許。
 - **和開發者模式無關**：配對走標準系統藍牙（有線時由 Mac 發起，iPhone 點「配對」；
   沒有線時才用雙方的藍牙設定），不需要開啟 iPhone 的 Developer Mode，也不需要
   CarPlay Simulator。
-- **讓位規則**：USB 的 carkit 開成功才讓藍牙讓位（開不動藍牙不受影響）；拔線回藍牙時退避歸零，
-  立刻連。
+- **讓位規則**：USB 的 carkit 開成功才讓藍牙讓位（開不動藍牙不受影響）；拔線時退避歸零、藍牙立刻
+  恢復待命，但會話在 Wi-Fi 上時不會被接收器結束。
 - **密碼（只在失敗時才需要）**：正常情況 iPhone 與 Mac 同一個 Wi-Fi，receiver 自動用目前的
   SSID／安全類型／信道，不要求填密碼。只有手機 30 秒內沒連回控制口時，桌寵才會提示
   「右鍵 → Wi-Fi 設置」；那裡填 iPhone 所連網路的名稱與密碼。macOS 26 不再向 App 提供鑰匙串
@@ -170,6 +200,61 @@ LaunchAgent 常駐接收器時，`open HomePlay.app` 會認為「HomePlay 已在
 不參與 App 登記（lsappinfo 實測對照：MacOS 裡的接收器出現在 app 實例清單，Resources 裡的沒有）。
 舊版安裝升級時，桌寵啟動會比對 LaunchAgent 的接收器路徑並自動重寫＋重載（一次性重啟接收器）。
 
+## iAP 資料通道（流 130）：拔線後 iAP2 仍有路（2026-10-22 實作，待真機驗證）
+
+雙模下插線是「USB 鏈路上回無線版 0x4301、會話走 Wi-Fi、線只充電」。真機日誌（2026-10-22 13:52–14:00）
+顯示每次 `USB carkit 流关闭` 後約 30 ms 就 `会话结束：控制连接关闭`——手機把會話綁在開會話的那條
+iAP2 鏈路上，鏈路一斷會話就收。MacPlay 的解法是 CarPlay 自己的 iAP 資料通道（stream type 130）：
+手機送 `disableBluetooth` 後，iAP2 改走會話內的一條 TCP 資料流，與藍牙／USB 無關。現在 HomePlay 也有了：
+
+- **宣告**：會話 SETUP 的 `enabledFeatures` 預設含 `iAPChannel`（與 MacPlay 一致；`/info` 不另宣告，
+  MacPlay 也沒有）。排障要關：`HOMEPLAY_IAP_CHANNEL=0` 或 `--no-iap-channel`。
+- **資料口**（`Sources/Session/IapTunnel.swift`，照 MacPlay `iapTunnel.ts`）：手機 SETUP 流 130
+  （`clientTypeUUID` = `E9459FD0-BCAD-4C45-820F-1E72447EF2F2`）時綁臨時 TCP 口，回
+  `{type 130, streamID 1, dataPort}`。線上兩層：`[2B 小端長度][密文][16B tag]`，AAD＝長度前綴，
+  nonce＝4 零字節＋8B 小端計數（與控制通道、螢幕流同形），金鑰 HKDF 鹽 `DataStream-Salt<seed>`
+  （手機給的 `seed`；沒有就用 `streamConnectionID`）、Output 方向；解密後是 32 字節大端
+  APTransportPackage 頭（size@0、messageType@16 = `comm`）＋原始 iAP2 字節。
+- **反向**：配件→手機不走這條口，走事件通道的 `POST /command {type: iAPSendMessage, params: {data}}`
+  （`EventChannel.sendIapMessage`）。
+- **協議核心**（`Sources/IAP2/Iap2TunnelAccessory.swift`）：把隧道當傳輸包住 `Iap2AccessoryCore`，
+  在隧道上重跑完整 bring-up（marker → SYNC → 識別 → MFi 認證 → 訂閱），與 MacPlay helper 的
+  `run_tunnel` 一致；鏈路參數 zero-ack／出窗 4／控制會話 v2 本來就是 `Iap2Link` 的本端聲明。
+- **接線**（`Wireless.runDual`）：RECORD 一到（或流 130 在 RECORD 之後才 SETUP）就在隧道上起核心，
+  配件先發 marker＋SYNC（MacPlay 在 RECORD 時開 relay，同樣由配件先發），手機連上資料口後回包。
+  不以 `disableBluetooth` 為起跑條件——配件是鏈路發起方，等它會互等；`disableBluetooth` 只記日誌
+  並報隧道當時的狀態。隧道核心上的 Now Playing（0x5001）、封面、進度跳轉與 Wi-Fi 配置（0x5702）
+  照藍牙版處理；0x4300 在會話進行中忽略，會話沒了才回無線版 0x4301。資料口斷開→核心結束；
+  手機重連資料口→再起一套。
+
+真機期望日誌（`receiver.log`，雙模插線）：
+
+```
+SETUP iAP 隧道（130，dataPort 5xxxx，seed …）
+iAP 隧道就绪（dataPort 5xxxx）
+RECORD：会话开始
+隧道 iAP2 起跑（RECORD）
+隧道 iAP2 开始：marker＋SYNC 经事件通道发出，等 iPhone 连流 130
+iAP 隧道已连（192.168.x.x:…）
+隧道 iAP2 链路同步完成（对方出窗 …）
+隧道 iAP2 识别通过（0x1D02）
+隧道 iAP2 MFi 认证通过（0xAA05）
+隧道 iAP2 已认证：iAP2 现在走 Wi-Fi 会话（拔线不影响）
+command disableBluetooth（控制口，ack）
+手机要求停用蓝牙 iAP2（disableBluetooth，deviceID …）：隧道 iAP2 已认证
+NowPlaying 0x5001：…            ← 之後持續來自隧道核心
+USB carkit 流关闭 / USB iAP2 结束（0）   ← 拔線
+（沒有 会话结束：控制连接关闭；畫面、NowPlaying 繼續）
+```
+
+要判讀的分支：手機從不 SETUP 130（`disableBluetooth` 那行會報「手机没 SETUP 流 130」）→ 宣告方式或
+時機不對；SETUP 了但 `iAP 隧道已连` 不來、25 秒後 `隧道 iAP2 阶段链路探测超时` → 手機不接我們經事件通道
+發的 marker/SYNC，要對照 MacPlay 看 `iAPSendMessage` 的時機；隧道已認證但拔線仍 `会话结束` → 手機還是把
+會話綁在 USB 鏈路上，這條路不成立。離線已驗：`session-tests` 的 `transport-iap-tunnel-parser`（幀解析對照
+ControlCipher 封幀、nonce 對照 ScreenStream 向量、32B 頭、篡改／長度不合理即斷）與 `session-e2e`
+（假 iPhone SETUP 130 → 送兩個加密的 `comm` 包 → 原樣交出 iAP2 字節；`link.send` → 事件通道
+`iAPSendMessage`；TEARDOWN 130 → 句柄 `isTornDown`，螢幕流不受影響）。
+
 ## 已知缺口
 
 - **音訊（AAC/PCM 已出聲）**：手機 SETUP 音訊流（100/101/102）時用與螢幕流同源的 HKDF 金鑰
@@ -196,8 +281,6 @@ LaunchAgent 常駐接收器時，`open HomePlay.app` 會認為「HomePlay 已在
   不彈授權框**；且 launchd 拉起的接收器自己彈不出權限框——由桌寵（GUI、同一 App 身份）請求，
   TCC 記在 HomePlay 名下，接收器沿用同一授權。更新後首次在「系統設定 › 隱私與安全性 › 麥克風」
   把 HomePlay 打開（已實測勾上後麥克風上行立即工作）。
-- **iAP 資料通道（流 130）**：預設不宣告 `iAPChannel`。若手機在 SETUP 卡住或斷開，試 `--iap-channel`
-  （只宣告，還沒實作通道本身——那時就知道要補它）。
 - 有線 USB 的音訊（PCM 路徑已寫、未上真機）、儀表盤副屏、旋鈕／Home／Siri 的介面。
 - 手機「正在播放」已接（iAP2 0x5001 → Mac 系統 Now Playing／控制中心；播放/暫停/上一首/下一首走 CarPlay HID）：
   0x5000 訂閱的屬性 ID 必須都在 iAP2 規範內（播放組 0 狀態、1 已播毫秒、7 App 名、16 bundle id）——
@@ -270,11 +353,16 @@ F5 → `siri`（WS）→ 接收器 `requestSiri`（HID action 2/3）→ 手機�
 
 ## 換不同的 iPhone（插線即切換）
 
-- **已配對的另一台 iPhone**：直接插線。receiver 會把目前手機切到這一台；有線穩定 4 秒後
-  靜默切無線（桌寵凍住最後一幀），之後拔線不影響會話。
+- **已配對的另一台 iPhone**：直接插線。它在 USB 鏈路上報 0x4300 時，receiver 比對會話擁有者
+  （藍牙地址或 USB 序號）：不是同一台就先 `switchPhone` 結束舊會話（舊手機上的 CarPlay 退出），
+  再回無線版 0x4301 讓新手機用 Wi-Fi 開會話——**後插的拿會話，任何時刻只有一個**。兩台都插 USB
+  時以 usbmuxd 的到達順序為準（後到者勝），關舊鏈路時不會把藍牙恢復到舊手機。
+  純藍牙（都沒插線）時先連上的保持，第二台的主動連入會被拒絕——兩台已配對手機在範圍內會
+  互相自動連，若允許搶佔會乒乓；「後連上」只認插線這個明確動作。控制口若收到第二條 RECORD
+  （同一手機重連或另一台），後到的頂掉先到的，日誌 `第二条会话顶替旧会话`。
 - **沒配對的新 iPhone**：插線後 USB 只用來識別／拿藍牙地址；receiver 隨即結束 USB CarPlay、
   抑制 carkit，讓手機藍牙恢復，桌寵顯示「在 iPhone 上點『配對』」。BondAssist 沒確認就
-  自動切到「設定 › 藍牙 → 點 Mac 名字」的引導；配對完成後無線接管、這台手機成為目前手機，
-  線可以一直插著充電。
+  自動切到「設定 › 藍牙 → 點 Mac 名字」的引導；配對完成後**重開 USB，走 Wi-Fi 會話**
+  （不再等藍牙 iAP2——插著線時手機多半不接），這台手機成為目前手機，線可以一直插著充電。
 - `wireless.json` 的 `phone` **只在系統藍牙配對成功後**才落盤，避免插一下未配對的手機
   就把原本已配對的主用機頂掉；插上之前「忘記」的手機會自動解除 App 層忽略（不刪系統配對）。
