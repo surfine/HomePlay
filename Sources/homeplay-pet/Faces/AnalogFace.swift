@@ -19,7 +19,7 @@ extension Face {
         let ink = srgb(0x0b0f0c)
         // 四個數字：字高約 0.42 面高，故意互相壓到（Typograph 的味道）
         if analogNumeralCache == nil {
-            let f = FaceType.sf(400, .regular, mono: false)
+            let f = FaceType.numeric(.sf, 400, ["wght": 400, "wdth": 100])
             let h: CGFloat = 430
             analogNumeralCache = [
                 GlyphShape("12", font: f, kern: -14).tall(height: h, stretch: 1.0, at: CGPoint(x: 512, y: 44), anchorX: 0.5),

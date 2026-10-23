@@ -33,7 +33,7 @@ extension Face {
             g.fillEllipse(in: CGRect(x: c.x - 13, y: c.y - 13, width: 26, height: 26))
             g.restoreGState()
         }
-        let t = GlyphShape(Self.clock(date), font: FaceType.sf(300, .semibold), kern: -4)
+        let t = GlyphShape(Self.clock(date), font: FaceType.numeric(.sf, 300, ["wght": 600, "wdth": 100]), kern: -4)
             .tall(height: 92, stretch: 1.0, at: CGPoint(x: 512, y: 238), anchorX: 0.5, maxWidth: 520)
         fillShape(g, t, .white)
         drawIsland(g, at: CGPoint(x: 512, y: 500), scale: 0.62, liveAt: CGPoint(x: 512, y: 640), now: now)
@@ -58,9 +58,10 @@ extension Face {
 /// 陪伴天数：本机记每天第一次打开（UserDefaults），錶面上点成一圈
 enum CompanionLog {
     private static let key = "HomePlayCompanionDays"
-    private static func fmt() -> DateFormatter {
+    private static let posixDay: DateFormatter = {
         let f = DateFormatter(); f.locale = Locale(identifier: "en_US_POSIX"); f.dateFormat = "yyyy-MM-dd"; return f
-    }
+    }()
+    private static func fmt() -> DateFormatter { posixDay }
     static func markToday() {
         let today = fmt().string(from: Date())
         var arr = UserDefaults.standard.stringArray(forKey: key) ?? []

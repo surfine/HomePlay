@@ -56,10 +56,11 @@ extension Face {
         let shapes: (GlyphShape, GlyphShape)
         if let c = flowDigitCache, c.key == key { shapes = (c.top, c.bottom) } else {
             // SF 圓體最粗，再沿外框鼓起一圈（圓角描邊與原形聯集）＝吹脹的泡泡
-            let f = FaceType.rounded(400, .black)
+            // 系統錶面數字的 Soft 款：最粗、轉角最圓（SOFT 100），再沿外框鼓起一圈
+            let f = FaceType.numeric(.soft, 400, ["wght": 1000, "wdth": 110, "SOFT": 100])
             func bubble(_ s: String, top: CGFloat) -> GlyphShape {
                 let raw = GlyphShape(s, font: f, kern: 6).tall(height: 360, stretch: 1.0, at: CGPoint(x: 512, y: top), anchorX: 0.5, maxWidth: 780)
-                let puffed = raw.path.copy(strokingWithWidth: 26, lineCap: .round, lineJoin: .round, miterLimit: 1)
+                let puffed = raw.path.copy(strokingWithWidth: 18, lineCap: .round, lineJoin: .round, miterLimit: 1)
                 return GlyphShape(path: raw.path.union(puffed))
             }
             shapes = (bubble(hh2, top: 80), bubble(mm, top: 560))
@@ -68,8 +69,12 @@ extension Face {
         // 折射用的背景：同一片色彩畫到小圖再模糊（色團在漂，所以每次都取）
         let small = snapshotBackdrop(px: 192) { c in self.drawFlowField(c, now) }
         let backdrop = blurredBackdrop(small, sigma: 10, key: "flowface|\(Int(flowAnimT * 10))")
-        drawGlass(g, shapes.0, backdrop: backdrop, look: .bubble, cacheKey: "flow-top|\(key)")
-        drawGlass(g, shapes.1, backdrop: backdrop, look: .bubble, cacheKey: "flow-bottom|\(key)")
+        let clear = snapshotBackdrop(px: 384) { c in self.drawFlowField(c, now) }
+        // 亮邊跟著人轉：人在左邊，光就從左邊打過來（像斜著看 iPhone 鎖定畫面的玻璃時間）
+        let pt = Self.pointerOverride ?? pointer ?? .zero
+        let turn = max(-0.9, min(0.9, -pt.x * 0.7 + pt.y * 0.35))
+        drawLiquidGlass(g, [shapes.0, shapes.1], key: "flow|\(key)", clear: clear, frosted: backdrop, params: .bubble, system: .bubble,
+                        lightTurn: turn, fallback: .bubble)
 
         drawIsland(g, at: CGPoint(x: 512, y: 500), scale: 0.62, liveAt: CGPoint(x: 512, y: 500), now: now)
         // 日期：靠近才浮出（右下一行小字，不搶泡泡）

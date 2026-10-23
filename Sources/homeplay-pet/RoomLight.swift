@@ -34,6 +34,7 @@ final class RoomLightEstimator {
     private var sceneIndoor: Float = 0
     private var loggedFormat = false
     private var smooth = RoomLightSample.neutral
+    private var lastSampleAt = CACurrentMediaTime()
     private var hasSample = false
 
     /// 在 GazeTracker 的采集队列上调用（串行）。
@@ -184,10 +185,13 @@ final class RoomLightEstimator {
         s.sceneOutdoor = sceneOutdoor
         s.sceneIndoor = sceneIndoor
         s.thumbnail = thumb
+        defer { lastSampleAt = CACurrentMediaTime() }
         if !hasSample {
             smooth = s; hasSample = true
         } else {
-            let a: Float = 0.22
+            // 依時間平滑（時間常數 0.8 s）：相機 2、5 或 15 fps 都一樣快地跟上開關燈
+            let now = CACurrentMediaTime(), dt = max(0.02, min(1.5, now - lastSampleAt))
+            let a = Float(1 - exp(-dt / 0.8))
             smooth.intensity += (s.intensity - smooth.intensity) * a
             smooth.warmth += (s.warmth - smooth.warmth) * a
             smooth.cct += (s.cct - smooth.cct) * a

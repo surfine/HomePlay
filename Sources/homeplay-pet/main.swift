@@ -950,9 +950,8 @@ final class Face {
         let date = Self.displayDate, red = srgb(0xa8241c)
         drawCentered(g, Self.dateLine(date), font: FaceType.sf(36, .semibold), kern: 0.6, y: 150, color: srgb(0x5e1712))
         let (hh, mm) = Self.hourMinute(date)
-        let f = FaceType.sf(400, .light, width: .compressed)
-        let a = GlyphShape(hh, font: f, kern: -4).tall(height: 470, stretch: 1.3, at: CGPoint(x: 492, y: 210), anchorX: 1, maxWidth: 400)
-        let b = GlyphShape(mm, font: f, kern: -4).tall(height: 470, stretch: 1.3, at: CGPoint(x: 532, y: 210), anchorX: 0, maxWidth: 400)
+        let a = GlyphShape.adaptive(hh, height: 470, maxWidth: 400, at: CGPoint(x: 492, y: 210), anchorX: 1, weight: 220)
+        let b = GlyphShape.adaptive(mm, height: 470, maxWidth: 400, at: CGPoint(x: 532, y: 210), anchorX: 0, weight: 220)
         // 一點點同色的光暈，像夜裡的 LED，不是平面貼字
         g.saveGState()
         g.setShadow(offset: .zero, blur: 26, color: red.withAlphaComponent(0.45).cgColor)
@@ -961,13 +960,9 @@ final class Face {
         drawIsland(g, at: CGPoint(x: 512, y: 820), scale: 0.62, liveAt: CGPoint(x: 512, y: 820), now: now, red: true)
     }
 
-    static func clock(_ d: Date) -> String { let f = DateFormatter(); f.dateFormat = "H:mm"; return f.string(from: d) }
-    static func dateLine(_ d: Date) -> String {
-        let loc = L10n.language.locale
-        let f = DateFormatter(); f.locale = loc
-        f.dateFormat = DateFormatter.dateFormat(fromTemplate: "MMMMdEEEE", options: 0, locale: loc)
-        return f.string(from: d)
-    }
+    // 錶面每次重畫都會叫：DateFormatter 建一次約幾十微秒，用 FaceKit 的快取（依語言分開）
+    static func clock(_ d: Date) -> String { formatter("H:mm", raw: true).string(from: d) }
+    static func dateLine(_ d: Date) -> String { formatter("MMMMdEEEE").string(from: d) }
     /// 電量狀態一行字（模組、口袋共用）
     static func batteryState(_ b: Battery.Reading) -> String {
         b.charging ? L("battery.charging", "充电中") : (b.onAC ? L("battery.pluggedIn", "已接电源") : L("battery.onBattery", "使用电池"))
@@ -1691,9 +1686,15 @@ final class HomeViewModel {
     }
 
     /// 脸的 CGImage。尺寸不变时原地替换，避免每帧新建 GPU 纹理。
+    /// 只算錶面貼圖的換新次數（材質、外觀換了不算）：海報補丁用來判斷「只有螢幕內容變了」
+    private(set) var screenGeneration = 0
+    /// 目前螢幕上那張錶面（直播時是 nil）
+    private(set) var lastScreenImage: CGImage?
     func setScreen(_ image: CGImage) {
         guard displayLoaded else { return }
         generation += 1
+        screenGeneration += 1
+        lastScreenImage = image
         if let tex = screenTexture, tex.width == image.width, tex.height == image.height {
             do {
                 try tex.replace(withImage: image, options: .init(semantic: .color, mipmapsMode: .none))
@@ -1713,6 +1714,7 @@ final class HomeViewModel {
     func setScreen(texture: MTLTexture) {
         guard displayLoaded else { return }
         generation += 1
+        lastScreenImage = nil
         let tex = TextureResource.__texture(from: texture)
         screenTexture = tex
         screenMaterial.color.texture = MaterialParameters.Texture(tex)
@@ -2361,6 +2363,31 @@ final class ReceiverClient: NSObject, URLSessionWebSocketDelegate {
 
 // MARK: - 3D 视图：转动、拆开、缩放、触控
 
+/// 主循環的時鐘：60 Hz（手勢、直播、彈簧）用 NSView 的 display link（跟螢幕刷新同步，動畫不抖）；
+/// 低幀率或視窗不在任何螢幕上（快照放在螢幕外）時退回 Timer，低幀率允許系統合併喚醒。
+final class LoopClock: NSObject {
+    private var timer: Timer?
+    private var link: CADisplayLink?
+    private let tick: () -> Void
+    init(view: NSView, hz: Int, tick: @escaping () -> Void) {
+        self.tick = tick
+        super.init()
+        if hz >= 60, view.window?.screen != nil {
+            let l = view.displayLink(target: self, selector: #selector(fire(_:)))
+            l.preferredFrameRateRange = CAFrameRateRange(minimum: Float(hz) / 2, maximum: Float(hz), preferred: Float(hz))
+            l.add(to: .main, forMode: .common)
+            link = l
+        } else {
+            let t = Timer(timeInterval: 1.0 / Double(max(1, hz)), repeats: true) { [weak self] _ in self?.tick() }
+            if hz <= 30 { t.tolerance = min(0.05, 0.25 / Double(max(1, hz))) }
+            RunLoop.main.add(t, forMode: .common)
+            timer = t
+        }
+    }
+    @objc private func fire(_ l: CADisplayLink) { tick() }
+    func invalidate() { timer?.invalidate(); timer = nil; link?.invalidate(); link = nil }
+}
+
 /// 闲置海报层：盖在 ARView 上的最后一帧；点击/靠近时让位给实时渲染。
 /// 海報層：直接把凍結幀的 CGImage 當 layer contents（走 Core Animation 的 GPU 合成與色彩匹配，和 CAMetalLayer 同一條路）。
 private final class PosterImageView: NSView {
@@ -2419,7 +2446,7 @@ final class PetView: NSView {
     private(set) var stepFrames = 0
     func resetStepCount() { stepFrames = 0 }
     // lastNear 在 init 里设成「刚开始」；见 targetHz 的远距省电
-    private var timer: Timer?
+    private var timer: LoopClock?
     /// 闲置 90 秒后把 ARView 换成静态海报：RealityKit 的每帧固定开销是待机最大单项。
     /// 海报每 2 秒重新拍一张，时间/眨眼不会完全停；鼠标靠近或任何点击立刻恢复实时渲染。
     private let poster = PosterImageView()
@@ -2439,8 +2466,18 @@ final class PetView: NSView {
     private(set) var cycles3D = 0             // 統計：卸下次數（bench 用）
     private var lastSceneChange = CACurrentMediaTime()
     private var detachShotAt: Double?         // 正在為卸下等凍結幀（開始時間）；中途場景再變就取消
-    private var pendingSnapshots: [(CGImage?) -> Void] = []
-    private var snapshotsInFlight = 0   // 卸下期間要求的快照，掛回去出幀後再拍
+    private var pendingSnapshots: [(CGImage?) -> Void] = []   // 卸下期間要求的快照，掛回去出幀後再拍
+    private var snapshotsInFlight = 0
+    /// 海報補丁：卸下時記下凍結幀、當時的錶面與螢幕四角；之後只有錶面變（眨眼、瞄一眼、換分鐘）就把
+    /// 「新錶面 − 舊錶面」透視投影到螢幕四邊形、加回海報，不必為一次眨眼把 RealityKit 掛回來（一次約 30–40 ms）。
+    /// 螢幕是 UnlitMaterial、沒有色調映射，蓋板玻璃的反光是加上去的，所以「加差值」和真的重繪幾乎一樣。
+    private var frozenPatch: (poster: CIImage, posterCG: CGImage?, face: CIImage, corners: [CGPoint], scale: CGFloat, cs: CGColorSpace)?
+    private var renderedScreenGeneration = -1
+    private(set) var patches3D = 0
+    var debugDetached: Bool { !attached3D && !poster.isHidden }
+    /// 海報補丁專用的 Core Image context（跟錶面的分開，補完就清快取）
+    private static let patchCI = CIContext(options: [.cacheIntermediates: false, .workingFormat: CIFormat.RGBAh])
+    private let posterPatching = ProcessInfo.processInfo.environment["HOMEPLAY_POSTER_PATCH"] != "0"
     private var updateSub: (any Cancellable)?
     private var renderedGeneration = -1
     private var renderedPose = ScenePose()
@@ -2696,9 +2733,7 @@ final class PetView: NSView {
         loopHz = 0
         step()
         if timer == nil {
-            let t = Timer(timeInterval: 1 / 60, repeats: true) { [weak self] _ in self?.step() }
-            RunLoop.main.add(t, forMode: .common)
-            timer = t
+            timer = LoopClock(view: self, hz: 60) { [weak self] in self?.step() }
         }
     }
     required init?(coder: NSCoder) { fatalError() }
@@ -2773,6 +2808,7 @@ final class PetView: NSView {
     private func attach3D() {
         guard !attached3D else { return }
         attached3D = true
+        frozenPatch = nil
         updates3D = 0
         detachShotAt = nil
         lastSceneChange = CACurrentMediaTime()
@@ -2857,6 +2893,11 @@ final class PetView: NSView {
         guard attached3D, lastSceneChange <= at, pendingSnapshots.isEmpty, snapshotsInFlight == 0, !occluded, !sceneDirty,
               let cg = freezeImage() else { return }
         poster.show(cg, scale: window?.backingScaleFactor ?? 2)
+        if posterPatching, let face = model.lastScreenImage, screenFacingCamera() {
+            let c = screenCorners()
+            frozenPatch = c.count == 4 ? (CIImage(cgImage: cg), cg, CIImage(cgImage: face), c, window?.backingScaleFactor ?? 2,
+                                          cg.colorSpace ?? CGColorSpace(name: CGColorSpace.sRGB)!) : nil
+        } else { frozenPatch = nil }
         posterBob = bob
         poster.frame = bounds
         poster.isHidden = false
@@ -2891,10 +2932,17 @@ final class PetView: NSView {
         let pose = ScenePose(yaw: Double(yaw), pitch: Double(pitch), rigPitch: Double(rigPitch), rigYaw: Double(rigYaw),
                              apart: Double(apartT), press: Double(press),
                              aim: model.aimYaw.isNaN ? 0 : Double(model.aimYaw))
+        // 只有錶面貼圖變了、機身沒動、而且 3D 已卸下：補海報就好
+        if !sceneDirty, !attached3D, model.generation != renderedGeneration, !pose.differs(from: renderedPose),
+           model.generation - renderedGeneration == model.screenGeneration - renderedScreenGeneration, patchPoster() {
+            renderedGeneration = model.generation
+            renderedScreenGeneration = model.screenGeneration
+        }
         if model.generation != renderedGeneration || pose.differs(from: renderedPose) { sceneDirty = true }
         if sceneDirty {
             sceneDirty = false
             renderedGeneration = model.generation
+            renderedScreenGeneration = model.screenGeneration
             renderedPose = pose
             if lastDirtyAt > 0 { changeGaps = (now - lastDirtyAt, changeGaps.last) }
             lastDirtyAt = now
@@ -2912,6 +2960,57 @@ final class PetView: NSView {
             let f = bounds.offsetBy(dx: 0, dy: dy)
             if poster.frame != f { poster.frame = f }
         }
+    }
+
+    /// 把「目前錶面 − 凍結時錶面」投影到螢幕四邊形，加回凍結幀。成功回 true。
+    /// Core Image 的合成會把負值夾成 0（變暗的地方加不回去），所以加減在 CPU 上用浮點做，只算螢幕那一塊：
+    /// 三張圖（海報、新錶面投影、舊錶面投影）在線性色彩裡渲染成 Float 緩衝，p + n − o 夾回 0…1 再貼回海報。
+    private func patchPoster() -> Bool {
+        guard let fp = frozenPatch, let img = model.lastScreenImage,
+              CGFloat(img.width) == fp.face.extent.width, CGFloat(img.height) == fp.face.extent.height else {
+            if renderLog { log("3d: patch skipped (frozen \(frozenPatch != nil), image \(model.lastScreenImage != nil))") }
+            return false
+        }
+        let pts = fp.corners.map { CGPoint(x: $0.x * fp.scale, y: $0.y * fp.scale) }
+        let c = pts.map { CIVector(x: $0.x, y: $0.y) }
+        func proj(_ im: CIImage) -> CIImage {
+            im.applyingFilter("CIPerspectiveTransform", parameters: ["inputTopLeft": c[0], "inputTopRight": c[1], "inputBottomRight": c[2], "inputBottomLeft": c[3]])
+        }
+        // 螢幕四邊形的外框（像素、整數），夾在海報裡
+        let xs = pts.map(\.x), ys = pts.map(\.y)
+        let quad = CGRect(x: floor(xs.min()!) - 2, y: floor(ys.min()!) - 2, width: ceil(xs.max()! - xs.min()!) + 4, height: ceil(ys.max()! - ys.min()!) + 4)
+            .intersection(fp.poster.extent)
+        guard !quad.isNull, quad.width >= 2, quad.height >= 2 else { return false }
+        let w = Int(quad.width), h = Int(quad.height)
+        let lin = CGColorSpace(name: CGColorSpace.extendedLinearSRGB)!
+        func floats(_ im: CIImage) -> [Float] {
+            var buf = [Float](repeating: 0, count: w * h * 4)
+            buf.withUnsafeMutableBytes { Self.patchCI.render(im, toBitmap: $0.baseAddress!, rowBytes: w * 16, bounds: quad, format: .RGBAf, colorSpace: lin) }
+            return buf
+        }
+        let pBuf = floats(fp.poster), nBuf = floats(proj(CIImage(cgImage: img))), oBuf = floats(proj(fp.face))
+        Self.patchCI.clearCaches()   // 補丁之間不需要留中間圖（實測 footprint 只多約 4 MB）
+        var out = [Float](repeating: 0, count: w * h * 4)
+        for i in 0..<(w * h * 4) { out[i] = min(1, max(0, pBuf[i] + nBuf[i] - oBuf[i])) }
+        // 浮點緩衝 → CGImage（線性色彩），蓋回凍結幀的那一塊
+        let data = out.withUnsafeBufferPointer { Data(buffer: $0) }
+        guard let provider = CGDataProvider(data: data as CFData),
+              let patch = CGImage(width: w, height: h, bitsPerComponent: 32, bitsPerPixel: 128, bytesPerRow: w * 16, space: lin,
+                                  bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.premultipliedLast.rawValue | CGBitmapInfo.floatComponents.rawValue | CGBitmapInfo.byteOrder32Little.rawValue),
+                                  provider: provider, decode: nil, shouldInterpolate: false, intent: .defaultIntent),
+              let base = fp.posterCG,
+              let ctx = CGContext(data: nil, width: base.width, height: base.height, bitsPerComponent: 8, bytesPerRow: 0, space: fp.cs,
+                                  bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return false }
+        ctx.draw(base, in: CGRect(x: 0, y: 0, width: base.width, height: base.height))
+        ctx.setBlendMode(.copy)
+        ctx.draw(patch, in: quad)   // CIImage 與 CGContext 都是左下原點，座標直接對上
+        guard let cg = ctx.makeImage() else { return false }
+        poster.show(cg, scale: fp.scale)
+        patches3D += 1
+        if let p = ProcessInfo.processInfo.environment["HOMEPLAY_PATCH_TEST"] {
+            try? NSBitmapImageRep(cgImage: cg).representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: p + "/patched.png"))
+        }
+        return true
     }
 
     /// 深度閒置（90 秒沒人看）：主循環停掉，改成每 5 秒跑一拍；掛載／卸下由按需 3D 閘門處理
@@ -3119,11 +3218,7 @@ final class PetView: NSView {
         // Darwin 27 上這個值對 RealityKit 的出幀節奏無效（實測恆 60），真正省下來的是上面的按需掛載；
         // 仍照 targetHz 寫，保留語意給未來能生效的系統。
         render.__preferredFrameRate = Float(hz)
-        let t = Timer(timeInterval: 1.0 / Double(hz), repeats: true) { [weak self] _ in self?.step() }
-        // 低幀率時給系統合併定時器的餘地（60fps 不給，動畫要準）
-        if hz <= 30 { t.tolerance = min(0.05, 0.25 / Double(hz)) }
-        RunLoop.main.add(t, forMode: .common)
-        timer = t
+        timer = LoopClock(view: self, hz: hz) { [weak self] in self?.step() }
     }
 
     // MARK: 表情与小动作
@@ -4156,6 +4251,7 @@ final class PetView: NSView {
         styles.addItem(.separator())
         let islandOptItem = submenuItem(L("menu.islandFace", "岛表盘样式"), islandOptionsMenu(), symbol: "slider.horizontal.3")
         styles.addItem(islandOptItem)
+        styles.addItem(menuItem(L("clockLook.menu", "字体与颜色…"), #selector(menuClockLook(_:)), symbol: "textformat.size"))
         styles.addItem(menuItem(L("menu.faceOverview", "表盘总览…"), #selector(menuFaceOverview), hint: L("menu.hint.longPress", "长按屏幕"),
                                 symbol: "square.grid.3x3"))
         menu.addItem(submenuItem(L("menu.faces", "表盘"), styles, symbol: "clock"))
@@ -5921,6 +6017,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
         }
         // 除錯／截图：开机直接打开设置的某一页（--open-settings general|appearance|carplay|camera|permissions）
+        if CommandLine.arguments.contains("--clock-look-panel") {   // 截图：打开「字体与颜色」面板
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) { self.view.menuClockLook(nil) }
+        }
         if let i = CommandLine.arguments.firstIndex(of: "--open-settings") {
             let name = i + 1 < CommandLine.arguments.count ? CommandLine.arguments[i + 1] : "general"
             let pane = SettingsSection(rawValue: name) ?? .general
@@ -6191,6 +6290,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 }
             }
         }
+        // 驗證海報補丁：等 3D 真的卸下後只換眼睛（瞄一眼）；補丁上去後掛回 3D 拍一張真的，兩張比對
+        if let dir = ProcessInfo.processInfo.environment["HOMEPLAY_PATCH_TEST"] {
+            var phase = 0, patchesAt = 0
+            let t = Timer(timeInterval: 0.05, repeats: true) { [weak self] tm in
+                guard let self else { return }
+                if phase == 0, CACurrentMediaTime() > 4, self.view.debugDetached {
+                    phase = 1; patchesAt = self.view.patches3D
+                    Face.glanceOverride = true; self.view.face.forceDirty = true
+                } else if phase == 1, self.view.patches3D > patchesAt {
+                    phase = 2; tm.invalidate()
+                    self.view.captureSnapshot { img in
+                        if let img { try? NSBitmapImageRep(cgImage: img).representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: dir + "/real.png")) }
+                        exit(0)
+                    }
+                } else if phase == 1, !self.view.debugDetached { phase = 0; Face.glanceOverride = false }   // 中途掛回去了：重來
+            }
+            RunLoop.main.add(t, forMode: .common)
+        }
         if let snapshotPath {
             // 自检出图：等弹簧停稳，存一张 RealityKit 快照（透明底）就退出。
             // --snapshot-glance／--snapshot-blink：同一格畫面再拍「瞄一眼」「閉眼」，
@@ -6266,10 +6383,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let cpu1 = Double(ru.ru_utime.tv_sec) + Double(ru.ru_utime.tv_usec) / 1e6
                 + Double(ru.ru_stime.tv_sec) + Double(ru.ru_stime.tv_usec) / 1e6
             let mb = Double(ru.ru_maxrss) / 1_048_576
-            log(String(format: "bench frames=%d wall=%.1fs fps=%.1f cpu=%.2fs cpu%%=%.1f rss=%.0fMB faceRenders=%d prefFPS=%d frames3D=%d (%.1f/s) detaches=%d dirty(blink=%d approach=%d screen=%d live=%d expr=%d)",
+            log(String(format: "bench frames=%d wall=%.1fs fps=%.1f cpu=%.2fs cpu%%=%.1f rss=%.0fMB faceRenders=%d prefFPS=%d frames3D=%d (%.1f/s) detaches=%d patches=%d dirty(blink=%d approach=%d screen=%d live=%d expr=%d)",
                        self.view.stepFrames, wall, Double(self.view.stepFrames) / wall, cpu1 - cpu0, (cpu1 - cpu0) / wall * 100, mb,
                        Face.renderCount, Int(self.view.render.__preferredFrameRate),
-                       self.view.frames3D - frames3D0, Double(self.view.frames3D - frames3D0) / wall, self.view.cycles3D - cycles3D0,
+                       self.view.frames3D - frames3D0, Double(self.view.frames3D - frames3D0) / wall, self.view.cycles3D - cycles3D0, self.view.patches3D,
                        Face.dbgBlink, Face.dbgApproach, Face.dbgScreen, Face.dbgLive, Face.dbgExpr))
             log("dirty screen: pal=\(Face.dbgPal) reveal=\(Face.dbgReveal) flow=\(Face.dbgFlow) hello=\(Face.dbgHello) faceMs=\(String(format: "%.2f", Face.renderSeconds / Double(max(1, Face.renderCount)) * 1000)) bgMs=\(String(format: "%.2f", Face.bgSeconds / Double(max(1, Face.renderCount)) * 1000)) textMs=\(String(format: "%.2f", Face.textSeconds / Double(max(1, Face.renderCount)) * 1000)) islandMs=\(String(format: "%.2f", Face.islandSeconds / Double(max(1, Face.renderCount)) * 1000)) cache=\(Face.cacheHits)/\(Face.cacheHits + Face.cacheMisses) pocket=\(String(format: "%.2f/%.2f/%.2f", Face.pocketA / Double(max(1, Face.renderCount)) * 1000, Face.pocketC / Double(max(1, Face.renderCount)) * 1000, Face.pocketD / Double(max(1, Face.renderCount)) * 1000))")
             log(String(format: "state reveal %.3f target %.3f near %d style %@ mouse %.0f,%.0f frame %@",
@@ -6486,7 +6603,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// 截图／基准／设置预览这类诊断进程：不挂接收器、退出时也不发 stop，绝不碰用户正在用的 CarPlay
     static var isDiagnosticRun: Bool {
         let a = CommandLine.arguments
-        return ["--snapshot", "--bench", "--open-settings", "--show-menu"].contains { a.contains($0) }
+        return ["--snapshot", "--bench", "--open-settings", "--show-menu", "--clock-look-panel"].contains { a.contains($0) }
     }
     private func connect(_ endpoint: String, quiet: Bool = false) {
         guard !Self.isDiagnosticRun else { log("diagnostic run: not attaching to receiver"); return }
@@ -7262,7 +7379,8 @@ if let s = arg("--style") {
     }
     delegate.faceStyle = st
 }
-if let s = arg("--clock") { islandSnapshotOverride.clock = ClockStyle(rawValue: s) }   // 快照用：島錶面时钟样式 bold thin stacked compact
+if let s = arg("--clock") { islandSnapshotOverride.clock = ClockStyle(rawValue: s) }
+if let s = arg("--clock-look") { ClockLook.snapshotOverride = ClockLook.parse(s) }   // 快照用：字体与颜色   // 快照用：島錶面时钟样式 bold thin stacked compact
 if let s = arg("--bg") { islandSnapshotOverride.bg = IslandBackground(rawValue: s) }     // daytime flow photo solid black
 if let s = arg("--era") { islandSnapshotOverride.era = ["1988": Era.y1988, "2002": .y2002, "2026": .y2026][s] }
 if let s = arg("--timer"), let t = Double(s) { delegate.timerSeconds = t }   // 快照用：开一个 t 秒的计时器

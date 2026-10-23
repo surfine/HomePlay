@@ -17,7 +17,7 @@ extension Face {
             : Self.formatter("EEEEMMM").string(from: date)
         drawLeft(g, wdMonth, font: FaceType.sf(64, .semibold, mono: false), x: 70, y: 132, color: ink)
         let day = String(Calendar.current.component(.day, from: date))
-        let dayShape = GlyphShape(day, font: FaceType.sf(400, .semibold)).tall(height: 228, stretch: 1.0, at: CGPoint(x: 72, y: 176), anchorX: 0)
+        let dayShape = GlyphShape(day, font: FaceType.numeric(.sf, 400, ["wght": 600, "wdth": 100])).tall(height: 228, stretch: 1.0, at: CGPoint(x: 72, y: 176), anchorX: 0)
         fillShape(g, dayShape, ink)
 
         // ── 右上：指針鐘

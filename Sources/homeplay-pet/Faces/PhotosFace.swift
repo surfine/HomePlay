@@ -8,6 +8,7 @@ import Vision
 nonisolated(unsafe) private var subjectMask: (id: ObjectIdentifier, mask: CGImage?)?
 nonisolated(unsafe) private var subjectPending: ObjectIdentifier?
 nonisolated(unsafe) private var photoBackdrop: (id: ObjectIdentifier, image: CGImage)?
+nonisolated(unsafe) private var photoClear: (id: ObjectIdentifier, image: CGImage)?
 
 extension Face {
     func renderPhotosV2(_ g: CGContext, _ now: Double) {
@@ -33,12 +34,13 @@ extension Face {
 
         // 玻璃大時間：時左分右，貼著中縫
         let (hh, mm) = Self.hourMinute(date)
-        let f = FaceType.sf(400, .medium, width: .compressed)
-        let a = GlyphShape(hh, font: f, kern: -4).tall(height: 720, stretch: 1.42, at: CGPoint(x: 480, y: 150), anchorX: 1, maxWidth: 420)
-        let b = GlyphShape(mm, font: f, kern: -4).tall(height: 720, stretch: 1.42, at: CGPoint(x: 544, y: 150), anchorX: 0, maxWidth: 420)
-        let look = GlassLook(lift: 0.07, saturation: 1.25, brightness: 0.06)
-        drawGlass(g, a, backdrop: photoBackdrop?.image, look: look, cacheKey: "photo-h|\(hh)")
-        drawGlass(g, b, backdrop: photoBackdrop?.image, look: look, cacheKey: "photo-m|\(mm)")
+        let look = ClockLook.active
+        let a = GlyphShape.clock(hh, look: look, height: 720, maxWidth: 420, at: CGPoint(x: 480, y: 150), anchorX: 1)
+        let b = GlyphShape.clock(mm, look: look, height: 720, maxWidth: 420, at: CGPoint(x: 544, y: 150), anchorX: 0)
+        if photoClear?.id != id {   // 清楚的照片（畫成 1024² 一次）給玻璃邊緣折射出細節
+            photoClear = (id, snapshotBackdrop(px: 1024) { c in c.clip(to: full); self.drawUpright(c, img, in: r) })
+        }
+        drawClockDigits(g, [a, b], look: look, clear: photoClear?.image, frosted: photoBackdrop?.image, alpha: 1)
         // 人物蓋回來（景深）
         if let mask {
             g.saveGState()

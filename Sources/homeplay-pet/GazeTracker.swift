@@ -102,7 +102,7 @@ final class GazeTracker: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate 
 
     var isRunning: Bool { isRunningLocked }
 
-    /// 只开灯估计时跳过 Vision，并把相机降到 5 fps；在采集队列上改，避免跨线程读写。
+    /// 只开灯估计时跳过 Vision，并把相机降到格式支援的最低幀率（2／5／15 fps）；在采集队列上改，避免跨线程读写。
     func setTrackFaces(_ on: Bool) {
         queue.async { [weak self] in
             guard let self else { return }
@@ -118,7 +118,7 @@ final class GazeTracker: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate 
             if on {
                 if let f = self.highFormat { self.setFormat(f, fps: 15, device: d) } else { self.setFrameRate(15, device: d) }
             } else {
-                if let f = self.lowFormat { self.setFormat(f, fps: 15, device: d) } else { self.setFrameRate(15, device: d) }
+                if let f = self.lowFormat { self.setFormat(f, fps: self.lightOnlyFPS(f), device: d) } else { self.setFrameRate(self.lightOnlyFPS(d.activeFormat), device: d) }
             }
         }
     }
@@ -147,6 +147,12 @@ final class GazeTracker: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate 
             let fd = CMVideoFormatDescriptionGetDimensions(device.activeFormat.formatDescription)
             appendDiag("gaze.log", "camera mode \(fd.width)x\(fd.height) \(fps)fps")
         } catch { }
+    }
+
+    /// 只開房間光線：光線一秒變不了多少，挑格式支援的最低幀率（2 → 5 → 15），相機與縮放都省
+    private func lightOnlyFPS(_ fmt: AVCaptureDevice.Format?) -> Int {
+        guard let ranges = fmt?.videoSupportedFrameRateRanges else { return 5 }
+        return [2, 5, 15].first { f in ranges.contains { $0.minFrameRate <= Double(f) && Double(f) <= $0.maxFrameRate } } ?? 15
     }
 
     private func setFrameRate(_ fps: Int, device: AVCaptureDevice) {
@@ -317,8 +323,8 @@ final class GazeTracker: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate 
             self.restartAttempts = 0
             self.setStartingFlag(false)
             if !self.trackFaces {
-                if let f = self.lowFormat { self.setFormat(f, fps: 15, device: device) }
-                else { self.setFrameRate(5, device: device) }
+                if let f = self.lowFormat { self.setFormat(f, fps: self.lightOnlyFPS(f), device: device) }
+                else { self.setFrameRate(self.lightOnlyFPS(device.activeFormat), device: device) }
             }
             self.lastSeen = 0
             self.sentAbsent = true

@@ -18,7 +18,7 @@
 ## ⭐️ Features
 
 - **插线连接，然后无线。** 如同妙控系列配件一样的配对体验：第一次用数据线连上 Mac，配好就自动换成无线，之后拔线 CarPlay 也不会断。
-- **十种表情和多款表盘。** 初步设计了十种表情和多款表盘（玻璃大数字、Flow 泡泡字、模块、指针、床头夜灯……），旨在为平凡的日常注入一丝活力，帮助你收获更多平静、自在和从容。
+- **十种表情和多款表盘。** 初步设计了十种表情和多款表盘（Liquid Glass 大数字、Flow 泡泡字、模块、指针、床头夜灯……），旨在为平凡的日常注入一丝活力，帮助你收获更多平静、自在和从容。
 - **稍微用力按下屏幕，就是 CarPlay。** 在 Mac 桌面上获得连贯的 CarPlay 车载体验。与 iPhone 镜像不同的是，你可以通过 Mac 访问 iPhone 上的 Siri：按住 F5 直接开口说话，全程免提操作，在工作时减少分心。
 - **不只是 CarPlay。** 还整合了番茄钟、电量显示和“正在播放”小组件，并支持窗口置顶，相当于 iTunes 迷你播放器，但播的是 iPhone 上的曲库，比 AirPlay to Mac 更灵活和主动（F7–F9 媒体键切歌）。
 
@@ -55,16 +55,14 @@
 
 Release 有 Developer ID 签名并通过 Apple 公证，解压后 Gatekeeper 会直接放行。对应的 checksum 是 [`HomePlay-macOS-arm64.zip.sha256`](https://github.com/surfine/HomePlay/releases/latest/download/HomePlay-macOS-arm64.zip.sha256)，可用 `shasum -a 256 -c HomePlay-macOS-arm64.zip.sha256` 验证。
 
-## 0.6.0 的新东西
+## 0.6.1 的新东西
 
-- **重新设计的表盘与眼睛：** 液态玻璃大数字、Flow 泡泡字、按 Apple 版式重做的模块与指针；照片表盘会把人物抠出来，让时间站在人后面。眼睛照 Apple 的 👀 emoji 重新取样。
-- **真正的番茄钟：** 专注 25 分钟、休息 5 分钟，四轮后长休息 15 分钟，自动接下一段；岛会告诉你今天完成了几个。
-- **照真实构造的「拆开看看」：** 由外向内九层，点一下零件就有名称和规格。
-- **CarPlay 来电与 Siri：** 来电卡可接听、拒接、挂断；通话与 Siri 时开启回音消除；F5 改成按住说话。
-- **在 CarPlay 里播放视频（实验）：** iOS 27 停车时播视频；也可以直接用 AirPlay 投到这台 Mac。
-- **更清楚、更顺：** 表盘贴图跟着屏幕真实像素走，表情过渡 30fps，手势起手不再卡一下。
+- **系统自己的 Liquid Glass：** 表盘大数字直接用 macOS 27 画 Liquid Glass 的那套引擎，折射、厚度、沿轮廓的亮边都和系统一样；Flow 的亮边会跟着你转。
+- **字体与颜色：** 照 iOS 27 锁定画面——六款系统时钟字体加粗细滑杆、色票（或跟随壁纸）加色调滑杆、玻璃或实线；右键 › 表盘 › 字体与颜色，或在设置 › 外观里打开。
+- **系统时钟数字：** 改用 iOS 锁定画面同一套数字字体，长高时笔画不变形；修掉了「9」里面那条细线。
+- **更省电：** 闲置 CPU 从约 9% 降到约 5%。
 
-[完整 Release notes](https://github.com/surfine/HomePlay/releases/tag/v0.6.0)
+[完整 Release notes](https://github.com/surfine/HomePlay/releases/tag/v0.6.1)
 
 ## 特色（技术细节）
 

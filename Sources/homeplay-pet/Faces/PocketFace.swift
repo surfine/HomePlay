@@ -63,7 +63,7 @@ extension Face {
                 drawCentered(c, dl, font: FaceType.sf(36, .semibold), kern: 0.4,
                              y: 118, color: NSColor.white.withAlphaComponent(0.9))
                 // SF Pro 半粗的時間（和其他錶面同一套字），不再用圓體
-                let t = GlyphShape(Self.clock(date), font: FaceType.sf(300, .semibold), kern: -4)
+                let t = GlyphShape(Self.clock(date), font: FaceType.numeric(.sf, 300, ["wght": 600, "wdth": 100]), kern: -4)
                     .tall(height: 138, stretch: 1.0, at: CGPoint(x: 512, y: 146), anchorX: 0.5, maxWidth: 800)
                 fillShape(c, t, .white, shadow: 0.18)
                 // 卡片堆：兩層錯位的底，再一張玻璃前卡

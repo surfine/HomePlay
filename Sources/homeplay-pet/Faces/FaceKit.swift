@@ -41,6 +41,48 @@ enum FaceType {
         cache[key] = f
         return f
     }
+    /// 系統錶面數字字體（/System/Library/Fonts/ADTNumeric.ttc）：iOS 鎖定畫面（PosterBoard）、watchOS 錶面用的同一套。
+    /// 家族與可變軸（實測 macOS 27）：
+    /// - .SF Numeric：wdth 30…150、wght、GRAD
+    /// - .SF Adaptive Numeric：HGHT 100…500（往上長高、筆畫粗細不變＝iOS 26「自適應時間」）、wdth 60…100、wght、GRAD
+    /// - .SF Soft Numeric：wdth、wght、SOFT 0…100（轉角圓潤度）、GRAD；.SF Adaptive Soft Numeric 兼有 HGHT 與 SOFT
+    /// - .SF Rounded / Rail / Stencil Numeric、.New York (Soft) Numeric（New York 也有 HGHT）、.ADT Slab Numeric
+    enum Numeric: String {
+        case sf = ".SF Numeric", adaptive = ".SF Adaptive Numeric", soft = ".SF Soft Numeric", adaptiveSoft = ".SF Adaptive Soft Numeric"
+        case rounded = ".SF Rounded Numeric", rail = ".SF Rail Numeric", stencil = ".SF Stencil Numeric"
+        case newYork = ".New York Numeric", slab = ".ADT Slab Numeric"
+    }
+    nonisolated(unsafe) private static var numericBases: [String: CTFontDescriptor]?
+    private static func numericBase(_ family: Numeric) -> CTFontDescriptor? {
+        if numericBases == nil {
+            var m: [String: CTFontDescriptor] = [:]
+            let url = URL(fileURLWithPath: "/System/Library/Fonts/ADTNumeric.ttc") as CFURL
+            for d in (CTFontManagerCreateFontDescriptorsFromURL(url) as? [CTFontDescriptor]) ?? [] {
+                if let fam = CTFontDescriptorCopyAttribute(d, kCTFontFamilyNameAttribute) as? String, m[fam] == nil { m[fam] = d }
+            }
+            numericBases = m
+        }
+        return numericBases?[family.rawValue]
+    }
+    /// 錶面數字字體；axes 用四字母軸名（"wght" "wdth" "HGHT" "SOFT" "GRAD"）。找不到這套字體時退回 SF Pro（同粗細、壓縮寬）。
+    static func numeric(_ family: Numeric, _ size: CGFloat, _ axes: [String: CGFloat]) -> NSFont {
+        let key = "num|\(family.rawValue)|\(size)|" + axes.sorted { $0.key < $1.key }.map { "\($0.key)=\($0.value)" }.joined(separator: ",")
+        if let f = cache[key] { return f }
+        let f: NSFont
+        if var d = numericBase(family) {
+            for (tag, v) in axes {
+                let t = tag.utf8.reduce(UInt32(0)) { $0 << 8 | UInt32($1) }
+                d = CTFontDescriptorCreateCopyWithVariation(d, NSNumber(value: t), v)
+            }
+            f = CTFontCreateWithFontDescriptor(d, size, nil) as NSFont
+        } else {
+            let w = axes["wght"].map { NSFont.Weight(rawValue: ($0 - 400) / 600 * 0.6) } ?? .regular
+            f = NSFont.systemFont(ofSize: size, weight: w, width: .compressed)
+        }
+        cache[key] = f
+        return f
+    }
+
     private static func monoDigits(_ f: NSFont) -> NSFont {
         let d = f.fontDescriptor.addingAttributes([.featureSettings: [[
             NSFontDescriptor.FeatureKey.typeIdentifier: kNumberSpacingType,
@@ -80,9 +122,12 @@ struct GlyphShape {
                 if let gp = CTFontCreatePathForGlyph(runFont, glyphs[i], &t) { out.addPath(gp) }
             }
         }
-        path = out
+        // SF 可變字型的輪廓會互相重疊（例如 9 的直筆壓在圓上）：先合成不重疊的輪廓，
+        // 否則斜面、折射帶這些「沿邊描一圈」的效果會在字裡面多描出一條線
+        let clean = out.normalized()
+        path = clean
         if Self.cache.count > 400 { Self.cache.removeAll() }
-        Self.cache[key] = out
+        Self.cache[key] = clean
     }
     init(path: CGPath) { self.path = path }
 
@@ -111,6 +156,34 @@ struct GlyphShape {
             .scaledBy(x: sx, y: sy).translatedBy(x: -b.minX, y: -b.minY)
         return transformed(t)
     }
+    /// 自適應高數字（iOS 26 鎖定畫面那種）：在 SF Adaptive Numeric 的 HGHT 軸上找能填滿高寬比的那一檔，
+    /// 再「等比」縮放到 height——筆畫粗細一致，不是把字硬拉長。anchorX：0 左、0.5 中、1 右；at 是墨跡頂端那一點。
+    static func adaptive(_ s: String, height h: CGFloat, maxWidth: CGFloat, at p: CGPoint, anchorX: CGFloat,
+                         weight: CGFloat, soft: CGFloat? = nil, family: FaceType.Numeric = .adaptive) -> GlyphShape {
+        func shape(_ hght: CGFloat) -> GlyphShape {
+            var axes: [String: CGFloat] = ["HGHT": hght, "wght": weight]
+            if let soft { axes["SOFT"] = soft }
+            return GlyphShape(s, font: FaceType.numeric(soft == nil ? family : .adaptiveSoft, 200, axes), kern: 0)
+        }
+        // 要的高寬比；HGHT 100…500 單調增加高度，二分找最接近的一檔
+        let want = h / maxWidth
+        var lo: CGFloat = 100, hi: CGFloat = 500
+        let tallest = shape(hi).ink
+        var pick = hi
+        if tallest.height / max(1, tallest.width) > want {
+            for _ in 0..<12 {
+                let mid = (lo + hi) / 2, b = shape(mid).ink
+                if b.height / max(1, b.width) > want { hi = mid } else { lo = mid }
+            }
+            pick = lo
+        }
+        let g = shape(pick), b = g.ink
+        let k = min(h / max(1, b.height), maxWidth / max(1, b.width))
+        let t = CGAffineTransform(translationX: p.x - b.width * k * anchorX, y: p.y)
+            .scaledBy(x: k, y: k).translatedBy(x: -b.minX, y: -b.minY)
+        return g.transformed(t)
+    }
+
     func moved(_ dx: CGFloat, _ dy: CGFloat) -> GlyphShape {
         var t = CGAffineTransform(translationX: dx, y: dy)
         return GlyphShape(path: path.copy(using: &t) ?? path)
@@ -166,23 +239,71 @@ extension Face {
     /// 液態玻璃字：path 是畫布座標的字形；backdrop 是整張 1024² 背景（最好已模糊）。
     /// 給 cacheKey 時，只跟字形有關的部分（落影、斜面、厚度、霜白、鏡面）快取成一張透明圖，
     /// 每幀只重畫「透出來的背景」——Flow 這種背景一直在動的錶面才不會每幀重算一堆模糊陰影。
+    /// 光學液態玻璃（Faces/LiquidGlass.swift，GPU）：clear 是清楚的背景、frosted 是模糊版；整組字形當同一片玻璃。
+    /// GPU 不可用時退回下面的 CoreGraphics 版。
+    func drawLiquidGlass(_ g: CGContext, _ shapes: [GlyphShape], key: String? = nil, clear: CGImage?, frosted: CGImage?,
+                         params: LiquidGlassParams = .portrait, system: SystemGlassParams = .portrait, lightTurn: CGFloat = 0,
+                         fallback: GlassLook = .portrait) {
+        let path = CGMutablePath()
+        for s in shapes { path.addPath(s.path) }
+        // 先用系統自己的 Liquid Glass（私有 CA 零件）；不行再用自己的光學 shader；再不行退回 CG 版
+        if let clear, let r = SystemGlass.shared.render(path: path, key: key, scale: renderPixelScale, backdrop: clear, params: system,
+                                                         lightTurn: lightTurn) {
+            // 字外一圈柔和落影（玻璃浮在背景上）：只畫在字形外面，字裡交給玻璃；跟背景無關，按字形快取
+            glassShadow(g, path, key: key)
+            g.saveGState(); g.addPath(path); g.clip()
+            drawUpright(g, r.image, in: r.rect)
+            g.restoreGState()
+        } else if let clear, let r = LiquidGlass.shared.render(path: path, key: key, scale: renderPixelScale, backdrop: clear, frosted: frosted, params: params) {
+            drawUpright(g, r.image, in: r.rect)
+        } else {
+            for s in shapes { drawGlass(g, s, backdrop: frosted, look: fallback) }
+        }
+    }
+
+    private func glassShadow(_ g: CGContext, _ path: CGPath, key: String?) {
+        let ink = path.boundingBoxOfPath, sc = renderPixelScale
+        let pad = ink.height * 0.08 + 8
+        let rect = ink.insetBy(dx: -pad, dy: -pad).intersection(CGRect(x: 0, y: 0, width: 1024, height: 1024)).integral
+        guard !rect.isNull, rect.width > 1, rect.height > 1 else { return }
+        let ck = key.map { "\($0)|\(Int(sc * 100))|\(rect)" }
+        let img: CGImage
+        if let ck, let hit = Self.shadowCache, hit.key == ck { img = hit.image } else {
+            img = makeImage(Int((rect.width * sc).rounded(.up)), Int((rect.height * sc).rounded(.up))) { c in
+                c.scaleBy(x: sc, y: sc); c.translateBy(x: -rect.minX, y: -rect.minY)
+                c.addRect(CGRect(x: -100, y: -100, width: 1224, height: 1224)); c.addPath(path); c.clip(using: .evenOdd)
+                c.setShadow(offset: CGSize(width: 0, height: -ink.height * 0.012 * sc), blur: ink.height * 0.035 * sc,
+                            color: NSColor.black.withAlphaComponent(0.22).cgColor)
+                c.addPath(path); c.setFillColor(NSColor.black.withAlphaComponent(0.5).cgColor); c.fillPath()
+            }
+            if let ck { Self.shadowCache = (ck, img) }
+        }
+        drawUpright(g, img, in: rect)
+    }
+    nonisolated(unsafe) private static var shadowCache: (key: String, image: CGImage)?
+
     func drawGlass(_ g: CGContext, _ shape: GlyphShape, backdrop: CGImage?, look: GlassLook = .portrait, cacheKey: String? = nil) {
         guard shape.ink.width > 1, shape.ink.height > 1 else { return }
         glassBody(g, shape, backdrop: backdrop, look: look)
         guard let cacheKey else { glassDecor(g, shape, look: look); return }
         let sc = renderPixelScale
         let key = "\(cacheKey)|\(Int(sc * 100))"
+        // 只存字形附近那一塊（含落影外擴），不存整張畫布：放到最大（2048²）時整張一份 16 MB，十幾份就上百 MB
+        let pad = shape.ink.height * 0.12 + 8
+        let rect = shape.ink.insetBy(dx: -pad, dy: -pad).intersection(CGRect(x: 0, y: 0, width: 1024, height: 1024)).integral
+        guard !rect.isNull, rect.width > 1, rect.height > 1 else { return }
         let img: CGImage
         if let hit = Self.decorCache[key] { img = hit } else {
-            let px = Int((1024 * sc).rounded())
-            img = makeImage(px, px) { c in
-                if sc != 1 { c.scaleBy(x: sc, y: sc) }
+            let pw = Int((rect.width * sc).rounded(.up)), ph = Int((rect.height * sc).rounded(.up))
+            img = makeImage(pw, ph) { c in
+                c.scaleBy(x: sc, y: sc)
+                c.translateBy(x: -rect.minX, y: -rect.minY)
                 self.glassDecor(c, shape, look: look)
             }
-            if Self.decorCache.count > 12 { Self.decorCache.removeAll() }
+            if Self.decorCache.count >= 6 { Self.decorCache.removeAll() }   // 一個錶面最多四塊字；換分鐘時舊的整批丟掉
             Self.decorCache[key] = img
         }
-        drawUpright(g, img, in: CGRect(x: 0, y: 0, width: 1024, height: 1024))
+        drawUpright(g, img, in: rect)
     }
     nonisolated(unsafe) private static var decorCache: [String: CGImage] = [:]
 

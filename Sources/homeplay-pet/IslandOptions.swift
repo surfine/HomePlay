@@ -62,7 +62,7 @@ extension Face {
 
     /// 直排用：两位小时 / 两位分钟
     static func clockParts(_ d: Date) -> (h: String, m: String) {
-        let f = DateFormatter(); f.dateFormat = "HH,mm"
+        let f = formatter("HH,mm", raw: true)
         let p = f.string(from: d).split(separator: ",").map(String.init)
         return (p.first ?? "00", p.last ?? "00")
     }
@@ -336,7 +336,8 @@ extension PetView {
             i.target = self; i.representedObject = raw; i.state = on ? .on : .off; m.addItem(i)
         }
         section(L("island.clock", "时钟样式"))
-        for c in ClockStyle.allCases { add(c.title, #selector(menuIslandClock(_:)), c.rawValue, face.clockStyle == c) }
+        // 「細線」併進「字體與顏色」的粗細滑桿，不再單列（舊設定照樣讀得回來）
+        for c in ClockStyle.allCases where c != .thin || face.clockStyle == .thin { add(c.title, #selector(menuIslandClock(_:)), c.rawValue, face.clockStyle == c) }
         section(L("island.bg", "背景"))
         for b in IslandBackground.allCases {
             add(b == .photo && face.photos.current == nil ? String(format: L("island.bg.photoMissing", "%@（没有照片，暂用随时段）"), b.title) : b.title,
@@ -345,6 +346,17 @@ extension PetView {
         section(L("island.era", "年代"))
         for e in Era.allCases { add(e.title, #selector(menuIslandEra(_:)), e.rawValue, face.era == e) }
         return m
+    }
+
+    /// 「字體與顏色」面板：一邊調一邊在桌寵上看；不是島或照片錶面就先切到島
+    @objc func menuClockLook(_ s: Any?) {
+        if face.style != .island && face.style != .photos { setFaceStyle(.island) }
+        let tone = face.wallpaperTone(face.frosted)
+        ClockLookPanel.shared.show(near: window, wallpaper: tone) { [weak self] in
+            guard let self else { return }
+            self.face.forceDirty = true
+            log("clock look \(ClockLook.current.key)")
+        }
     }
 
     /// 改了选项就切回島錶面，马上看得到

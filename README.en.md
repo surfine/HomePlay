@@ -18,7 +18,7 @@
 ## ⭐️ Features
 
 - **Plug in once, then wireless.** Pairing works like a Magic accessory: connect the iPhone to the Mac with a cable once, it switches to wireless when pairing is done, and unplugging later doesn't drop CarPlay.
-- **Ten expressions, many faces.** Ten expressions and a set of faces (glass numerals, Flow bubbles, Modular, Analog, Bedside…) to add a little life to ordinary days, and help you feel a bit more calm and at ease.
+- **Ten expressions, many faces.** Ten expressions and a set of faces (Liquid Glass numerals, Flow bubbles, Modular, Analog, Bedside…) to add a little life to ordinary days, and help you feel a bit more calm and at ease.
 - **Press a little harder, and it's CarPlay.** A continuous CarPlay experience on your Mac desktop. Unlike iPhone Mirroring, you can reach your iPhone's Siri through the Mac: hold F5 and just talk, completely hands-free, so work stays focused.
 - **More than CarPlay.** A Pomodoro timer, battery and Now Playing widgets, and an always-on-top window: like the iTunes MiniPlayer, but playing your iPhone's library, more flexible than AirPlay to Mac (F7–F9 skip tracks).
 
@@ -55,16 +55,14 @@
 
 The release is Developer ID signed and notarized by Apple, so Gatekeeper opens it after unzipping. The matching checksum is [`HomePlay-macOS-arm64.zip.sha256`](https://github.com/surfine/HomePlay/releases/latest/download/HomePlay-macOS-arm64.zip.sha256). Verify with `shasum -a 256 -c HomePlay-macOS-arm64.zip.sha256`.
 
-## What's new in 0.6.0
+## What's new in 0.6.1
 
-- **Redesigned faces and eyes:** Liquid Glass numerals, Flow bubbles, Modular and Analog rebuilt on Apple's layouts; the Photos face cuts out the subject so the time stands behind them. The eyes are resampled from Apple's 👀 emoji.
-- **A real Pomodoro:** 25 minutes of focus, 5 minutes of rest, a 15-minute long break after four rounds, each phase starting on its own; the island tells you how many you finished today.
-- **Take-apart view on the real construction:** nine layers from the outside in, with a name and spec line for each part.
-- **CarPlay calls and Siri:** a call card to answer, decline and hang up; echo cancellation during calls and Siri; hold F5 to talk.
-- **Video in CarPlay (experimental):** iOS 27 video while parked, or AirPlay straight to this Mac.
-- **Sharper and smoother:** the face texture follows the screen's real pixels, expression transitions run at 30 fps, and gestures no longer hitch on the first touch.
+- **The system's own Liquid Glass.** The big numerals are drawn by the same engine macOS 27 uses for Liquid Glass: the lensing, the thickness and the rim light all match the system. On Flow, the rims follow you.
+- **Font & Color.** Like the iOS 27 Lock Screen: six system clock fonts with a weight slider, swatches (or match the wallpaper) with a tone slider, Glass or Solid. Right-click › Faces › Font & Color, or Settings › Appearance.
+- **The system clock numerals.** The same digits as the iOS Lock Screen, which grow taller without distorting; the hairline inside the "9" is gone.
+- **Lighter on power.** Idle CPU down from about 9% to about 5%.
 
-[Full release notes](https://github.com/surfine/HomePlay/releases/tag/v0.6.0)
+[Full release notes](https://github.com/surfine/HomePlay/releases/tag/v0.6.1)
 
 ## Technical details
 

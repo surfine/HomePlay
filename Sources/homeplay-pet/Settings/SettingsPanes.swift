@@ -127,6 +127,11 @@ struct AppearancePane: View {
                 Picker(L("settings.face", "表面"), selection: Binding(get: { m.faceStyle }, set: { m.perform("menuStyle:", $0.rawValue) })) {
                     ForEach(FaceStyle.allCases, id: \.self) { Text($0.title).tag($0) }
                 }
+                LabeledContent {
+                    Button(L("clockLook.edit", "编辑…")) { m.perform("menuClockLook:") }
+                } label: {
+                    RowLabel(title: L("clockLook.title", "字体与颜色"), subtitle: L("clockLook.subtitle", "岛和照片表盘的大时间"))
+                }
             }
         }
         .formStyle(.grouped)
