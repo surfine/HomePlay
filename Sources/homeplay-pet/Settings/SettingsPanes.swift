@@ -107,6 +107,7 @@ struct AppearancePane: View {
                 Picker(L("settings.facing", "朝向"), selection: Binding(get: { m.viewMode }, set: { m.app?.view.setViewMode($0); m.refresh() })) {
                     Text(L("settings.facing.auto", "自动")).tag(ViewMode.auto)
                     Text(L("settings.facing.front", "正面固定")).tag(ViewMode.front)
+                    Text(L("settings.facing.wall", "挂墙")).tag(ViewMode.wall)
                 }.pickerStyle(.segmented).fixedSize()
                 LabeledContent(L("settings.angle", "视角")) {
                     ControlGroup {
@@ -115,10 +116,12 @@ struct AppearancePane: View {
                         Button(L("menu.view.back", "背面")) { m.perform("menuViewBack") }
                         Button(L("menu.view.top", "俯视")) { m.perform("menuViewAbove") }
                     }.fixedSize()
-                }
+                }.disabled(m.viewMode == .wall)   // 挂墙贴在墙上，不换视角
             } header: {
-                IllustrationHeader(scene: m.viewMode == .front ? .facingFront : .facing,
-                                   note: m.viewMode == .auto ? L("settings.facing.note", "自动朝向屏幕中央") : L("settings.facing.frontNote", "始终正对前方"))
+                IllustrationHeader(scene: m.viewMode == .auto ? .facing : .facingFront,
+                                   note: m.viewMode == .auto ? L("settings.facing.note", "自动朝向屏幕中央")
+                                       : m.viewMode == .wall ? L("settings.facing.wallNote", "只有屏幕，贴墙正对前方")
+                                       : L("settings.facing.frontNote", "始终正对前方"))
             }
             Section {
                 Picker(L("settings.finish", "配色"), selection: Binding(get: { m.finish }, set: { m.perform("menuFinish:", $0.rawValue) })) {

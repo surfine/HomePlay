@@ -353,3 +353,8 @@ footer .links{display:flex;gap:8px 20px;flex-wrap:wrap}
   .style-grid{grid-template-columns:repeat(2,1fr)}
   .dev-card{padding:36px 22px}
 }
+
+/* ── 44 秒演示影片（同一支也在 B 站） ── */
+.film .lede{margin-top:14px}
+.film-video{display:block;width:100%;height:auto;margin-top:28px;border-radius:var(--r);background:#000}
+.film-alt{margin-top:12px;font-size:15px;color:var(--muted)}

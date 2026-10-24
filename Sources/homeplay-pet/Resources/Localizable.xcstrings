@@ -5589,6 +5589,28 @@
         }
       }
     },
+    "menu.view.wall": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wall Mounted (Screen Only)"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "挂墙（只有屏幕）"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "掛牆（只有螢幕）"
+          }
+        }
+      }
+    },
     "perm.camera.title": {
       "localizations": {
         "en": {
@@ -7081,6 +7103,50 @@
           "stringUnit": {
             "state": "translated",
             "value": "正面固定"
+          }
+        }
+      }
+    },
+    "settings.facing.wall": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wall Mounted"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "挂墙"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "掛牆"
+          }
+        }
+      }
+    },
+    "settings.facing.wallNote": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Screen only, flat on the wall, facing you"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "只有屏幕，贴墙正对前方"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "只有螢幕，貼牆正對前方"
           }
         }
       }

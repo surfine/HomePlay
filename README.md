@@ -24,6 +24,10 @@
 - **用力按，就是 CarPlay。** 第一次插线，之后无线。iPhone 把真正的 CarPlay 画面和声音传到这台小屏幕，你在上面点，就像在车上点。按住 F5，直接和 iPhone 的 Siri 说话。
 - **顺手的小工具。** 番茄钟、正在播放、电量、下一个日程；F7–F9 媒体键切歌，窗口可以置顶，当成 iPhone 曲库的迷你播放器。
 
+<a href="https://www.bilibili.com/video/BV1rTnz6YEmM/"><img src="assets/github/film-cover.webp" alt="HomePlay 44 秒演示动画（点开在 B 站播放）" width="100%"></a>
+
+<p align="center"><sub>▶ <a href="https://www.bilibili.com/video/BV1rTnz6YEmM/">在 B 站看 44 秒演示</a> · 也可以在<a href="https://homeplay.aaronlau.me/zh-hans/#film">产品页面</a>直接播放</sub></p>
+
 <img src="assets/github/grid-v2.webp" alt="HomePlay 正面、背面、真实 CarPlay 音乐画面与拆开图" width="100%">
 
 | 10 款表盘 | 十种表情 |
@@ -63,6 +67,7 @@ App 有 Developer ID 签名并通过 Apple 公证，解压后直接打开。想�
 
 ## 1.0 的新东西
 
+- **1.0.1：挂墙模式。** 右键 › 外观 › 挂墙：拿掉底座，只留屏幕，直立正对你；表盘、眼睛、CarPlay 都照常可用。
 - **10 款表盘，每款都有眼睛。** 岛、照片、模块、Typograph（可换浮雕）、Flow、天气、日历、陪伴的痕迹、黑色、System 6（Finder、闹钟、关于三种版式，照 1988 年原样做）。胶囊跟着表盘的年代换材质：平面版式是纯黑，iOS 27 风格是黑透渐变，HomeView 本身是 Liquid Glass，System 6 是 1-bit 按钮。
 - **10 种表情，各有各的轮廓。** 新增「在想」（等 CarPlay 连接时）和「不耐烦」（连点五下）；远远看也分得出来。
 - **插线配对，之后无线。** 第一次插线就在屏幕上带你配对，配好立刻出画面；之后拔线，CarPlay 自己转到 Wi-Fi，画面和声音不断。重启后约 10–20 秒连回来。

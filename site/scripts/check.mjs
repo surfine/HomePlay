@@ -7,7 +7,7 @@ import { copy, LANGS } from './content.mjs';
 const root = fileURLToPath(new URL('../dist/', import.meta.url));
 const origin = process.env.SITE_ORIGIN || 'https://homeplay.aaronlau.me';
 const originHost = new URL(origin).host;
-const okHosts = new Set([originHost, 'github.com']);
+const okHosts = new Set([originHost, 'github.com', 'www.bilibili.com']);   // B 站只是演示影片的外連，頁面不從那裡載入任何東西
 const files = [];
 async function walk(dir) {
   for (const e of await readdir(dir, { withFileTypes: true })) {

@@ -24,6 +24,10 @@ A HomeView that lives on your Mac’s desktop. It has a pair of eyes that watch 
 - **Press firmly for CarPlay.** Plug in once, then it’s wireless. Your iPhone sends real CarPlay video and sound to the little screen, and tapping it works like tapping the screen in a car. Hold F5 to talk to your iPhone’s Siri.
 - **Handy extras.** Focus timer, Now Playing, battery and your next event. F7–F9 skip tracks, and the window can float on top like a mini player for your iPhone’s library.
 
+<a href="https://www.bilibili.com/video/BV1rTnz6YEmM/"><img src="assets/github/film-cover.webp" alt="HomePlay 44-second demo film (opens on Bilibili)" width="100%"></a>
+
+<p align="center"><sub>▶ <a href="https://www.bilibili.com/video/BV1rTnz6YEmM/">Watch the 44-second demo on Bilibili</a> · or play it on the <a href="https://homeplay.aaronlau.me/en/#film">website</a></sub></p>
+
 <img src="assets/github/grid-v2.webp" alt="HomePlay front view, back view, real CarPlay music screen, and exploded anatomy" width="100%">
 
 | 10 faces | Ten expressions |
@@ -63,6 +67,7 @@ The app is signed with a Developer ID and notarized by Apple, so it opens straig
 
 ## What’s new in 1.0
 
+- **1.0.1: Wall Mounted.** Right-click › Appearance › Wall Mounted: the base goes away and only the screen remains, upright and facing you; faces, eyes and CarPlay all still work.
 - **10 faces, eyes on every one.** Island, Photos, Modular, Typograph (with an Embossed option), Flow, Weather, Calendar, Days Together, Black, and System 6 (Finder, Alarm Clock and About layouts, rebuilt the way they looked in 1988). The capsule follows each face’s era: solid black on the flat layouts, smoked on the iOS 27 ones, Liquid Glass on HomeView’s own, and a 1-bit button on System 6.
 - **10 expressions, each with its own silhouette.** New: Thinking (while CarPlay connects) and Annoyed (five quick clicks), easy to tell apart from across the room.
 - **Pair with a cable, then go wireless.** The first time you plug in, the screen walks you through pairing and the picture appears as soon as it’s done. Unplug afterwards and CarPlay moves to Wi-Fi without dropping picture or sound. After a restart it’s back in about 10–20 seconds.

@@ -190,6 +190,15 @@ ${head(c, { title: c.title, description: c.description, canonicalPath: c.path, i
   </div>
 </div></section>
 
+<section class="film" id="film"><div class="wrap">
+  <div class="rise">
+    <h2>${c.filmTitle}</h2>
+    <p class="lede">${c.filmLede}</p>
+  </div>
+  <video class="film-video" controls playsinline preload="none" poster="/media/film/poster.webp" width="1920" height="1080" aria-label="${attr(c.filmLabel)}"><source src="/media/film/homeplay-44s.mp4" type="video/mp4"></video>
+  <p class="film-alt"><a href="https://www.bilibili.com/video/BV1rTnz6YEmM/">${c.filmBili}</a></p>
+</div></section>
+
 <section class="why" id="why"><div class="wrap why-grid">
   <div class="why-text">
     <h2 class="rise">${c.essayTitle}</h2>

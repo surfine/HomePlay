@@ -5,7 +5,7 @@
 // 1. 基准：窗口在显示器右边 → 朝左（朝屏幕中央的人），左边反之；
 // 2. 跟随（摄像头看到人）：转向人。摄像头在显示器顶部中央、桌宠在侧边，人相对桌宠的角度要扣掉视差：
 //    tan(对桌宠) = tan(对摄像头) + tan(基准)。没看到人就是基准本身。
-// 「正面固定」：两层都不要，永远 0。
+// 「正面固定」「挂墙」：两层都不要，永远 0。
 //
 // 纯逻辑：时间、窗口几何、人脸位置都由调用方给；selftest 直接驱动。
 import Foundation
@@ -13,6 +13,7 @@ import Foundation
 enum ViewMode: String, CaseIterable {
     case auto    // 窗口位置倾斜＋跟随
     case front   // 正面固定，不倾斜
+    case wall    // 挂墙：只有屏幕模组，直立贴墙、正对前方，不倾斜也不转
     static let key = "HomePlayViewMode"
     /// 快照／基准用：只在这次执行生效，不写偏好
     nonisolated(unsafe) static var override: ViewMode?
@@ -82,7 +83,7 @@ struct Aim {
         var target: Double
         var response = Self.returnResponse
         switch mode {
-        case .front:
+        case .front, .wall:
             target = 0
         case .auto:
             target = baseline

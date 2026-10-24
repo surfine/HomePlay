@@ -89,7 +89,11 @@ func srgb(_ hex: UInt32, _ a: CGFloat = 1) -> NSColor {
 // MARK: - 窗口比例
 
 enum Pet {
-    static let aspect: CGFloat = 0.82        // 宽 / 高
+    static let standAspect: CGFloat = 0.82   // 宽 / 高：整机（底座＋屏幕）
+    static let wallAspect: CGFloat = 1 / 1.06 // 挂墙：只有屏幕模组，近正方，高＝宽＋一点边
+    /// 目前的窗口比例：跟着朝向模式换（启动时、切换挂墙时设）
+    nonisolated(unsafe) static var aspect: CGFloat = standAspect
+    static func aspect(for mode: ViewMode) -> CGFloat { mode == .wall ? wallAspect : standAspect }
     static let defaultWidth: CGFloat = 220
     static let minWidth: CGFloat = 130
     static let maxWidth: CGFloat = 900
@@ -1860,8 +1864,25 @@ final class HomeViewModel {
 
     /// 铰链：点头/摇头 + 追人的小幅度俯仰/偏航。
     func setRig(pitch: Float, yaw: Float) {
+        // 挂墙：没有铰链，屏幕扶正（抵消 USDZ 自带的后仰）后固定不动
+        if wall { screenPivot.orientation = simd_quatf(angle: Float(Self.tilt), axis: SIMD3<Float>(1, 0, 0)); return }
         screenPivot.orientation = simd_quatf(angle: yaw, axis: SIMD3<Float>(0, 1, 0))
             * simd_quatf(angle: pitch, axis: SIMD3<Float>(1, 0, 0))
+    }
+
+    /// 挂墙模式：藏起底座（圆顶、网罩、脚圈、USB‑C 都在里面）和铰链，只留屏幕模组，直立正对前方。
+    private(set) var wall = false
+    func setWall(_ on: Bool) {
+        wall = on
+        baseGroup?.isEnabled = !on
+        for name in ["TlTyQAuZSZnkfBS", "UHiMdHobqyuoBpP"] { usdzRoot?.findEntity(named: name)?.isEnabled = !on }   // 铰链上下两半
+        setRig(pitch: 0, yaw: 0)
+        generation += 1
+    }
+    /// 挂墙时显示面中心（世界座标，cm）：绕铰链转回直立后的位置，镜头对准这里
+    static var wallScreenCenter: SIMD3<Float> {
+        let t = Float(tilt), dy = Float(rigY - hingeY), dz = 4.28 - rigHome.z
+        return rigHome + SIMD3<Float>(0, dy * cosf(t) - dz * sinf(t), dy * sinf(t) + dz * cosf(t))
     }
 
     /// 按下时的 2.5% 缩放和 4.5 秒一次的轻微浮动（都以底座底面为原点）。
@@ -2957,6 +2978,7 @@ final class PetView: NSView {
         }
         if let y0 { yaw = y0; ty = y0 }
         if let p0 { pitch = p0; tp = p0 }
+        if viewMode == .wall { model.setWall(true); yaw = 0; ty = 0; pitch = 0; tp = 0 }
         if initialApart { apartTarget = 1; apartT = 1; if y0 == nil { yaw = Self.apartYaw; ty = yaw } }
         // 驗證用：HOMEPLAY_CAR_VIDEO=<網址> 不接 iPhone 直接走 CarPlay 影片播放器（同一條貼圖路徑、控制列）
         if let u = ProcessInfo.processInfo.environment["HOMEPLAY_CAR_VIDEO"] {
@@ -3377,6 +3399,13 @@ final class PetView: NSView {
             ty += realDt * 0.45
             tp += (0.32 - tp) * min(1, realDt * 1.5)
         }
+        // 挂墙：机身贴在墙上不转——拖转、滑动、转一圈、视角预设都不动镜头，永远正对屏幕
+        let wall = viewMode == .wall && !isApart
+        if wall {
+            touring = false
+            let full = 2 * CGFloat.pi
+            ty = (yaw / full).rounded() * full; tp = 0
+        }
         let k1: CGFloat = 26, c1 = 2 * sqrt(k1)      // 拆开：临界阻尼，不回弹（双击不是甩出去的手势）
         // 转动：Apple 的旋转弹簧（阻尼比 0.8、响应 0.4 s），放手带惯性时会轻轻过冲再停
         let k2: CGFloat = (2 * .pi / 0.4) * (2 * .pi / 0.4), c2: CGFloat = 2 * 0.8 * sqrt(k2)
@@ -3392,8 +3421,9 @@ final class PetView: NSView {
         // 镜头：围着身体转；拆开时退远一点、抬一点，九件都在画面里。
         // RealityKit 默认相机朝 -Z，绕 Y 转 yaw、绕 X 转 -pitch 就正对目标，滚转恒 0。
         let e = AnatomyLayer.liftProgress(apartT)   // 跟螢幕組抬升同步：半拆時也已經在框內
-        let target = SIMD3<Float>(0, Float(8.6 + 3.6 * e), Float(1.8 + 3.0 * e))
-        let fitH = Float(22 + 22 * e)
+        // 挂墙只框屏幕模组：对准扶正后的显示面中心
+        let target = wall ? HomeViewModel.wallScreenCenter : SIMD3<Float>(0, Float(8.6 + 3.6 * e), Float(1.8 + 3.0 * e))
+        let fitH: Float = wall ? Self.wallFitH : Float(22 + 22 * e)
         let d = (fitH / 2) / tanf(12 * .pi / 180) * max(1, 0.86 / Float(Pet.aspect))
         let sy = sinf(Float(yaw)), cy = cosf(Float(yaw))
         let sp = sinf(Float(pitch)), cp = cosf(Float(pitch))
@@ -3807,7 +3837,10 @@ final class PetView: NSView {
     // 用户自己转过就不再替他转。
     private var atHome = true
     private static let homeYaw: CGFloat = 0.52, apartYaw: CGFloat = 1.0, homePitch: CGFloat = 0.26
+    /// 挂墙时镜头的竖直取景（cm）：屏幕模组外框约 14.4 cm，四周各留约 5% 的边
+    static let wallFitH: Float = 16.6
     func setApart(_ on: Bool) {
+        if on, viewMode == .wall { return }   // 挂墙没有底座可拆
         apartTarget = on ? 1 : 0
         if on { mood.apart = true }      // 组回到位才放下（见 step）
         else { pinnedPart = nil; hoverPart = nil }
@@ -4235,8 +4268,17 @@ final class PetView: NSView {
         setViewMode(mode)
     }
     func setViewMode(_ mode: ViewMode) {
+        let wasWall = viewMode == .wall
         viewMode = mode
         ViewMode.saved = mode
+        if mode == .wall, isApart { setApart(false) }
+        if (mode == .wall) != wasWall {
+            // 进出挂墙：换掉底座/铰链、窗口比例跟着换（宽度不变），离开时镜头回原本的主视角
+            model.setWall(mode == .wall)
+            Pet.aspect = Pet.aspect(for: mode)
+            if let w = window { resizeWindowAnimated(toWidth: w.frame.width) }
+            if wasWall { atHome = true; ty = Self.homeYaw; tp = Self.homePitch }
+        }
         if mode == .front { menuViewFront() }
         hotUntil = CACurrentMediaTime() + 0.4
         log("view mode \(mode.rawValue)")
@@ -4570,7 +4612,8 @@ final class PetView: NSView {
         liveTimerItem = timerItem
         menu.addItem(timerItem)
 
-        menu.addItem(menuItem(isApart ? L("menu.apart.putBack", "组回来") : L("menu.apart.takeApart", "拆开看看"), #selector(menuApart),
+        menu.addItem(menuItem(isApart ? L("menu.apart.putBack", "组回来") : L("menu.apart.takeApart", "拆开看看"),
+                              viewMode == .wall ? nil : #selector(menuApart),   // 挂墙没有底座可拆：灰掉
                               hint: L("menu.hint.twoFingerTap", "两指轻点两下"), symbol: isApart ? "cube" : "cube.transparent"))
         // 跟随我：最常开关的一项放在第一层（设置里有完整说明）
         let follow = menuItem(L("prefs.gaze", "跟随我（相机）"), #selector(menuGazeToggle), symbol: "viewfinder")
@@ -4591,9 +4634,13 @@ final class PetView: NSView {
         looks.addItem(NSMenuItem.sectionHeader(title: L("settings.facing", "朝向")))
         // 朝向：自动（窗口在哪边就朝中央、开了跟随就转向人）／正面固定（永远正对、不倾斜）
         for mode in ViewMode.allCases {
-            let title = mode == .auto ? L("menu.view.auto", "自动朝向（窗口位置 + 跟随）")
-                                      : L("menu.view.fixedFront", "正面固定（不倾斜）")
-            let item = menuItem(title, #selector(menuViewMode(_:)), symbol: mode == .auto ? "arrow.left.arrow.right" : "rectangle")
+            let title: String, symbol: String
+            switch mode {
+            case .auto: title = L("menu.view.auto", "自动朝向（窗口位置 + 跟随）"); symbol = "arrow.left.arrow.right"
+            case .front: title = L("menu.view.fixedFront", "正面固定（不倾斜）"); symbol = "rectangle"
+            case .wall: title = L("menu.view.wall", "挂墙（只有屏幕）"); symbol = "photo.artframe"
+            }
+            let item = menuItem(title, #selector(menuViewMode(_:)), symbol: symbol)
             item.representedObject = mode.rawValue
             item.state = viewMode == mode ? .on : .off
             looks.addItem(item)
@@ -4609,12 +4656,12 @@ final class PetView: NSView {
         ]
         let presetSymbols = ["square", "square.lefthalf.filled", "square.dashed", "square.tophalf.filled"]
         for (i, (title, sel, key, vy, vpitch)) in viewPresets.enumerated() {
-            let item = menuItem(title, sel, key: key, symbol: presetSymbols[i])
+            let item = menuItem(title, viewMode == .wall ? nil : sel, key: key, symbol: presetSymbols[i])   // 挂墙不转：灰掉
             let yawMatches = vy.isNaN || abs(ty - vy) < 0.02
             if !touring, yawMatches, abs(tp - vpitch) < 0.02 { item.state = .on }
             looks.addItem(item)
         }
-        let tour = menuItem(L("menu.view.tour", "自动环绕"), #selector(menuTour), symbol: "rotate.3d")
+        let tour = menuItem(L("menu.view.tour", "自动环绕"), viewMode == .wall ? nil : #selector(menuTour), symbol: "rotate.3d")
         tour.state = touring ? .on : .off
         looks.addItem(tour)
         looks.addItem(menuItem(L("menu.resetAngle", "回正"), #selector(menuResetOrientation), hint: L("menu.hint.doubleClick", "双击机身"),
@@ -6238,6 +6285,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         // 上次的位置与大小（给了 --at / --size / --snapshot 就不动它，也不写回）
         let remember = origin == nil && !sizeGiven && snapshotPath == nil
+        Pet.aspect = Pet.aspect(for: ViewMode.saved)   // 挂墙时窗口只框屏幕模组
         rememberFrame = remember
         let restored = remember ? WindowFrameStore.restore(WindowFrameStore.load(), visible: NSScreen.screens.map(\.visibleFrame)) : nil
         let size = restored?.size ?? NSSize(width: initialWidth, height: initialWidth / Pet.aspect)
@@ -7560,6 +7608,10 @@ if CommandLine.arguments.contains("--selftest") {
         let left = Aim.baseline(windowMidX: 0.0, screenMidX: 0.5, screenHalfWidth: 0.5)
         check(right < -17 * d && right > -19 * d && abs(left + right) < 1e-9, "朝向：贴右边约 -18°、左右对称")
         check(Aim.baseline(windowMidX: 0.5, screenMidX: 0.5, screenHalfWidth: 0.5) == 0, "朝向：居中不倾斜")
+        check(ViewMode(rawValue: "wall") == .wall && ViewMode.wall.rawValue == "wall" && ViewMode.allCases.count == 3, "朝向：挂墙存取来回一致")
+        check(Pet.aspect(for: .wall) < 1 && Pet.aspect(for: .wall) > 0.9 && Pet.aspect(for: .auto) == Pet.standAspect, "挂墙窗口近正方，其它照旧")
+        let wc = HomeViewModel.wallScreenCenter
+        check(abs(wc.x) < 1e-6 && wc.y > 9.5 && wc.y < 10.6 && wc.z > 4.28, "挂墙：扶正后的屏幕中心在铰链上方、往前")
         check(abs(Aim.followTarget(gazeX: 1, baseline: 0, maxDegrees: 25) - 25 * d) < 1e-9, "朝向：跟随夹在 25°")
         check(Aim.followTarget(gazeX: 0, baseline: right, maxDegrees: 25) < 0, "朝向：人在镜头正前、桌宠在右 → 朝左（视差）")
         var a = Aim(); var t = 0.0
