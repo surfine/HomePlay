@@ -34,16 +34,19 @@ extension Face {
             g.restoreGState()
         }
         let t = GlyphShape(Self.clock(date), font: FaceType.numeric(.sf, 300, ["wght": 600, "wdth": 100]), kern: -4)
-            .tall(height: 92, stretch: 1.0, at: CGPoint(x: 512, y: 238), anchorX: 0.5, maxWidth: 520)
+            .tall(height: 80, stretch: 1.0, at: CGPoint(x: 512, y: 286), anchorX: 0.5, maxWidth: 420)
         fillShape(g, t, .white)
-        drawIsland(g, at: CGPoint(x: 512, y: 500), scale: 0.62, liveAt: CGPoint(x: 512, y: 640), now: now)
+        // 島在環的正中央（寬 ≈ 392，稿：face('Growth') 寬 230／600）；時間在上、字在下，都不碰到島
+        drawIsland(g, at: CGPoint(x: 512, y: 512), scale: 392 / 588, liveAt: CGPoint(x: 512, y: 512), now: now)
         // 计时器长出来时让位给胶囊
         let fade = 1 - liveT
         if fade > 0.01 {
-            drawCentered(g, on.count == 1 ? L("growth.days.one", "这个月陪你 1 天") : String(format: L("growth.days", "这个月陪你 %d 天"), on.count), font: Self.rounded(35, weight: .bold), kern: 0, y: 690,
+            drawCentered(g, on.count == 1 ? L("growth.days.one", "这个月陪你 1 天") : String(format: L("growth.days", "这个月陪你 %d 天"), on.count), font: Self.rounded(44, weight: .bold), kern: 0, y: 700,
                          color: NSColor(white: 1, alpha: fade))
-            drawCentered(g, L("growth.hint", "每天第一次打开，圈上就多一颗"), font: Self.rounded(24, weight: .semibold), kern: 0, y: 730,
-                         color: NSColor(white: 1, alpha: 0.55 * fade))
+            let hf = Self.rounded(32, weight: .semibold)
+            for (i, line) in Self.wrap(L("growth.hint", "每天第一次打开，圈上就多一颗"), hf, 500, maxLines: 2).enumerated() {   // 收在點陣環裡
+                drawCentered(g, line, font: hf, kern: nil, y: 754 + CGFloat(i) * 42, color: NSColor(white: 1, alpha: 0.6 * fade))
+            }
         }
     }
     /// 有需要重画（秒针走动、轮替、漂动）就回 true；没有就回 false，省电

@@ -1,129 +1,160 @@
-// 錶面「模組」：照 HomeView 的 Modular——淡淡的灰藍底，不用卡片，四塊資訊直接排在底上：
-// 左上「週 月」＋超大的日；右上一隻帶分鐘刻度的指針鐘；左下正在播放（沒有就 CarPlay）；
-// 右下一個大數字（電量；沒電池就下一個行程）。島（👀）站在正中間的縫裡。
+// 錶面「模組」：照 HomeView 的 Modular——平的灰藍底，不用卡片，四格資訊直接排在底上：
+// 左上「週 月」（週白、月深灰）＋超大的日；右上一隻帶 60 格刻度的指針鐘；左下正在播放（沒有就 CarPlay）；
+// 右下那格住著島（👀，純黑膠囊），上面一行 HomePlay、下面一行電量（原本「島的口袋」的電量資訊收到這裡）。
+// 座標照官方 tile_modular.png 量（600² 的圖去掉 14 px 邊框，×1024/572）。
 
 import AppKit
 
 extension Face {
     func renderModularV2(_ g: CGContext, _ now: Double) {
-        let cs = CGColorSpace(name: CGColorSpace.sRGB)!
-        let bg = CGGradient(colorsSpace: cs, colors: [srgb(0xa9bcbd).cgColor, srgb(0x93a9ab).cgColor] as CFArray, locations: [0, 1])!
-        g.drawLinearGradient(bg, start: .zero, end: CGPoint(x: 0, y: 1024), options: [])
-        let ink = srgb(0x121416), soft = srgb(0x121416, 0.62)
+        g.setFillColor(srgb(0x93abb1).cgColor); g.fill(CGRect(x: 0, y: 0, width: 1024, height: 1024))
+        let ink = srgb(0x0a0b0c), soft = srgb(0x3e4a4e), white = NSColor.white
         let date = Self.displayDate
 
-        // ── 左上：週 月 ＋ 日
-        let wdMonth = L10n.language == .en ? Self.formatter("EEE MMM", raw: true).string(from: date)   // 「Thu Oct」，照 Apple 的寫法
-            : Self.formatter("EEEEMMM").string(from: date)
-        drawLeft(g, wdMonth, font: FaceType.sf(64, .semibold, mono: false), x: 70, y: 132, color: ink)
+        // ── 左上：週（白）月（深灰）＋ 日（大、黑、置中在這一行下面）
+        let en = L10n.language == .en
+        let wd = en ? Self.formatter("EEE", raw: true).string(from: date) : Self.formatter("EEE").string(from: date)
+        let mo = en ? Self.formatter("MMM", raw: true).string(from: date) : Self.formatter("MMM").string(from: date)
+        var df = FaceType.sf(86, .bold, mono: false)
+        func width(_ t: String, _ f: NSFont) -> CGFloat { (t as NSString).size(withAttributes: [.font: f, .kern: -0.5]).width }
+        let space = en ? " " : " "
+        var lineW = width(wd + space + mo, df)
+        if lineW > 470 { df = FaceType.sf(86 * 470 / lineW, .bold, mono: false); lineW = width(wd + space + mo, df) }
+        let x0: CGFloat = 82
+        drawLeft(g, wd + space, font: df, x: x0, y: 149, color: white, kern: -0.5)
+        drawLeft(g, mo, font: df, x: x0 + width(wd + space, df), y: 149, color: soft, kern: -0.5)
         let day = String(Calendar.current.component(.day, from: date))
-        let dayShape = GlyphShape(day, font: FaceType.numeric(.sf, 400, ["wght": 600, "wdth": 100])).tall(height: 228, stretch: 1.0, at: CGPoint(x: 72, y: 176), anchorX: 0)
+        let dayShape = GlyphShape(day, font: FaceType.numeric(.sf, 400, ["wght": 600, "wdth": 100]), kern: -6)
+            .tall(height: 262, stretch: 1.0, at: CGPoint(x: x0 + lineW / 2, y: 193), anchorX: 0.5, maxWidth: 440)
         fillShape(g, dayShape, ink)
 
         // ── 右上：指針鐘
-        drawModularClock(g, center: CGPoint(x: 766, y: 268), radius: 206, date: date, ink: ink)
-
-        // ── 中間：島
-        drawIsland(g, at: CGPoint(x: 512, y: 548), scale: 0.4, liveAt: CGPoint(x: 512, y: 548), now: now)
+        drawModularClock(g, center: CGPoint(x: 761, y: 263), radius: 205, date: date, ink: ink)
 
         // ── 左下：正在播放／CarPlay
-        let art = CGRect(x: 72, y: 616, width: 196, height: 196)
+        let art = CGRect(x: 51, y: 543, width: 230, height: 230)
         if let np = nowPlaying.shown {
             artwork(g, art, seed: np.title)
-            let tf = FaceType.sf(30, .bold, mono: false)
-            drawLeft(g, Self.clipped(np.title.uppercased(), tf, 400), font: tf, x: 72, y: 862, color: ink, kern: 0.3)
-            let af = FaceType.sf(29, .medium, mono: false)
-            drawLeft(g, Self.clipped(np.artist, af, 400), font: af, x: 72, y: 900, color: soft)
-            let pill = CGRect(x: 72, y: 924, width: 150, height: 58)
-            g.setFillColor(NSColor(white: 1, alpha: 0.32).cgColor)
-            g.addPath(CGPath(roundedRect: pill, cornerWidth: 29, cornerHeight: 29, transform: nil)); g.fillPath()
-            drawSymbol(g, np.playing ? "pause.fill" : "play.fill", in: CGRect(x: pill.minX + 24, y: pill.midY - 12, width: 24, height: 24), color: ink)
-            drawLeft(g, np.playing ? L("modular.pause", "暂停") : L("modular.play", "播放"), font: FaceType.sf(28, .semibold, mono: false),
-                     x: pill.minX + 60, y: pill.midY + 10, color: ink)
-        } else {
-            // CarPlay：藍色方塊圖示＋狀態
-            let r = CGRect(x: 72, y: 616, width: 196, height: 196)
-            let grad = CGGradient(colorsSpace: cs, colors: [srgb(0x4aa3ff).cgColor, srgb(0x1f6fe0).cgColor] as CFArray, locations: [0, 1])!
+            // 右邊一顆白色音符，標出這格是「音樂」
+            drawLeft(g, "♫", font: FaceType.sf(64, .regular, mono: false), x: 428, y: 600, color: white)
+            let tf = FaceType.sf(35, .bold, mono: false)
+            drawLeft(g, Self.clipped(np.title.uppercased(), tf, 400), font: tf, x: 53, y: 823, color: ink, kern: 0.4)
+            let af = FaceType.sf(35, .regular, mono: false)
+            drawLeft(g, Self.clipped(np.artist, af, 400), font: af, x: 53, y: 866, color: soft)
+            let pill = CGRect(x: 51, y: 892, width: 228, height: 80)
+            g.setFillColor(NSColor(white: 0, alpha: 0.12).cgColor)
+            g.addPath(CGPath(roundedRect: pill, cornerWidth: 40, cornerHeight: 40, transform: nil)); g.fillPath()
+            let label = np.playing ? L("modular.pause", "暂停") : L("modular.play", "播放")
+            let lf = FaceType.sf(38, .medium, mono: false)
+            let lw = Typo.width(label, lf)
+            let gx = pill.midX - (30 + 14 + lw) / 2
+            drawSymbol(g, np.playing ? "pause.fill" : "play.fill", in: CGRect(x: gx, y: pill.midY - 16, width: 30, height: 32), color: ink)
+            drawLeft(g, label, font: lf, x: gx + 44, y: pill.midY + 13, color: ink)
+        } else if case .event(let e) = calendarTile {
+            // 沒在播、但有下一個行程（設定 › 讀取行事曆）：像「行事曆」App 圖示的日期方塊＋紅色小標、行程名、時間
             g.saveGState()
-            g.addPath(CGPath(roundedRect: r, cornerWidth: 44, cornerHeight: 44, transform: nil)); g.clip()
-            g.drawLinearGradient(grad, start: CGPoint(x: 0, y: r.minY), end: CGPoint(x: 0, y: r.maxY), options: [])
+            g.addPath(continuousRoundedRect(art, radius: art.width * 0.2237)); g.clip()
+            g.setFillColor(NSColor.white.cgColor); g.fill(art)
             g.restoreGState()
-            drawSymbol(g, "car.fill", in: r.insetBy(dx: 46, dy: 56), color: .white)
-            let sp = statusParts
-            // 狀態字長（英文）就折成兩行，不截斷
-            let tf = FaceType.sf(32, .bold, mono: false)
-            let lines = Self.wrap(sp.title, tf, 410, maxLines: 2)
-            for (i, l) in lines.enumerated() { drawLeft(g, l, font: tf, x: 72, y: 862 + CGFloat(i) * 38, color: ink) }
-            if lines.count == 1, let hint = sp.hint {   // 兩行就不再放提示
-                let hf = FaceType.sf(29, .medium, mono: false)
-                drawLeft(g, Self.clipped(hint, hf, 400), font: hf, x: 72, y: 904, color: soft)
-            }
+            let wd = Self.formatter("EEE").string(from: e.start), day = Calendar.current.component(.day, from: e.start)
+            let wf = FaceType.sf(30, .semibold, mono: false), df = FaceType.sfv(118, wght: 300, mono: false)
+            drawLeft(g, wd, font: wf, x: art.midX - Typo.width(wd, wf) / 2, y: art.minY + 54, color: srgb(0xff3b30))
+            let ds = String(day)
+            drawLeft(g, ds, font: df, x: art.midX - Typo.width(ds, df) / 2, y: art.minY + 176, color: srgb(0x1c1c1e))
+            drawLeft(g, L("calendar.next", "下一个行程").uppercased(), font: FaceType.sf(30, .bold, mono: false), x: 53, y: 823, color: srgb(0xc6281f), kern: 0.4)
+            let tf = FaceType.sf(35, .bold, mono: false)
+            drawLeft(g, Self.clipped(e.title.isEmpty ? L("calendar.untitled", "（无标题）") : e.title, tf, 420), font: tf, x: 53, y: 866, color: ink)
+            let hf = FaceType.sf(35, .regular, mono: false)
+            drawLeft(g, CalendarLogic.range(e), font: hf, x: 53, y: 909, color: soft)
+        } else {
+            // 沒在播：照官方「正在播放」小工具的空狀態——灰色封面＋音符、「未在播放」、灰掉的播放膠囊；
+            // 第二行放連線狀態（例如「重按連上 iPhone」），不再畫像 App 圖示的藍色 CarPlay 方塊
+            g.saveGState()
+            g.addPath(CGPath(roundedRect: art, cornerWidth: 18, cornerHeight: 18, transform: nil)); g.clip()
+            g.setFillColor(NSColor(white: 0, alpha: 0.10).cgColor); g.fill(art)
+            g.restoreGState()
+            drawSymbol(g, "music.note", in: art.insetBy(dx: 70, dy: 66), color: NSColor(white: 1, alpha: 0.75), weight: .medium)
+            drawLeft(g, "♫", font: FaceType.sf(64, .regular, mono: false), x: 428, y: 600, color: white)
+            let tf = FaceType.sf(35, .bold, mono: false)
+            drawLeft(g, Self.clipped(L("modular.notPlaying", "未在播放").uppercased(), tf, 400), font: tf, x: 53, y: 823, color: ink, kern: 0.4)
+            var hs: CGFloat = 35
+            while hs > 26, Typo.width(statusParts.title, FaceType.sf(hs, .regular, mono: false)) > 420 { hs -= 1 }   // 先縮字，真的放不下才截
+            let hf = FaceType.sf(hs, .regular, mono: false)
+            drawLeft(g, Self.clipped(statusParts.title, hf, 420), font: hf, x: 53, y: 866, color: soft)
+            let pill = CGRect(x: 51, y: 892, width: 228, height: 80)
+            g.setFillColor(NSColor(white: 0, alpha: 0.07).cgColor)
+            g.addPath(CGPath(roundedRect: pill, cornerWidth: 40, cornerHeight: 40, transform: nil)); g.fillPath()
+            let label = L("modular.play", "播放"), lf = FaceType.sf(38, .medium, mono: false)
+            let lw = Typo.width(label, lf), gx = pill.midX - (30 + 14 + lw) / 2, dim = ink.withAlphaComponent(0.4)
+            drawSymbol(g, "play.fill", in: CGRect(x: gx, y: pill.midY - 16, width: 30, height: 32), color: dim)
+            drawLeft(g, label, font: lf, x: gx + 44, y: pill.midY + 13, color: dim)
         }
 
-        // ── 右下：一個大數字
-        let x0: CGFloat = 556
+        // ── 右下：島住的那一格——上面一行 HomePlay，中間純黑膠囊，下面一行電量
+        let cx: CGFloat = 548
+        drawLeft(g, "HomePlay", font: FaceType.sf(40, .semibold, mono: false), x: cx, y: 576, color: white)
+        let line: String, lineColor: NSColor
         if let b = battery {
-            let symbol = b.charging ? "battery.100percent.bolt" : (b.percent > 60 ? "battery.100percent" : (b.percent > 25 ? "battery.50percent" : "battery.25percent"))
-            drawSymbol(g, symbol, in: CGRect(x: x0, y: 618, width: 56, height: 30), color: b.percent <= 20 && !b.charging ? srgb(0xd7352b) : ink)
-            drawLeft(g, L("battery.title", "电量"), font: FaceType.sf(30, .semibold, mono: false), x: x0 + 70, y: 644, color: ink)
-            let big = GlyphShape("\(b.percent)%", font: FaceType.sf(400, .semibold)).tall(height: 168, stretch: 1.0, at: CGPoint(x: x0, y: 690), anchorX: 0, maxWidth: 400)
-            fillShape(g, big, ink)
-            drawLeft(g, Self.batteryState(b), font: FaceType.sf(30, .semibold, mono: false), x: x0, y: 912, color: soft)
+            let state = Self.batteryState(b)
+            line = en ? "\(state) · \(b.percent)%" : "\(state)・\(b.percent)%"
+            lineColor = b.percent <= 20 && !b.charging ? srgb(0xc6281f) : ink
         } else {
-            drawSymbol(g, "calendar", in: CGRect(x: x0, y: 616, width: 36, height: 34), color: srgb(0xd7352b))
-            drawLeft(g, L("calendar.next", "下一个行程"), font: FaceType.sf(30, .semibold, mono: false), x: x0 + 50, y: 644, color: ink)
-            switch calendarTile {
-            case .event(let e):
-                let t = e.allDay ? L("calendar.allDay", "全天") : Self.formatter("HH:mm", raw: true).string(from: e.start)
-                fillShape(g, GlyphShape(t, font: FaceType.sf(400, .semibold)).tall(height: 150, stretch: 1.0, at: CGPoint(x: x0, y: 696), anchorX: 0, maxWidth: 400), ink)
-                let tf = FaceType.sf(32, .semibold, mono: false)
-                drawLeft(g, Self.clipped(e.title.isEmpty ? L("calendar.untitled", "（无标题）") : e.title, tf, 400), font: tf, x: x0, y: 912, color: soft)
-            default:
-                let msg: String
-                switch calendarTile {
-                case .empty: msg = L("calendar.empty", "今天没有行程")
-                case .denied: msg = L("calendar.denied", "行事历未授权")
-                default: msg = L("calendar.notConnected", "尚未连接行事历")
-                }
-                let tf = FaceType.sf(44, .bold, mono: false)
-                drawLeft(g, Self.clipped(msg, tf, 410), font: tf, x: x0, y: 780, color: ink)
-                if calendarTile == .notConnected {
-                    drawLeft(g, L("calendar.hint", "右键 › 偏好设定"), font: FaceType.sf(29, .medium, mono: false), x: x0, y: 830, color: soft)
-                }
-            }
+            line = L("battery.macPlugged", "这台 Mac 接着电源"); lineColor = ink
         }
+        let bf = FaceType.sf(36, .medium, mono: false)
+        drawLeft(g, Self.clipped(line, bf, 440), font: bf, x: cx, y: 958, color: lineColor)
+        drawIsland(g, at: CGPoint(x: cx + 162, y: 762), scale: 324 / 588, liveAt: CGPoint(x: 512, y: 762), now: now)
     }
 
-    /// Modular 的指針鐘：60 格刻度（整點粗長）、1–12 數字、黑色指針、細秒針
+    /// Modular 的指針鐘（照官方）：60 格刻度（整點黑、其餘灰）、1–12 數字、
+    /// 黑色指針（細頸接粗桿、圓頭）、細白秒針（尾巴略過軸心）、軸心黑圈白環
     private func drawModularClock(_ g: CGContext, center c: CGPoint, radius r: CGFloat, date: Date, ink: NSColor) {
+        g.setLineCap(.round)
         for i in 0..<60 {
             let a = CGFloat(i) * .pi / 30, major = i % 5 == 0
-            let r0 = r - (major ? 20 : 12), sx = sin(a), cy = -cos(a)
-            g.setStrokeColor(ink.withAlphaComponent(major ? 0.9 : 0.45).cgColor); g.setLineWidth(major ? 4 : 2.2); g.setLineCap(.round)
+            let r0 = r - (major ? 17 : 15), sx = sin(a), cy = -cos(a)
+            g.setStrokeColor(major ? ink.cgColor : ink.withAlphaComponent(0.42).cgColor); g.setLineWidth(major ? 4 : 2.6)
             g.move(to: CGPoint(x: c.x + sx * r0, y: c.y + cy * r0)); g.addLine(to: CGPoint(x: c.x + sx * r, y: c.y + cy * r)); g.strokePath()
         }
-        let nf = FaceType.sf(40, .medium, mono: false)
+        let nf = FaceType.sf(43, .semibold, mono: false)
         for h in 1...12 {
-            let a = CGFloat(h) * .pi / 6, rr = r - 54
-            let s = GlyphShape(String(h), font: nf).centered(at: CGPoint(x: c.x + sin(a) * rr, y: c.y - cos(a) * rr))
+            let a = CGFloat(h) * .pi / 6, rr = r * 0.755
+            let s = GlyphShape(String(h), font: nf, kern: -1).centered(at: CGPoint(x: c.x + sin(a) * rr, y: c.y - cos(a) * rr))
             fillShape(g, s, ink)
         }
         let comp = Calendar.current.dateComponents([.hour, .minute, .second], from: date)
         let s = Double(comp.second ?? 0), m = Double(comp.minute ?? 0) + s / 60, h = Double((comp.hour ?? 0) % 12) + m / 60
         func hand(_ deg: Double, _ len: CGFloat, _ w: CGFloat) {
-            let a = CGFloat(deg * .pi / 180)
-            g.setStrokeColor(ink.cgColor); g.setLineWidth(w); g.setLineCap(.round)
-            g.move(to: c); g.addLine(to: CGPoint(x: c.x + sin(a) * len * 0.16, y: c.y - cos(a) * len * 0.16)); g.setLineWidth(w * 0.45); g.strokePath()
-            g.setLineWidth(w)
-            g.move(to: CGPoint(x: c.x + sin(a) * len * 0.16, y: c.y - cos(a) * len * 0.16)); g.addLine(to: CGPoint(x: c.x + sin(a) * len, y: c.y - cos(a) * len)); g.strokePath()
+            let a = CGFloat(deg * .pi / 180), ux = sin(a), uy = -cos(a), neck: CGFloat = 28
+            let p = CGMutablePath()
+            p.addPath(Self.segment(c, ux, uy, 0, neck + 2, 4.6))
+            p.addPath(Self.segment(c, ux, uy, neck, len, w))
+            g.saveGState()
+            g.setShadow(offset: CGSize(width: 0, height: -2), blur: 5, color: NSColor(white: 0, alpha: 0.22).cgColor)
+            g.addPath(p); g.setFillColor(ink.cgColor); g.fillPath()
+            g.restoreGState()
         }
-        hand(h * 30, r * 0.52, 12)
-        hand(m * 6, r * 0.86, 9)
-        let sa = CGFloat(s * 6 * .pi / 180)
-        g.setStrokeColor(NSColor.white.cgColor); g.setLineWidth(3)
-        g.move(to: CGPoint(x: c.x - sin(sa) * 30, y: c.y + cos(sa) * 30)); g.addLine(to: CGPoint(x: c.x + sin(sa) * r * 0.94, y: c.y - cos(sa) * r * 0.94)); g.strokePath()
-        g.setFillColor(ink.cgColor); g.fillEllipse(in: CGRect(x: c.x - 10, y: c.y - 10, width: 20, height: 20))
-        g.setFillColor(NSColor.white.cgColor); g.fillEllipse(in: CGRect(x: c.x - 4, y: c.y - 4, width: 8, height: 8))
+        hand(h * 30, r * 0.57, 11)
+        hand(m * 6, r * 0.95, 11)
+        if secondsVisible {   // 沒人在看時收起秒針
+            let sa = CGFloat(s * 6 * .pi / 180)
+            g.saveGState()
+            g.setShadow(offset: CGSize(width: 0, height: -1), blur: 3, color: NSColor(white: 0, alpha: 0.18).cgColor)
+            g.setStrokeColor(NSColor.white.cgColor); g.setLineWidth(2.2); g.setLineCap(.butt)
+            g.move(to: CGPoint(x: c.x - sin(sa) * 32, y: c.y + cos(sa) * 32)); g.addLine(to: CGPoint(x: c.x + sin(sa) * r, y: c.y - cos(sa) * r)); g.strokePath()
+            g.restoreGState()
+        }
+        g.setFillColor(ink.cgColor); g.fillEllipse(in: CGRect(x: c.x - 10.5, y: c.y - 10.5, width: 21, height: 21))
+        g.setFillColor(NSColor.white.cgColor); g.fillEllipse(in: CGRect(x: c.x - 7, y: c.y - 7, width: 14, height: 14))
+        g.setFillColor(srgb(0x93abb1).cgColor); g.fillEllipse(in: CGRect(x: c.x - 3.2, y: c.y - 3.2, width: 6.4, height: 6.4))
+    }
+
+    /// 從軸心 c 沿 (ux, uy) 方向、r0 到 r1 的一段圓頭粗線（填色用的外框）
+    static func segment(_ c: CGPoint, _ ux: CGFloat, _ uy: CGFloat, _ r0: CGFloat, _ r1: CGFloat, _ w: CGFloat) -> CGPath {
+        let p = CGMutablePath()
+        p.move(to: CGPoint(x: c.x + ux * r0, y: c.y + uy * r0))
+        p.addLine(to: CGPoint(x: c.x + ux * r1, y: c.y + uy * r1))
+        return p.copy(strokingWithWidth: w, lineCap: .round, lineJoin: .round, miterLimit: 1)
     }
 
     /// 沒有專輯封面時：用歌名決定一組漸層色，中間一個音符（每首歌顏色固定）
@@ -135,13 +166,23 @@ extension Face {
         let cs = CGColorSpace(name: CGColorSpace.sRGB)!
         g.saveGState()
         g.setShadow(offset: CGSize(width: 0, height: -6), blur: 18, color: NSColor(white: 0, alpha: 0.18).cgColor)
-        let path = CGPath(roundedRect: r, cornerWidth: 26, cornerHeight: 26, transform: nil)
+        let path = CGPath(roundedRect: r, cornerWidth: 18, cornerHeight: 18, transform: nil)
         g.addPath(path); g.setFillColor(srgb(p.1).cgColor); g.fillPath()
         g.restoreGState()
         g.saveGState(); g.addPath(path); g.clip()
         let grad = CGGradient(colorsSpace: cs, colors: [srgb(p.0).cgColor, srgb(p.1).cgColor] as CFArray, locations: [0, 1])!
         g.drawLinearGradient(grad, start: CGPoint(x: r.minX, y: r.minY), end: CGPoint(x: r.maxX, y: r.maxY), options: [])
         g.restoreGState()
-        drawSymbol(g, "music.note", in: r.insetBy(dx: 58, dy: 50), color: NSColor.white.withAlphaComponent(0.92))
+        drawSymbol(g, "music.note", in: r.insetBy(dx: 70, dy: 62), color: NSColor.white.withAlphaComponent(0.92))
+    }
+}
+
+nonisolated(unsafe) private var modularLastSecond = -1
+extension Face {
+    /// 秒針每秒走一格
+    func tickModularFace(_ now: Double) -> Bool {
+        let s = secondsVisible ? Int(Date().timeIntervalSince1970) : -1
+        if s == modularLastSecond { return false }
+        modularLastSecond = s; return true
     }
 }

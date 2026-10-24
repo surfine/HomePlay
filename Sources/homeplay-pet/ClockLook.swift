@@ -163,11 +163,12 @@ extension GlyphShape {
 
 extension Face {
     /// 照「字體與顏色」畫一組大時間：玻璃（系統 Liquid Glass，可染色）或實線
-    func drawClockDigits(_ g: CGContext, _ shapes: [GlyphShape], look: ClockLook, clear: CGImage?, frosted: CGImage?, alpha: CGFloat) {
+    func drawClockDigits(_ g: CGContext, _ shapes: [GlyphShape], look: ClockLook, clear: CGImage?, frosted: CGImage?, alpha: CGFloat,
+                         system: SystemGlassParams = .portrait) {
         let color = look.color(wallpaper: wallpaperTone(frosted))
         g.saveGState(); g.setAlpha(alpha)
         if look.glass {
-            var sys = SystemGlassParams.portrait
+            var sys = system
             sys.tint = look.glassTint > 0 ? color.withAlphaComponent(look.glassTint).cgColor : nil
             drawLiquidGlass(g, shapes, clear: clear, frosted: frosted, system: sys)
         } else {
@@ -208,31 +209,29 @@ struct ClockLookView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            // 字體：一排「12」，選中的有一圈圓角框
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 6) {
-                    ForEach(ClockLook.Font.allCases, id: \.self) { f in
-                        Button { m.look.font = f } label: {
-                            Text("12")
-                                .font(Font(f.previewFont(36, weight: m.look.weight)))
-                                .frame(width: 72, height: 58)
-                                .background {
-                                    if m.look.font == f {
-                                        RoundedRectangle(cornerRadius: 14, style: .continuous).fill(.white.opacity(0.10))
-                                        RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(.white.opacity(0.35), lineWidth: 1.5)
-                                    }
+            // 字體：3×2 的「12」，全部一眼看得到（不用橫捲）；選中的有一圈圓角框
+            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 6), count: 3), spacing: 6) {
+                ForEach(ClockLook.Font.allCases, id: \.self) { f in
+                    Button { m.look.font = f } label: {
+                        Text("12")
+                            .font(Font(f.previewFont(36, weight: m.look.weight)))
+                            .frame(maxWidth: .infinity).frame(height: 58)
+                            .background {
+                                if m.look.font == f {
+                                    RoundedRectangle(cornerRadius: 14, style: .continuous).fill(.white.opacity(0.10))
+                                    RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(.white.opacity(0.35), lineWidth: 1.5)
                                 }
-                                .contentShape(Rectangle())
-                        }
-                        .buttonStyle(.plain)
-                        .help(f.title)
-                        .accessibilityLabel(f.title)
-                        .accessibilityAddTraits(m.look.font == f ? .isSelected : [])
+                            }
+                            .contentShape(Rectangle())
                     }
+                    .buttonStyle(.plain)
+                    .help(f.title)
+                    .accessibilityLabel(f.title)
+                    .accessibilityAddTraits(m.look.font == f ? .isSelected : [])
                 }
-                .padding(.horizontal, 16)
             }
-            .padding(.top, 10)
+            .padding(.horizontal, 16)
+            .padding(.top, 4)
             Slider(value: $m.look.weight, in: 0...1)
                 .controlSize(.small)
                 .padding(.horizontal, 22).padding(.top, 10).padding(.bottom, 16)
@@ -240,25 +239,23 @@ struct ClockLookView: View {
 
             Divider().padding(.horizontal, 16)
 
-            // 顏色：第一個跟隨壁紙，選中的外面一圈白環
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 12) {
-                    ForEach(ClockLook.Swatch.allCases, id: \.self) { s in
-                        Button { m.look.swatch = s } label: {
-                            swatchDot(s)
-                                .frame(width: 34, height: 34)
-                                .padding(4)
-                                .overlay { if m.look.swatch == s { Circle().strokeBorder(.white, lineWidth: 2.5) } }
-                                .contentShape(Circle())
-                        }
-                        .buttonStyle(.plain)
-                        .help(s.title)
-                        .accessibilityLabel(s.title)
-                        .accessibilityAddTraits(m.look.swatch == s ? .isSelected : [])
+            // 顏色：5×2，第一個跟隨壁紙，選中的外面一圈白環
+            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: 5), spacing: 8) {
+                ForEach(ClockLook.Swatch.allCases, id: \.self) { s in
+                    Button { m.look.swatch = s } label: {
+                        swatchDot(s)
+                            .frame(width: 34, height: 34)
+                            .padding(4)
+                            .overlay { if m.look.swatch == s { Circle().strokeBorder(.white, lineWidth: 2.5) } }
+                            .contentShape(Circle())
                     }
+                    .buttonStyle(.plain)
+                    .help(s.title)
+                    .accessibilityLabel(s.title)
+                    .accessibilityAddTraits(m.look.swatch == s ? .isSelected : [])
                 }
-                .padding(.horizontal, 16)
             }
+            .padding(.horizontal, 22)
             .padding(.top, 16)
             Slider(value: $m.look.tone, in: 0...1)
                 .controlSize(.small)
@@ -295,7 +292,8 @@ struct ClockLookView: View {
     }
 }
 
-/// 浮在桌寵旁邊的小面板：系統的玻璃底（macOS 26 起），標題列透明，關閉鈕在左上——像 iOS 編輯鎖定畫面，但是 Mac 的窗。
+/// 浮在桌寵旁邊的小面板：深色 HUD 底、標題列透明，關閉鈕在左上——像 iOS 編輯鎖定畫面，但是 Mac 的窗。
+/// 外框、圓角與陰影都交給系統畫（以前自己疊一塊圓角玻璃，半徑跟視窗不一樣，角落會疊出一圈粗灰邊）。
 @MainActor final class ClockLookPanel {
     static let shared = ClockLookPanel()
     private var panel: NSPanel?
@@ -331,18 +329,11 @@ struct ClockLookView: View {
         p.hidesOnDeactivate = false
         p.isMovableByWindowBackground = true
         p.isReleasedWhenClosed = false
-        p.isOpaque = false
-        p.backgroundColor = .clear
-        if #available(macOS 26.0, *) {
-            let glass = NSGlassEffectView()
-            glass.cornerRadius = 26
-            glass.contentView = host
-            p.contentView = glass
-        } else {
-            let fx = NSVisualEffectView(); fx.material = .hudWindow; fx.blendingMode = .behindWindow; fx.state = .active
-            fx.addSubview(host); host.frame = fx.bounds; host.autoresizingMask = [.width, .height]
-            p.contentView = fx
-        }
+        // 視窗內混色、底是深灰：不管後面是淺色桌面還是桌寵，白字對比都一樣（透出桌面時會變成淺灰、字看不清）
+        p.backgroundColor = NSColor(white: 0.11, alpha: 1)
+        let fx = NSVisualEffectView(); fx.material = .hudWindow; fx.blendingMode = .withinWindow; fx.state = .active
+        fx.addSubview(host); host.frame = fx.bounds; host.autoresizingMask = [.width, .height]
+        p.contentView = fx
         p.appearance = NSAppearance(named: .darkAqua)   // 跟鎖定畫面一樣：深色玻璃、白字
         return p
     }

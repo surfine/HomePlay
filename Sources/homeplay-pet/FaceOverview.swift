@@ -8,7 +8,7 @@ enum FaceOverview {
     /// 快照用：--overview 强制进入，也不会闲置退出
     static var forced = false
     static var active = false
-    static var sel = 0                       // 选中第几个（FaceStyle.allCases 的下标）
+    static var sel = 0                       // 选中第几个（FaceStyle.lineup 的下标）
     static var pos: CGFloat = 0, vel: CGFloat = 0   // 轮播位置（弹簧追 sel）
     static var enter: CGFloat = 0, enterV: CGFloat = 0   // 进场：0 整屏 … 1 缩成卡片
     static var lastInput = 0.0, lastThumbPass = -1e9
@@ -42,7 +42,7 @@ extension Face {
     func beginOverview(now: Double = CACurrentMediaTime(), animated: Bool = true) {
         let S = FaceOverview.self
         S.active = true
-        S.sel = FaceStyle.allCases.firstIndex(of: style) ?? 0
+        S.sel = FaceStyle.lineup.firstIndex(of: style) ?? 0
         S.pos = CGFloat(S.sel); S.vel = 0
         S.enter = animated ? 0 : 1; S.enterV = 0
         S.lastInput = now; S.thumbs = [:]; S.lastThumbPass = -1e9
@@ -56,11 +56,11 @@ extension Face {
         guard S.active else { return nil }
         S.active = false; S.thumbs = [:]; forceDirty = true
         log("overview \(confirm ? "confirm" : "cancel")")
-        return confirm ? FaceStyle.allCases[S.sel] : nil
+        return confirm ? FaceStyle.lineup[S.sel] : nil
     }
     func moveOverview(_ d: Int, now: Double = CACurrentMediaTime()) {
         let S = FaceOverview.self
-        S.sel = FaceOverview.step(S.sel, d, count: FaceStyle.allCases.count)
+        S.sel = FaceOverview.step(S.sel, d, count: FaceStyle.lineup.count)
         S.lastInput = now; forceDirty = true
     }
 
@@ -68,7 +68,7 @@ extension Face {
     func tickOverview(_ now: Double, _ dt: Double) -> Bool {
         let S = FaceOverview.self
         // 快照用：开机时 --style 可能晚一步才换，跟着当前錶面重进一次
-        if S.forced && (!S.active || FaceStyle.allCases[S.sel] != style) { beginOverview(now: now, animated: false) }
+        if S.forced && (!S.active || FaceStyle.lineup[S.sel] != style) { beginOverview(now: now, animated: false) }
         guard S.active else { return false }
         if !S.forced, now - S.lastInput > FaceOverview.idleTimeout { endOverview(confirm: false); return true }
         var dirty = false
@@ -104,7 +104,7 @@ extension Face {
     func drawOverview(_ g: CGContext, _ now: Double) {
         let S = FaceOverview.self
         guard S.active, !S.rendering, let live = g.makeImage() else { return }
-        let all = FaceStyle.allCases, curIdx = all.firstIndex(of: style) ?? 0
+        let all = FaceStyle.lineup, curIdx = all.firstIndex(of: style) ?? 0
         if now - S.lastThumbPass >= 3 { S.lastThumbPass = now }
         let e = max(0, min(1.05, S.enter)), ek = min(1, e)
 
@@ -124,10 +124,10 @@ extension Face {
             // 进场：中卡从整屏缩下来，邻卡淡入
             let isCenter = abs(d) < 0.5
             let r = isCenter ? lerp(CGRect(x: 0, y: 0, width: 1024, height: 1024), card, e) : card
-            let radius = (73.6 - 9 * k) * (isCenter ? ek : 1)
+            let radius = Screen.cornerRadius * r.width / Screen.side   // 縮圖＝螢幕本身的形狀等比縮小
             let alpha = (1 - 0.45 * k) * (isCenter ? 1 : ek)
             let img = i == curIdx ? live : overviewThumb(all[i], now)
-            let path = CGPath(roundedRect: r, cornerWidth: radius, cornerHeight: radius, transform: nil)
+            let path = continuousRoundedRect(r, radius: radius)
 
             g.saveGState()
             g.setAlpha(alpha)
@@ -145,7 +145,7 @@ extension Face {
             if ring > 0.01 {
                 let rr = r.insetBy(dx: -3.2, dy: -3.2)
                 g.setStrokeColor(NSColor(white: 1, alpha: 0.9 * ring).cgColor); g.setLineWidth(6.4)
-                g.addPath(CGPath(roundedRect: rr, cornerWidth: radius + 3.2, cornerHeight: radius + 3.2, transform: nil)); g.strokePath()
+                g.addPath(continuousRoundedRect(rr, radius: radius + 3.2)); g.strokePath()   // 外圈跟縮圖同心
             }
         }
 

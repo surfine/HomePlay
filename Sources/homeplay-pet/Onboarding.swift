@@ -42,18 +42,20 @@ extension Face {
     func drawOnboarding(_ g: CGContext, _ now: Double) {
         // 桌宠默认只有 220 pt 宽：字要够大（正文 ≈ 9 pt），一行一件事
         let r = CGRect(x: 64, y: 190, width: 896, height: 668)   // 「点一下开始」也收在卡片里，不压到屏幕底下的提示胶囊
-        glass(g, r, radius: 64, tint: NSColor(white: 1, alpha: 0.18), band: 14)
+        glass(g, r, radius: Screen.concentric(inset: r.minX), tint: NSColor(white: 1, alpha: 0.18), band: 14)   // 左右外距 64：與螢幕同心
         let x = r.minX + 56
         let title = L("onboarding.title", "嗨，我是 HomePlay")
         drawLeft(g, title, font: Self.fitted(title, size: 80, weight: .bold, maxWidth: r.width - 112), x: x, y: r.minY + 108, color: .white)
-        let rows = [L("onboarding.carplay", "重按进入 CarPlay"), L("onboarding.menu", "右键看菜单"), L("onboarding.drag", "拖动转身体，双击回正")]
+        let rows = [L("onboarding.carplay", "重按进入 CarPlay"), L("onboarding.menu", "右键看菜单"), L("onboarding.drag", "拖动转动机身，双击回正")]
+        let rowMax = r.maxX - 56 - (x + 104 + 30)
+        let rowSize = rows.map { Self.fitted($0, size: 60, weight: .semibold, maxWidth: rowMax).pointSize }.min() ?? 60   // 三行同字級
         for (i, text) in rows.enumerated() {
             let top = r.minY + 150 + CGFloat(i) * (104 + 24)
             let box = CGRect(x: x, y: top, width: 104, height: 104)
             g.setFillColor(NSColor(white: 1, alpha: 0.18).cgColor)
-            g.addPath(CGPath(roundedRect: box, cornerWidth: 28, cornerHeight: 28, transform: nil)); g.fillPath()
+            g.addPath(continuousRoundedRect(box, radius: box.width * 0.2237)); g.fillPath()
             drawTipGlyph(g, i, in: box)
-            let font = Self.fitted(text, size: 60, weight: .semibold, maxWidth: r.maxX - 56 - (box.maxX + 30))
+            let font = Self.rounded(rowSize, weight: .semibold)
             drawLeft(g, text, font: font, x: box.maxX + 30, y: box.midY + font.capHeight / 2, color: .white)
         }
         drawCentered(g, L("onboarding.start", "点一下开始"), font: Self.rounded(44, weight: .semibold), kern: 0, y: r.maxY - 46,

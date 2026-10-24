@@ -34,10 +34,12 @@ extension Face {
             }
         }
         let (islandAt, islandScale, liveAt) = layout
-        // 靠近時底部的 CarPlay 狀態膠囊
-        if rv > 0.02 && liveT < 0.5 {
+        // 靠近時底部的 CarPlay 狀態膠囊（在島下面，不疊到島）。
+        // 「重按連上 iPhone」這種操作提示由第一次的導覽（Onboarding）教過了，錶面上不再一直掛著。
+        let idleHint = status == .notConnected && CarPlayPhoneBook.phones.isEmpty
+        if rv > 0.02 && liveT < 0.5 && !idleHint {
             let font = FaceType.sf(32, .semibold, mono: false)
-            let tw = (status.text as NSString).size(withAttributes: [.font: font]).width
+            let tw = Typo.width(status.text, font)
             let chip = CGRect(x: 512 - (tw + 64) / 2, y: 900 + 18 * (1 - rv), width: tw + 64, height: 70)
             g.saveGState(); g.setAlpha(rv * (1 - liveT * 2))
             if bg == .daytime { glass(g, chip, radius: 35, tint: NSColor(white: 1, alpha: 0.10), band: 10) }
@@ -60,8 +62,9 @@ extension Face {
         let (hh, mm) = Self.hourMinute(date)
         let backdrop = islandBackdrop(bg, now)
 
-        var islandAt = CGPoint(x: 512, y: 650), islandScale: CGFloat = 1.0, liveAt = CGPoint(x: 512, y: 700)
-        var dateY: CGFloat = 104
+        // 島在數字下面置中：寬 ≈ 512（稿：face('眼睛') 寬 300／600、y 405／600）
+        var islandAt = CGPoint(x: 512, y: 694), islandScale: CGFloat = 512 / 588, liveAt = CGPoint(x: 512, y: 700)
+        var dateY: CGFloat = 70
         // 數字：時在左、分在右，以中線為界各自貼齊中間的縫（單位數的小時不會漂到左邊）
         // 系統的 SF Adaptive Numeric：HGHT 軸往上長高、筆畫不變形（iOS 26 鎖定畫面／HomeView Portraits 的大時間）
         // 字體、粗細、顏色、玻璃／實線都照「字體與顏色」（ClockLook）
@@ -69,23 +72,24 @@ extension Face {
         if clockStyle == .thin, UserDefaults.standard.data(forKey: ClockLook.defaultsKey) == nil {   // 舊的「細線」樣式：細、實線
             look.weight = 0.08; look.glass = false
         }
-        func tallPair(top: CGFloat, height: CGFloat, gap: CGFloat) -> (GlyphShape, GlyphShape) {
-            let w = 512 - gap / 2 - 60
-            let hS = GlyphShape.clock(hh, look: look, height: height, maxWidth: w, at: CGPoint(x: 512 - gap / 2, y: top), anchorX: 1)
-            let mS = GlyphShape.clock(mm, look: look, height: height, maxWidth: w, at: CGPoint(x: 512 + gap / 2, y: top), anchorX: 0)
+        func tallPair(top: CGFloat, height: CGFloat, gap: CGFloat, boost: Double) -> (GlyphShape, GlyphShape) {
+            let w = 512 - gap / 2 - 52
+            let hS = GlyphShape.clock(hh, look: look, height: height, maxWidth: w, at: CGPoint(x: 512 - gap / 2, y: top), anchorX: 1, weightBoost: boost)
+            let mS = GlyphShape.clock(mm, look: look, height: height, maxWidth: w, at: CGPoint(x: 512 + gap / 2, y: top), anchorX: 0, weightBoost: boost)
             return (hS, mS)
         }
         let textAlpha = 0.72 + 0.28 * rv
         switch clockStyle {
         case .bold, .thin:
-            let (a, b) = tallPair(top: 150, height: 700, gap: 64)
-            drawClockDigits(g, [a, b], look: look, clear: islandClear(bg, now), frosted: backdrop, alpha: textAlpha)
+            // Portraits：Compressed 半粗、頂到上緣（日期之下），佔到約 59% 的高度，下面留給島
+            let (a, b) = tallPair(top: 100, height: 488, gap: 56, boost: clockStyle == .bold ? 0.1 : 0)
+            drawClockDigits(g, [a, b], look: look, clear: islandClear(bg, now), frosted: backdrop, alpha: textAlpha, system: .portraitFrosted)
         case .stacked:
             // 上時下分（X-Large 的排法），各一行
             let top = GlyphShape.clock(hh, look: look, height: 330, maxWidth: 820, at: CGPoint(x: 512, y: 132), anchorX: 0.5, weightBoost: 0.15)
             let bot = GlyphShape.clock(mm, look: look, height: 330, maxWidth: 820, at: CGPoint(x: 512, y: 500), anchorX: 0.5, weightBoost: 0.15)
-            drawClockDigits(g, [top, bot], look: look, clear: islandClear(bg, now), frosted: backdrop, alpha: textAlpha)
-            dateY = 84; islandAt = CGPoint(x: 512, y: 900); islandScale = 0.72; liveAt = CGPoint(x: 512, y: 880)
+            drawClockDigits(g, [top, bot], look: look, clear: islandClear(bg, now), frosted: backdrop, alpha: textAlpha, system: .portraitFrosted)
+            dateY = 84; islandAt = CGPoint(x: 512, y: 912); islandScale = 0.6; liveAt = CGPoint(x: 512, y: 880)
         case .compact:
             // 島是主角：上面一行不大的時間，島放大置中（字小，玻璃看不出來：一律實線，顏色照設定）
             let s = GlyphShape("\(hh):\(mm)", font: look.font.nsFont(150, weight: look.weight + 0.12), kern: -2).centered(at: CGPoint(x: 512, y: 236))
@@ -93,7 +97,7 @@ extension Face {
             dateY = 110; islandAt = CGPoint(x: 512, y: 560); islandScale = 1.3; liveAt = CGPoint(x: 512, y: 600)
         }
         // 日期：一般字寬、半粗，像鎖定畫面
-        drawCentered(g, Self.dateLine(date), font: FaceType.sf(40, .semibold), kern: 0.4, y: dateY,
+        drawCentered(g, Self.dateLine(date), font: FaceType.sf(clockStyle == .compact ? 40 : 34, .semibold), kern: 0.4, y: dateY,
                      color: NSColor.white.withAlphaComponent(0.66 + 0.3 * rv))
 
         return (islandAt, islandScale, liveAt)

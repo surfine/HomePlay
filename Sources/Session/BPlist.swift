@@ -49,6 +49,12 @@ package struct DisplayConfig: Sendable {
     package var safeArea: DisplayInsets?
     package var safeAreaDrawOutside: Bool?
     package var initialURL: String?
+    /// 宣告 cornerMasks（iOS 26 起）：手機會用 topLeftCornerMask 告訴我們它這一版的螢幕圓角輪廓。
+    /// 不能再帶 safeArea：2026-10-23 真機（iOS 27）兩個都宣告時，手機 RECORD 後 14 ms 就 TEARDOWN（DiPlay 也這麼說）
+    package var cornerMasks: Bool?
+    /// 實驗：把機身螢幕的圓角遮罩交給手機（"key"＝螢幕描述裡放 topLeftCornerMask；"dict"＝cornerMasks 寫成字典）
+    package var ownCornerMask: Data?
+    package var ownCornerMaskStyle: String?
     package init(widthPixels: Int, heightPixels: Int, widthPhysicalMm: Int? = nil, heightPhysicalMm: Int? = nil,
                  fps: Int? = nil, primaryInputDevice: Int? = nil, viewArea: DisplayInsets? = nil,
                  safeArea: DisplayInsets? = nil, safeAreaDrawOutside: Bool? = nil, initialURL: String? = nil) {
@@ -163,7 +169,7 @@ package enum CarPlayPlist {
         var view: [String: Any] = ["widthPixels": d.widthPixels - va.left - va.right,
                                    "heightPixels": d.heightPixels - va.top - va.bottom,
                                    "originXPixels": va.left, "originYPixels": va.top]
-        if let sa = d.safeArea {
+        if let sa = d.safeArea, d.cornerMasks != true {
             var safe: [String: Any] = ["widthPixels": d.widthPixels - sa.left - sa.right,
                                        "heightPixels": d.heightPixels - sa.top - sa.bottom,
                                        "originXPixels": sa.left, "originYPixels": sa.top]
@@ -183,6 +189,10 @@ package enum CarPlayPlist {
                                 "features": 0x08 | 0x02, "primaryInputDevice": d.primaryInputDevice ?? 3]
         if let v = areaDict(d) { e["viewAreas"] = [v]; e["initialViewArea"] = 0 }
         if let u = d.initialURL, !u.isEmpty { e["initialURL"] = u }
+        if let cm = d.cornerMasks { e["cornerMasks"] = cm }
+        if d.cornerMasks == true, let png = d.ownCornerMask {
+            if d.ownCornerMaskStyle == "dict" { e["cornerMasks"] = ["topLeftCornerMask": png] } else { e["topLeftCornerMask"] = png }
+        }
         return e
     }
 

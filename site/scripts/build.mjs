@@ -134,6 +134,7 @@ const MOTIF = {
   cable: `<svg viewBox="0 0 120 80" aria-hidden="true" focusable="false"><rect x="14" y="10" width="30" height="56" rx="7" class="m-line"/><path d="M29 66 V74" class="m-line"/><path class="m-cable" d="M29 74 C 29 78 40 78 52 70"/><g class="m-waves"><path d="M70 30 a 18 18 0 0 1 0 22"/><path d="M80 24 a 28 28 0 0 1 0 34"/><path d="M90 18 a 38 38 0 0 1 0 46"/></g></svg>`,
   faces: `<svg viewBox="0 0 120 80" aria-hidden="true" focusable="false"><rect x="18" y="16" width="84" height="48" rx="24" class="m-pill"/><g class="m-blink"><ellipse cx="50" cy="40" rx="10" ry="14" class="m-white"/><ellipse cx="72" cy="40" rx="10" ry="14" class="m-white"/><circle cx="46" cy="42" r="5.5" class="m-iris"/><circle cx="68" cy="42" r="5.5" class="m-iris"/></g></svg>`,
   siri: `<svg viewBox="0 0 120 80" aria-hidden="true" focusable="false"><rect x="10" y="22" width="40" height="36" rx="8" class="m-key m-press"/><text x="30" y="45" class="m-cap">F5</text><g class="m-wave">${[0, 1, 2, 3, 4, 5].map((i) => `<rect x="${62 + i * 9}" y="28" width="5" height="24" rx="2.5" class="w${i}"/>`).join('')}</g></svg>`,
+  tiles: `<svg viewBox="0 0 120 80" aria-hidden="true" focusable="false"><rect x="16" y="12" width="40" height="40" rx="11" class="m-line"/><rect x="64" y="12" width="40" height="18" rx="9" class="m-pill"/><rect x="64" y="36" width="40" height="16" rx="8" class="m-line"/><rect x="16" y="58" width="88" height="10" rx="5" class="m-line"/></svg>`,
   keys: `<svg viewBox="0 0 120 80" aria-hidden="true" focusable="false">${['F7', 'F8', 'F9'].map((k, i) => `<g class="${i === 1 ? 'm-press' : ''}"><rect x="${8 + i * 36}" y="22" width="32" height="36" rx="7" class="m-key"/><text x="${24 + i * 36}" y="45" class="m-cap">${k}</text></g>`).join('')}</svg>`,
 };
 
@@ -144,10 +145,9 @@ function page(c) {
   const langLinks = otherLangs(c).map((l) => `<a href="${l.path}" hreflang="${l.code}" lang="${l.code}">${l.label}</a>`).join('');
   const first = Object.keys(c.faceNames)[0];
   const rowFace = c.rows[0][0];
-  const finishFirst = FINISHES[0];
   const i18n = {
-    faceNames: c.faceNames, heroLabel: c.heroLabel, facesLabel: c.facesLabel, finishLabel: c.finishLabel, finishes: c.finishes,
-    apart: c.apart, together: c.together, apartAlt: c.apartAlt, spinLabel: c.spinLabel, copyCode: c.copyCode, copied: c.copied, replay: c.replay,
+    faceNames: c.faceNames, heroLabel: c.heroLabel, facesLabel: c.facesLabel,
+    apart: c.apart, together: c.together, apartAlt: c.apartAlt, spinLabel: c.spinLabel, copyCode: c.copyCode, copied: c.copied,
   };
   return `<!doctype html>
 <html lang="${c.htmlLang}">
@@ -167,11 +167,6 @@ ${head(c, { title: c.title, description: c.description, canonicalPath: c.path, i
 <main id="main">
 
 <section class="hero" id="top"><div class="wrap">
-  <div class="hero-film" id="hero-film" aria-hidden="true">
-    <video class="hero-film-video" muted playsinline preload="none" poster="/media/film/site-poster.webp" width="1180" height="760">
-      <source src="/media/film/hero-site.mp4" type="video/mp4">
-    </video>
-  </div>
   <div class="hero-copy">
     <h1>${c.h1}</h1>
     <p class="lede">${c.lede}</p>
@@ -182,7 +177,6 @@ ${head(c, { title: c.title, description: c.description, canonicalPath: c.path, i
     <div class="pet hero-pet" id="hero-pet" role="img" aria-label="${attr(fill(c.heroLabel, 'face', c.faceNames[first]))}" data-prefix="face-" data-names="${FACES.join(' ')}" data-first="idle" data-w="${SIZE.face[0]}" data-h="${SIZE.face[1]}" data-blink="auto" data-glance="auto">
       ${petImg('idle', 'face-', SIZE.face, { on: true, priority: true })}
     </div>
-    <button type="button" class="hero-film-replay" id="film-replay">${c.replayFilm}</button>
   </div>
 </div></section>
 
@@ -200,9 +194,6 @@ ${head(c, { title: c.title, description: c.description, canonicalPath: c.path, i
   <div class="why-text">
     <h2 class="rise">${c.essayTitle}</h2>
     <p class="lede">${c.essayLede}</p>
-    <ol class="beats" id="beats">
-      ${c.essay.map(([year, t, body]) => `<li><span class="yr">${year}</span><div><h3>${t}</h3><p>${body}</p></div></li>`).join('\n      ')}
-    </ol>
     <p class="essay-close">${c.essayClose}</p>
   </div>
   <div class="why-eyes">
@@ -242,10 +233,12 @@ ${c.rows.map(([f, t, r], i) => `      <button type="button" class="row${i ? '' :
   <div class="path" role="group" aria-label="${attr(c.pathLabel)}">
     ${c.flow.map(([b, s], i) => `${i ? '<div class="link" aria-hidden="true"><i class="dot"></i><i class="dot d2"></i><i class="dot back"></i></div>' : ''}<div class="node"><b>${b}</b><span>${s}</span></div>`).join('\n    ')}
   </div>
-  <div class="sources">
-    ${c.sources.map(([h, p, flag]) => `<div class="src"><h3>${h}</h3><p>${p}</p><p class="flag"><code>${flag}</code></p></div>`).join('\n    ')}
+  <div class="first-use">
+    <h3>${c.firstStepsTitle}</h3>
+    <ol>
+      ${c.firstSteps.map((t) => `<li>${t}</li>`).join('\n      ')}
+    </ol>
   </div>
-  <p class="sources-note">${c.sourcesNote}</p>
 </div></div></section>
 
 <section class="spin" id="spin"><div class="wrap">
@@ -264,37 +257,6 @@ ${c.rows.map(([f, t, r], i) => `      <button type="button" class="row${i ? '' :
     <p class="apart-note">${c.apartNote}</p>
     <ol>${c.apartParts.map((p, i) => `<li><span>${i + 1}</span>${p}</li>`).join('')}</ol>
   </div>
-  <div class="gestures">
-    ${c.gestures.map(([a, b]) => `<div class="g"><span>${a}</span><span>${b}</span></div>`).join('\n    ')}
-  </div>
-</div></section>
-
-<section class="finish" id="finish"><div class="wrap">
-  <div class="pet still finish-pet" id="finish-pet" role="img" aria-label="${attr(fill(c.finishLabel, 'finish', c.finishes[finishFirst][0]))}" data-prefix="finish-" data-names="${FINISHES.join(' ')}" data-first="${finishFirst}" data-w="${SIZE.finish[0]}" data-h="${SIZE.finish[1]}" data-blink="auto" data-glance="always">
-    ${petImg(finishFirst, 'finish-', SIZE.finish, { on: true, lazy: true })}
-  </div>
-  <div class="rise">
-    <h2>${c.finishTitle}</h2>
-    <p class="lede">${c.finishLede}</p>
-    <div class="swatches" id="swatches" role="group" aria-label="${attr(c.finishTitle)}">
-      ${FINISHES.map((f, i) => `<button type="button" class="sw ${SW[f]}" aria-pressed="${i === 0}" data-finish="${f}" aria-label="${attr(c.finishes[f][0])}"></button>`).join('\n      ')}
-    </div>
-    <div class="swname" id="swname" aria-live="polite">${c.finishes[finishFirst][0]}</div>
-    <p class="swdesc" id="swdesc">${c.finishes[finishFirst][1]}</p>
-  </div>
-</div></section>
-
-<section class="moments"><div class="wrap">
-  <h2 class="rise">${c.momentsTitle}</h2>
-  <div class="grid">
-    ${c.moments.map(([h, p, file, alt], i) => {
-      const hello = file === 'hello.webp';
-      const ambient = file === 'ambient-night.webp';
-      const asleep = file === 'asleep-night.webp';
-      const shot = `<div class="shot"><img src="${R}${file}" width="${SIZE.moment[file][0]}" height="${SIZE.moment[file][1]}" alt="${attr(alt)}" loading="lazy" decoding="async">${hello ? `<canvas class="hello-canvas" aria-hidden="true" hidden></canvas>` : ''}</div>`;
-      return `<div class="cell c${i + 1}"${hello ? ` id="hello-cell" data-frames="16"` : ambient ? ' id="ambient-cell"' : asleep ? ' id="asleep-cell"' : ''}><h3>${h}</h3><p>${p}</p>${hello ? `<button type="button" class="textbtn" id="replay" hidden>${c.replay}</button>` : ''}${shot}</div>`;
-    }).join('\n    ')}
-  </div>
 </div></section>
 
 <section class="run" id="run"><div class="wrap">
@@ -302,27 +264,14 @@ ${c.rows.map(([f, t, r], i) => `      <button type="button" class="row${i ? '' :
     <h2>${c.runTitle}</h2>
     <p class="lede">${c.runLede}</p>
     <div class="dl"><a class="btn btn-primary" href="${releaseDownload}">${c.download}</a><p class="dl-note">${c.downloadNote}</p></div>
-    <div class="first-use">
-      <h3>${c.firstStepsTitle}</h3>
-      <ol>
-        ${c.firstSteps.map((t) => `<li>${t}</li>`).join('\n        ')}
-      </ol>
-    </div>
   </div>
-  <div class="build">
-    <h3>${c.buildTitle}</h3>
+  <details class="build">
+    <summary>${c.buildTitle}</summary>
     <ul>
       ${c.runList.map((t) => `<li>${t}</li>`).join('\n      ')}
     </ul>
     <div class="code"><pre><code>${c.code.map(([k, t]) => (k ? `<span class="c">${esc(t)}</span>` : esc(t))).join('\n')}</code></pre><button type="button" class="copy" id="copy" aria-live="polite" hidden>${c.copyCode}</button></div>
-  </div>
-</div></section>
-
-<section class="notes" id="notes"><div class="wrap">
-  <h2 class="rise">${c.notesTitle}</h2>
-  <div class="note-grid rise">
-    ${c.notes.map(([t, b]) => `<div class="note"><h3>${t}</h3><p>${b}</p></div>`).join('\n    ')}
-  </div>
+  </details>
 </div></section>
 
 <section id="faq"><div class="wrap faq">

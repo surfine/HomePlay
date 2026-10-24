@@ -6,19 +6,19 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Press firmly on the screen to connect CarPlay. Right-click for the menu."
+            "value": "Force Click the screen to enter CarPlay. Right-click for the menu."
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "重按屏幕连接 CarPlay，右键打开菜单"
+            "value": "重按屏幕进入 CarPlay，右键打开菜单"
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "重按螢幕連接 CarPlay，右鍵打開選單"
+            "value": "重按螢幕進入 CarPlay，右鍵開啟選單"
           }
         }
       }
@@ -480,7 +480,7 @@
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "不鏽鋼，連接顯示器與鋁圓頂底座"
+            "value": "不鏽鋼，連線顯示器與鋁圓頂底座"
           }
         }
       }
@@ -612,7 +612,7 @@
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "USB-C 接口，30W 電源轉接器"
+            "value": "USB-C 連接埠，30W 電源轉接器"
           }
         }
       }
@@ -947,72 +947,6 @@
         }
       }
     },
-    "calendar.denied": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Calendar access denied"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "行事历未授权"
-          }
-        },
-        "zh-Hant": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "行事曆未授權"
-          }
-        }
-      }
-    },
-    "calendar.empty": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "No events today"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "今天没有行程"
-          }
-        },
-        "zh-Hant": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "今天沒有行程"
-          }
-        }
-      }
-    },
-    "calendar.hint": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Right-click › Preferences"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "右键 › 偏好设定"
-          }
-        },
-        "zh-Hant": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "右鍵 › 偏好設定"
-          }
-        }
-      }
-    },
     "calendar.next": {
       "localizations": {
         "en": {
@@ -1031,28 +965,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "下一個行程"
-          }
-        }
-      }
-    },
-    "calendar.notConnected": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "No calendar yet"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "尚未连接行事历"
-          }
-        },
-        "zh-Hant": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "尚未連接行事曆"
           }
         }
       }
@@ -1112,7 +1024,7 @@
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "收 %.0f fps · 解 %.0f fps · %d×%d"
+            "value": "接收 %.0f fps · 解码 %.0f fps · %d×%d"
           }
         },
         "zh-Hant": {
@@ -1128,19 +1040,19 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Analog"
+            "value": "Typograph"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "指针"
+            "value": "Typograph"
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "指針"
+            "value": "Typograph"
           }
         }
       }
@@ -1392,19 +1304,19 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "HomePlay will stop using it and try to remove the system Bluetooth pairing. If macOS keeps it, forget this Mac in the iPhone’s Bluetooth settings."
+            "value": "HomePlay will stop using it and remove its Bluetooth pairing on this Mac. You'll then see the one step left on iPhone."
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "HomePlay 会停止使用它，并尝试删除系统蓝牙配对。若系统仍保留，可在 iPhone 的蓝牙设置里忘记这台 Mac。"
+            "value": "HomePlay 会停止使用它，并删除这台 Mac 上的蓝牙配对。之后会告诉你 iPhone 上还要做哪一步。"
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "HomePlay 會停止使用它，並嘗試刪除系統藍牙配對。若系統仍保留，可在 iPhone 的藍牙設定裡忘記這台 Mac。"
+            "value": "HomePlay 會停止使用它，並刪除這台 Mac 上的藍牙配對。之後會告訴你 iPhone 上還要做哪一步。"
           }
         }
       }
@@ -1464,7 +1376,7 @@
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "在系统设置 › 隐私与安全性 › 摄像头里允许 HomePlay，跟随我或房间光线才能使用摄像头。画面只在本机处理，不保存。"
+            "value": "在系统设置 › 隐私与安全性 › 相机里允许 HomePlay，跟随我或房间光线才能使用相机。画面只在本机处理，不保存。"
           }
         },
         "zh-Hant": {
@@ -1508,7 +1420,7 @@
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "需要摄像头权限"
+            "value": "需要相机权限"
           }
         },
         "zh-Hant": {
@@ -1580,7 +1492,7 @@
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "每天第一次打開，圈上就多一顆"
+            "value": "每天第一次開啟，圈上就多一顆"
           }
         }
       }
@@ -1602,7 +1514,7 @@
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "已設為登入時打開（登入後待命）"
+            "value": "已設為登入時開啟（登入後待命）"
           }
         }
       }
@@ -1668,7 +1580,7 @@
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "已取消登入時打開"
+            "value": "已取消登入時開啟"
           }
         }
       }
@@ -1959,6 +1871,94 @@
         }
       }
     },
+    "typograph.material": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Typograph material"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Typograph 材质"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Typograph 材質"
+          }
+        }
+      }
+    },
+    "typograph.material.flat": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Flat"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "平面"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "平面"
+          }
+        }
+      }
+    },
+    "typograph.material.embossed": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Embossed"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "浮雕"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "浮雕"
+          }
+        }
+      }
+    },
+    "system6.layout": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "System 6 layout"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "System 6 版式"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "System 6 版式"
+          }
+        }
+      }
+    },
     "menu.about": {
       "localizations": {
         "en": {
@@ -2036,7 +2036,7 @@
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "取消连线"
+            "value": "取消连接"
           }
         },
         "zh-Hant": {
@@ -2140,7 +2140,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Finish"
+            "value": "Appearance"
           }
         },
         "zh-Hans": {
@@ -2153,28 +2153,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "外觀"
-          }
-        }
-      }
-    },
-    "menu.forgetPhone": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Forget iPhone"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "忘记 iPhone"
-          }
-        },
-        "zh-Hant": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "忘記 iPhone"
           }
         }
       }
@@ -2212,13 +2190,13 @@
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "双击身体"
+            "value": "双击机身"
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "連按兩下身體"
+            "value": "連按兩下機身"
           }
         }
       }
@@ -2344,13 +2322,13 @@
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "两指点两下"
+            "value": "两指轻点两下"
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "兩指點兩下"
+            "value": "兩指輕點兩下"
           }
         }
       }
@@ -2377,50 +2355,6 @@
         }
       }
     },
-    "menu.language": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Language"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "语言"
-          }
-        },
-        "zh-Hant": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "語言"
-          }
-        }
-      }
-    },
-    "menu.language.system": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Follow System"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "跟随系统"
-          }
-        },
-        "zh-Hant": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "跟隨系統"
-          }
-        }
-      }
-    },
     "menu.pairNewPhone": {
       "localizations": {
         "en": {
@@ -2443,72 +2377,6 @@
         }
       }
     },
-    "menu.pairNewPhone.hint": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Plug in to pair; use Bluetooth settings only without a cable"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "插线就会开始配对；没线才用蓝牙设置"
-          }
-        },
-        "zh-Hant": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "插線就會開始配對；沒線才用藍牙設定"
-          }
-        }
-      }
-    },
-    "menu.pairPhone": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Pair iPhone…"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "配对 iPhone…"
-          }
-        },
-        "zh-Hant": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "配對 iPhone…"
-          }
-        }
-      }
-    },
-    "menu.pairPhone.hint": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Connect once with a cable, then wireless"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "数据线连一次，之后无线自动连"
-          }
-        },
-        "zh-Hant": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "資料線連一次，之後無線自動連"
-          }
-        }
-      }
-    },
     "menu.pet": {
       "localizations": {
         "en": {
@@ -2527,28 +2395,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "桌寵"
-          }
-        }
-      }
-    },
-    "menu.prefs": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Preferences"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "偏好设定"
-          }
-        },
-        "zh-Hant": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "偏好設定"
           }
         }
       }
@@ -2592,7 +2438,7 @@
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "重新連接 CarPlay"
+            "value": "重新連線 CarPlay"
           }
         }
       }
@@ -2615,28 +2461,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "回正"
-          }
-        }
-      }
-    },
-    "menu.restorePhones": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Restore Forgotten iPhones"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "恢复已忘记的 iPhone"
-          }
-        },
-        "zh-Hant": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "恢復已忘記的 iPhone"
           }
         }
       }
@@ -2703,28 +2527,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "呼叫 Siri（F5）"
-          }
-        }
-      }
-    },
-    "menu.usePhone.hint": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Switching ends the current screen"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "切换会断开当前画面"
-          }
-        },
-        "zh-Hant": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "切換會中斷目前畫面"
           }
         }
       }
@@ -2857,28 +2659,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Wi-Fi 設定…"
-          }
-        }
-      }
-    },
-    "menu.wifiPassword.hint": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Only needed if the connection fails"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "一般不用；连不上时再用"
-          }
-        },
-        "zh-Hant": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "一般不用；連不上時再用"
           }
         }
       }
@@ -3064,7 +2844,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Press firmly for CarPlay"
+            "value": "Force Click for CarPlay"
           }
         },
         "zh-Hans": {
@@ -3092,13 +2872,13 @@
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "拖动转身体，双击回正"
+            "value": "拖动转动机身，双击回正"
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "拖動轉身體，雙擊回正"
+            "value": "拖動轉動機身，連按兩下回正"
           }
         }
       }
@@ -3187,28 +2967,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "滾輪或 ← → 挑選 · 點按套用 · Esc 取消"
-          }
-        }
-      }
-    },
-    "photos.empty": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Put photos in Pictures › HomePlay"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "把照片放进「图片 › HomePlay」"
-          }
-        },
-        "zh-Hant": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "把照片放進「圖片 › HomePlay」"
           }
         }
       }
@@ -3438,7 +3196,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Back to focus"
+            "value": "Back to Focus"
           }
         },
         "zh-Hans": {
@@ -3482,7 +3240,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Take a break"
+            "value": "Take a Break"
           }
         },
         "zh-Hans": {
@@ -3504,7 +3262,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Break's over"
+            "value": "Break’s over"
           }
         },
         "zh-Hans": {
@@ -3592,7 +3350,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Rest 15 minutes"
+            "value": "Rest 15 Minutes"
           }
         },
         "zh-Hans": {
@@ -3697,50 +3455,6 @@
         }
       }
     },
-    "prefs.calendar.allow": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Allow Calendar Access…"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "允许读取行事历…"
-          }
-        },
-        "zh-Hant": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "允許讀取行事曆…"
-          }
-        }
-      }
-    },
-    "prefs.calendar.needsApp": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Allow Calendar Access… (packaged app only)"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "允许读取行事历…（打包成 App 后可用）"
-          }
-        },
-        "zh-Hant": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "允許讀取行事曆…（打包成 App 後可用）"
-          }
-        }
-      }
-    },
     "prefs.calendar.on": {
       "localizations": {
         "en": {
@@ -3752,57 +3466,13 @@
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "读取行事历"
+            "value": "读取日历"
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
             "value": "讀取行事曆"
-          }
-        }
-      }
-    },
-    "prefs.calendar.openSettings": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Open Calendar Access in System Settings…"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "到系统设置打开行事历…"
-          }
-        },
-        "zh-Hant": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "到系統設定打開行事曆…"
-          }
-        }
-      }
-    },
-    "prefs.calendar.sub": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Used by “Next Event” on the Modular face"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "模组表盘的「下一个行程」要用"
-          }
-        },
-        "zh-Hant": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "模組錶面的「下一個行程」要用"
           }
         }
       }
@@ -3818,35 +3488,13 @@
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "跟随我（摄像头）"
+            "value": "跟随我（相机）"
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "跟隨我（攝影機）"
-          }
-        }
-      }
-    },
-    "prefs.gaze.sub": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "On-device, no recording; paused during CarPlay"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "本机处理，不录制；CarPlay 时暂停"
-          }
-        },
-        "zh-Hant": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "本機處理，不錄製；CarPlay 時暫停"
+            "value": "跟隨我（相機）"
           }
         }
       }
@@ -3869,50 +3517,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "再看一次操作提示"
-          }
-        }
-      }
-    },
-    "prefs.login": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Open HomePlay at Login"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "登入时打开 HomePlay"
-          }
-        },
-        "zh-Hant": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "登入時打開 HomePlay"
-          }
-        }
-      }
-    },
-    "prefs.login.needsApp": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Open HomePlay at Login (packaged app only)"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "登入时打开 HomePlay（打包成 App 后可用）"
-          }
-        },
-        "zh-Hant": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "登入時打開 HomePlay（打包成 App 後可用）"
           }
         }
       }
@@ -3950,7 +3554,7 @@
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "照片资料夹…"
+            "value": "照片文件夹…"
           }
         },
         "zh-Hant": {
@@ -3994,7 +3598,7 @@
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "选一个放照片的资料夹，照片表盘会轮播里面的照片"
+            "value": "选一个放照片的文件夹，照片表盘会轮播里面的照片"
           }
         },
         "zh-Hant": {
@@ -4044,51 +3648,7 @@
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "開機在背景等待 iPhone；插線一次，之後無線自動連"
-          }
-        }
-      }
-    },
-    "prefs.roomLight": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Room light (camera)"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "房间光线（摄像头）"
-          }
-        },
-        "zh-Hant": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "房間光線（相機）"
-          }
-        }
-      }
-    },
-    "prefs.roomLight.sub": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Estimates room brightness, color temperature, and key-light direction on-device; no recording"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "估计房间亮度/色温/主光方向；本机处理，不录制"
-          }
-        },
-        "zh-Hant": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "估計房間亮度、色溫與主光方向；本機處理，不錄製"
+            "value": "開機在背景等待 iPhone；插線一次，之後無線自動連線"
           }
         }
       }
@@ -4198,7 +3758,7 @@
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "打開設定…"
+            "value": "開啟設定…"
           }
         }
       }
@@ -4252,7 +3812,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "A Mac doesn't move, so it's always parked"
+            "value": "A Mac doesn’t move, so it’s always parked"
           }
         },
         "zh-Hans": {
@@ -4296,19 +3856,19 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "CarPlay live"
+            "value": "CarPlay showing"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "CarPlay 直播中"
+            "value": "CarPlay 显示中"
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "CarPlay 直播中"
+            "value": "CarPlay 顯示中"
           }
         }
       }
@@ -4340,7 +3900,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Press firmly to connect your iPhone"
+            "value": "Force Click to connect"
           }
         },
         "zh-Hans": {
@@ -4368,7 +3928,7 @@
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "仍可右键取消连线"
+            "value": "仍可右键取消连接"
           }
         },
         "zh-Hant": {
@@ -4440,7 +4000,7 @@
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "正在連接「%@」…"
+            "value": "正在連線「%@」…"
           }
         }
       }
@@ -4450,7 +4010,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Just a moment. The picture will appear shortly."
+            "value": "Just a moment — the picture will appear shortly"
           }
         },
         "zh-Hans": {
@@ -4544,7 +4104,7 @@
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "iPhone 里若还有这台 Mac 的旧配对：点 ⓘ → 忘记此装置，再重新配对"
+            "value": "iPhone 里若还有这台 Mac 的旧配对：点 ⓘ → 忽略此设备，再重新配对"
           }
         },
         "zh-Hant": {
@@ -4660,7 +4220,7 @@
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "沒看到 Mac？保持兩邊藍牙設定開著，等幾秒會刷新"
+            "value": "沒看到 Mac？保持兩邊藍牙設定開著，等幾秒會重新整理"
           }
         }
       }
@@ -4726,7 +4286,7 @@
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "確認 iPhone 已解鎖、藍牙已開、和這臺 Mac 在同一 Wi-Fi"
+            "value": "確認 iPhone 已解鎖、藍牙已開、和這台 Mac 在同一 Wi-Fi"
           }
         }
       }
@@ -5050,7 +4610,7 @@
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "CarPlay 未连接 · 稍后重连"
+            "value": "稍后重新连接"
           }
         },
         "zh-Hant": {
@@ -5079,28 +4639,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "正在等待「%@」"
-          }
-        }
-      }
-    },
-    "system6.open": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Click to open"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "单击打开"
-          }
-        },
-        "zh-Hant": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "按一下打開"
           }
         }
       }
@@ -5264,19 +4802,19 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Enter the Wi-Fi the iPhone is on (not necessarily the one the Mac uses). If the Mac is on Ethernet or the two use different SSIDs, enter the iPhone's network name and password. Leave the password empty when the iPhone is already on that network. macOS 26 no longer lets apps read keychain passwords; view it in System Settings and type it once (stored locally with 0600)."
+            "value": "Enter the Wi-Fi the iPhone is on (not necessarily the one the Mac uses). If the Mac is on Ethernet or the two use different SSIDs, enter the iPhone’s network name and password. Leave the password empty when the iPhone is already on that network. macOS 26 no longer lets apps read keychain passwords; view it in System Settings and type it once (stored only on this Mac)."
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "这里填 iPhone 所连的 Wi-Fi（不一定是 Mac 自己连的那个）。Mac 用网线、或两者连不同 SSID 时，请填 iPhone 那个网络的名称和密码。iPhone 已在该网络上时密码可留空。macOS 26 不再允许 App 读取钥匙串密码，需要时请在系统设置里查看后手填（只存本机 0600）。"
+            "value": "这里填 iPhone 所连的 Wi-Fi（不一定是 Mac 自己连的那个）。Mac 用网线、或两者连不同 SSID 时，请填 iPhone 那个网络的名称和密码。iPhone 已在该网络上时密码可留空。macOS 26 不再允许 App 读取钥匙串密码，需要时请在系统设置里查看后手填（仅存在本机）。"
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "這裡填 iPhone 所連的 Wi-Fi（不一定是 Mac 自己連的那個）。Mac 用網路線、或兩者連不同 SSID 時，請填 iPhone 那個網路的名稱和密碼。iPhone 已在該網路上時密碼可留空。macOS 26 不再允許 App 讀取鑰匙圈密碼，需要時請在系統設定裡查看後手填（只存本機 0600）。"
+            "value": "這裡填 iPhone 所連的 Wi-Fi（不一定是 Mac 自己連的那個）。Mac 用網路線、或兩者連不同 SSID 時，請填 iPhone 那個網路的名稱和密碼。iPhone 已在該網路上時密碼可留空。macOS 26 不再允許 App 讀取鑰匙圈密碼，需要時請在系統設定裡查看後手填（僅存在本機）。"
           }
         }
       }
@@ -5396,19 +4934,19 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "\"<redacted>\" is a macOS placeholder, not a real network name. Enter the actual SSID of the Wi-Fi the iPhone is on (shown in iPhone Settings › Wi-Fi)."
+            "value": "“<redacted>” is a macOS placeholder, not a real network name. Enter the actual SSID of the Wi-Fi the iPhone is on (shown in iPhone Settings › Wi-Fi)."
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "「<redacted>」是 macOS 的脱敏占位符，不是真实网络名。请填 iPhone 所连 Wi-Fi 的实际名称（可在 iPhone 的「设置 › Wi-Fi」里看到）。"
+            "value": "「<redacted>」是 macOS 隐藏网络名后显示的占位文字，不是真实网络名。请填 iPhone 所连 Wi-Fi 的实际名称（可在 iPhone 的「设置 › Wi-Fi」里看到）。"
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "「<redacted>」是 macOS 的遮罩佔位符，不是真實網路名稱。請填 iPhone 所連 Wi-Fi 的實際名稱（可在 iPhone 的「設定 › Wi-Fi」裡看到）。"
+            "value": "「<redacted>」是 macOS 隱藏網路名稱後顯示的佔位文字，不是真實網路名稱。請填 iPhone 所連 Wi-Fi 的實際名稱（可在 iPhone 的「設定 › Wi-Fi」裡看到）。"
           }
         }
       }
@@ -5440,7 +4978,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "iPhone's Wi-Fi (SSID)"
+            "value": "iPhone’s Wi-Fi (SSID)"
           }
         },
         "zh-Hans": {
@@ -5462,7 +5000,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Empty = the Mac's current Wi-Fi (only if the iPhone uses it too)"
+            "value": "Empty = the Mac’s current Wi-Fi (only if the iPhone uses it too)"
           }
         },
         "zh-Hans": {
@@ -5611,28 +5149,6 @@
         }
       }
     },
-    "status.overlay.pairConfirmBody": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Pair once and the Mac remembers this iPhone"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "配对一次，Mac 就会记住这台 iPhone"
-          }
-        },
-        "zh-Hant": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "配對一次，Mac 就會記住這台 iPhone"
-          }
-        }
-      }
-    },
     "status.overlay.pairConfirmHint": {
       "localizations": {
         "en": {
@@ -5716,7 +5232,7 @@
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "沒看到配對彈窗；拔線再插一次就能重試"
+            "value": "沒看到配對提示；拔線再插一次就能重試"
           }
         }
       }
@@ -5805,50 +5321,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "iPhone"
-          }
-        }
-      }
-    },
-    "prefs.cameras": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Cameras & Microphone"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "摄像头与麦克风"
-          }
-        },
-        "zh-Hant": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "攝影機與麥克風"
-          }
-        }
-      }
-    },
-    "prefs.mic": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Microphone (CarPlay calls/Siri)…"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "麦克风（CarPlay 通话/Siri）…"
-          }
-        },
-        "zh-Hant": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "麥克風（CarPlay 通話/Siri）…"
           }
         }
       }
@@ -6029,72 +5501,6 @@
         }
       }
     },
-    "prefs.nowPlaying.sub": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Needs Automation access; iPhone Now Playing still works"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "需要自动化权限；iPhone 的正在播放不受影响"
-          }
-        },
-        "zh-Hant": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "需要自動化權限；iPhone 的正在播放不受影響"
-          }
-        }
-      }
-    },
-    "prefs.gazePitch": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Follow Me Pitch…"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "跟随我俯仰角度…"
-          }
-        },
-        "zh-Hant": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "跟隨我俯仰角度…"
-          }
-        }
-      }
-    },
-    "prefs.gazePitch.value": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%.1f°"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%.1f°"
-          }
-        },
-        "zh-Hant": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%.1f°"
-          }
-        }
-      }
-    },
     "gaze.pitch.title": {
       "localizations": {
         "en": {
@@ -6150,13 +5556,13 @@
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "自动朝向（窗口位置＋跟随）"
+            "value": "自动朝向（窗口位置 + 跟随）"
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "自動朝向（視窗位置＋跟隨）"
+            "value": "自動朝向（視窗位置 + 跟隨）"
           }
         }
       }
@@ -6310,7 +5716,7 @@
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "轉頭看你、配合房間光線\n不錄影、不上傳"
+            "value": "轉頭看你、配合房間光線\n不錄製、不上傳"
           }
         }
       }
@@ -6364,7 +5770,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Shows what's playing.\nClick to play or pause."
+            "value": "Shows what’s playing.\nClick to play or pause."
           }
         },
         "zh-Hans": {
@@ -6474,19 +5880,19 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Now Playing will show on the island"
+            "value": "Now Playing will show in the capsule"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "正在播放会显示在岛上"
+            "value": "正在播放会显示在胶囊上"
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "正在播放會顯示在島上"
+            "value": "正在播放會顯示在膠囊上"
           }
         }
       }
@@ -6518,7 +5924,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Click Allow in the dialog"
+            "value": "Click Allow in the Dialog"
           }
         },
         "zh-Hans": {
@@ -6584,19 +5990,19 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Not Available Yet"
+            "value": "Turn It On in System Settings"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "现在还用不了"
+            "value": "需要在系统设置里打开"
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "現在還用不了"
+            "value": "需要在系統設定裡開啟"
           }
         }
       }
@@ -6618,7 +6024,7 @@
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "在「隱私權與安全性」裡打開\n回來就能用"
+            "value": "在「隱私權與安全性」裡開啟\n回來就能用"
           }
         }
       }
@@ -6662,7 +6068,7 @@
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "打開系統設定"
+            "value": "開啟系統設定"
           }
         }
       }
@@ -6678,13 +6084,13 @@
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "以后"
+            "value": "以后再说"
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "以後"
+            "value": "以後再說"
           }
         }
       }
@@ -6810,13 +6216,13 @@
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "摄像头"
+            "value": "相机"
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "攝影機"
+            "value": "相機"
           }
         }
       }
@@ -6854,13 +6260,13 @@
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "登入时打开 HomePlay"
+            "value": "登录时打开 HomePlay"
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "登入時打開 HomePlay"
+            "value": "登入時開啟 HomePlay"
           }
         }
       }
@@ -6953,28 +6359,6 @@
         }
       }
     },
-    "settings.sizeMax": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Largest"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "最大"
-          }
-        },
-        "zh-Hant": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "最大"
-          }
-        }
-      }
-    },
     "settings.sources": {
       "localizations": {
         "en": {
@@ -6986,7 +6370,7 @@
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "表面上的资料"
+            "value": "表盘上的数据"
           }
         },
         "zh-Hant": {
@@ -7030,7 +6414,7 @@
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "表面"
+            "value": "表盘"
           }
         },
         "zh-Hant": {
@@ -7256,7 +6640,7 @@
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "只認臉的位置，不錄影、不上傳"
+            "value": "只認臉的位置，不錄製、不上傳"
           }
         }
       }
@@ -7266,7 +6650,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Matches the room's light"
+            "value": "Matches the room’s light"
           }
         },
         "zh-Hans": {
@@ -7294,13 +6678,13 @@
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "摄像头"
+            "value": "相机"
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "攝影機"
+            "value": "相機"
           }
         }
       }
@@ -7382,7 +6766,7 @@
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "行事历"
+            "value": "日历"
           }
         },
         "zh-Hant": {
@@ -7486,19 +6870,19 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Floats above your other windows"
+            "value": "Sits on your desktop as a little companion"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "浮在桌面上，别的窗口盖不住"
+            "value": "陪你待在桌面上"
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "浮在桌面上，別的視窗蓋不住"
+            "value": "陪你待在桌面上"
           }
         }
       }
@@ -7778,13 +7162,13 @@
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "三指拖移，直播时也行"
+            "value": "三指拖移，CarPlay 显示时也行"
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "三指拖移，直播時也行"
+            "value": "三指拖移，CarPlay 顯示時也行"
           }
         }
       }
@@ -7794,19 +7178,19 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Press the screen firmly"
+            "value": "Force Click the screen"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "稍微用力按下屏幕"
+            "value": "重按屏幕"
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "稍微用力按下螢幕"
+            "value": "重按螢幕"
           }
         }
       }
@@ -7822,13 +7206,13 @@
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "直播时在屏幕上双指滑"
+            "value": "CarPlay 显示时在屏幕上双指滑"
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "直播時在螢幕上雙指滑"
+            "value": "CarPlay 顯示時在螢幕上雙指滑"
           }
         }
       }
@@ -7872,7 +7256,7 @@
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "雙擊機身"
+            "value": "連按兩下機身"
           }
         }
       }
@@ -7948,7 +7332,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Long-press the screen"
+            "value": "Press & Hold the Screen"
           }
         },
         "zh-Hans": {
@@ -7976,13 +7360,13 @@
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "打开表面总览"
+            "value": "打开表盘总览"
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "打開錶面總覽"
+            "value": "開啟錶面總覽"
           }
         }
       }
@@ -8014,41 +7398,19 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Space live · F5 Siri · 1–4 views"
+            "value": "Space play/pause · F5 Siri · 1–4 views"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "空格直播 · F5 Siri · 1–4 视角"
+            "value": "空格暂停/继续 · F5 Siri · 1–4 视角"
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "空白鍵直播 · F5 Siri · 1–4 視角"
-          }
-        }
-      }
-    },
-    "settings.autoConnect.sub": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Press the screen firmly for CarPlay"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "用力按屏幕就是 CarPlay"
-          }
-        },
-        "zh-Hant": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "用力按螢幕就是 CarPlay"
+            "value": "空白鍵暫停/繼續 · F5 Siri · 1–4 視角"
           }
         }
       }
@@ -8108,13 +7470,13 @@
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "直播时也会转向你"
+            "value": "CarPlay 显示时也会转向你"
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "直播時也會轉向你"
+            "value": "CarPlay 顯示時也會轉向你"
           }
         }
       }
@@ -8174,13 +7536,13 @@
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "转身体"
+            "value": "转动机身"
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "轉身體"
+            "value": "轉動機身"
           }
         }
       }
@@ -8278,7 +7640,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Connect one by cable once and it's remembered"
+            "value": "Connect one by cable once and it’s remembered"
           }
         },
         "zh-Hans": {
@@ -8394,7 +7756,7 @@
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "在模块表面上显示下一个行程"
+            "value": "在模块表盘上显示下一个行程"
           }
         },
         "zh-Hant": {
@@ -8658,7 +8020,7 @@
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "保持中"
+            "value": "通话保持中"
           }
         },
         "zh-Hant": {
@@ -8718,7 +8080,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "End call"
+            "value": "End Call"
           }
         },
         "zh-Hans": {
@@ -8812,13 +8174,13 @@
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "岛和照片表盘的大时间"
+            "value": "岛表盘和照片表盘的大时间"
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "島和照片錶面的大時間"
+            "value": "島錶面和照片錶面的大時間"
           }
         }
       }
@@ -9215,6 +8577,1568 @@
           "stringUnit": {
             "state": "translated",
             "value": "綠色"
+          }
+        }
+      }
+    },
+    "settings.corners": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Corners"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "圆角"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "圓角"
+          }
+        }
+      }
+    },
+    "settings.corners.concentric": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Concentric"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "同心"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "同心"
+          }
+        }
+      }
+    },
+    "settings.corners.balanced": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Balanced"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "折衷"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "折衷"
+          }
+        }
+      }
+    },
+    "settings.corners.maximize": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Largest"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "最大画面"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "最大畫面"
+          }
+        }
+      }
+    },
+    "settings.corners.concentric.sub": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Icons and the Dock follow the body’s corners; the wallpaper fills the screen"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "图标和 Dock 与机身同心，壁纸铺满"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "圖示和 Dock 與機身同心，桌布鋪滿"
+          }
+        }
+      }
+    },
+    "settings.corners.balanced.sub": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Between Concentric and Largest"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "介于同心与最大画面之间"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "介於同心與最大畫面之間"
+          }
+        }
+      }
+    },
+    "settings.corners.maximize.sub": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Just clears the body’s corners for the largest picture"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "只避开机身圆角，画面最大"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "只避開機身圓角，畫面最大"
+          }
+        }
+      }
+    },
+    "settings.corners.inset": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": " (this iPhone: %d px inset per side)"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "（这台 iPhone 每边内收 %d px）"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "（這台 iPhone 每邊內收 %d px）"
+          }
+        }
+      }
+    },
+    "settings.capsule": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Capsule"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "胶囊"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "膠囊"
+          }
+        }
+      }
+    },
+    "capsule.auto": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Automatic"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "自动"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "自動"
+          }
+        }
+      }
+    },
+    "capsule.black": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Black"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "纯黑"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "純黑"
+          }
+        }
+      }
+    },
+    "capsule.smoke": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Smoke"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "黑透渐层"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "黑透漸層"
+          }
+        }
+      }
+    },
+    "capsule.glass": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Glass"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "玻璃"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "玻璃"
+          }
+        }
+      }
+    },
+    "face.style.weather": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Weather"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "天气"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "天氣"
+          }
+        }
+      }
+    },
+    "face.style.calendar": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Calendar"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "日历"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "行事曆"
+          }
+        }
+      }
+    },
+    "face.style.homeModular": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Home Modular"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "家庭模块"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "家庭模組"
+          }
+        }
+      }
+    },
+    "face.style.embossed": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Embossed Hands"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "浮雕指针"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "浮雕指針"
+          }
+        }
+      }
+    },
+    "face.style.black": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Black"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "黑色"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "黑色"
+          }
+        }
+      }
+    },
+    "weather.cond.clear": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Clear"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "晴"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "晴"
+          }
+        }
+      }
+    },
+    "weather.cond.mostlyClear": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mostly Clear"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "大致晴朗"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "大致晴朗"
+          }
+        }
+      }
+    },
+    "weather.cond.partly": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Partly Cloudy"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "晴时多云"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "晴時多雲"
+          }
+        }
+      }
+    },
+    "weather.cond.cloudy": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cloudy"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "阴"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "陰"
+          }
+        }
+      }
+    },
+    "weather.cond.fog": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fog"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "雾"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "霧"
+          }
+        }
+      }
+    },
+    "weather.cond.drizzle": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Drizzle"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "毛毛雨"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "毛毛雨"
+          }
+        }
+      }
+    },
+    "weather.cond.rain": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rain"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "雨"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "雨"
+          }
+        }
+      }
+    },
+    "weather.cond.snow": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Snow"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "雪"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "雪"
+          }
+        }
+      }
+    },
+    "weather.cond.showers": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Showers"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "阵雨"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "陣雨"
+          }
+        }
+      }
+    },
+    "weather.cond.snowShowers": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Snow Showers"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "阵雪"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "陣雪"
+          }
+        }
+      }
+    },
+    "weather.cond.storm": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Thunderstorms"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "雷雨"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "雷雨"
+          }
+        }
+      }
+    },
+    "weather.hiLo": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "H:%d° L:%d°"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "高 %d° 低 %d°"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "高 %d° 低 %d°"
+          }
+        }
+      }
+    },
+    "weather.sunset": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sunset"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "日落"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "日落"
+          }
+        }
+      }
+    },
+    "weather.wind": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wind"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "风速"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "風速"
+          }
+        }
+      }
+    },
+    "weather.humidity": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Humidity"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "湿度"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "濕度"
+          }
+        }
+      }
+    },
+    "homemod.thermostat": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Thermostat"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "温控"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "溫控"
+          }
+        }
+      }
+    },
+    "homemod.scene": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Scene"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "场景"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "場景"
+          }
+        }
+      }
+    },
+    "homemod.intercom": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Intercom"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "对讲"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "對講"
+          }
+        }
+      }
+    },
+    "homemod.lock": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Door Lock"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "门锁"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "門鎖"
+          }
+        }
+      }
+    },
+    "homemod.watching": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Watching you"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "看着你"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "看著你"
+          }
+        }
+      }
+    },
+    "homemod.connecting": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Connecting to Home…"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在连接家庭…"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在連線家庭…"
+          }
+        }
+      }
+    },
+    "homemod.install": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Install HomePlay Home to show your home"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "安装 HomePlay Home 以显示家庭"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "安裝 HomePlay Home 以顯示家庭"
+          }
+        }
+      }
+    },
+    "modular.notPlaying": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Not Playing"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "未在播放"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "未在播放"
+          }
+        }
+      }
+    },
+    "settings.capsule.locked": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This face uses its own era’s look"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "这个表盘用它那个年代的样子"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "這個錶面用它那個年代的樣子"
+          }
+        }
+      }
+    },
+    "settings.capsule.sub": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Holds the 👀; Automatic follows the face’s era"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "装着 👀 的那颗；自动＝跟着表盘的年代"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "裝著 👀 的那顆；自動＝跟著錶面的年代"
+          }
+        }
+      }
+    },
+    "clockLook.unavailable": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Island (2026) and Photos faces only"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "只用于岛（2026）和照片表盘"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "只用於島（2026）和照片錶面"
+          }
+        }
+      }
+    },
+    "settings.photos": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Photos"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "照片"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "照片"
+          }
+        }
+      }
+    },
+    "settings.gesture.scroll": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Scroll or ← →"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "滚轮或 ← →"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "滾輪或 ← →"
+          }
+        }
+      }
+    },
+    "settings.gesture.scroll.sub": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Change faces"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "换表盘"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "換錶面"
+          }
+        }
+      }
+    },
+    "photos.emptyIn": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Put photos in the “%@” folder"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "把照片放进「%@」文件夹"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "把照片放進「%@」資料夾"
+          }
+        }
+      }
+    },
+    "perm.waiting.settingsTitle": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Turn It On in System Settings"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "在系统设置里打开开关"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "在系統設定裡開啟開關"
+          }
+        }
+      }
+    },
+    "homemod.demo.livingRoom": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Living Room"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "客厅"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "客廳"
+          }
+        }
+      }
+    },
+    "homemod.demo.goodNight": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Good Night"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "晚安"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "晚安"
+          }
+        }
+      }
+    },
+    "homemod.demo.floorLamp": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Floor Lamp"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "落地灯"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "落地燈"
+          }
+        }
+      }
+    },
+    "homemod.demo.frontDoor": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Front Door"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "大门"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "大門"
+          }
+        }
+      }
+    },
+    "status.overlay.pairNoResponseTitle": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Can't reach this iPhone"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "找不到这台 iPhone"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "找不到這支 iPhone"
+          }
+        }
+      }
+    },
+    "status.overlay.pairCodeTitle": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Check the number %@"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "核对数字 %@"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "核對數字 %@"
+          }
+        }
+      }
+    },
+    "status.overlay.pairRetryTitle": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Calling your iPhone…"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在呼叫 iPhone…"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在呼叫 iPhone…"
+          }
+        }
+      }
+    },
+    "status.overlay.pairNoResponseBody": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Make sure iPhone is unlocked with Bluetooth on, then unplug and plug in again"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "确认 iPhone 已解锁、蓝牙已打开，再拔线重插"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "確認 iPhone 已解鎖、藍牙已開啟，再拔線重插"
+          }
+        }
+      }
+    },
+    "status.overlay.pairNotConfirmedBody": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "“Pair” wasn't tapped on iPhone; unplug and plug in to be asked again"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "刚才没在 iPhone 上点「配对」；拔线再插会再问一次"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "剛才沒在 iPhone 上點「配對」；拔線再插會再問一次"
+          }
+        }
+      }
+    },
+    "status.overlay.pairCodeBody": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "If iPhone shows the same number, tap “Pair”"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "iPhone 上显示同样的数字，就点「配对」"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "iPhone 上顯示同樣的數字，就點「配對」"
+          }
+        }
+      }
+    },
+    "status.overlay.pairRetryBody": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Keep iPhone unlocked with Bluetooth on"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "请保持 iPhone 解锁、蓝牙打开"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "請保持 iPhone 解鎖、藍牙開啟"
+          }
+        }
+      }
+    },
+    "status.overlay.pairRequestBodyHost": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "iPhone will ask to pair with “%@” — tap “Pair”"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "iPhone 会弹出「%@」的蓝牙配对请求，点「配对」"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "iPhone 會跳出「%@」的藍牙配對請求，點「配對」"
+          }
+        }
+      }
+    },
+    "status.overlay.pairRequestBody": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "iPhone will show a Bluetooth pairing request — tap “Pair”"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "iPhone 会弹出「蓝牙配对请求」，点「配对」"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "iPhone 會跳出「藍牙配對請求」，點「配對」"
+          }
+        }
+      }
+    },
+    "status.overlay.pairCountdown": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Waiting for iPhone — %d s left"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "等待 iPhone 确认，还剩 %d 秒"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "等待 iPhone 確認，還剩 %d 秒"
+          }
+        }
+      }
+    },
+    "forget.doneTitle": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Forgot “%@”"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已忘记「%@」"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已忘記「%@」"
+          }
+        }
+      }
+    },
+    "forget.doneTitleNoName": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "iPhone forgotten"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已忘记这台 iPhone"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已忘記這支 iPhone"
+          }
+        }
+      }
+    },
+    "forget.stepPhone": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "On iPhone: Settings › General › CarPlay › HomePlay › Forget This Car (this also removes the Bluetooth pairing)"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "在 iPhone 上：设置 › 通用 › CarPlay › HomePlay › 忘记此车辆（蓝牙配对会一起删除）"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "在 iPhone 上：設定 › 一般 › CarPlay › HomePlay › 忘記此車輛（藍牙配對會一併刪除）"
+          }
+        }
+      }
+    },
+    "forget.stepMac": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "On this Mac: System Settings › Bluetooth › ⓘ next to this iPhone › Forget This Device"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "在这台 Mac 上：系统设置 › 蓝牙 › 这台 iPhone 旁边的 ⓘ › 忘记此设备"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "在這台 Mac 上：系統設定 › 藍牙 › 這支 iPhone 旁邊的 ⓘ › 忘記此裝置"
+          }
+        }
+      }
+    },
+    "forget.doneBody": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "To pair again, a few steps are left:"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "要重新配对，还差这几步："
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "要重新配對，還差這幾步："
+          }
+        }
+      }
+    },
+    "forget.openBluetooth": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open Bluetooth Settings"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "打开蓝牙设置"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "打開藍牙設定"
+          }
+        }
+      }
+    },
+    "status.overlay.pairCableHint": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The picture opens as soon as you pair; not now? It connects by cable in 60 s"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "配好就自动开画面；不想现在配，60 秒后先用有线连上"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "配好就自動開畫面；不想現在配，60 秒後先用有線連上"
+          }
+        }
+      }
+    },
+    "status.overlay.wifiToggleHint": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Already on this Wi-Fi? Turn Wi-Fi off and on once on iPhone"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已连同一个 Wi-Fi？在 iPhone 控制中心关开一次 Wi-Fi"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已連同一個 Wi-Fi？在 iPhone 控制中心關開一次 Wi-Fi"
           }
         }
       }

@@ -41,6 +41,7 @@ package final class CarPlaySession {
     private let signer: AccessorySigner
     private let sink: H264Sink
     private let queue = DispatchQueue(label: "session.control")
+    private static let queueKey = DispatchSpecificKey<Bool>()
     private var discovery: Discovery?
     private var probe: CtrlProbe?
     private var conns: [ObjectIdentifier: ControlConnection] = [:]
@@ -59,8 +60,13 @@ package final class CarPlaySession {
     package var onIapTunnel: ((IapTunnelLink) -> Void)?
     /// CarPlay 影片：手機要車機播／暫停／跳轉／停（op：play、rate、seek、stop、show），在會話佇列上叫
     package var onVideo: ((_ op: String, _ fields: [String: Any]) -> Void)?
+    /// 圓角遮罩：手機協商了 cornerMasks（negotiated）、送來 topLeftCornerMask（8 位元灰階 PNG，亮＝保留）
+    package var onCornerMask: ((_ negotiated: Bool, _ png: Data?) -> Void)?
+    /// 手機這一版 iOS 的識別（osBuildVersion，沒有就用 SETUP 的 user-agent AirPlay/x.y.z）：換版就要重學圓角
+    package var onPhoneBuild: ((String) -> Void)?
 
     package init(config: CarPlaySessionConfig, store: PairingStore, signer: AccessorySigner, sink: H264Sink) {
+        queue.setSpecific(key: Self.queueKey, value: true)
         self.config = config; self.store = store; self.signer = signer; self.sink = sink
     }
 
@@ -89,6 +95,21 @@ package final class CarPlaySession {
             for c in conns.values { c.close() }
             conns = [:]; live = nil
             discovery?.stop(); discovery = nil
+        }
+    }
+
+    /// 換顯示設定（圓角策略、換手機）：下一次 /info 照新的回；搭配 dropConnections() 讓手機立刻重連
+    /// 已在控制佇列上（例如 SETUP 處理當中的 onPhoneBuild）就當場改：這次 SETUP 的回應與隨後的 /info 照新的回
+    /// （手機的順序固定是 SETUP → GET /info → RECORD）；不在就排上佇列（同步會卡死）。
+    package func updateMainDisplay(_ d: DisplayConfig) {
+        if DispatchQueue.getSpecific(key: Self.queueKey) == true { config.info.main = d } else { queue.async { self.config.info.main = d } }
+    }
+    /// 關掉跟手機的 RTSP 連線（控制口照樣監聽）：手機會結束這次會話，再照 0x4301 連回來
+    package func dropConnections(_ why: String = "重開會話") {
+        queue.async {
+            self.end(why)   // 有進行中的會話：照正規流程結束（通知桌寵、叫手機回來）
+            for c in self.conns.values { c.close() }
+            self.conns = [:]
         }
     }
 
@@ -431,6 +452,11 @@ private final class ControlConnection {
             }
             return RTSPResponse(status: 200, headers: [("Content-Type", Self.plist)], body: try BPlist.encode(["streams": streams]))
         }
+        if req.method == "SET_PARAMETER", let d = try? BPlist.decodeDict(req.body), let png = CornerMaskProtocol.find(d) {
+            session.note("圓角遮罩（SET_PARAMETER，\(png.count)B）")
+            session.onCornerMask?(true, png)
+            return RTSPResponse(status: 200)
+        }
         if !chatty { session.note("未处理 \(req.method) \(req.path)（回 200）") }
         return RTSPResponse(status: 200)
     }
@@ -463,6 +489,7 @@ private final class ControlConnection {
                     let port = try s.start()
                     screen = s; adapter = a
                     session.note("SETUP 屏幕（110，dataPort \(port)，id \(sid)）")
+                    if let png = CornerMaskProtocol.find(sd) { session.note("圓角遮罩（屏幕 SETUP，\(png.count)B）"); session.onCornerMask?(true, png) }
                     resp.append(["type": type, "dataPort": Int(port)])
                 case CarPlayStream.mainAudio, CarPlayStream.altAudio, CarPlayStream.mainHighAudio:
                     // 同类型的重复 SETUP：旧的先收掉
@@ -628,6 +655,19 @@ private final class ControlConnection {
             timingPort: Int(timingPort), eventPort: Int(eventPort), hevc: session.config.info.hevc))
         if !session.config.advertiseIAPChannel, var f = body["enabledFeatures"] as? [String] {
             f.removeAll { $0 == "iAPChannel" }; body["enabledFeatures"] = f
+        }
+        // 圓角遮罩：手機提議才啟用；沒提議（舊 iOS）也告訴桌寵，讓它用自己的同心退路
+        let proposed = (dict["features"] as? [String]) ?? []
+        session.note("SETUP：手機提議 features=\(proposed)")
+        let ua = req.headers.first(where: { $0.key.lowercased() == "user-agent" })?.value ?? ""
+        let build = (dict["osBuildVersion"] as? String) ?? ua.trimmingCharacters(in: .whitespaces)
+        if !build.isEmpty { session.onPhoneBuild?(build) }
+        if session.config.info.main.cornerMasks == true {
+            let on = proposed.contains("cornerMasks")
+            if on { body["enabledFeatures"] = ((body["enabledFeatures"] as? [String]) ?? []) + ["cornerMasks"] }
+            session.onCornerMask?(on, nil)
+        } else {
+            session.onCornerMask?(false, nil)   // 平常的連線（安全區）：讓桌寵知道不必縮放
         }
         if session.config.info.videoPlayback, CarVideoProtocol.proposed(dict) {
             body["enabledFeatures"] = ((body["enabledFeatures"] as? [String]) ?? []) + [CarVideoProtocol.feature]

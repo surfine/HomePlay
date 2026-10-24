@@ -174,9 +174,14 @@ package final class CarPlayAudioPlayer {
                                          AudioFileTypeID(kAudioFileAAC_ADTSType), &fileStream)
             guard rc == noErr else { fail("ADTS 解析器建不起来（\(rc)）"); return }
         }
-        engine.attach(node)
-        engine.connect(node, to: engine.mainMixerNode, format: fmt)
-        engine.prepare()
+        // 接上輸出要打開預設輸出裝置（藍牙耳機、AirPlay 時常要好幾秒，真機 2026-10-24 量到 0.9–16 秒）。
+        // 這段原本在 SETUP 回應之前同步做，手機等不到就報錯（1852797029＝'nope'）並拆掉重來。
+        // 改到 engineQueue 上非同步：SETUP 立刻回；第一幀來時 ensureRunning 也在這條佇列上，順序不變。
+        engineQueue.async { [engine, node] in
+            engine.attach(node)
+            engine.connect(node, to: engine.mainMixerNode, format: fmt)
+            engine.prepare()
+        }
         running = true
         // 預設輸出裝置被拔掉／切換時，AVAudioEngine 會停下來；不重建連線就一直沒聲。
         // 回到 engineQueue 重新接上 mainMixer，下一幀或立刻繼續。

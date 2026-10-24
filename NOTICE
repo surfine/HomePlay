@@ -23,5 +23,10 @@ Authentication material:
   supply your own identity.pk8 + certificate.p7b; its origin and legality are the
   user's responsibility. Tools never print identity contents.
 
+Bundled font: ChicagoFLF (Sources/homeplay-pet/Resources/Fonts/ChicagoFLF.ttf), a
+  recreation of Susan Kare's Chicago by Robin Casady. Its license field states:
+  "I created ChicagoFLF and CheckboxFLF. You are free to use them as you wish. I
+  consider those two in the public domain." Chicago is a trademark of Apple Inc.
+
 No Apple endorsement or certification is claimed. CarPlay and HomeView are
 trademarks of Apple Inc.; they are used here only to describe compatibility.

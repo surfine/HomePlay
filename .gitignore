@@ -3,3 +3,9 @@
 *.log
 .DS_Store
 dist/
+
+# HomePlay Home 幫手：xcodegen 產生
+Helpers/HomeBridge/*.xcodeproj/
+Helpers/HomeBridge/build/
+Helpers/HomeBridge/Src/Info.plist
+Helpers/HomeBridge/Src/*.entitlements

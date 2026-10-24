@@ -15,10 +15,10 @@ from PIL import Image, ImageChops
 HERE = os.path.dirname(os.path.abspath(__file__))
 OUT = os.path.join(HERE, "..", "public", "media", "renders")
 HERO = ["--yaw", "0.28", "--pitch", "0.1", "--near", "--hour", "10", "--pointer", "0,0"]
-FACES = "idle curious happy focus sleepy asleep surprised worried love wink".split()
+FACES = "idle happy love wink thinking annoyed surprised worried sleepy asleep".split()
 
 GROUPS = {
-    "faces": [(f"face-{f}", ["--finish", "g4", "--face", f, *HERO]) for f in FACES],
+    "faces": [(f"face-{f}", ["--finish", "g4", "--face", f, "--time", "10:09", *HERO]) for f in FACES],   # 固定 10:09：十張一樣，不必等整分鐘
     "finish": [(f"finish-{f}", ["--finish", f, "--face", "curious", *HERO])
                for f in "g4 silver starlight rose gray".split()],
     "views": [
@@ -32,10 +32,10 @@ GROUPS = {
         ("ambient-night", ["--finish", "gray", "--face", "idle", "--yaw", "0.28", "--pitch", "0.1", "--hour", "22", "--time", "23:12"]),
         ("asleep-night", ["--finish", "gray", "--face", "asleep", "--yaw", "0.28", "--pitch", "0.1", "--hour", "2", "--time", "02:07"]),
     ],
-    # 錶面一覽：正面、同一個時間（10:09，像 Apple 的產品圖），六款各一張
+    # 錶面一覽：正面、同一個時間（10:09，像 Apple 的產品圖），八款各一張
     "styles": [(f"style-{st}", ["--finish", "silver", "--face", "idle", "--style", st, "--clock", "bold", "--yaw", "0", "--pitch", "0.04",
                                 "--near", "--hour", "16", "--time", "10:09", "--pointer", "0,0"])
-               for st in "island flow modular analog pocket bedside".split()],
+               for st in "island flow modular analog weather calendar growth system6".split()],
     # 轉一圈：每 10° 一張，官網拖動／捲動時逐張換
     "spin": [(f"spin/{i:02d}", ["--finish", "g4", "--face", "idle", "--yaw", f"{i * 2 * math.pi / 36:.4f}", "--pitch", "0.1", "--near", "--hour", "10"])
              for i in range(36)],
@@ -52,11 +52,17 @@ NO_GLANCE = {"face-asleep", "face-wink"}
 EYE_BOX = (0.20, 0.36, 0.80, 0.64)
 
 LANG = None
+WEATHER_JSON = '{"temp":22,"hi":25,"lo":19,"code":2,"wind":11,"humidity":76,"aqi":21,"sunset":"17:21","city":"臺北市"}'
 
 def shoot(path, args, env=None):
     # 錶面樣式會被桌寵記在偏好裡（HomePlayFaceStyle），官網一律拍島錶面
-    extra = ["--style", "island"] + (["--lang", LANG] if LANG else [])
-    subprocess.run([os.path.join(HERE, "shoot.sh"), path, *args, *extra], check=True, env=env)
+    extra = ([] if "--style" in args else ["--style", "island"]) + (["--lang", LANG] if LANG else [])
+    if "style-weather" in os.path.basename(path):  # 天氣錶面：固定的假資料，不依賴網路
+        env = dict(env or os.environ, HOMEPLAY_WEATHER_JSON=WEATHER_JSON)
+    for attempt in range(3):   # 機器忙時偶爾等不到第一張圖：最多重拍兩次
+        if subprocess.run([os.path.join(HERE, "shoot.sh"), path, *args, *extra], env=env).returncode == 0:
+            return
+    raise RuntimeError(f"shoot failed 3 times: {path}")
 
 def paired(name, group):
     return group == "faces" and name not in NO_BLINK or group == "finish" or name == "ambient-night"
@@ -107,9 +113,6 @@ def main():
     os.makedirs(OUT, exist_ok=True)
     tmp = tempfile.mkdtemp(prefix="homeplay-shots-")
     for g in want:
-        if g == "faces":  # 十張要在同一分鐘內拍完，屏幕上的時間才一致
-            while time.localtime().tm_sec > 15:
-                time.sleep(1)
         order = GROUPS[g]
         if g == "spin":  # 螢幕朝前的那幾張要在同一分鐘拍完，轉回原點時鐘才不會跳：整分鐘一開始先拍它們
             front = {31, 32, 33, 34, 35, 0, 1, 2, 3, 4}

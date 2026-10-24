@@ -2,7 +2,7 @@ import AppKit
 import EventKit
 
 // 模組錶面「下一个行程」的真数据：EventKit 读未来 24 小时的第一个行程（全天的排在最后）。
-// 不弹框：只有菜单「偏好设定 › 允许读取行事历…」点了才向系统要权限；没授权就老实写没授权。
+// 不弹框：只有菜单「设置 › 读取日历」点了才向系统要权限；没授权就老实写没授权。
 // 每 5 分钟刷新一次，行事历有变动（EKEventStoreChanged）时立刻刷新。
 
 struct NextEvent: Equatable {

@@ -47,7 +47,7 @@ enum PermissionKind: String, CaseIterable {
         case .camera: return L("perm.camera.granted", "开始跟着你了")
         case .microphone: return L("perm.mic.granted", "按住 F5 就能说话")
         case .inputMonitoring: return L("perm.input.granted", "F5 已经可以叫 Siri")
-        case .automation: return L("perm.automation.granted", "正在播放会显示在岛上")
+        case .automation: return L("perm.automation.granted", "正在播放会显示在胶囊上")
         case .calendar: return L("perm.calendar.granted", "下一个行程已就位")
         }
     }
@@ -274,7 +274,7 @@ extension Face {
         g.translateBy(x: 512, y: 512 + rise); g.scaleBy(x: s, y: s); g.translateBy(x: -512, y: -512)
         // 桌宠默认 220 pt 宽，屏幕只占约 150 pt：1024 坐标里的 46 号字才 ≈ 7 pt。字要大、话要短。
         let card = CGRect(x: 56, y: 150, width: 912, height: 724)
-        glass(g, card, radius: 64, tint: NSColor(white: 1, alpha: 0.18), band: 14)
+        glass(g, card, radius: Screen.concentric(inset: card.minX), tint: NSColor(white: 1, alpha: 0.18), band: 14)   // 與螢幕同心
         // 换阶段（说明 → 等待 → 好了）：内容交叉淡入并往上 10 pt，卡片本身不动
         let c = CGFloat(PermissionPrimer.easeOut(t / 0.22))
         g.setAlpha(opacity * c)
@@ -283,7 +283,7 @@ extension Face {
         // 图示：每种权限一段小动画；允许后换成打勾，拒绝后图示加一道斜线
         let icon = CGRect(x: 512 - 76, y: card.minY + 52, width: 152, height: 152)
         g.setFillColor(NSColor(white: 1, alpha: 0.16).cgColor)
-        g.addPath(CGPath(roundedRect: icon, cornerWidth: 40, cornerHeight: 40, transform: nil)); g.fillPath()
+        g.addPath(continuousRoundedRect(icon, radius: icon.width * 0.2237)); g.fillPath()
         if phase == .granted {
             drawCheck(g, in: icon, progress: CGFloat(PermissionPrimer.easeOut(t / 0.42)))
         } else {
@@ -295,18 +295,25 @@ extension Face {
         let title: String, body: String
         switch phase {
         case .intro: title = k.title; body = k.body
+        case .waiting where k == .inputMonitoring:   // 輸入監控沒有「允許」框：要去系統設定打開開關
+            title = L("perm.waiting.settingsTitle", "在系统设置里打开开关")
+            body = L("perm.waiting.body", "随时可以在系统设置里改")
         case .waiting: title = L("perm.waiting.title", "点系统框里的「允许」")
             body = L("perm.waiting.body", "随时可以在系统设置里改")
         case .granted: title = L("perm.granted.title", "好了！"); body = k.grantedLine
-        case .denied: title = L("perm.denied.title", "现在还用不了")
+        case .denied: title = L("perm.denied.title", "需要在系统设置里打开")
             body = L("perm.denied.body", "在「隐私与安全性」里打开\n回来就能用")
         }
         let textWidth = card.width - 96
-        drawCentered(g, title, font: Self.fitted(title, size: 76, weight: .bold, maxWidth: textWidth), kern: 0, y: icon.maxY + 104, color: .white)
-        for (i, line) in body.split(separator: "\n").enumerated() {
-            let s = String(line)
-            drawCentered(g, s, font: Self.fitted(s, size: 48, weight: .medium, maxWidth: textWidth), kern: 0,
-                         y: icon.maxY + 178 + CGFloat(i) * 62, color: NSColor.white.withAlphaComponent(0.85))
+        // 標題一律 68 pt：放不下就折兩行（不縮字，每張卡看起來同一個層級）；內文同一個字級
+        let tf = Self.rounded(68, weight: .bold)
+        let titleLines = Self.wrap(title, tf, textWidth, maxLines: 2)
+        for (i, l) in titleLines.enumerated() { drawCentered(g, l, font: tf, y: icon.maxY + 100 + CGFloat(i) * 78, color: .white) }
+        let bodyTop = icon.maxY + 174 + CGFloat(titleLines.count - 1) * 78
+        let bodyLines = body.split(separator: "\n").map(String.init)
+        let bs = bodyLines.map { Self.fitted($0, size: 46, weight: .medium, maxWidth: textWidth).pointSize }.min() ?? 46
+        for (i, s) in bodyLines.enumerated() {
+            drawCentered(g, s, font: Self.rounded(bs, weight: .medium), y: bodyTop + CGFloat(i) * 60, color: NSColor.white.withAlphaComponent(0.85))
         }
 
         // 按钮：左「以后」，右主按钮（白底深字）
@@ -317,9 +324,10 @@ extension Face {
             let primary = phase == .intro ? L("perm.continue", "继续") : L("perm.openSettings", "打开系统设置")
             let left = CGRect(x: card.minX + 52, y: by, width: 388, height: 116)
             let right = CGRect(x: card.maxX - 52 - 388, y: by, width: 388, height: 116)
-            pill(g, left, fill: NSColor(white: 1, alpha: 0.16), text: L("perm.later", "以后"), color: .white,
-                 button: .secondary)
-            pill(g, right, fill: .white, text: primary, color: srgb(0x111418), button: .primary)
+            let later = L("perm.later", "以后再说")
+            let ps = [later, primary].map { Self.fitted($0, size: 46, weight: .semibold, maxWidth: 388 - 48).pointSize }.min() ?? 46   // 兩顆按鈕同字級
+            pill(g, left, fill: NSColor(white: 1, alpha: 0.16), text: later, color: .white, button: .secondary, size: ps)
+            pill(g, right, fill: .white, text: primary, color: srgb(0x111418), button: .primary, size: ps)
             buttons = [(.secondary, left), (.primary, right)]
         case .waiting:
             // 三个点像波一样依次亮起（连续的，不是一格一格跳）：在等你回答系统框
@@ -336,7 +344,7 @@ extension Face {
         g.restoreGState()
     }
 
-    private func pill(_ g: CGContext, _ r: CGRect, fill: NSColor, text: String, color: NSColor, button: PermissionPrimer.Button) {
+    private func pill(_ g: CGContext, _ r: CGRect, fill: NSColor, text: String, color: NSColor, button: PermissionPrimer.Button, size: CGFloat = 46) {
         // 按下：缩到 0.96、稍暗（100 ms 缓出）；放开的那颗弹回
         let since = CACurrentMediaTime() - PermissionPrimer.pressAt
         let k = CGFloat(PermissionPrimer.easeOut(since / 0.1))
@@ -352,8 +360,8 @@ extension Face {
         g.setFillColor((wasPressed ? fill.blended(withFraction: 0.12 * depth, of: .black) ?? fill : fill).cgColor)
         g.addPath(CGPath(roundedRect: r, cornerWidth: r.height / 2, cornerHeight: r.height / 2, transform: nil)); g.fillPath()
         // 字要在按钮里置中（drawCentered 只会以整块屏幕的中线置中）
-        let font = Self.fitted(text, size: 46, weight: .semibold, maxWidth: r.width - 48)
-        let attr = NSAttributedString(string: text, attributes: [.font: font, .foregroundColor: color])
+        let font = Self.rounded(size, weight: .semibold)
+        let attr = NSAttributedString(string: text, attributes: Typo.attributes(font, color: color))
         let line = CTLineCreateWithAttributedString(attr)
         let w = CGFloat(CTLineGetTypographicBounds(line, nil, nil, nil))
         g.saveGState()

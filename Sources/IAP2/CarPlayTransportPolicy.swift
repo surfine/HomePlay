@@ -39,7 +39,8 @@ package enum CarPlayTransportPolicy {
     package static func onCableGone(live: Bool, transport: CarPlayTransport?) -> [CableGoneAction] {
         guard live else { return [.resumeBluetooth] }
         switch transport {
-        case .wifi: return [.freezeFrame, .resumeBluetooth, .keepSession]
+        // Wi-Fi 会话本来就不受线影响：不冻帧（真机 2026-10-24 11:19 拔线后画面照常，冻住 3 秒反而像卡了一下）
+        case .wifi: return [.resumeBluetooth, .keepSession]
         case .usbNCM, nil: return [.freezeFrame, .resumeBluetooth, .expectReconnect]
         }
     }

@@ -63,10 +63,10 @@ def main():
     carplay = Image.open(os.path.join(ROOT, "site", "public", "media", "carplay-music.png")).convert("RGBA")
     save(grid([open_("view-front.webp"), open_("view-back.webp"), carplay, open_("view-apart.webp")],
               2, (740, 540), 40, 40, dark={2}), "grid-v2.webp")
-    faces = "idle curious happy focus sleepy asleep surprised worried love wink".split()
+    faces = "idle happy love wink thinking annoyed surprised worried sleepy asleep".split()
     save(grid([open_(f"face-{f}.webp") for f in faces], 5, (380, 420), 16, 20), "faces-v2.webp")
-    styles = "island flow modular analog pocket bedside".split()
-    save(grid([open_(f"style-{s}.webp") for s in styles], 3, (560, 600), 20, 24), "styles-v2.webp")
+    styles = "island flow modular analog weather calendar growth system6".split()
+    save(grid([open_(f"style-{s}.webp") for s in styles], 4, (440, 480), 20, 24), "styles-v2.webp")
     finishes = "g4 silver starlight rose gray".split()
     save(grid([open_(f"finish-{f}.webp") for f in finishes], 5, (340, 400), 16, 20), "finishes-v2.webp")
 

@@ -20,15 +20,15 @@
 A HomeView that lives on your Mac’s desktop. It has a pair of eyes that watch you, and one firm press turns it into your iPhone’s CarPlay.
 
 - **It watches you.** One pair of 👀, ten expressions. Come closer and it looks over, curious. Rest your pointer on it and it smiles. Leave it alone late at night and it dozes off. The eyes live in a capsule that matches the face’s era: solid black, smoked, or Liquid Glass.
-- **13 faces.** Laid out like Apple’s HomeView faces: Island, Photos, Modular, Typograph, Flow, Weather, Calendar, Embossed Hands, Days Together, Black, plus three System 6 throwbacks. The big time is the system’s own Liquid Glass, and you can pick its font and color the way you do on the iOS 27 Lock Screen.
+- **10 faces.** Laid out like Apple’s HomeView faces: Island, Photos, Modular, Typograph (with an Embossed option), Flow, Weather, Calendar, Days Together, Black, and System 6 (three layouts). The big time is the system’s own Liquid Glass, and you can pick its font and color the way you do on the iOS 27 Lock Screen.
 - **Press firmly for CarPlay.** Plug in once, then it’s wireless. Your iPhone sends real CarPlay video and sound to the little screen, and tapping it works like tapping the screen in a car. Hold F5 to talk to your iPhone’s Siri.
 - **Handy extras.** Focus timer, Now Playing, battery and your next event. F7–F9 skip tracks, and the window can float on top like a mini player for your iPhone’s library.
 
 <img src="assets/github/grid-v2.webp" alt="HomePlay front view, back view, real CarPlay music screen, and exploded anatomy" width="100%">
 
-| 13 faces | Ten expressions |
+| 10 faces | Ten expressions |
 |:---:|:---:|
-| <img src="assets/github/styles-v2.webp" alt="HomePlay faces: Island, Flow, Modular, Typograph, Weather, Calendar, Embossed Hands and System 6" width="100%"> | <img src="assets/github/faces-v2.webp" alt="Ten expressions made from the same pair of eyes" width="100%"> |
+| <img src="assets/github/styles-v2.webp" alt="HomePlay faces: Island, Flow, Modular, Typograph, Weather, Calendar, Days Together and System 6" width="100%"> | <img src="assets/github/faces-v2.webp" alt="Ten expressions made from the same pair of eyes" width="100%"> |
 
 ## First time: three steps
 
@@ -36,7 +36,7 @@ A HomeView that lives on your Mac’s desktop. It has a pair of eyes that watch 
 
 1. [**Download HomePlay-macOS-arm64.zip**](https://github.com/surfine/HomePlay/releases/latest/download/HomePlay-macOS-arm64.zip), unzip, drag `HomePlay.app` into Applications and open it.
 2. Connect your iPhone to the Mac with a cable once, then tap Trust and Pair on the iPhone.
-3. Press firmly on the pet’s screen to enter CarPlay. After that you can unplug, and it reconnects wirelessly on its own.
+3. Press firmly on the pet’s screen to enter CarPlay. After that you can unplug, and it reconnects wirelessly on its own. If it doesn’t the first time, turn Wi-Fi off and on once in the iPhone’s Control Center.
 
 The app is signed with a Developer ID and notarized by Apple, so it opens straight away. To check the download: [`HomePlay-macOS-arm64.zip.sha256`](https://github.com/surfine/HomePlay/releases/latest/download/HomePlay-macOS-arm64.zip.sha256), `shasum -a 256 -c HomePlay-macOS-arm64.zip.sha256`.
 
@@ -61,15 +61,18 @@ The app is signed with a Developer ID and notarized by Apple, so it opens straig
 >
 > I believe that in the age of AI, staying curious, freeing your imagination, being creative, keeping your judgment and learning to work together matter more than ever. I hope this little desk pet brings you some fun.
 
-## Coming in 0.7.0
+## What’s new in 1.0
 
-These are done and waiting on real-device testing of wireless CarPlay; they ship as soon as that passes.
+- **10 faces, eyes on every one.** Island, Photos, Modular, Typograph (with an Embossed option), Flow, Weather, Calendar, Days Together, Black, and System 6 (Finder, Alarm Clock and About layouts, rebuilt the way they looked in 1988). The capsule follows each face’s era: solid black on the flat layouts, smoked on the iOS 27 ones, Liquid Glass on HomeView’s own, and a 1-bit button on System 6.
+- **10 expressions, each with its own silhouette.** New: Thinking (while CarPlay connects) and Annoyed (five quick clicks), easy to tell apart from across the room.
+- **Pair with a cable, then go wireless.** The first time you plug in, the screen walks you through pairing and the picture appears as soon as it’s done. Unplug afterwards and CarPlay moves to Wi-Fi without dropping picture or sound. After a restart it’s back in about 10–20 seconds.
+- **A Siri orb for F5.** While you talk, a colorful orb rises on the screen; let go and it shrinks back.
+- **Type and corners closer to Apple’s.** The time uses SF Pro’s variable weight, width and optical size; the capsule, cards and screen corners stay concentric.
+- **Cleaner.** No more ghosting when faces change or the eyes blink; the Font & Color panel shows every option at once; idle uses less power.
 
-- **Eyes on every face.** The capsule follows each face’s era: solid black on the flat layouts, smoked on the iOS 27 ones, Liquid Glass on HomeView’s own, and a 1-bit button on System 6.
-- **New faces:** Weather, Calendar, Embossed Hands, Black, and three System 6 faces rebuilt the way they looked in 1988 (Chicago type, 1-bit pixels).
-- **A Siri orb for F5.** While you talk, a colorful Siri orb rises on the screen; let go and it shrinks back.
-- **Type and corners closer to Apple’s.** The time uses SF Pro’s variable weight, width and optical size, and the capsule, cards and body corners stay concentric.
-- **No more ghosting when faces change,** and it sips less power while idle.
+[Full release notes](https://github.com/surfine/HomePlay/releases/latest)
+
+**Next: HomePlay 2.0 Preview** — a Home Screen, timers and alarms, recipes, Home, and ClioTalk, a voice assistant that uses your own Anthropic or DeepSeek API key.
 
 ## Privacy and permissions
 

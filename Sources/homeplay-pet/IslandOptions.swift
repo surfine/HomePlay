@@ -30,6 +30,8 @@ enum IslandBackground: String, CaseIterable {
     }
     /// 照片背景没有照片时退回随时段
     func effective(hasPhoto: Bool) -> IslandBackground { self == .photo && !hasPhoto ? .daytime : self }
+    /// 這個年代真的有差別的背景：1988 只有網點（隨時段）、純色、全黑（Flow 與照片在 1-bit 裡畫出來一樣）
+    static func choices(for era: Era) -> [IslandBackground] { era == .y1988 ? [.daytime, .solid, .black] : allCases }
 }
 
 enum Era: String, CaseIterable {
@@ -56,6 +58,7 @@ extension Face {
     func restoreIslandOptions() {
         let d = UserDefaults.standard
         clockStyle = islandSnapshotOverride.clock ?? ClockStyle(rawValue: d.string(forKey: ClockStyle.defaultsKey) ?? "") ?? .bold
+        if clockStyle == .thin && islandSnapshotOverride.clock == nil { clockStyle = .bold }   // 細線已併進「字體與顏色」的粗細
         background = islandSnapshotOverride.bg ?? IslandBackground(rawValue: d.string(forKey: IslandBackground.defaultsKey) ?? "") ?? .daytime
         era = islandSnapshotOverride.era ?? Era(rawValue: d.string(forKey: Era.defaultsKey) ?? "") ?? .y2026
     }
@@ -105,11 +108,11 @@ extension Face {
             lines = [Line(s: t, size: 132, w: lerp(.semibold, .bold), y: 760, a: 0.7 + 0.28 * rv, kern: -2)]
             islandAt = CGPoint(x: 512, y: 500); islandScale = 1.15; liveAt = CGPoint(x: 512, y: 560)
         }
-        if e1988 && clockStyle != .stacked { islandAt.y += 60; liveAt.y += 40 }   // 白框下面留出岛的位置
+        if clockStyle != .stacked { islandAt.y += e1988 ? 80 : 60; liveAt.y += 40 }   // 1988 白框、2002 凝膠字：島都放在數字下面
         func font(_ l: Line) -> NSFont { e1988 ? Self.font1988(l.size) : Self.rounded(l.size, weight: l.w) }
         if e1988 {   // 1-bit 字体宽，收到 700 以内
             for i in lines.indices {
-                let wd = (lines[i].s as NSString).size(withAttributes: [.font: Self.font1988(lines[i].size)]).width
+                let wd = Typo.width(lines[i].s, Self.font1988(lines[i].size))
                 if wd > 700 { lines[i].size *= 700 / wd }
             }
         }
@@ -117,15 +120,16 @@ extension Face {
         let dl = Self.dateLine(date)
         // 日期 + 時間（含 1988 白框）。抽成一個函式，供快取層與直接繪製兩條路共用。
         func drawText(_ c: CGContext) {
+            if e1988 { c.setShouldAntialias(false) }   // 1-bit：字也不反鋸齒
             if e1988 {
-                let f = Self.font1988(40), wd = (dl as NSString).size(withAttributes: [.font: f]).width
+                let f = Self.font1988(40), wd = Typo.width(dl, f)
                 box1988(c, CGRect(x: 512 - wd / 2 - 24, y: dateY - 50, width: wd + 48, height: 72))
                 drawCentered(c, dl, font: f, kern: 0, y: dateY, color: .black)
             } else {
                 drawCentered(c, dl, font: Self.rounded(44, weight: .semibold), kern: 2, y: dateY, color: alpha(0.62 + 0.26 * rv))
             }
             if e1988, let top = lines.first, let bot = lines.last {
-                let wd = lines.map { ($0.s as NSString).size(withAttributes: [.font: font($0)]).width }.max() ?? 0
+                let wd = lines.map { Typo.width($0.s, font($0)) }.max() ?? 0
                 let y0 = top.y - top.size * 0.8, y1 = bot.y + 12
                 box1988(c, CGRect(x: 512 - wd / 2 - 40, y: y0, width: wd + 80, height: y1 - y0 + 8))
             }
@@ -158,9 +162,10 @@ extension Face {
         Face.textSeconds += CACurrentMediaTime() - tText
         let tIsland = CACurrentMediaTime()
         // 靠近时底部的 CarPlay 状态
-        if rv > 0.02 && liveT < 0.5 {
+        let idleHint = status == .notConnected && CarPlayPhoneBook.phones.isEmpty   // 這句由導覽教，錶面不一直掛著
+        if rv > 0.02 && liveT < 0.5 && !idleHint {
             let chipFont = e1988 ? Self.font1988(30) : Self.rounded(34, weight: .semibold)
-            let tw = (status.text as NSString).size(withAttributes: [.font: chipFont]).width
+            let tw = Typo.width(status.text, chipFont)
             let chip = CGRect(x: 512 - (tw + 64) / 2, y: 872 + 18 * (1 - rv), width: tw + 64, height: 72)
             g.saveGState(); g.setAlpha(rv * (1 - liveT * 2))
             if e1988 { box1988(g, chip) }
@@ -181,6 +186,7 @@ extension Face {
 
     /// Chicago / Geneva / Monaco 哪个有用哪个
     static func font1988(_ size: CGFloat) -> NSFont {
+        _ = bundledFontsRegistered
         for n in ["Chicago", "ChicagoFLF", "Chicago_12", "Geneva", "Monaco"] { if let f = NSFont(name: n, size: size) { return f } }
         return NSFont.monospacedSystemFont(ofSize: size, weight: .bold)
     }
@@ -198,7 +204,7 @@ extension Face {
                     dither1988 = makeImage(1024, 1024) { c in
                         c.setFillColor(NSColor.white.cgColor); c.fill(CGRect(x: 0, y: 0, width: 1024, height: 1024))
                         c.setFillColor(NSColor.black.cgColor)
-                        for j in 0..<171 { for i in 0..<171 where (i + j) % 2 == 0 { c.fill(CGRect(x: i * 6, y: j * 6, width: 6, height: 6)) } }
+                        for j in 0..<256 { for i in 0..<256 where (i + j) % 2 == 0 { c.fill(CGRect(x: i * 4, y: j * 4, width: 4, height: 4)) } }   // 256 點格子，和 1-bit 膠囊同一格
                     }
                 }
                 if let d = dither1988 { drawUpright(g, d, in: full) }
@@ -337,9 +343,9 @@ extension PetView {
         }
         section(L("island.clock", "时钟样式"))
         // 「細線」併進「字體與顏色」的粗細滑桿，不再單列（舊設定照樣讀得回來）
-        for c in ClockStyle.allCases where c != .thin || face.clockStyle == .thin { add(c.title, #selector(menuIslandClock(_:)), c.rawValue, face.clockStyle == c) }
+        for c in ClockStyle.allCases where c != .thin { add(c.title, #selector(menuIslandClock(_:)), c.rawValue, face.clockStyle == c) }
         section(L("island.bg", "背景"))
-        for b in IslandBackground.allCases {
+        for b in IslandBackground.choices(for: face.era) {
             add(b == .photo && face.photos.current == nil ? String(format: L("island.bg.photoMissing", "%@（没有照片，暂用随时段）"), b.title) : b.title,
                 #selector(menuIslandBackground(_:)), b.rawValue, face.background == b)
         }
@@ -374,6 +380,10 @@ extension PetView {
     }
     @objc func menuIslandEra(_ s: NSMenuItem) {
         guard let raw = s.representedObject as? String, let v = Era(rawValue: raw) else { return }
-        face.era = v; UserDefaults.standard.set(raw, forKey: Era.defaultsKey); islandOptionChanged("era \(raw)")
+        face.era = v; UserDefaults.standard.set(raw, forKey: Era.defaultsKey)
+        if !IslandBackground.choices(for: v).contains(face.background) {   // 1988 沒有 Flow／照片：換回隨時段
+            face.background = .daytime; UserDefaults.standard.set(IslandBackground.daytime.rawValue, forKey: IslandBackground.defaultsKey)
+        }
+        islandOptionChanged("era \(raw)")
     }
 }

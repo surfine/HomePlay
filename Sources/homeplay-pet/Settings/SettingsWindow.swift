@@ -15,6 +15,8 @@ final class SettingsModel: ObservableObject {
     @Published var loginAvailable = false
     @Published var autoConnect = false
     @Published var carVideo = CarVideoSetting.allowed
+    @Published var cornerStyle = ConcentricCorners.style
+    @Published var cornerInset = ConcentricCorners.appliedInset
     @Published var alwaysOnTop = true
     @Published var language = "system"
     @Published var calendarOn = false
@@ -22,6 +24,16 @@ final class SettingsModel: ObservableObject {
 
     @Published var finish = Finish.starlight
     @Published var faceStyle = FaceStyle.island
+    @Published var capsule = CapsuleMaterial.auto
+    @Published var clockStyle = ClockStyle.bold
+    @Published var islandBackground = IslandBackground.daytime
+    @Published var era = Era.y2026
+    @Published var typographMaterial = TypographMaterial.flat
+    @Published var system6Layout = System6Layout.finder
+    /// 這個錶面用自己年代的島身（System 6 系列、島的 1988／2002）：膠囊設定在這裡不作用
+    var capsuleLocked: Bool { [.system6, .alarmClock, .about].contains(faceStyle) || (faceStyle == .island && era != .y2026) }
+    /// 「字體與顏色」只作用在 2026 的島與照片錶面
+    var clockLookApplies: Bool { (faceStyle == .island && era == .y2026) || faceStyle == .photos }
     @Published var viewMode = ViewMode.auto
 
     @Published var phones: [CarPlayPhoneBook.Phone] = []
@@ -41,9 +53,12 @@ final class SettingsModel: ObservableObject {
         loginItem = s.loginItem; loginAvailable = s.loginAvailable
         autoConnect = s.autoConnect; alwaysOnTop = s.alwaysOnTop
         carVideo = CarVideoSetting.allowed
+        cornerStyle = ConcentricCorners.style
+        cornerInset = ConcentricCorners.appliedInset
         language = PetLanguage.chosen?.rawValue ?? "system"
         calendarOn = CalendarSource.enabled; nowPlayingOn = NowPlayingPoller.enabled
-        finish = s.finish; faceStyle = s.faceStyle; viewMode = s.viewMode
+        finish = s.finish; faceStyle = s.faceStyle; viewMode = s.viewMode; capsule = capsuleMaterialSetting
+        if let f = app.view?.face { clockStyle = f.clockStyle == .thin ? .bold : f.clockStyle; islandBackground = f.background; era = f.era; typographMaterial = f.typographMaterial; system6Layout = f.system6Layout }
         phones = CarPlayPhoneBook.phones; currentPhone = CarPlayPhoneBook.current
         gazeFollow = s.gazeFollow; followDegrees = s.followDegrees; gazePitch = s.gazePitch; roomLight = s.roomLight; petWidth = s.petWidth
         var p: [PermissionKind: PermissionStatus] = [:]
@@ -69,7 +84,7 @@ enum SettingsSection: String, CaseIterable, Identifiable {
         case .appearance: return L("settings.appearance", "外观")
         case .gestures: return L("settings.gestures", "手势")
         case .carplay: return L("settings.carplay", "CarPlay")
-        case .camera: return L("settings.camera", "摄像头")
+        case .camera: return L("settings.camera", "相机")
         case .permissions: return L("settings.permissions", "权限")
         }
     }

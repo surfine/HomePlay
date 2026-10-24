@@ -312,13 +312,22 @@ enum Surface {
 // 只动眼睛：眼白半径、上下眼皮遮住的比例、眼皮斜角、笑眼弯月、眼珠位移与缩放、胶囊宽高；不加嘴、不换画风。
 
 enum Expression: String, CaseIterable {
-    case idle, curious, happy, focus, sleepy, asleep, surprised, worried, love, wink
+    case idle, happy, love, wink, thinking, annoyed, surprised, worried, sleepy, asleep
+    /// 舊名（快照腳本、官網素材）：好奇併進待機（靠近時眼珠本來就跟著游標）；專注拆成「思考」（等待）與「不耐煩」（連點）
+    init?(name: String) {
+        switch name {
+        case "curious": self = .idle
+        case "focus": self = .annoyed
+        default: self.init(rawValue: name)
+        }
+    }
 }
 
 struct FaceParams: Equatable {
     var cw: CGFloat = 420, ch: CGFloat = 156                    // 胶囊
     var rx: CGFloat = 31, ry: CGFloat = 45, sep: CGFloat = 36   // 眼白半径、两眼中心离中线（照 👀 emoji：高寬比 1.45、微微分开）
-    var top: CGFloat = 0, bot: CGFloat = 0, tilt: CGFloat = 0   // 上下眼皮遮住的比例、眼皮往外斜（弧度）
+    var top: CGFloat = 0, bot: CGFloat = 0, tilt: CGFloat = 0   // 上下眼皮遮住的比例、眼皮往外斜（弧度；正＝內角往上、難過，負＝內角往下、不耐煩）
+    var ltop: CGFloat = 0                                       // 只壓左眼的上眼皮（思考時一高一低，像挑起一邊眉）
     var smile: CGFloat = 0                                      // 笑眼：眼白下缘切成弯月
     var pdx: CGFloat = -13, pdy: CGFloat = 6, ps: CGFloat = 1   // 眼珠位移、缩放
     var blush: CGFloat = 0, dim: CGFloat = 0                    // 脸颊红晕、屏幕变暗
@@ -326,21 +335,22 @@ struct FaceParams: Equatable {
     static func of(_ e: Expression) -> FaceParams {
         var p = FaceParams()
         switch e {
-        case .idle, .wink: break
-        case .curious: p.rx = 32; p.ry = 47; p.cw = 440
-        case .happy: p.smile = 1; p.ps = 0; p.blush = 0.6
-        case .focus: p.top = 0.34; p.bot = 0.22; p.pdx = 0; p.pdy = 0
-        case .sleepy: p.top = 0.55; p.pdx = 0; p.pdy = 12
+        // 十種剪影各不相同：只看外形（眼白輪廓＋眼珠位置）也分得出來
+        case .idle, .wink: break                                                         // 👀 原樣；靠近時眼珠跟著游標
+        case .happy: p.smile = 1; p.ps = 0; p.blush = 0.6                                 // ^^ 彎月
+        case .love: p.ps = 1.25; p.pdx = 0; p.pdy = 2; p.blush = 1                        // 心形瞳孔＋紅暈
+        case .thinking: p.ltop = 0.34; p.pdx = 15; p.pdy = -11; p.ps = 0.92               // 眼珠飄到右上、左眼皮壓低：「嗯……」
+        case .annoyed: p.top = 0.42; p.tilt = -0.42; p.ry = 42; p.pdx = 0; p.pdy = 6; p.ps = 0.9   // 上眼皮往內壓成 V，扁一點
+        case .surprised: p.rx = 34; p.ry = 56; p.sep = 40; p.ps = 0.5; p.pdx = 0; p.pdy = 0; p.cw = 470; p.ch = 184   // 瞪大、眼珠縮小、膠囊撐大
+        case .worried: p.top = 0.26; p.tilt = 0.42; p.pdx = 0; p.pdy = 16                 // 內角往上的八字眉，眼珠往下
+        case .sleepy: p.top = 0.6; p.bot = 0.08; p.pdx = 0; p.pdy = 12; p.ps = 0.95        // 眼皮平平地垂到一半多
         case .asleep: p.top = 0; p.pdx = 0; p.pdy = 14; p.dim = 0.45
-        case .surprised: p.rx = 33; p.ry = 50; p.sep = 38; p.ps = 0.62; p.pdx = 0; p.pdy = 0; p.cw = 460; p.ch = 172
-        case .worried: p.top = 0.3; p.tilt = 0.38; p.pdx = 0; p.pdy = 14
-        case .love: p.ps = 1.25; p.pdx = 0; p.pdy = 2; p.blush = 1
         }
         return p
     }
 
     private static let keys: [WritableKeyPath<FaceParams, CGFloat>] =
-        [\.cw, \.ch, \.rx, \.ry, \.sep, \.top, \.bot, \.tilt, \.smile, \.pdx, \.pdy, \.ps, \.blush, \.dim]
+        [\.cw, \.ch, \.rx, \.ry, \.sep, \.top, \.bot, \.tilt, \.ltop, \.smile, \.pdx, \.pdy, \.ps, \.blush, \.dim]
 
     /// 每个参数往 t 靠近 a（0..1），差得够小就直接贴上。返回有没有变。
     mutating func approach(_ t: FaceParams, _ a: CGFloat) -> Bool {
@@ -358,27 +368,87 @@ struct FaceParams: Equatable {
 
 /// 錶面样式：滚轮或 ← → 换，像 Apple Watch 的数字表冠
 enum FaceStyle: String, CaseIterable {
-    case island, photos, modular, analog, flow, pocket, growth, system6, bedside
+    // 順序＝滾輪換錶面的順序（稿：docs/design-drafts/faces-v3/artifact）
+    case island, photos, modular, analog, flow, weather, calendar, homeModular, embossed, growth, black, bedside, system6, alarmClock, about, pocket
     var title: String {
         switch self {
         case .island: return L("face.style.island", "岛")
         case .photos: return L("face.style.photos", "照片")
         case .modular: return L("face.style.modular", "模块")
-        case .analog: return L("face.style.analog", "指针")
+        case .analog: return L("face.style.analog", "Typograph")
         case .flow: return "Flow"
         case .pocket: return L("face.style.pocket", "岛的口袋")
         case .growth: return L("face.style.growth", "陪伴的痕迹")
         case .system6: return "System 6"
         case .bedside: return L("face.style.bedside", "床头夜灯")
+        case .weather: return L("face.style.weather", "天气")
+        case .calendar: return L("face.style.calendar", "日历")
+        case .homeModular: return L("face.style.homeModular", "家庭模块")
+        case .embossed: return L("face.style.embossed", "浮雕指针")
+        case .black: return L("face.style.black", "黑色")
+        case .alarmClock: return "System 6 · Alarm Clock"   // 復古系列維持英文（史實），名稱前綴分組
+        case .about: return "System 6 · About"
+        }
+    }
+    /// 陣容（滾輪、總覽、選單、設定都用這份）：十款。Pocket 併進 Modular、床頭夜燈併進「黑」的夜間（稿：faces-v3），
+    /// 浮雕指針成了 Typograph 的「材質」、Alarm Clock／About 成了 System 6 的「版式」，Home Modular 不再列出（要開發簽名的小幫手）；
+    /// 程式都還留著，舊的偏好讀進來時換成新的那款（見 inLineup、migratedOptions）
+    static var lineup: [FaceStyle] {
+        allCases.filter { ![.pocket, .bedside, .homeModular, .embossed, .alarmClock, .about].contains($0) }
+    }
+    var inLineup: FaceStyle {
+        switch self {
+        case .pocket, .homeModular: return .modular
+        case .bedside: return .black
+        case .embossed: return .analog
+        case .alarmClock, .about: return .system6
+        default: return self
+        }
+    }
+    /// 舊錶面搬進新選項：回傳要一併設成的材質／版式
+    var migratedOptions: (material: TypographMaterial?, layout: System6Layout?) {
+        switch self {
+        case .embossed: return (.embossed, nil)
+        case .alarmClock: return (nil, .alarmClock)
+        case .about: return (nil, .about)
+        default: return (nil, nil)
         }
     }
     /// 往后（d > 0）或往前换一个，头尾相接
     func next(_ d: Int) -> FaceStyle {
-        let all = Self.allCases, i = all.firstIndex(of: self)!
+        let all = Self.lineup, i = all.firstIndex(of: inLineup)!
         return all[((i + d) % all.count + all.count) % all.count]
     }
     static let defaultsKey = "HomePlayFaceStyle"
 }
+
+/// Typograph 的材質：平面（原樣）或浮雕（原「浮雕指針」錶面）
+enum TypographMaterial: String, CaseIterable {
+    case flat, embossed
+    static let defaultsKey = "HomePlayTypographMaterial"
+    var title: String {
+        switch self {
+        case .flat: return L("typograph.material.flat", "平面")
+        case .embossed: return L("typograph.material.embossed", "浮雕")
+        }
+    }
+}
+
+/// System 6 的版式：Finder 桌面（原樣）、Alarm Clock、About This Macintosh
+enum System6Layout: String, CaseIterable {
+    case finder, alarmClock, about
+    static let defaultsKey = "HomePlaySystem6Layout"
+    var title: String {
+        switch self {
+        case .finder: return "Finder"
+        case .alarmClock: return "Alarm Clock"   // 復古系列維持英文（史實）
+        case .about: return "About"
+        }
+    }
+}
+
+/// 快照專用：命令行強行指定材質／版式（不寫 UserDefaults）
+nonisolated(unsafe) var faceOptionSnapshotOverride: (material: TypographMaterial?, layout: System6Layout?) = (nil, nil)
 
 /// 本机电量（IOKit）。台式机没有电池时回 nil。
 enum Battery {
@@ -474,6 +544,8 @@ func timerClock(_ seconds: Double) -> String {
 
 final class Face {
     private(set) var expression: Expression = .idle
+    /// 游標在附近：待機的眼珠跟著游標（以前的「好奇」），不自己東張西望
+    var followPointer = false
     /// 快照用：不眨、不瞄
     var frozen = false
     /// 好奇时眼珠看的方向（-1..1，x 往右、y 往下）
@@ -485,6 +557,8 @@ final class Face {
     /// 表情正在往目標過渡：這幾幀要用 30fps 以上畫，否則 6 Hz 下過場一格一格跳
     private(set) var approaching = false
     var forceDirty = false
+    /// 錶面要眼睛看哪裡（App 原始單位，同 FaceParams.pdx/pdy）；只在平常表情時生效。錶面在 drawIsland 前設、畫完清掉
+    var faceEyeLook: CGPoint?
     static var renderCount = 0
     static var ambientPaused = false      // 過熱／低電量時停掉 Flow 氛圍動畫
     /// 貼圖解析度倍率（0.5…1）：按視窗大小選，預設視窗只畫 512²，省 4 倍光柵與上傳
@@ -548,13 +622,13 @@ final class Face {
         } else if blinkEnd > 0 { blinkEnd = 0; dirty = true }
 
         // 瞄：只在待机，每 7–11 s 往右上看 1.4 s
-        if !frozen && expression == .idle {
+        if !frozen && expression == .idle && !followPointer {
             if glanceEnd == 0 && now > nextGlance { glanceEnd = now + 1.4 }
             if glanceEnd > 0 && now > glanceEnd { glanceEnd = 0; nextGlance = now + 7 + Double.random(in: 0...4) }
         } else { glanceEnd = 0 }
 
         var t = target
-        if expression == .curious, let p = Face.pointerOverride ?? pointer {
+        if expression == .idle, followPointer || Face.pointerOverride != nil, let p = Face.pointerOverride ?? pointer {
             t.pdx = max(-1, min(1, p.x)) * 15; t.pdy = max(-1, min(1, p.y)) * 18
         }
         if glanceEnd > 0 || Face.glanceOverride { t.pdx = 13; t.pdy = -14 }
@@ -758,7 +832,11 @@ final class Face {
     /// 上一层染色和顶部内光；Aqua 时再加细横条纹和上半部的凝胶高光；最后是左上亮、右下次亮的镜面细边。
     func glass(_ g: CGContext, _ r: CGRect, radius: CGFloat, tint: NSColor, band: CGFloat = 16) {
         guard let frosted else { return }
-        let path = CGPath(roundedRect: r, cornerWidth: radius, cornerHeight: radius, transform: nil)
+        let pill = radius >= r.height / 2 - 0.5   // 膠囊維持半圓兩端；卡片用跟螢幕同一種連續圓角
+        func shape(_ rr: CGRect, _ rad: CGFloat) -> CGPath {
+            pill ? CGPath(roundedRect: rr, cornerWidth: min(rad, rr.height / 2), cornerHeight: min(rad, rr.height / 2), transform: nil) : continuousRoundedRect(rr, radius: rad)
+        }
+        let path = shape(r, radius)
         let c = CGPoint(x: r.midX, y: r.midY)
         let cs = CGColorSpace(name: CGColorSpace.sRGB)
         g.saveGState()
@@ -770,7 +848,7 @@ final class Face {
         g.addPath(path); g.clip()
         lens(g, frosted, around: c, 1.05)
         let ir = r.insetBy(dx: band, dy: band), irad = max(1, radius - band)
-        g.addPath(path); g.addPath(CGPath(roundedRect: ir, cornerWidth: irad, cornerHeight: irad, transform: nil))
+        g.addPath(path); g.addPath(shape(ir, irad))
         g.clip(using: .evenOdd)
         lens(g, frosted, around: c, 1.16)
         g.restoreGState()
@@ -783,7 +861,7 @@ final class Face {
             var y = r.minY; while y < r.maxY { g.fill(CGRect(x: r.minX, y: y, width: r.width, height: 2)); y += 6 }
             let hr = CGRect(x: r.minX + 10, y: r.minY + 6, width: r.width - 20, height: r.height * 0.48)
             let hrad = min(radius - 6, hr.height / 2)
-            g.addPath(CGPath(roundedRect: hr, cornerWidth: max(1, hrad), cornerHeight: max(1, hrad), transform: nil)); g.clip()
+            g.addPath(shape(hr, max(1, hrad))); g.clip()
             let gel = CGGradient(colorsSpace: cs, colors: [NSColor(white: 1, alpha: 0.55).cgColor, NSColor(white: 1, alpha: 0.06).cgColor] as CFArray,
                                  locations: [0, 1])!
             g.drawLinearGradient(gel, start: CGPoint(x: 0, y: hr.minY), end: CGPoint(x: 0, y: hr.maxY), options: [])
@@ -806,11 +884,19 @@ final class Face {
     // MARK: 錶面与即时动态
 
     /// 现在用哪个錶面
-    var style: FaceStyle = .island { didSet { if style != oldValue { forceDirty = true } } }
+    var style: FaceStyle = .island { didSet { if style != oldValue { beginFaceTransition(); forceDirty = true } } }
+    /// 換錶面的過場：舊的一張（清楚版＋霧化版）與開始時刻（Faces/ScreenGeometry.swift 的 drawFaceTransition）
+    var lastFrame: CGImage?
+    /// 這一幀膠囊（眼睛）佔的範圍（1024 畫布）：海報補丁只補這裡面的變化（眨眼、瞄一眼）
+    var islandRect: CGRect?
+    private var islandRectBuilding: CGRect?
+    var faceTransition: (sharp: CGImage, frosted: CGImage, start: Double)?
     /// 島錶面的自由组合（见 IslandOptions.swift）
     var clockStyle: ClockStyle = .bold { didSet { if clockStyle != oldValue { forceDirty = true } } }
     var background: IslandBackground = .daytime { didSet { if background != oldValue { forceDirty = true } } }
     var era: Era = .y2026 { didSet { if era != oldValue { forceDirty = true } } }
+    var typographMaterial: TypographMaterial = .flat { didSet { if typographMaterial != oldValue { forceDirty = true } } }
+    var system6Layout: System6Layout = .finder { didSet { if system6Layout != oldValue { forceDirty = true } } }
     /// 正在播放（NowPlaying.swift 的轮询写入；计时器优先）
     var nowPlaying = NowPlayingState()
     /// 电量（PetView 每分钟读一次）；nil＝没有电池
@@ -871,6 +957,7 @@ final class Face {
             }
         }
         if tickMusic(now) { dirty = true }
+        if siriOrb.active(now) || (siriOrb.upAt > 0 && now - siriOrb.upAt < SiriOrbState.think + SiriOrbState.settle + 0.1) { dirty = true }
         let goal: CGFloat = (timerActive || musicActive(now)) && !Self.timerInTile.contains(style) ? 1 : 0
         if liveT != goal {
             liveT += (goal - liveT) * CGFloat(1 - exp(-dt / 0.12))
@@ -884,15 +971,29 @@ final class Face {
         if tickPermissionPrimer(now, dt) { dirty = true }   // 权限说明卡（PermissionPrimer.swift）
         // 各錶面自己要不要重画（秒针、轮替、漂动…），实现在 Faces/ 里
         switch style {
-        case .analog: if tickAnalogFace(now) { dirty = true }
+        case .analog: if (typographMaterial == .embossed ? tickEmbossedFace(now) : tickAnalogFace(now)) { dirty = true }
         case .flow: if tickFlowFace(now) { dirty = true }
         case .pocket: if tickPocketFace(now) { dirty = true }
         case .growth: if tickGrowthFace(now) { dirty = true }
-        case .system6: if tickSystem6Face(now) { dirty = true }
+        case .system6:
+            switch system6Layout {
+            case .finder: if tickSystem6Face(now) { dirty = true }
+            case .alarmClock: if tickAlarmClockFace(now) { dirty = true }
+            case .about: if tickAboutFace(now) { dirty = true }
+            }
+        case .weather: if tickWeatherFace(now) { dirty = true }
+        case .modular: if tickModularFace(now) { dirty = true }
+        case .calendar: if tickCalendarFace(now) { dirty = true }
+        case .homeModular: if tickHomeModularFace(now) { dirty = true }
+        case .embossed: if tickEmbossedFace(now) { dirty = true }
+        case .black: if tickBlackFace(now) { dirty = true }
+        case .alarmClock: if tickAlarmClockFace(now) { dirty = true }
+        case .about: if tickAboutFace(now) { dirty = true }
         case .island: if tickIslandOptions(now) { dirty = true }
         default: break
         }
         if tickOverview(now, dt) { dirty = true }   // 长按换錶面总览（FaceOverview.swift）
+        if faceTransition != nil { dirty = true }  // 換錶面的過場還在跑
         return dirty
     }
 
@@ -904,8 +1005,12 @@ final class Face {
         let sc = max(0.25, min(2, renderScale))
         renderPixelScale = sc
         let px = Int((1024 * sc).rounded())
-        return makeImage(px, px) { g in
+        let tr = faceTransitionProgress(now)
+        islandRectBuilding = nil
+        defer { islandRect = islandRectBuilding }
+        let frame = makeImage(px, px) { g in
             if sc != 1 { g.scaleBy(x: sc, y: sc) }
+            if let tr { beginFaceTransitionFrame(g, tr) }
             if helloStart >= 0, now - helloStart < Self.helloDuration {
                 if let wallpaper { drawUpright(g, wallpaper, in: CGRect(x: 0, y: 0, width: 1024, height: 1024)) }
                 drawHello(g, CGFloat((now - helloStart) / Self.helloDuration)); return
@@ -916,12 +1021,25 @@ final class Face {
             case .modular: renderModularFace(g, now)
             case .bedside: renderBedsideFace(g, now)
             // 下面几个各在 Faces/ 里自己的文件
-            case .analog: renderAnalogFace(g, now)
+            case .analog: if typographMaterial == .embossed { renderEmbossedFace(g, now) } else { renderAnalogFace(g, now) }   // 材質：Faces/EmbossedFace.swift
             case .flow: renderFlowFace(g, now)
             case .pocket: renderPocketFace(g, now)
             case .growth: renderGrowthFace(g, now)
-            case .system6: renderSystem6Face(g, now)
+            case .system6:
+                switch system6Layout {   // 版式：Faces/System6Series.swift
+                case .finder: renderSystem6Face(g, now)
+                case .alarmClock: renderAlarmClockFace(g, now)
+                case .about: renderAboutFace(g, now)
+                }
+            case .weather: renderWeatherFace(g, now)          // Faces/WeatherFace.swift
+            case .calendar: renderCalendarFace(g, now)        // Faces/CalendarFace.swift
+            case .homeModular: renderHomeModularFace(g, now)  // Faces/HomeModularFace.swift
+            case .embossed: renderEmbossedFace(g, now)        // Faces/EmbossedFace.swift
+            case .black: renderBlackFace(g, now)              // Faces/BlackFace.swift
+            case .alarmClock: renderAlarmClockFace(g, now)    // Faces/System6Series.swift
+            case .about: renderAboutFace(g, now)              // Faces/System6Series.swift
             }
+            if let tr { endFaceTransitionFrame(g, tr) }   // 舊錶面像起霧的玻璃一樣化開
             drawCarPlayOverlay(g, now)   // 连线中过场（CarPlayOverlay.swift）
             if FaceOverview.active { drawOverview(g, now) }   // 长按换錶面总览盖在最上面
             if Onboarding.active { drawOnboarding(g, now) }   // 第一次打开的操作提示
@@ -932,6 +1050,8 @@ final class Face {
                 g.fill(CGRect(x: 0, y: 0, width: 1024, height: 1024))
             }
         }
+        lastFrame = frame
+        return frame
     }
 
     /// 島：上方一行小字日期，中间巨大的圆体时间，岛站在数字前面（像 Portraits 的景深）。
@@ -971,21 +1091,27 @@ final class Face {
     /// 岛：深色液态玻璃胶囊 + 两颗贴在一起的白眼。at/scale 是平常的位置和大小；
     /// 计时器在跑时长成一条宽胶囊（liveAt 是长大后的中心）：眼睛缩到左边，右边是倒数与圆环。red＝床头夜灯的暗红版。
     func drawIsland(_ g: CGContext, at c0: CGPoint, scale s0: CGFloat, liveAt lc: CGPoint, now: Double, red: Bool = false) {
+        if capsuleLook() == .system && isSystem6Era && !red && liveT < 0.02 && !siriOrb.active(now) {   // 1988：1-bit 預設按鈕（Faces/System6Series.swift）
+            drawPixelIsland(g, center: c0, scale: s0, now: now); return
+        }
         let p = cur, lt = Self.timerInTile.contains(style) ? 0 : liveT
         let k0 = 1.4 * s0
         let cw0 = p.cw * k0, ch0 = p.ch * k0
         let cw = cw0 + (880 - cw0) * lt, ch = ch0 + (230 - ch0) * lt
         let c = CGPoint(x: c0.x + (lc.x - c0.x) * lt, y: c0.y + (lc.y - c0.y) * lt)
         let rect = CGRect(x: c.x - cw / 2, y: c.y - ch / 2, width: cw, height: ch)
+        let eyesArea = rect.insetBy(dx: -ch * 0.6, dy: -ch * 0.45)   // 臉頰紅暈、睡著的 z 會畫到膠囊外面一點
+        islandRectBuilding = islandRectBuilding.map { $0.union(eyesArea) } ?? eyesArea
+        let orb = red || lt > 0.02 ? nil : siriOrbGeometry(rect, now: now)   // 按住 F5：Siri 球（Faces/Capsule.swift）
         if red {
-            g.setFillColor(srgb(0x140403).cgColor)
+            g.setFillColor((style == .black ? NSColor.black : srgb(0x140403)).cgColor)   // 黑錶面夜裡膠囊融進全黑，只剩眼瞼線
             g.addPath(CGPath(roundedRect: rect, cornerWidth: ch / 2, cornerHeight: ch / 2, transform: nil)); g.fillPath()
-        } else if drawOptionIslandBody(g, rect) {
-            // 島錶面的年代 / 背景自己画了岛身
+        } else if let orb {
+            drawSiriOrb(g, orb.rect, listen: orb.listen, think: orb.think, now: now)
+        } else if aqua && style != .island {
+            glass(g, rect, radius: ch / 2, tint: NSColor(srgbRed: 0.04, green: 0.08, blue: 0.16, alpha: 0.8), band: 20 * s0)
         } else {
-            glass(g, rect, radius: ch / 2,
-                  tint: aqua ? NSColor(srgbRed: 0.04, green: 0.08, blue: 0.16, alpha: 0.8) : NSColor(white: 0, alpha: 0.74 + 0.12 * lt),
-                  band: 20 * s0)
+            drawCapsuleBody(g, rect, look: lt > 0.02 ? .smoke : capsuleLook(), animating: false)   // 長成計時器／音樂時一律黑透，字才看得清
         }
         let ke = k0 + (1.4 * 0.62 - k0) * lt
         let ex = c.x + (-cw / 2 + 150) * lt
@@ -999,12 +1125,20 @@ final class Face {
         } else {
             if p.blush > 0.01 && lt < 0.5 {
                 g.setFillColor(NSColor(srgbRed: 1, green: 150 / 255, blue: 170 / 255, alpha: 0.55 * p.blush * (1 - lt * 2)).cgColor)
-                for s: CGFloat in [-1, 1] {
-                    g.fillEllipse(in: CGRect(x: c.x + s * (cw / 2 + 46 * s0) - 40 * s0, y: c.y + 30 * s0 - 22 * s0, width: 80 * s0, height: 44 * s0))
+                for s: CGFloat in [-1, 1] {   // 收在膠囊裡、眼睛外下方
+                    let bx = c.x + s * (p.sep * k0 + p.rx * k0 * 1.55), by = c.y + p.ry * k0 * 0.62
+                    g.fillEllipse(in: CGRect(x: bx - 30 * s0, y: by - 16 * s0, width: 60 * s0, height: 32 * s0))
                 }
             }
             let bf = blinkFactor(now)
-            for s: CGFloat in [-1, 1] { drawEye(g, cx: ex + s * p.sep * ke, cy: c.y, side: s, blinkF: bf, k: ke) }
+            if let orb {   // Siri 球：眼睛跟著球往下、略往上讓出波形；思考時淡出
+                g.saveGState(); g.setAlpha(1 - orb.think)
+                let ey = orb.rect.midY - orb.rect.height * 0.13 * orb.listen
+                for s: CGFloat in [-1, 1] { drawEye(g, cx: orb.rect.midX + s * p.sep * ke, cy: ey, side: s, blinkF: bf, k: ke) }
+                g.restoreGState()
+            } else {
+                for s: CGFloat in [-1, 1] { drawEye(g, cx: ex + s * p.sep * ke, cy: c.y, side: s, blinkF: bf, k: ke) }
+            }
         }
         if lt > 0.02, timerEnd == nil { drawMusicCapsule(g, rect: rect, c: c, lt: lt, now: now, red: red) }
         if lt > 0.02, let end = timerEnd {
@@ -1015,7 +1149,7 @@ final class Face {
             drawLeft(g, L("timer.left", "还剩"), font: Self.rounded(30, weight: .semibold), x: rect.minX + 300, y: c.y + 36,
                      color: NSColor.white.withAlphaComponent(red ? 0.35 : 0.6))
             let font = Self.rounded(118, weight: .semibold), txt = timerClock(left)
-            let tw = (txt as NSString).size(withAttributes: [.font: font]).width
+            let tw = Typo.width(txt, font)
             drawLeft(g, txt, font: font, x: rect.maxX - 200 - tw, y: c.y + 42, color: accent)
             let rc = CGPoint(x: rect.maxX - 104, y: c.y)
             g.setLineWidth(15); g.setLineCap(.round)
@@ -1027,44 +1161,42 @@ final class Face {
         }
         if expression == .asleep && lt < 0.1 && !red {
             let up = Int(now) % 2 == 0
-            drawText(g, "z", at: CGPoint(x: c.x + cw / 2 + 4, y: c.y - ch / 2 - (up ? 40 : 24) * s0), size: 64 * s0, weight: .semibold,
+            drawText(g, "z", at: CGPoint(x: c.x + cw / 2 + 18 * s0, y: c.y + (up ? 6 : 18) * s0), size: 58 * s0, weight: .semibold,
                      color: NSColor.white.withAlphaComponent(0.8))
-            drawText(g, "z", at: CGPoint(x: c.x + cw / 2 + 50 * s0, y: c.y - ch / 2 - (up ? 110 : 128) * s0), size: 88 * s0, weight: .semibold,
+            drawText(g, "z", at: CGPoint(x: c.x + cw / 2 + 64 * s0, y: c.y - (up ? 46 : 30) * s0), size: 80 * s0, weight: .semibold,
                      color: NSColor.white.withAlphaComponent(0.55))
         }
     }
 
     /// 计时器到点的横幅：顶上一块液态玻璃（夜灯时是暗红），点一下屏幕收起，12 秒后自己收
     private func drawBanner(_ g: CGContext, red: Bool) {
-        let r = CGRect(x: 56, y: 56, width: 912, height: 230)
+        let r = CGRect(x: 56, y: 56, width: 912, height: 230), rad = Screen.concentric(inset: 56)   // 跟螢幕圓角同心
         if red {
             g.setFillColor(srgb(0x1a0504).cgColor)
-            g.addPath(CGPath(roundedRect: r, cornerWidth: 70, cornerHeight: 70, transform: nil)); g.fillPath()
+            g.addPath(continuousRoundedRect(r, radius: rad)); g.fillPath()
         } else {
-            glass(g, r, radius: 70, tint: NSColor(white: 1, alpha: 0.18), band: 14)
+            glass(g, r, radius: rad, tint: NSColor(white: 1, alpha: 0.18), band: 14)
         }
         let accent = red ? srgb(0xb3261e) : srgb(0xff9f0a)
         let icon = CGRect(x: r.minX + 44, y: r.midY - 60, width: 120, height: 120)
         g.setFillColor(accent.cgColor)
-        g.addPath(CGPath(roundedRect: icon, cornerWidth: 32, cornerHeight: 32, transform: nil)); g.fillPath()
+        g.addPath(continuousRoundedRect(icon, radius: icon.width * 0.2237)); g.fillPath()   // App 圖示的連續圓角比例
         g.setStrokeColor((red ? NSColor.black : NSColor.white).cgColor); g.setLineWidth(9); g.setLineCap(.round)
         g.addArc(center: CGPoint(x: icon.midX, y: icon.midY + 6), radius: 34, startAngle: 0, endAngle: .pi * 2, clockwise: false); g.strokePath()
         g.move(to: CGPoint(x: icon.midX, y: icon.midY + 6)); g.addLine(to: CGPoint(x: icon.midX, y: icon.midY - 16)); g.strokePath()
         let fg = red ? srgb(0xb3261e) : NSColor.white
         drawLeft(g, bannerTexts?.title ?? L("timer.banner.title", "计时器 · 现在"), font: Self.rounded(32, weight: .bold), x: icon.maxX + 34, y: r.minY + 92, color: fg.withAlphaComponent(0.7))
         drawLeft(g, bannerTexts?.big ?? L("timer.banner.done", "时间到了"), font: Self.rounded(64, weight: .bold), x: icon.maxX + 34, y: r.minY + 168, color: fg)
-        drawLeft(g, L("timer.banner.dismiss", "点一下收起"), font: Self.rounded(30, weight: .semibold), x: r.maxX - 210, y: r.minY + 168, color: fg.withAlphaComponent(0.6))
+        let df = Self.rounded(30, weight: .semibold), dismiss = L("timer.banner.dismiss", "点一下收起")
+        drawLeft(g, dismiss, font: df, x: r.maxX - 44 - Typo.width(dismiss, df), y: r.minY + 168, color: fg.withAlphaComponent(0.6))
     }
 
-    /// 还没做好的錶面：深色底 + 名字（Faces/ 里的空壳用）
-    func renderPlaceholder(_ g: CGContext, title: String) {
-        g.setFillColor(srgb(0x111214).cgColor); g.fill(CGRect(x: 0, y: 0, width: 1024, height: 1024))
-        drawCentered(g, title, font: Self.rounded(64, weight: .bold), kern: 0, y: 520, color: NSColor.white.withAlphaComponent(0.7))
-    }
 
     /// 左对齐画一行字，y 是基线（画布左上原点）
-    func drawLeft(_ g: CGContext, _ s: String, font: NSFont, x: CGFloat, y: CGFloat, color: NSColor, kern: CGFloat = 0) {
-        let line = CTLineCreateWithAttributedString(NSAttributedString(string: s, attributes: [.font: font, .foregroundColor: color, .kern: kern]))
+    /// kern 為 nil＝照螢幕上的實際字級套 SF 的 trak 字距（Typography.swift）；亮字自動加一點 GRAD
+    func drawLeft(_ g: CGContext, _ s: String, font: NSFont, x: CGFloat, y: CGFloat, color: NSColor, kern: CGFloat? = nil) {
+        let f = color.isLightInk ? FaceType.graded(font, 440) : font
+        let line = CTLineCreateWithAttributedString(NSAttributedString(string: s, attributes: Typo.attributes(f, color: color, kern: kern)))
         g.saveGState(); g.translateBy(x: x, y: y); g.scaleBy(x: 1, y: -1)
         g.textPosition = .zero; CTLineDraw(line, g); g.restoreGState()
     }
@@ -1103,6 +1235,7 @@ final class Face {
         g.saveGState()
         let eye = CGRect(x: cx - rx, y: cy - ry, width: rx * 2, height: ry * 2)
         g.addEllipse(in: eye); g.clip()
+        g.beginTransparencyLayer(auxiliaryInfo: nil)   // 眼皮在這層裡「切掉」形狀，玻璃／漸層膠囊上才不會露出黑塊
         // 眼白照 Apple Color Emoji 的 👀 取樣：中間純白，沿橢圓邊一圈約 15% 寬的內陰影，
         // 邊上落到 0.58 灰（像枕頭的鼓面），沒有描邊。用縮放過的徑向漸層做成「橢圓等距」的暈。
         let cs = CGColorSpaceCreateDeviceRGB()
@@ -1123,7 +1256,8 @@ final class Face {
         if ps > 0.02 && irisA > 0.01 {                        // 闭眼时眼珠淡出，换成眼睑线
             g.saveGState()
             g.setAlpha(irisA)
-            let qx = cx + p.pdx * k, qy = cy + p.pdy * k
+            let look = expression == .idle && glanceEnd == 0 ? faceEyeLook : nil
+            let qx = cx + (look?.x ?? p.pdx) * k, qy = cy + (look?.y ?? p.pdy) * k
             if expression == .love {
                 g.addPath(heart(qx, qy, 18 * k * ps)); g.fillPath()
                 // 心形瞳孔也保留一点眼神光，和别的表情共用同一个「光点」脊柱
@@ -1163,17 +1297,21 @@ final class Face {
             }
             g.restoreGState()
         }
-        // 眼皮：绕眼睛中心往外斜（左眼外侧在左），上下各遮一部分；笑眼用一个黑椭圆把下缘切成弯月
+        // 眼皮：绕眼睛中心往外斜（左眼外侧在左），上下各切掉一部分；笑眼用一个椭圆把下缘切成弯月
+        // （以前是塗黑，只在黑膠囊上成立；現在用 .clear 把眼睛形狀本身切掉）
         g.translateBy(x: cx, y: cy); g.rotate(by: p.tilt * side)
-        if p.top > 0.005 {
+        g.setBlendMode(.clear)
+        let top = p.top + (side < 0 ? p.ltop : 0)
+        if top > 0.005 {
             // 上眼睑用一条弯的边（中间低、两侧高），比直切片更像唐老鸭的眼皮；
             // 闭到 85% 以上就退回矩形，免得两侧漏白。
-            if p.top >= 0.85 {
-                g.fill(CGRect(x: -rx * 2, y: -ry * 3, width: rx * 4, height: ry * 2 + ry * 2 * p.top))
+            if top >= 0.85 {
+                g.fill(CGRect(x: -rx * 2, y: -ry * 3, width: rx * 4, height: ry * 2 + ry * 2 * top))
             } else {
-                let line = -ry + 2 * ry * p.top
+                let line = -ry + 2 * ry * top
                 let w = rx * 2.5, h = max(ry * 0.6, 6)
                 g.fillEllipse(in: CGRect(x: -w / 2, y: line - h, width: w, height: h))
+                g.fill(CGRect(x: -rx * 2, y: -ry * 3, width: rx * 4, height: line - h / 2 + ry * 3))   // 弧線以上整片切掉，頂端不留白邊
             }
         }
         if p.bot > 0.005 { g.fill(CGRect(x: -rx * 2, y: ry - ry * 2 * p.bot, width: rx * 4, height: ry * 3)) }
@@ -1181,6 +1319,7 @@ final class Face {
             let c = ry * (1.95 - 0.9 * smile)
             g.fillEllipse(in: CGRect(x: -rx * 1.35, y: c - ry * 1.1, width: rx * 2.7, height: ry * 2.2))
         }
+        g.setBlendMode(.normal)
         if lidA > 0.01 {
             // 唐老鸭式闭眼：保留白色眼白，只画一条短的下弯眼睑线（和网站同一套比例）。
             g.saveGState()
@@ -1194,6 +1333,7 @@ final class Face {
             g.addPath(lid); g.strokePath()
             g.restoreGState()
         }
+        g.endTransparencyLayer()
         g.restoreGState()
     }
 
@@ -1210,25 +1350,23 @@ final class Face {
 
     /// 圆体（SF Pro Rounded）、等宽数字：錶面数字跳动时不会左右晃
     static func rounded(_ size: CGFloat, weight: NSFont.Weight) -> NSFont {
-        let base = NSFont.systemFont(ofSize: size, weight: weight)
-        let d = (base.fontDescriptor.withDesign(.rounded) ?? base.fontDescriptor).addingAttributes([.featureSettings: [[
-            NSFontDescriptor.FeatureKey.typeIdentifier: kNumberSpacingType,
-            NSFontDescriptor.FeatureKey.selectorIdentifier: kMonospacedNumbersSelector]]])
-        return NSFont(descriptor: d, size: size) ?? base
+        FaceType.rounded(size, weight)   // 可變軸、中文退回同粗細的蘋方（Faces/Typography.swift）
     }
     /// 放得下就用 size，放不下就缩小（最小到 size × minScale）：卡片上的字要大，换成英文也不能出框
     static func fitted(_ s: String, size: CGFloat, weight: NSFont.Weight, maxWidth: CGFloat, minScale: CGFloat = 0.7) -> NSFont {
         let f = rounded(size, weight: weight)
-        let w = CGFloat(CTLineGetTypographicBounds(CTLineCreateWithAttributedString(NSAttributedString(string: s, attributes: [.font: f])), nil, nil, nil))
+        let w = CGFloat(CTLineGetTypographicBounds(CTLineCreateWithAttributedString(NSAttributedString(string: s, attributes: Typo.attributes(f))), nil, nil, nil))
         guard w > maxWidth, w > 0 else { return f }
         return rounded(max(size * minScale, (size * maxWidth / w).rounded(.down)), weight: weight)
     }
     static let safeWidth: CGFloat = 944
     /// 水平置中画一行字，y 是基线（画布左上原点）
-    func drawCentered(_ g: CGContext, _ s: String, font: NSFont, kern: CGFloat, y: CGFloat, color: NSColor) {
-        let attr = NSAttributedString(string: s, attributes: [.font: font, .foregroundColor: color, .kern: kern])
+    func drawCentered(_ g: CGContext, _ s: String, font: NSFont, kern: CGFloat? = nil, y: CGFloat, color: NSColor) {
+        let f = color.isLightInk ? FaceType.graded(font, 440) : font
+        let a = Typo.attributes(f, color: color, kern: kern == 0 ? nil : kern)   // 0＝舊呼叫的「不加」：改成照實際字級
+        let attr = NSAttributedString(string: s, attributes: a)
         let line = CTLineCreateWithAttributedString(attr)
-        let w = CGFloat(CTLineGetTypographicBounds(line, nil, nil, nil)) - kern
+        let w = CGFloat(CTLineGetTypographicBounds(line, nil, nil, nil)) - ((a[.kern] as? CGFloat) ?? 0)   // 最後一字後面的字距不算
         // 太寬（大字號時鐘、德文日期）就以基線中點等比縮進螢幕安全寬度，不會被圓角裁掉
         let k = w > Self.safeWidth ? Self.safeWidth / w : 1
         g.saveGState()
@@ -1238,8 +1376,7 @@ final class Face {
     }
 
     func drawText(_ g: CGContext, _ s: String, at p: CGPoint, size: CGFloat, weight: NSFont.Weight, color: NSColor) {
-        let attr = NSAttributedString(string: s, attributes: [.font: NSFont.systemFont(ofSize: size, weight: weight),
-                                                              .foregroundColor: color])
+        let attr = NSAttributedString(string: s, attributes: Typo.attributes(FaceType.sf(size, weight, mono: false), color: color))
         let line = CTLineCreateWithAttributedString(attr)
         g.saveGState()
         // 坐标系已翻成左上原点；文字要再翻回来，基线在 p.y
@@ -1290,7 +1427,7 @@ final class Mood {
     func poke(now: Double) -> Bool {
         pokes = pokes.filter { now - $0 < 1.5 } + [now]
         guard pokes.count >= 5 else { return false }
-        pokes = []; show(.focus, for: 1.5, now: now)
+        pokes = []; show(.annoyed, for: 1.5, now: now)
         return true
     }
 
@@ -1310,7 +1447,7 @@ final class Mood {
         case .awake: break
         }
         if let s = petSince { if now - s >= 4 { return .love }; if now - s >= 1.5 { return .happy } }
-        return near ? .curious : .idle
+        return .idle
     }
 }
 
@@ -2178,6 +2315,38 @@ final class VideoDecoder {
 
 // MARK: - 接收器 client（wire 解析，和 WS2CarPlayReceiverWire 对齐）
 
+/// 每條 WS 的「首幀／結束只報一次」標記。接收器換手機時同一條 WS 上會送
+/// session ended → started，之後的第一幀要再報一次 live，桌寵才會從「正在連線」切回畫面。
+/// 純值型別，不帶鎖；ReceiverClient 在自己的鎖裡用它，selftest 直接測。
+struct FirstFrameLatch {
+    private(set) var gotFrame = false
+    private(set) var ended = false
+    mutating func open() { gotFrame = false; ended = false }
+    /// 首幀只報一次；返回 true 表示這次是第一次。
+    mutating func takeFirstFrame() -> Bool {
+        if gotFrame { return false }
+        gotFrame = true; return true
+    }
+    /// 結束只報一次；返回 true 表示這次是第一次。
+    mutating func markEnded() -> Bool {
+        if ended { return false }
+        ended = true; gotFrame = false; return true
+    }
+    mutating func resetFirstFrame() { gotFrame = false }
+    /// 接收器的會話邊界（換手機／手機自己 TEARDOWN）：之後的第一幀要重新報 live。
+    static func isSessionBoundary(_ s: String) -> Bool {
+        s.contains("\"type\":\"session\"") && (s.contains("\"state\":\"ended\"") || s.contains("\"state\":\"started\""))
+    }
+    /// 依序餵入文字與幀（nil 代表一幀），回傳每一幀是否觸發 live。selftest 用。
+    static func replay(_ events: [String?]) -> [Bool] {
+        var l = FirstFrameLatch(); l.open()
+        return events.compactMap { e in
+            if let s = e { if isSessionBoundary(s) { l.resetFirstFrame() }; return nil }
+            return l.takeFirstFrame()
+        }
+    }
+}
+
 final class ReceiverClient: NSObject, URLSessionWebSocketDelegate {
     private let endpoint: URL
     private let decoder: VideoDecoder
@@ -2190,8 +2359,7 @@ final class ReceiverClient: NSObject, URLSessionWebSocketDelegate {
     private let stateLock = NSLock()
     private var task: URLSessionWebSocketTask?
     private var session: URLSession?
-    private var gotFrame = false
-    private var ended = false
+    private var latch = FirstFrameLatch()
     private var closedByUs = false
 
     init?(endpoint: String, decoder: VideoDecoder) {
@@ -2205,16 +2373,16 @@ final class ReceiverClient: NSObject, URLSessionWebSocketDelegate {
     /// 首帧只报一次；返回 true 表示这次是第一次。
     private func takeFirstFrame() -> Bool {
         stateLock.lock(); defer { stateLock.unlock() }
-        if gotFrame { return false }
-        gotFrame = true
-        return true
+        return latch.takeFirstFrame()
     }
     /// 结束只报一次；返回 true 表示这次是第一次。
     private func markEnded() -> Bool {
         stateLock.lock(); defer { stateLock.unlock() }
-        if ended { return false }
-        ended = true; gotFrame = false
-        return true
+        return latch.markEnded()
+    }
+    /// 同一條 WS 上接收器換了會話：下一幀再報一次 onLive(true)。
+    func resetFirstFrame() {
+        stateLock.lock(); latch.resetFirstFrame(); stateLock.unlock()
     }
     /// URLSession 會強引用它的 delegate（就是本物件），沒有 invalidate 就永遠不釋放：
     /// 斷線重連每建一條 WS 就漏一個 session 加一個 client。
@@ -2226,7 +2394,7 @@ final class ReceiverClient: NSObject, URLSessionWebSocketDelegate {
 
     func open() {
         releaseSession()   // 防禦：同一個物件重開時先收掉上一條
-        stateLock.lock(); closedByUs = false; ended = false; gotFrame = false; stateLock.unlock()
+        stateLock.lock(); closedByUs = false; latch.open(); stateLock.unlock()
         let s = URLSession(configuration: .default, delegate: self, delegateQueue: nil)
         let t = s.webSocketTask(with: endpoint)
         t.maximumMessageSize = 8 * 1024 * 1024   // 專輯封面 base64 可能超過預設 1 MB
@@ -2273,6 +2441,8 @@ final class ReceiverClient: NSObject, URLSessionWebSocketDelegate {
             if case .success(let m) = r {
                 if case .data(let d) = m { self.handle([UInt8](d)) }
                 if case .string(let s) = m {
+                    // 在收包線程上就重置：保證排在這則訊息之後的幀一定看得到
+                    if FirstFrameLatch.isSessionBoundary(s) { self.resetFirstFrame() }
                     DispatchQueue.main.async { [weak self] in
                         guard let self, !self.isClosedByUs() else { return }
                         self.onText?(s)
@@ -2474,8 +2644,97 @@ final class PetView: NSView {
     private var frozenPatch: (poster: CIImage, posterCG: CGImage?, face: CIImage, corners: [CGPoint], scale: CGFloat, cs: CGColorSpace)?
     private var renderedScreenGeneration = -1
     private(set) var patches3D = 0
+    /// 凍結時錶面的 48×48 縮圖：補丁前先量「新錶面變了多大一塊」
+    private var frozenThumb: [UInt8]?
+    /// 補丁只適合小範圍的變化（眨眼、瞄一眼）。差值法的前提是「舊錶面的透視投影＝RealityKit 當時畫上去的樣子」，
+    /// 但兩者在取樣與邊緣上總差一兩個像素：變化小時殘差只落在變的那一小塊、看不出來；整面都變（連線過場、
+    /// 換錶面、大數字換分鐘）時，舊錶面每一道邊的殘差會同時浮出來＝殘影。超過這個比例就掛回 3D 重畫。
+    static let patchMaxChange = 0.04
+    static func faceThumb(_ img: CGImage) -> [UInt8] {
+        let n = 48
+        var buf = [UInt8](repeating: 0, count: n * n * 4)
+        buf.withUnsafeMutableBytes { raw in
+            guard let ctx = CGContext(data: raw.baseAddress, width: n, height: n, bitsPerComponent: 8, bytesPerRow: n * 4,
+                                      space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return }
+            ctx.interpolationQuality = .medium
+            ctx.draw(img, in: CGRect(x: 0, y: 0, width: n, height: n))
+        }
+        return buf
+    }
+    /// 兩張縮圖有多少比例的像素明顯不同（任一色版差 > 20/255），以及有沒有變化落在 allowed（1024 畫布）之外
+    static func changedFraction(_ a: [UInt8], _ b: [UInt8], allowed: CGRect? = nil) -> (fraction: Double, outside: Bool) {
+        guard a.count == b.count, !a.isEmpty else { return (1, true) }
+        let n = 48, k = CGFloat(n) / 1024
+        let box = allowed.map { CGRect(x: $0.minX * k, y: $0.minY * k, width: $0.width * k, height: $0.height * k).insetBy(dx: -1, dy: -1) }
+        var changed = 0, outside = false
+        for i in stride(from: 0, to: a.count, by: 4) {
+            let d = max(abs(Int(a[i]) - Int(b[i])), abs(Int(a[i + 1]) - Int(b[i + 1])), abs(Int(a[i + 2]) - Int(b[i + 2])))
+            guard d > 20 else { continue }
+            changed += 1
+            let px = (i / 4) % n, py = (i / 4) / n
+            if !(box?.contains(CGPoint(x: CGFloat(px) + 0.5, y: CGFloat(py) + 0.5)) ?? false) { outside = true }
+        }
+        return (Double(changed) / Double(a.count / 4), outside)
+    }
     var debugDetached: Bool { !attached3D && !poster.isHidden }
     /// 海報補丁專用的 Core Image context（跟錶面的分開，補完就清快取）
+    /// 補丁＝「有變化的那一小塊直接換成新內容」，不是 p + n − o：
+    /// 3D 畫出來的螢幕和平面錶面的投影銳利度、明暗都不完全一樣，加減法會讓舊內容的每道邊留下一圈殘差（殘影）。
+    /// 做法：|n − o| 超過門檻的像素＝變化區，往外擴 3 px 再羽化成遮罩 M；在變化區周圍沒變的像素上，
+    /// 逐色版用最小平方擬合 p ≈ a·o + b（螢幕的明暗、反光近似成仿射），變化區填 a·n + b。舊內容在 M 裡完全不出現。
+    /// 擬合用的乾淨像素不夠（整塊都在變）就回 nil，交給 3D 重畫。
+    static func replacePatch(p: [Float], n: [Float], o: [Float], w: Int, h: Int) -> [Float]? {
+        let count = w * h
+        var changed = [Float](repeating: 0, count: count)
+        var minX = w, minY = h, maxX = -1, maxY = -1
+        for i in 0..<count where o[i * 4 + 3] > 0.99 && n[i * 4 + 3] > 0.99 {
+            let d = max(abs(n[i * 4] - o[i * 4]), abs(n[i * 4 + 1] - o[i * 4 + 1]), abs(n[i * 4 + 2] - o[i * 4 + 2]))
+            if d > 0.012 { changed[i] = 1; let x = i % w, y = i / w; minX = min(minX, x); maxX = max(maxX, x); minY = min(minY, y); maxY = max(maxY, y) }
+        }
+        guard maxX >= 0 else { return p }   // 沒有變化
+        // 擴張（可分離的方框最大值）再羽化（方框平均），各自兩趟
+        func boxPass(_ src: [Float], radius r: Int, horizontal: Bool, maxOp: Bool) -> [Float] {
+            var dst = src
+            for y in 0..<h { for x in 0..<w {
+                var acc: Float = 0, k: Float = 0
+                for t in -r...r {
+                    let xx = horizontal ? x + t : x, yy = horizontal ? y : y + t
+                    guard xx >= 0, xx < w, yy >= 0, yy < h else { continue }
+                    let v = src[yy * w + xx]
+                    if maxOp { acc = max(acc, v) } else { acc += v; k += 1 }
+                }
+                dst[y * w + x] = maxOp ? acc : acc / max(1, k)
+            } }
+            return dst
+        }
+        var m = boxPass(boxPass(changed, radius: 3, horizontal: true, maxOp: true), radius: 3, horizontal: false, maxOp: true)
+        m = boxPass(boxPass(m, radius: 2, horizontal: true, maxOp: false), radius: 2, horizontal: false, maxOp: false)
+        // 擬合範圍：變化區外擴 28 px 的方框裡、遮罩為 0、在螢幕內的像素
+        let pad = 28
+        let x0 = max(0, minX - pad), x1 = min(w - 1, maxX + pad), y0 = max(0, minY - pad), y1 = min(h - 1, maxY + pad)
+        var a = [Float](repeating: 1, count: 3), b = [Float](repeating: 0, count: 3)
+        for c in 0..<3 {
+            var so: Double = 0, sp: Double = 0, soo: Double = 0, sop: Double = 0, k: Double = 0
+            for y in y0...y1 { for x in x0...x1 {
+                let i = y * w + x
+                guard m[i] == 0, o[i * 4 + 3] > 0.99 else { continue }
+                let ov = Double(o[i * 4 + c]), pv = Double(p[i * 4 + c])
+                so += ov; sp += pv; soo += ov * ov; sop += ov * pv; k += 1
+            } }
+            guard k > 200 else { return nil }
+            let den = k * soo - so * so
+            let ac = abs(den) < 1e-9 ? 1 : (k * sop - so * sp) / den
+            a[c] = Float(ac); b[c] = Float((sp - ac * so) / k)
+        }
+        var out = p
+        for i in 0..<count where m[i] > 0 {
+            for c in 0..<3 {
+                let v = a[c] * n[i * 4 + c] + b[c]
+                out[i * 4 + c] = min(1, max(0, p[i * 4 + c] * (1 - m[i]) + v * m[i]))
+            }
+        }
+        return out
+    }
     private static let patchCI = CIContext(options: [.cacheIntermediates: false, .workingFormat: CIFormat.RGBAh])
     private let posterPatching = ProcessInfo.processInfo.environment["HOMEPLAY_POSTER_PATCH"] != "0"
     private var updateSub: (any Cancellable)?
@@ -2538,7 +2797,7 @@ final class PetView: NSView {
         setAccessibilityElement(true)
         setAccessibilityRole(.button)
         setAccessibilityLabel(L("a11y.pet", "HomePlay 桌宠"))
-        setAccessibilityHelp(L("a11y.help", "重按屏幕连接 CarPlay，右键打开菜单"))
+        setAccessibilityHelp(L("a11y.help", "重按屏幕进入 CarPlay，右键打开菜单"))
 
         render.frame = bounds
         render.autoresizingMask = [.width, .height]
@@ -2578,7 +2837,9 @@ final class PetView: NSView {
         render.scene.addAnchor(bodyAnchor)
         setFinish(Finish(rawValue: UserDefaults.standard.string(forKey: Finish.defaultsKey) ?? "") ?? .starlight)
         if model.finish == .g4 { face.sayHello(CACurrentMediaTime()) }   // G4 白：开机先写一个 hello
-        face.style = FaceStyle(rawValue: UserDefaults.standard.string(forKey: FaceStyle.defaultsKey) ?? "") ?? .island
+        let savedStyle = FaceStyle(rawValue: UserDefaults.standard.string(forKey: FaceStyle.defaultsKey) ?? "") ?? .island
+        face.style = savedStyle.inLineup
+        face.restoreFaceOptions(migrating: savedStyle)   // Typograph 材質／System 6 版式（舊的浮雕、Alarm Clock、About 在這裡搬進來）
         face.restoreIslandOptions()   // 島錶面：时钟样式 / 背景 / 年代
         CompanionLog.markToday()   // 陪伴的痕跡：今天打开过
         // 电量每分钟读一次（IOKit，读不到＝没有电池）
@@ -2686,7 +2947,7 @@ final class PetView: NSView {
         // 零拷貝路（方畫面）：MTLTexture 直接當材質，不經任何像素轉換
         decoder.onTexture = { [weak self] tex, _, _ in
             guard let self, self.showingVideo, !self.carVideo.active else { return }
-            self.model.setScreen(texture: tex)
+            self.model.setScreen(texture: CornerFit.shared.apply(tex))   // 學圓角那一次連線才會縮放補黑，平常原樣
             self.videoFrameArrived()
         }
         carVideo.onTexture = { [weak self] tex in
@@ -2768,6 +3029,7 @@ final class PetView: NSView {
     func updateFaceScale() {
         // 螢幕佔視窗寬約 0.71（USDZ 量的）：貼圖像素要 ≥ 螢幕上實際像素，否則放大後發糊；上限 2048
         let need = bounds.width * (window?.backingScaleFactor ?? 2) * 0.72
+        Typo.pointsPerUnit = max(80, bounds.width) * 0.72 / 1024   // 字體的光學尺寸與字距照螢幕上的實際大小（Typography.swift）
         let sc = max(0.25, min(2, need / 1024))
         if abs(sc - face.renderScale) > 0.02 { face.renderScale = sc; face.forceDirty = true }
     }
@@ -2897,7 +3159,8 @@ final class PetView: NSView {
             let c = screenCorners()
             frozenPatch = c.count == 4 ? (CIImage(cgImage: cg), cg, CIImage(cgImage: face), c, window?.backingScaleFactor ?? 2,
                                           cg.colorSpace ?? CGColorSpace(name: CGColorSpace.sRGB)!) : nil
-        } else { frozenPatch = nil }
+            frozenThumb = frozenPatch == nil ? nil : Self.faceThumb(face)
+        } else { frozenPatch = nil; frozenThumb = nil }
         posterBob = bob
         poster.frame = bounds
         poster.isHidden = false
@@ -2971,6 +3234,14 @@ final class PetView: NSView {
             if renderLog { log("3d: patch skipped (frozen \(frozenPatch != nil), image \(model.lastScreenImage != nil))") }
             return false
         }
+        // 變太多就不補：交給 3D 重畫（見 patchMaxChange 的說明）
+        // 只補「膠囊裡」的短暫變化（眨眼、瞄一眼，等一下會回到凍結時的樣子）；指針、換分鐘、過場這些
+        // 會留下來或整面變的，補了會在舊內容的每道邊留下殘差＝殘影，一律掛回 3D 重畫
+        let ch = frozenThumb.map { Self.changedFraction($0, Self.faceThumb(img), allowed: face.islandRect) } ?? (fraction: 1, outside: true)
+        if ch.fraction > Self.patchMaxChange || ch.outside {
+            if renderLog { log("3d: patch skipped, \(Int(ch.fraction * 100))% changed\(ch.outside ? " outside the capsule" : "") → re-render") }
+            return false
+        }
         let pts = fp.corners.map { CGPoint(x: $0.x * fp.scale, y: $0.y * fp.scale) }
         let c = pts.map { CIVector(x: $0.x, y: $0.y) }
         func proj(_ im: CIImage) -> CIImage {
@@ -2988,10 +3259,14 @@ final class PetView: NSView {
             buf.withUnsafeMutableBytes { Self.patchCI.render(im, toBitmap: $0.baseAddress!, rowBytes: w * 16, bounds: quad, format: .RGBAf, colorSpace: lin) }
             return buf
         }
-        let pBuf = floats(fp.poster), nBuf = floats(proj(CIImage(cgImage: img))), oBuf = floats(proj(fp.face))
+        // 投影後輕輕模糊半個像素：3D 取樣（mipmap＋多重取樣）比 Core Image 的投影柔，兩邊銳利度才接近
+        func soft(_ im: CIImage) -> CIImage { im.clampedToExtent().applyingGaussianBlur(sigma: 0.55).cropped(to: im.extent) }
+        let pBuf = floats(fp.poster), nBuf = floats(soft(proj(CIImage(cgImage: img)))), oBuf = floats(soft(proj(fp.face)))
         Self.patchCI.clearCaches()   // 補丁之間不需要留中間圖（實測 footprint 只多約 4 MB）
-        var out = [Float](repeating: 0, count: w * h * 4)
-        for i in 0..<(w * h * 4) { out[i] = min(1, max(0, pBuf[i] + nBuf[i] - oBuf[i])) }
+        guard let out = Self.replacePatch(p: pBuf, n: nBuf, o: oBuf, w: w, h: h) else {
+            if renderLog { log("3d: patch skipped, no clean pixels to match the screen's shading → re-render") }
+            return false
+        }
         // 浮點緩衝 → CGImage（線性色彩），蓋回凍結幀的那一塊
         let data = out.withUnsafeBufferPointer { Data(buffer: $0) }
         guard let provider = CGDataProvider(data: data as CFData),
@@ -3141,6 +3416,7 @@ final class PetView: NSView {
 
         let expr = lockedFace ?? mood.current(now: now, hour: cachedHour)
         face.set(expr)
+        face.followPointer = mood.near && lockedFace == nil
         // 遠距（一分鐘沒靠近）不做表情過場動畫：直接到位，省十幾幀
         face.animateDetails = mood.near || now - lastNear <= 60 || face.needsSmooth(now)
         // 自適應幀率：有動作／直播跑 60，閒著 12（省 GPU 與電），睡著 1。
@@ -3466,7 +3742,7 @@ final class PetView: NSView {
                 gazeHeadOn = false
                 // 错峰：眼睛先到（Face.pointer 每帧更新、14/s 追过去），
                 // 头随后（0.6 s 弹簧），落定前再点一下头、补一个眨眼。
-                mood.show(.curious, for: 0.6, now: CACurrentMediaTime())
+                mood.show(.surprised, for: 0.3, now: CACurrentMediaTime())
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.38) { [weak self] in
                     guard let self, self.gazePresent else { return }
                     self.nod()
@@ -3607,9 +3883,9 @@ final class PetView: NSView {
 
     /// 屏幕上的点 → 发给接收器的 0..1（扣掉留黑）
     private func videoPoint(_ p: NSPoint) -> (Double, Double)? {
-        guard let uv = screenUV(p) else { return nil }
+        guard let uv = screenUV(p), let (u, v) = CornerFit.shared.toVideo(u: Double(uv.x), v: Double(uv.y)) else { return nil }
         let s = decoder.size
-        return screenToVideo(u: Double(uv.x), v: Double(uv.y), videoW: Double(s.width), videoH: Double(s.height))
+        return screenToVideo(u: u, v: v, videoW: Double(s.width), videoH: Double(s.height))
     }
     /// 「正在播放」胶囊带：屏幕下缘约三分之一（uv.y>0.68）；胶囊活跃时点／滚在这里＝媒体控制
     private func capsuleHit(_ p: NSPoint) -> Bool {
@@ -3644,7 +3920,7 @@ final class PetView: NSView {
         let p = local(event)
         if face.bannerShowing && !showingVideo { face.dismissBanner(); return }   // 点一下收起「时间到了」
         // System 6 錶面：单击屏幕（没拖、也不是双击）才打开 AI System 6，放手后等过双击间隔再开
-        system6Pending = face.style == .system6 && !showingVideo && event.clickCount == 1 && screenUV(p) != nil
+        system6Pending = face.style == .system6 && face.system6Layout == .finder && !showingVideo && event.clickCount == 1 && screenUV(p) != nil
         if event.clickCount >= 2 { system6Token += 1 }
         if event.modifierFlags.contains(.command) { window?.performDrag(with: event); return }
         if inResizeCorner(p) {
@@ -4215,42 +4491,53 @@ final class PetView: NSView {
         if item.title != title { item.title = title }
     }
 
+    /// CarPlay 那一項：按真實狀態給動詞（直播中＝退出；已暫停＝繼續；重連中＝重新連接；連線中＝取消）。
+    /// 右鍵選單與選單列共用這一份，兩處永遠一致
+    var carPlayAction: (title: String, action: Selector, hint: String?, symbol: String) {
+        if showingVideo { return (L("menu.exitCarPlay", "退出 CarPlay"), #selector(menuToggleLive), L("menu.hint.liveToggle", "重按或空格"), "car.fill") }
+        switch face.status {
+        case .connecting: return (L("menu.cancelConnect", "取消连接"), #selector(menuCancelConnect), nil, "xmark.circle")
+        case .pausedResume, .paused: return (L("menu.resumeCarPlay", "继续 CarPlay"), #selector(menuToggleLive), L("menu.hint.space", "空格"), "play.fill")
+        case .reconnecting: return (L("menu.reconnectCarPlay", "重新连接 CarPlay"), #selector(menuEnterCarPlay), nil, "arrow.clockwise")
+        default: return (L("menu.enterCarPlay", "进入 CarPlay"), #selector(menuEnterCarPlay), L("menu.hint.forceClick", "重按"), "car")
+        }
+    }
+
     /// 右键菜单（状态栏图标的菜单也復用它，兩处永远一致）
     func buildContextMenu() -> NSMenu {
         CalendarSource.shared.refresh()   // 授权状态可能在系统设置里改过
         let menu = NSMenu()
         // 状态项：按真实状态给动词，而不是一个含糊的「暂停」。
         // 直播中＝退出（同一手势可再进）；已暂停＝继续；重连中＝重新连接；连线中＝取消。
-        if showingVideo {
-            menu.addItem(menuItem(L("menu.exitCarPlay", "退出 CarPlay"), #selector(menuToggleLive),
-                                  hint: L("menu.hint.liveToggle", "重按或空格"), symbol: "car.fill"))
-        } else if face.status == .connecting {
-            menu.addItem(menuItem(L("menu.cancelConnect", "取消连线"), #selector(menuCancelConnect), symbol: "xmark.circle"))
-        } else if face.status == .pausedResume || face.status == .paused {
-            menu.addItem(menuItem(L("menu.resumeCarPlay", "继续 CarPlay"), #selector(menuToggleLive),
-                                  hint: L("menu.hint.space", "空格"), symbol: "play.fill"))
-        } else if face.status == .reconnecting {
-            menu.addItem(menuItem(L("menu.reconnectCarPlay", "重新连接 CarPlay"), #selector(menuEnterCarPlay), symbol: "arrow.clockwise"))
-        } else {
-            menu.addItem(menuItem(L("menu.enterCarPlay", "进入 CarPlay"), #selector(menuEnterCarPlay),
-                                  hint: L("menu.hint.forceClick", "重按"), symbol: "car"))
+        let cp = carPlayAction
+        menu.addItem(menuItem(cp.title, cp.action, hint: cp.hint, symbol: cp.symbol))
+        // 配对过两台以上：手机直接列在第一层，打勾的是现在这台，点一下就换（不用进偏好设定）
+        let phones = CarPlayPhoneBook.menuEntries()
+        if phones.count > 1 {
+            for entry in phones {
+                let item = menuItem(entry.title, #selector(menuUsePhone(_:)), symbol: "iphone")
+                item.representedObject = entry.address
+                item.state = entry.current ? .on : .off
+                menu.addItem(item)
+            }
         }
         menu.addItem(.separator())
 
         // 表盘：全部表盘（打勾）、岛表盘样式、表盘总览
         let styles = NSMenu()
-        for st in FaceStyle.allCases {
+        for st in FaceStyle.lineup {
             let item = menuItem(st.title, #selector(menuStyle(_:)), hint: face.style == st ? L("menu.hint.scrollArrows", "滚轮 / ← →") : nil,
                                 symbol: Self.faceSymbols[st])
             item.representedObject = st.rawValue; item.state = face.style == st ? .on : .off
             styles.addItem(item)
         }
         styles.addItem(.separator())
-        styles.addItem(menuItem(L("prefs.photoFolder", "照片资料夹…"), #selector(menuPhotoFolder),
+        styles.addItem(menuItem(L("prefs.photoFolder", "照片文件夹…"), #selector(menuPhotoFolder),
                                 hint: face.photos.folder.lastPathComponent, symbol: "folder"))
         styles.addItem(.separator())
         let islandOptItem = submenuItem(L("menu.islandFace", "岛表盘样式"), islandOptionsMenu(), symbol: "slider.horizontal.3")
         styles.addItem(islandOptItem)
+        for i in faceOptionMenuItems() { styles.addItem(i) }   // Typograph 材质／System 6 版式（FaceOptions.swift）
         styles.addItem(menuItem(L("clockLook.menu", "字体与颜色…"), #selector(menuClockLook(_:)), symbol: "textformat.size"))
         styles.addItem(menuItem(L("menu.faceOverview", "表盘总览…"), #selector(menuFaceOverview), hint: L("menu.hint.longPress", "长按屏幕"),
                                 symbol: "square.grid.3x3"))
@@ -4284,9 +4571,9 @@ final class PetView: NSView {
         menu.addItem(timerItem)
 
         menu.addItem(menuItem(isApart ? L("menu.apart.putBack", "组回来") : L("menu.apart.takeApart", "拆开看看"), #selector(menuApart),
-                              hint: L("menu.hint.twoFingerTap", "两指点两下"), symbol: isApart ? "cube" : "cube.transparent"))
+                              hint: L("menu.hint.twoFingerTap", "两指轻点两下"), symbol: isApart ? "cube" : "cube.transparent"))
         // 跟随我：最常开关的一项放在第一层（设置里有完整说明）
-        let follow = menuItem(L("prefs.gaze", "跟随我（摄像头）"), #selector(menuGazeToggle), symbol: "viewfinder")
+        let follow = menuItem(L("prefs.gaze", "跟随我（相机）"), #selector(menuGazeToggle), symbol: "viewfinder")
         follow.state = gazeEnabled ? .on : .off
         menu.addItem(follow)
 
@@ -4304,7 +4591,7 @@ final class PetView: NSView {
         looks.addItem(NSMenuItem.sectionHeader(title: L("settings.facing", "朝向")))
         // 朝向：自动（窗口在哪边就朝中央、开了跟随就转向人）／正面固定（永远正对、不倾斜）
         for mode in ViewMode.allCases {
-            let title = mode == .auto ? L("menu.view.auto", "自动朝向（窗口位置＋跟随）")
+            let title = mode == .auto ? L("menu.view.auto", "自动朝向（窗口位置 + 跟随）")
                                       : L("menu.view.fixedFront", "正面固定（不倾斜）")
             let item = menuItem(title, #selector(menuViewMode(_:)), symbol: mode == .auto ? "arrow.left.arrow.right" : "rectangle")
             item.representedObject = mode.rawValue
@@ -4330,7 +4617,7 @@ final class PetView: NSView {
         let tour = menuItem(L("menu.view.tour", "自动环绕"), #selector(menuTour), symbol: "rotate.3d")
         tour.state = touring ? .on : .off
         looks.addItem(tour)
-        looks.addItem(menuItem(L("menu.resetAngle", "回正"), #selector(menuResetOrientation), hint: L("menu.hint.doubleClick", "双击身体"),
+        looks.addItem(menuItem(L("menu.resetAngle", "回正"), #selector(menuResetOrientation), hint: L("menu.hint.doubleClick", "双击机身"),
                                symbol: "arrow.counterclockwise"))
         looks.addItem(.separator())
         looks.addItem(NSMenuItem.sectionHeader(title: L("settings.size", "大小")))
@@ -4368,7 +4655,7 @@ final class PetView: NSView {
         }
         return item
     }
-    private func submenuItem(_ title: String, _ sub: NSMenu, hint: String? = nil, symbol: String? = nil) -> NSMenuItem {
+    func submenuItem(_ title: String, _ sub: NSMenu, hint: String? = nil, symbol: String? = nil) -> NSMenuItem {
         let item = hint.map { menuItem(title, nil, hint: $0, symbol: symbol) }
             ?? menuItem(title, nil, symbol: symbol)
         item.submenu = sub
@@ -4394,138 +4681,13 @@ final class PetView: NSView {
     }
     private static let faceSymbols: [FaceStyle: String] = [
         .island: "capsule", .photos: "photo", .modular: "square.grid.2x2", .analog: "clock",
-        .flow: "wind", .pocket: "rectangle.stack", .growth: "leaf", .system6: "desktopcomputer", .bedside: "moon.stars",
+        .flow: "wind", .growth: "leaf", .system6: "desktopcomputer",
+        .weather: "cloud.sun", .calendar: "calendar", .black: "circle.fill",
     ]
 
     // MARK: 偏好设定（菜单里的子菜单，不另开窗口）
 
     static let photoFolderKey = "HomePlayPhotoFolder"
-    private func preferencesMenu() -> NSMenu {
-        let m = NSMenu()
-        let bundled = Bundle.main.bundleIdentifier != nil
-
-        // 登入时打开：SMAppService（要打包成 App 才有 bundle id）
-        let login = menuItem(bundled ? L("prefs.login", "登入时打开 HomePlay") : L("prefs.login.needsApp", "登入时打开 HomePlay（打包成 App 后可用）"),
-                             bundled ? #selector(menuLoginItem) : nil)
-        if bundled { login.state = SMAppService.mainApp.status == .enabled ? .on : .off } else { login.isEnabled = false }
-        m.addItem(login)
-        // 插线就连：原来的 receiver LaunchAgent
-        let plug = menuItem(L("prefs.plugConnect", "后台自动连接"), #selector(menuAgentToggle))
-        plug.state = ReceiverAgent.isInstalled ? .on : .off
-        if #available(macOS 14.4, *) { plug.subtitle = L("prefs.plugConnect.sub", "开机在后台等待 iPhone；插线一次，之后无线自动连") }
-        m.addItem(plug)
-        let iphone = NSMenu()
-        let ignoredCount = ReceiverLauncher.loadConfig().ignoredPhones.count
-        if CarPlayPhoneBook.phones.isEmpty {
-            iphone.addItem(menuItem(L("menu.pairPhone", "配对 iPhone…"), #selector(menuPairPhone),
-                                    hint: L("menu.pairPhone.hint", "数据线连一次，之后无线自动连")))
-            if ignoredCount > 0 {
-                iphone.addItem(menuItem(L("menu.restorePhones", "恢复已忘记的 iPhone") + "（\(ignoredCount)）",
-                                        #selector(menuRestorePhones)))
-            }
-        } else {
-            iphone.addItem(menuItem(L("menu.pairNewPhone", "配对新 iPhone…"), #selector(menuPairNewPhone),
-                                    hint: L("menu.pairNewPhone.hint", "插线就会开始配对；没线才用蓝牙设置")))
-            iphone.addItem(.separator())
-            for entry in CarPlayPhoneBook.menuEntries() {
-                let item = menuItem(entry.title, #selector(menuUsePhone(_:)), hint: entry.address)
-                item.representedObject = entry.address
-                item.state = entry.current ? .on : .off
-                iphone.addItem(item)
-            }
-            let forget = NSMenu()
-            for entry in CarPlayPhoneBook.menuEntries() {
-                let item = menuItem(entry.title, #selector(menuForgetPhone(_:)), hint: entry.address)
-                item.representedObject = entry.address
-                forget.addItem(item)
-            }
-            if !forget.items.isEmpty {
-                iphone.addItem(.separator())
-                iphone.addItem(submenuItem(L("menu.forgetPhone", "忘记 iPhone"), forget))
-            }
-            if ignoredCount > 0 {
-                iphone.addItem(menuItem(L("menu.restorePhones", "恢复已忘记的 iPhone") + "（\(ignoredCount)）",
-                                        #selector(menuRestorePhones)))
-            }
-        }
-        iphone.addItem(.separator())
-        iphone.addItem(menuItem(L("menu.wifiPassword", "Wi-Fi 设置…"), #selector(menuWiFiPassword),
-                                hint: L("menu.wifiPassword.hint", "一般不用；连不上时再用")))
-        let switchHint = CarPlayPhoneBook.phones.count > 1 ? L("menu.usePhone.hint", "切换会断开当前画面") : nil
-        m.addItem(submenuItem(L("menu.iphone", "iPhone"), iphone, hint: switchHint))
-        m.addItem(.separator())
-
-        // 行事历：三种状态直接写在项目上
-        let calendar: NSMenuItem
-        switch CalendarSource.auth {
-        case .notDetermined:
-            if CalendarSource.canRequest {
-                calendar = menuItem(L("prefs.calendar.allow", "允许读取行事历…"), #selector(menuCalendarAllow))
-                if #available(macOS 14.4, *) { calendar.subtitle = L("prefs.calendar.sub", "模组表盘的「下一个行程」要用") }
-            } else {
-                calendar = menuItem(L("prefs.calendar.needsApp", "允许读取行事历…（打包成 App 后可用）"), nil)
-                calendar.isEnabled = false
-            }
-        case .fullAccess:
-            calendar = menuItem(L("prefs.calendar.on", "读取行事历"), #selector(menuCalendarToggle))
-            calendar.state = CalendarSource.enabled ? .on : .off
-        default:
-            calendar = menuItem(L("prefs.calendar.openSettings", "到系统设置打开行事历…"), #selector(menuCalendarSettings))
-        }
-        m.addItem(calendar)
-        let np = menuItem(L("prefs.nowPlaying", "Mac 正在播放（Music/Spotify）"), #selector(menuNowPlaying))
-        np.state = NowPlayingPoller.enabled ? .on : .off
-        if #available(macOS 14.4, *) {
-            np.subtitle = L("prefs.nowPlaying.sub", "需要自动化权限；iPhone 的正在播放不受影响")
-        }
-        m.addItem(np)
-        // 摄像头相关收成一个子菜单：默认都关，打开时才申请权限；CarPlay 直播时自动暂停
-        let cameras = NSMenu()
-        let gaze = menuItem(L("prefs.gaze", "跟随我（摄像头）"), #selector(menuGazeToggle))
-        gaze.state = gazeEnabled ? .on : .off
-        if #available(macOS 14.4, *) {
-            gaze.subtitle = L("prefs.gaze.sub", "本机处理，不录制；CarPlay 时暂停")
-        }
-        cameras.addItem(gaze)
-        let gazePitch = menuItem(L("prefs.gazePitch", "跟随我俯仰角度…"), #selector(menuGazePitch))
-        if #available(macOS 14.4, *) {
-            gazePitch.subtitle = String(format: L("prefs.gazePitch.value", "%.1f°"), Double(gazePitchDegrees))
-        }
-        cameras.addItem(gazePitch)
-        let room = menuItem(L("prefs.roomLight", "房间光线（摄像头）"), #selector(menuRoomLightToggle))
-        room.state = (NSApp.delegate as? AppDelegate)?.roomLightOn == true ? .on : .off
-        if #available(macOS 14.4, *) {
-            room.subtitle = L("prefs.roomLight.sub", "估计房间亮度/色温/主光方向；本机处理，不录制")
-        }
-        cameras.addItem(room)
-        cameras.addItem(.separator())
-        let mic = menuItem(L("prefs.mic", "麦克风（CarPlay 通话/Siri）…"), #selector(menuMicPermission))
-        if #available(macOS 14.4, *) {
-            mic.subtitle = (NSApp.delegate as? AppDelegate)?.micStatusLabel
-        }
-        cameras.addItem(mic)
-        m.addItem(submenuItem(L("prefs.cameras", "摄像头与麦克风"), cameras))
-        m.addItem(.separator())
-        // 语言收在偏好设定里（跟随系统 + 三种语言，每种用它自己的写法）；切换立即生效
-        let languages = NSMenu()
-        let followSystem = NSMenuItem(title: L("menu.language.system", "跟随系统"), action: #selector(menuLanguage(_:)), keyEquivalent: "")
-        followSystem.target = self
-        followSystem.state = PetLanguage.chosen == nil ? .on : .off
-        languages.addItem(followSystem)
-        languages.addItem(.separator())
-        for l in PetLanguage.allCases {
-            let item = NSMenuItem(title: l.nativeName, action: #selector(menuLanguage(_:)), keyEquivalent: "")
-            item.target = self; item.representedObject = l.rawValue
-            item.state = PetLanguage.chosen == l ? .on : .off
-            languages.addItem(item)
-        }
-        let langItem = NSMenuItem(title: L("menu.language", "语言"), action: nil, keyEquivalent: "")
-        langItem.submenu = languages
-        m.addItem(langItem)
-        m.addItem(menuItem(L("prefs.hints", "再看一次操作提示"), #selector(menuShowHints)))
-        return m
-    }
-
     @objc private func menuSettings() {
         if let app = NSApp.delegate as? AppDelegate { SettingsWindowController.show(app: app) }
     }
@@ -4544,7 +4706,7 @@ final class PetView: NSView {
         let panel = NSOpenPanel()
         panel.canChooseDirectories = true; panel.canChooseFiles = false; panel.allowsMultipleSelection = false
         panel.directoryURL = face.photos.folder
-        panel.message = L("prefs.photoFolder.message", "选一个放照片的资料夹，照片表盘会轮播里面的照片")
+        panel.message = L("prefs.photoFolder.message", "选一个放照片的文件夹，照片表盘会轮播里面的照片")
         panel.prompt = L("prefs.photoFolder.choose", "选择")
         NSApp.activate(ignoringOtherApps: true)
         guard panel.runModal() == .OK, let url = panel.url else { return }
@@ -4655,11 +4817,30 @@ final class PetView: NSView {
         NSApp.activate(ignoringOtherApps: true)
         let alert = NSAlert()
         alert.messageText = L("forget.title", "忘记这台 iPhone？")
-        alert.informativeText = L("forget.body", "HomePlay 会停止使用它，并尝试删除系统蓝牙配对。若系统仍保留，可在 iPhone 的蓝牙设置里忘记这台 Mac。")
+        alert.informativeText = L("forget.body", "HomePlay 会停止使用它，并删除这台 Mac 上的蓝牙配对。之后会告诉你 iPhone 上还要做哪一步。")
         alert.addButton(withTitle: L("forget.confirm", "忘记"))
         alert.addButton(withTitle: L("wifi.cancel", "取消"))
         guard alert.runModal() == .alertFirstButtonReturn else { return }
         onForgetPhone?(address)
+    }
+    /// 「忘記 iPhone」之後：列出還要使用者自己做的步驟（HomePlay 動不了 iPhone 的設定；Mac 的系統配對有時也刪不掉）
+    func showForgetSteps(name: String?, macRemoved: Bool) {
+        NSApp.activate(ignoringOtherApps: true)
+        let alert = NSAlert()
+        alert.messageText = name.map { String(format: L("forget.doneTitle", "已忘记「%@」"), $0) }
+            ?? L("forget.doneTitleNoName", "已忘记这台 iPhone")
+        var steps = [L("forget.stepPhone", "在 iPhone 上：设置 › 通用 › CarPlay › HomePlay › 忘记此车辆（蓝牙配对会一起删除）")]
+        if !macRemoved {
+            steps.append(L("forget.stepMac", "在这台 Mac 上：系统设置 › 蓝牙 › 这台 iPhone 旁边的 ⓘ › 忘记此设备"))
+        }
+        let numbered = steps.enumerated().map { "\($0.offset + 1). \($0.element)" }.joined(separator: "\n")
+        alert.informativeText = L("forget.doneBody", "要重新配对，还差这几步：") + "\n\n" + numbered
+        if !macRemoved { alert.addButton(withTitle: L("forget.openBluetooth", "打开蓝牙设置")) }
+        alert.addButton(withTitle: L("gaze.denied.ok", "好"))
+        if alert.runModal() == .alertFirstButtonReturn, !macRemoved,
+           let url = URL(string: "x-apple.systempreferences:com.apple.BluetoothSettings") {
+            NSWorkspace.shared.open(url)
+        }
     }
     @objc private func menuRestorePhones() {
         NSApp.activate(ignoringOtherApps: true)
@@ -4683,7 +4864,7 @@ final class PetView: NSView {
         while true {
             let alert = NSAlert()
             alert.messageText = L("wifi.title", "Wi-Fi 设置")
-            var body = L("wifi.body", "这里填 iPhone 所连的 Wi-Fi（不一定是 Mac 自己连的那个）。Mac 用网线、或两者连不同 SSID 时，请填 iPhone 那个网络的名称和密码。iPhone 已在该网络上时密码可留空。macOS 26 不再允许 App 读取钥匙串密码，需要时请在系统设置里查看后手填（只存本机 0600）。")
+            var body = L("wifi.body", "这里填 iPhone 所连的 Wi-Fi（不一定是 Mac 自己连的那个）。Mac 用网线、或两者连不同 SSID 时，请填 iPhone 那个网络的名称和密码。iPhone 已在该网络上时密码可留空。macOS 26 不再允许 App 读取钥匙串密码，需要时请在系统设置里查看后手填（仅存在本机）。")
             if let note { body += "\n\n" + note }
             alert.informativeText = body
             let container = NSView(frame: NSRect(x: 0, y: 0, width: 360, height: 96))
@@ -4714,7 +4895,7 @@ final class PetView: NSView {
                 // macOS 在无定位权限时把 SSID 显示成 "<redacted>"，曾有人把它当真名保存，
                 // 结果 0x5703 让 iPhone 去连一个不存在的网络。这里直接挡住。
                 if enteredSSID.caseInsensitiveCompare("<redacted>") == .orderedSame {
-                    note = L("wifi.rejectedRedacted", "「<redacted>」是 macOS 的脱敏占位符，不是真实网络名。请填 iPhone 所连 Wi-Fi 的实际名称（可在 iPhone 的「设置 › Wi-Fi」里看到）。")
+                    note = L("wifi.rejectedRedacted", "「<redacted>」是 macOS 隐藏网络名后显示的占位文字，不是真实网络名。请填 iPhone 所连 Wi-Fi 的实际名称（可在 iPhone 的「设置 › Wi-Fi」里看到）。")
                     continue
                 }
                 onSetWiFi?(enteredSSID, enteredPassword)
@@ -5006,7 +5187,7 @@ enum ReceiverLauncher {
         let p = Process()
         p.executableURL = bin
         p.arguments = args
-        var env = ProcessInfo.processInfo.environment
+        let env = ProcessInfo.processInfo.environment
         // 不自動讀系統鑰匙圈（Wi-Fi 密碼在「系統」鑰匙圈，會彈管理員授權）。
         // CarPlay 無線交接需要 Wi-Fi 憑據；由用戶在右鍵「Wi-Fi 密碼…」填一次，存本地 0600。
         p.environment = env
@@ -5476,6 +5657,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var reconnectStep = 0
     private var reconnectTimer: Timer?
     private static let backoff: [Double] = [5, 10, 20, 30, 60]   // 照 MacPlay，之后一直 60
+    /// WS 断开后先快探：接收器重启 1–3 s 就绪，别让桌宠干等 5 s 退避
+    private static let fastProbeWindow: Double = 15, fastProbeInterval: Double = 0.3
+    private var disconnectedAt: CFTimeInterval?   // 这一轮断线从何时起；出画面归零
+    private var reconnectProbing = false
     private var lastStats = (t: CACurrentMediaTime(), recv: 0, dec: 0)
     private var rememberFrame = false
 
@@ -5529,8 +5714,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let petMenu = NSMenu(title: L("menu.pet", "桌宠"))
         if let view {
             for (title, sel, key, mods) in [
-                (view.showingVideo ? L("menu.exitCarPlay", "退出 CarPlay") : L("menu.enterCarPlay", "进入 CarPlay"),
-                 #selector(PetView.menuEnterCarPlay), "", NSEvent.ModifierFlags()),
+                (view.carPlayAction.title, view.carPlayAction.action, "", NSEvent.ModifierFlags()),
                 (L("menu.faceOverview", "表盘总览…"), #selector(PetView.menuFaceOverview), "", NSEvent.ModifierFlags()),
                 (L("menu.zoomIn", "放大"), #selector(PetView.menuZoomIn), "+", .command),
                 (L("menu.zoomOut", "缩小"), #selector(PetView.menuZoomOut), "-", .command),
@@ -5659,6 +5843,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let now = CACurrentMediaTime()
         if down {
             guard siriHold.press(now: now) else { return }
+            siriOrb.downAt = now; view?.face.forceDirty = true   // 錶面上的 Siri 球（Faces/Capsule.swift）
             siriDownSent = false
             appendDiag("siri.log", "Siri key down")
             siriHoldWatch?.invalidate()
@@ -5683,6 +5868,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
         } else {
             guard siriHold.release() else { return }
+            siriOrb.upAt = now; view?.face.forceDirty = true
             siriHoldWatch?.invalidate(); siriHoldWatch = nil
             appendDiag("siri.log", "Siri key up")
             if siriDownSent {
@@ -5840,8 +6026,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             guard let self else { return }
             let now = CACurrentMediaTime()
             switch p {
-            case .intro: self.view.mood.show(.curious, for: 2.5, now: now)
-            case .waiting: self.view.mood.show(.focus, for: 1.5, now: now)
+            case .intro: self.view.mood.show(.idle, for: 2.5, now: now)
+            case .waiting: self.view.mood.show(.thinking, for: 1.5, now: now)
             case .granted: self.view.mood.show(.happy, for: 1.6, now: now)
             case .denied: self.view.mood.show(.worried, for: 2.0, now: now)
             }
@@ -5979,9 +6165,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             withPermission(.camera) { _ in }; return         // 拒绝卡：给「打开系统设置」
         }
         let a = NSAlert()
-        a.messageText = L("gaze.denied.title", "需要摄像头权限")
+        a.messageText = L("gaze.denied.title", "需要相机权限")
         a.informativeText = (reason == nil || reason == "camera permission denied")
-            ? L("gaze.denied.body", "在系统设置 › 隐私与安全性 › 摄像头里允许 HomePlay，跟随我或房间光线才能使用摄像头。画面只在本机处理，不保存。")
+            ? L("gaze.denied.body", "在系统设置 › 隐私与安全性 › 相机里允许 HomePlay，跟随我或房间光线才能使用相机。画面只在本机处理，不保存。")
             : (reason ?? "")
         a.addButton(withTitle: L("gaze.denied.ok", "好"))
         a.runModal()
@@ -6083,7 +6269,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             AirPlayWatch.onChange = { [weak self] on in
                 guard let self else { return }
                 let now = CACurrentMediaTime()
-                if on { self.view.mood.show(.curious, for: 6 * 3600, now: now) } else { self.view.mood.show(.happy, for: 1.2, now: now) }
+                if on { self.view.mood.show(.thinking, for: 6 * 3600, now: now) } else { self.view.mood.show(.happy, for: 1.2, now: now) }
                 log("AirPlay video on this Mac: \(on)")
             }
             AirPlayWatch.start()
@@ -6297,6 +6483,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 guard let self else { return }
                 if phase == 0, CACurrentMediaTime() > 4, self.view.debugDetached {
                     phase = 1; patchesAt = self.view.patches3D
+                    if ProcessInfo.processInfo.environment["HOMEPLAY_PATCH_TEST_BIG"] != nil {
+                        // 大範圍變化（連線過場蓋滿整面）：不該補丁，要掛回 3D 重畫；1.5 秒後記錄結果並拍一張
+                        CarPlayOverlayState.forced = true; self.view.face.forceDirty = true
+                        tm.invalidate()
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+                            log("patch-test big: patches +\(self.view.patches3D - patchesAt), detached \(self.view.debugDetached)")
+                            self.view.captureSnapshot { img in
+                                if let img { try? NSBitmapImageRep(cgImage: img).representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: dir + "/big.png")) }
+                                exit(0)
+                            }
+                        }
+                        return
+                    }
                     Face.glanceOverride = true; self.view.face.forceDirty = true
                 } else if phase == 1, self.view.patches3D > patchesAt {
                     phase = 2; tm.invalidate()
@@ -6338,7 +6537,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 if let p = ProcessInfo.processInfo.environment["HOMEPLAY_FACE_PNG"] {
                     let f = self.view.face
                     f.renderScale = CGFloat(Double(ProcessInfo.processInfo.environment["HOMEPLAY_FACE_SCALE"] ?? "1") ?? 1)
-                    let img = f.render()
+                    var img = f.render()
+                    // HOMEPLAY_FACE_TRANSITION=modular:0.3：換到 modular、拍過場進行到 30% 的那一格
+                    if let spec = ProcessInfo.processInfo.environment["HOMEPLAY_FACE_TRANSITION"]?.split(separator: ":"), spec.count == 2,
+                       let to = FaceStyle(rawValue: String(spec[0])), let x = Double(spec[1]) {
+                        f.style = to
+                        if let t = f.faceTransition { f.faceTransition = (t.sharp, t.frosted, CACurrentMediaTime() - x * Face.transitionDuration) }
+                        img = f.render()
+                    }
                     try? NSBitmapImageRep(cgImage: img).representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: p))
                     log("face png \(img.width)x\(img.height) -> \(p)")
                 }
@@ -6632,9 +6838,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
             let now = CACurrentMediaTime()
             if live {
-                // 出第一帧：点一下头。断过线的先笑 0.8 s（它回来了）再切直播。
+                // 出第一帧：点一下头。断过线的同时笑一下（它回来了），画面不等表情。
                 if !wasQuiet { self.requestMicrophoneIfNeeded(announce: false, reason: "CarPlay live") }
-                self.reconnectStep = 0; self.health.reset(now: now)
+                self.reconnectStep = 0; self.disconnectedAt = nil; self.health.reset(now: now)
                 self.switchingPhone = false
                 CarPlayOverlayState.needsPairing = false
                 CarPlayOverlayState.pairingHost = nil
@@ -6650,10 +6856,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 if self.view.mood.disconnected {
                     self.view.mood.disconnected = false
                     self.view.mood.show(.happy, for: 0.8, now: now)
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) { [weak self] in
-                        if let self, self.isLive { self.view.showVideo(true) }
-                    }
-                } else { self.view.showVideo(true) }
+                }
+                self.view.showVideo(true)
                 if self.gazeFollow { GazeTracker.shared.setPaused(true) }   // 看 CarPlay 时关摄像头
             } else {
                 // 直播中断（不是用户按空格停的）：屏幕回到擔心臉，直到重连成功
@@ -6665,6 +6869,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         c.onFrameReceived = { [weak self] in self?.health.frameReceived(now: CACurrentMediaTime()) }
         c.onText = { s in
+            if s.contains("\"type\":\"cornerMask\"") {   // 學圓角的那一次連線：桌寵暫時縮放補黑
+                if let data = s.data(using: .utf8), let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+                    let w = Int(self.view.decoder.size.width)
+                    CornerFit.shared.handle(obj, videoWidth: w > 0 ? w : 1088, device: MTLCreateSystemDefaultDevice())
+                }
+                return
+            }
             if s.contains("\"type\":\"carVideo\"") {
                 if let data = s.data(using: .utf8),
                    let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
@@ -6787,17 +6998,31 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 CarPlayOverlayState.needsTrust = false
                 CarPlayOverlayState.bluetoothPairing = true
                 CarPlayOverlayState.bluetoothPairFailed = false
+                CarPlayOverlayState.pairFailReason = nil
                 CarPlayOverlayState.wifiHelp = false
+                // 階段、配對碼、倒數、這台 Mac 在 iPhone 上的名字（舊 receiver 沒有這些欄位就照舊顯示）
+                if let data = s.data(using: .utf8),
+                   let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+                    CarPlayOverlayState.pairPhase = obj["phase"] as? String
+                    CarPlayOverlayState.pairCode = obj["code"] as? String
+                    CarPlayOverlayState.pairDeadline = (obj["timeout"] as? Int).map { CACurrentMediaTime() + Double($0) }
+                    if let host = obj["host"] as? String, !host.isEmpty { CarPlayOverlayState.pairingHost = host }
+                }
                 if !self.isLive, !self.view.showingVideo, !self.userStopped, !self.quietAttach {
                     self.view.face.status = .connecting
                 }
-                log("bluetooth pairing requested on iPhone")
+                log("bluetooth pairing \(CarPlayOverlayState.pairPhase ?? "requested") on iPhone")
                 return
             }
             if s.contains("\"type\":\"bluetoothPairFailed\"") {
                 self.engageQuietAttach()
                 CarPlayOverlayState.bluetoothPairing = false
                 CarPlayOverlayState.bluetoothPairFailed = true
+                CarPlayOverlayState.pairPhase = nil
+                CarPlayOverlayState.pairCode = nil
+                CarPlayOverlayState.pairDeadline = nil
+                CarPlayOverlayState.pairFailReason = s.data(using: .utf8)
+                    .flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String: Any] }?["reason"] as? String
                 CarPlayOverlayState.needsCable = false
                 if !self.isLive, !self.view.showingVideo, !self.userStopped, !self.quietAttach {
                     self.view.face.status = .connecting
@@ -6822,13 +7047,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 if let data = s.data(using: .utf8),
                    let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
                     CarPlayOverlayState.pairingStale = (obj["stale"] as? Bool) ?? false
+                    CarPlayOverlayState.pairingViaCable = (obj["cable"] as? Bool) ?? false
                 }
                 if !self.isLive, !self.view.showingVideo, !self.userStopped, !self.quietAttach {
                     self.view.face.status = .connecting
                 }
                 log("needs pairing")
             }
+            if s.contains("\"type\":\"phoneForgotten\"") {
+                // 忘記之後還要使用者做的步驟：iPhone 上忘記這台車；Mac 刪不掉系統配對時再加一步
+                if let data = s.data(using: .utf8),
+                   let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+                    let name = obj["name"] as? String
+                    let macRemoved = obj["macRemoved"] as? Bool ?? true
+                    DispatchQueue.main.async { self.view.showForgetSteps(name: name, macRemoved: macRemoved) }
+                }
+                return
+            }
             if s.contains("pairingDone") {
+                CarPlayOverlayState.pairPhase = nil
+                CarPlayOverlayState.pairCode = nil
+                CarPlayOverlayState.pairDeadline = nil
+                CarPlayOverlayState.pairFailReason = nil
                 CarPlayOverlayState.needsPairing = false
                 CarPlayOverlayState.needsCable = false
                 CarPlayOverlayState.bluetoothPairing = false
@@ -6923,7 +7163,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if resumeFromBackground() { return }
         view.mood.show(.surprised, for: 0.35, now: CACurrentMediaTime())
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { [weak self] in
-            self?.view.mood.show(.focus, for: 12, now: CACurrentMediaTime())
+            self?.view.mood.show(.thinking, for: 12, now: CACurrentMediaTime())
         }
         let target = endpoint ?? "ws://127.0.0.1:\(ReceiverLauncher.port())"
         endpoint = target
@@ -6950,7 +7190,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             waitForReceiver(attempts: 20, then)
             return
         }
-        portOpen("127.0.0.1", UInt16(clamping: ReceiverLauncher.port())) { open in
+        portOpen("127.0.0.1", UInt16(clamping: ReceiverLauncher.port())) { [weak self] open in
             DispatchQueue.main.async { [weak self] in
                 if !open, let self {
                     switch ReceiverLauncher.launch() {
@@ -6969,7 +7209,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// 探测一轮没到就先 kickstart（用户停播后接收器 exit(0)，launchd 的 KeepAlive
     /// 不会重启它——别等满 10 秒，0.5 秒后就催一次），再等 10 秒，最后才自起子进程。
     private func waitForReceiver(attempts: Int, _ then: @escaping () -> Void) {
-        portOpen("127.0.0.1", UInt16(clamping: ReceiverLauncher.port())) { open in
+        portOpen("127.0.0.1", UInt16(clamping: ReceiverLauncher.port())) { [weak self] open in
             DispatchQueue.main.async { [weak self] in
                 if open { then(); return }
                 guard attempts > 1 else {
@@ -7014,9 +7254,37 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         DispatchQueue.global().asyncAfter(deadline: .now() + 0.6) { finish(false) }
     }
 
-    // 断线重连：5、10、20、30、60 s 退避，出画面归零；用户按空格停的不重连
+    // 断线重连：前 15 s 每 0.3 s 探一次端口，通了就连；之后 5、10、20、30、60 s 退避，
+    // 出画面归零；用户按空格停的不重连
     private func scheduleReconnect(quiet: Bool = false) {
-        guard let endpoint, !userStopped, reconnectTimer == nil else { return }
+        guard let endpoint, !userStopped, reconnectTimer == nil, !reconnectProbing else { return }
+        let now = CACurrentMediaTime()
+        if disconnectedAt == nil { disconnectedAt = now }
+        // 没装 launchd 自启时接收器要桌宠自己拉起，快探只到原本第一次退避（5 s）就交给 ensureReceiver
+        let window = ReceiverAgent.isInstalled ? Self.fastProbeWindow : Self.backoff[0]
+        if now - (disconnectedAt ?? now) < window {
+            reconnectTimer = Timer.scheduledTimer(withTimeInterval: Self.fastProbeInterval, repeats: false) { [weak self] _ in
+                guard let self else { return }
+                self.reconnectTimer = nil
+                self.reconnectProbing = true
+                let failed = self.client
+                self.portOpen("127.0.0.1", UInt16(clamping: ReceiverLauncher.port())) { [weak self] open in
+                    DispatchQueue.main.async { [weak self] in
+                        guard let self else { return }
+                        self.reconnectProbing = false
+                        // 探测期间用户停了或手动换了连线：这条探测作废
+                        guard !self.userStopped, self.client === failed, !self.isLive else { return }
+                        if open {
+                            self.client?.close()
+                            self.connect(endpoint, quiet: quiet)
+                        } else {
+                            self.scheduleReconnect(quiet: quiet)
+                        }
+                    }
+                }
+            }
+            return
+        }
         let wait = Self.backoff[min(reconnectStep, Self.backoff.count - 1)]
         reconnectStep += 1
         log("reconnect in \(Int(wait))s")
@@ -7056,7 +7324,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard view.showingVideo else { view.toolTip = nil; return }
         let s = view.decoder.size
         log(String(format: "stats recv %.1f fps decoded %.1f fps %dx%d rebuilds %d", rf, df, Int(s.width), Int(s.height), health.totalRebuilds))
-        view.toolTip = String(format: L("debug.stats", "收 %.0f fps · 解 %.0f fps · %d×%d"), rf, df, Int(s.width), Int(s.height))
+        if ProcessInfo.processInfo.environment["HOMEPLAY_DEBUG_STATS"] != nil {   // 除錯用：游標停在桌寵上看收／解碼幀率
+            view.toolTip = String(format: L("debug.stats", "接收 %.0f fps · 解码 %.0f fps · %d×%d"), rf, df, Int(s.width), Int(s.height))
+        }
     }
 }
 
@@ -7064,6 +7334,8 @@ func arg(_ n: String) -> String? {
     let a = CommandLine.arguments
     if let i = a.firstIndex(of: n), i + 1 < a.count { return a[i + 1] }; return nil
 }
+
+if CommandLine.arguments.contains("--home-dump") { runHomeDump() }   // 連 HomePlay Home 幫手，印摘要就結束
 
 if CommandLine.arguments.contains("--selftest") {
     // 纯函数自检：方屏 uv → 画面坐标（留黑扣掉）
@@ -7147,14 +7419,14 @@ if CommandLine.arguments.contains("--selftest") {
     m.activity(now: 500, hour: 2)
     check(m.current(now: 500.2, hour: 2) == .surprised && m.current(now: 500.5, hour: 2) == .idle, "被叫醒：惊讶 0.4 s 再待机")
     m.near = true
-    check(m.current(now: 501, hour: 2) == .curious, "游标靠近＝好奇")
+    check(m.current(now: 501, hour: 2) == .idle, "游标靠近＝待机（眼珠跟着游标）")
     m.petting(true, now: 510)
-    check(m.current(now: 511, hour: 14) == .curious && m.current(now: 511.6, hour: 14) == .happy, "摸头 1.5 s 笑")
+    check(m.current(now: 511, hour: 14) == .idle && m.current(now: 511.6, hour: 14) == .happy, "摸头 1.5 s 笑")
     check(m.current(now: 514.1, hour: 14) == .love, "摸满 4 s 爱心")
     m.petting(false, now: 515)
-    check(m.current(now: 515.5, hour: 14) == .happy && m.current(now: 515.7, hour: 14) == .curious, "离开再笑 0.6 s")
+    check(m.current(now: 515.5, hour: 14) == .happy && m.current(now: 515.7, hour: 14) == .idle, "离开再笑 0.6 s")
     check(!(0..<4).map { m.poke(now: 520 + Double($0) * 0.2) }.contains(true) && m.poke(now: 520.9), "1.5 s 内第 5 下＝不耐烦")
-    check(m.current(now: 521, hour: 14) == .focus, "不耐烦＝专注脸")
+    check(m.current(now: 521, hour: 14) == .annoyed, "连点＝不耐烦")
     m.apart = true
     check(m.current(now: 530, hour: 14) == .surprised, "拆开＝惊讶")
     m.apart = false; m.disconnected = true
@@ -7165,7 +7437,9 @@ if CommandLine.arguments.contains("--selftest") {
     for _ in 0..<200 { _ = fp.approach(.of(.surprised), 0.2) }
     check(fp == .of(.surprised) && !fp.approach(.of(.surprised), 0.2), "表情插值收敛并停止重画")
     // 錶面切换与倒数显示
-    check(FaceStyle.island.next(1) == .photos && FaceStyle.island.next(-1) == .bedside && FaceStyle.bedside.next(1) == .island, "錶面头尾相接")
+    check(FaceStyle.island.next(1) == .photos && FaceStyle.island.next(-1) == FaceStyle.lineup.last! && FaceStyle.lineup.last!.next(1) == .island, "錶面头尾相接")
+    check(FaceStyle.lineup.map(\.rawValue) == ["island", "photos", "modular", "analog", "flow", "weather", "calendar", "growth", "black", "system6"], "錶面陣容十款")
+    check(FaceStyle.embossed.inLineup == .analog && FaceStyle.alarmClock.inLineup == .system6 && FaceStyle.about.inLineup == .system6 && FaceStyle.homeModular.inLineup == .modular, "舊錶面搬進新款")
     check(timerClock(299.2) == "5:00" && timerClock(59) == "0:59" && timerClock(0.3) == "0:01" && timerClock(3725) == "1:02:05", "倒数显示")
     let fct = Face(); fct.frozen = true; fct.startTimer(seconds: 2, now: 100)
     var fired = false; fct.onTimerDone = { fired = true }
@@ -7353,6 +7627,35 @@ if CommandLine.arguments.contains("--selftest") {
         check(!k.overdue(now: 29) && k.overdue(now: 30), "F5：按住 30 秒自动放开")
         check(k.release() && !k.release(), "F5：重复的放开只算一次")
     }
+    // CarPlay 圓角：平常的連線原樣直通；學圓角那一次（learning）收到遮罩才縮放
+    do {
+        let side = 64, r = 40.0
+        let rep = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: side, pixelsHigh: side, bitsPerSample: 8, samplesPerPixel: 1,
+                                   hasAlpha: false, isPlanar: false, colorSpaceName: .deviceWhite, bytesPerRow: side, bitsPerPixel: 8)!
+        for y in 0..<side { for x in 0..<side {
+            let dx = max(0, r - (Double(x) + 0.5)), dy = max(0, r - (Double(y) + 0.5))
+            rep.bitmapData![y * side + x] = UInt8((max(0, min(1, r - (dx * dx + dy * dy).squareRoot() + 0.5)) * 255).rounded())
+        } }
+        let png = rep.representation(using: .png, properties: [:])!.base64EncodedString()
+        let dev = MTLCreateSystemDefaultDevice()!
+        let d = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: .bgra8Unorm_srgb, width: 64, height: 64, mipmapped: false)
+        d.usage = [.shaderRead]; d.storageMode = .shared
+        let src = dev.makeTexture(descriptor: d)!
+        let fit = CornerFit.shared
+        fit.handle(["type": "cornerMask", "negotiated": false, "learning": false], videoWidth: 1088, device: dev)
+        check(fit.apply(src) === src && fit.toVideo(u: 0.01, v: 0.5) != nil, "圆角：平常的连线原样直通")
+        fit.handle(["type": "cornerMask", "negotiated": true, "learning": true, "png": png], videoWidth: 1088, device: dev)
+        check(fit.scale < 0.95 && fit.apply(src) !== src && fit.toVideo(u: 0.01, v: 0.5) == nil, "圆角：学圆角那一次缩放补黑（k=\(String(format: "%.3f", fit.scale))）")
+        fit.handle(["type": "cornerMask", "negotiated": false, "learning": false], videoWidth: 1088, device: dev)
+        check(fit.apply(src) === src, "圆角：下一次平常的连线又原样直通")
+    }
+    do {   // 換手機：同一條 WS 上 ended → started → 幀，要再報一次 live
+        let ended = #"{"type":"session","state":"ended"}"#, started = #"{"type":"session","state":"started"}"#
+        check(FirstFrameLatch.replay([nil, nil]) == [true, false], "首幀：同一會話只報一次 live")
+        check(FirstFrameLatch.replay([nil, ended, started, nil, nil]) == [true, true, false], "首幀：換手機 ended→started 之後的第一幀再報 live")
+        check(FirstFrameLatch.replay([nil, started, nil]) == [true, true], "首幀：只收到 started 也重新報 live")
+        check(FirstFrameLatch.replay([nil, #"{"type":"nowplaying"}"#, nil]) == [true, false], "首幀：別的文字不重置")
+    }
     log(ok ? "selftest OK" : "selftest FAIL"); exit(ok ? 0 : 1)
 }
 
@@ -7377,15 +7680,43 @@ if let s = arg("--style") {
     guard let st = FaceStyle(rawValue: s) else {
         log("--style 只认：\(FaceStyle.allCases.map(\.rawValue).joined(separator: " "))"); exit(2)
     }
-    delegate.faceStyle = st
+    // 舊腳本的 --style embossed／alarmClock／about：換成併進去的那款，並設好對應的選項
+    let mig = st.migratedOptions
+    if let m = mig.material { faceOptionSnapshotOverride.material = m }
+    if let l = mig.layout { faceOptionSnapshotOverride.layout = l }
+    delegate.faceStyle = st.inLineup
+}
+if let s = arg("--typograph-material") {   // 快照用：flat embossed
+    guard let m = TypographMaterial(rawValue: s) else { log("--typograph-material 只认：flat embossed"); exit(2) }
+    faceOptionSnapshotOverride.material = m
+}
+if let s = arg("--system6-layout") {   // 快照用：finder alarmClock about
+    guard let l = System6Layout(rawValue: s) else { log("--system6-layout 只认：finder alarmClock about"); exit(2) }
+    faceOptionSnapshotOverride.layout = l
 }
 if let s = arg("--clock") { islandSnapshotOverride.clock = ClockStyle(rawValue: s) }
 if let s = arg("--clock-look") { ClockLook.snapshotOverride = ClockLook.parse(s) }   // 快照用：字体与颜色   // 快照用：島錶面时钟样式 bold thin stacked compact
 if let s = arg("--bg") { islandSnapshotOverride.bg = IslandBackground(rawValue: s) }     // daytime flow photo solid black
 if let s = arg("--era") { islandSnapshotOverride.era = ["1988": Era.y1988, "2002": .y2002, "2026": .y2026][s] }
+if let s = arg("--capsule"), let m = CapsuleMaterial(rawValue: s) { capsuleMaterialSetting = m }   // 快照用：auto black smoke glass
+if let s = arg("--siri") { SiriOrbState.snapshotPhase = s }   // 快照用：listen | think
+if arg("--snapshot") != nil || ProcessInfo.processInfo.environment["HOMEPLAY_DEMO"] != nil { Face.demoData = true }   // 快照：Home Modular 用示範資料
 if let s = arg("--timer"), let t = Double(s) { delegate.timerSeconds = t }   // 快照用：开一个 t 秒的计时器
 if let s = arg("--music") { delegate.musicTest = s; NowPlayingPoller.disabled = true }   // 快照用：固定一个「正在播放」
 if CommandLine.arguments.contains("--connecting") { CarPlayOverlayState.forced = true }
+if CommandLine.arguments.contains("--pairing-code") {   // 快照用：插線配對的數字比對那一格
+    CarPlayOverlayState.bluetoothPairing = true; CarPlayOverlayState.pairPhase = "confirm"; CarPlayOverlayState.pairCode = "482913"
+    CarPlayOverlayState.pairDeadline = CACurrentMediaTime() + 27; CarPlayOverlayState.forced = true
+}
+if CommandLine.arguments.contains("--wifi-help") {   // 快照用：手機報了可用卻沒從 Wi-Fi 連回
+    CarPlayOverlayState.wifiHelp = true; CarPlayOverlayState.forced = true
+}
+if CommandLine.arguments.contains("--pairing-no-response") {   // 快照用：叫不到手機
+    CarPlayOverlayState.bluetoothPairFailed = true; CarPlayOverlayState.pairFailReason = "noResponse"; CarPlayOverlayState.forced = true
+}
+if CommandLine.arguments.contains("--pairing-success") {   // 快照用：配對成功那一格（綠色滿環）
+    CarPlayOverlayState.forced = true; CarPlayOverlayState.snapshotPaired = true
+}
 if CommandLine.arguments.contains("--pairing") { CarPlayOverlayState.needsPairing = true; CarPlayOverlayState.forced = true }   // 快照用：强制显示连线中过场
 if CommandLine.arguments.contains("--pairing-success") { CarPlayOverlayState.pairingSucceededAt = CACurrentMediaTime(); CarPlayOverlayState.forced = true }   // 快照用：刚配对成功
 if let s = arg("--pair-host") { CarPlayOverlayState.pairingHost = s }   // 快照用：蓝牙配对卡上的 Mac 名称
@@ -7429,7 +7760,7 @@ if let s = arg("--finish") {
     delegate.finish = f
 }
 if let s = arg("--face") {
-    guard let e = Expression(rawValue: s) else {
+    guard let e = Expression(name: s) else {
         log("--face 只认：\(Expression.allCases.map(\.rawValue).joined(separator: " "))"); exit(2)
     }
     delegate.lockedFace = e

@@ -14,12 +14,18 @@ enum CarPlayOverlayState {
     static var pairingHost: String?    // 這台 Mac 的藍牙名（receiver 送來；iPhone 上要點的名字）
     static var pairingStale = false    // iPhone 裡可能還留著這台 Mac 的舊配對：要先 ⓘ 忘記再重配
     static var pairingSucceededAt: Double?   // 剛配對成功：畫面出來前先給一句確認
+    static var snapshotPaired = false        // 快照用：固定在配對成功那一格
     static var wifiHelp = false       // receiver 發出 Wi-Fi 配置後 30 秒手機仍沒連回：給一次排障提示
     static var wifiNeedsPassword = false   // 沒回連＋本地沒存密碼：提示填一次密碼（右鍵 Wi-Fi 設定）
     static var needsTrust = false     // USB 插著但 iPhone 沒點「信任」：解鎖並點信任的卡片
     static var needsCable = false     // 首次配對：receiver 先等 20 秒插線（不會打開系統設定）
     static var bluetoothPairing = false   // 有線會話已發起 IOBluetoothDevicePair：iPhone 上點「配對」
     static var bluetoothPairFailed = false // 配對彈窗錯過/失敗：拔線再插一次即可重試
+    static var pairPhase: String?          // request／confirm／retry（receiver 的插線配對進度）
+    static var pairCode: String?           // 數字比對的 6 位數：和 iPhone 上顯示的核對
+    static var pairDeadline: Double?       // 這一輪配對還剩到幾時（CACurrentMediaTime）
+    static var pairingViaCable = false     // 手機插著線、receiver 暫緩開畫面等配對（60 秒後先用有線）
+    static var pairFailReason: String?     // noResponse＝叫不到手機；notConfirmed＝手機上沒點「配對」
     /// 淡入淡出 0.3 秒
     static func nextAlpha(_ a: CGFloat, target: CGFloat, dt: Double) -> CGFloat {
         let step = CGFloat(dt / 0.3)
@@ -119,6 +125,8 @@ extension Face {
         guard a > 0.003 else { return }
         CarPlayOverlayState.lastDraw = now
         g.saveGState(); g.setAlpha(a)
+        let retro = isSystem6Era   // AI System 6 年代：開機畫面「Welcome to HomePlay.」（Faces/System6Series.swift）
+        if !retro {
         g.setFillColor(srgb(0x050607).cgColor); g.fill(CGRect(x: 0, y: 0, width: 1024, height: 1024))
         // 柔和的蓝色径向光
         let cs = CGColorSpaceCreateDeviceRGB()
@@ -128,18 +136,25 @@ extension Face {
                                  endCenter: CGPoint(x: 512, y: 470), endRadius: 512, options: [])
         }
         // 进度环：底圈 + 转动的弧
-        let c = CGPoint(x: 512, y: 426), r: CGFloat = 166
+        let c = CGPoint(x: 512, y: 426), r: CGFloat = 188   // 環和膠囊兩端留 40 的空氣
+        let paired = CarPlayOverlayState.snapshotPaired || (CarPlayOverlayState.pairingSucceededAt.map { now - $0 < 3.0 } ?? false)
         g.setLineWidth(10); g.setLineCap(.round)
         g.setStrokeColor(NSColor.white.withAlphaComponent(0.12).cgColor)
         g.addArc(center: c, radius: r, startAngle: 0, endAngle: .pi * 2, clockwise: false); g.strokePath()
-        let a0 = CGFloat(now * 3.6).truncatingRemainder(dividingBy: .pi * 2)
-        g.setStrokeColor(srgb(0x4a9bff).cgColor)
-        g.addArc(center: c, radius: r, startAngle: a0, endAngle: a0 + .pi * 1.1, clockwise: false); g.strokePath()
+        if paired {   // 配對成功：環補滿成綠色、停住，和「連線中」一眼分得出來
+            g.setStrokeColor(srgb(0x34c759).cgColor)
+            g.addArc(center: c, radius: r, startAngle: 0, endAngle: .pi * 2, clockwise: false); g.strokePath()
+        } else {
+            let a0 = CGFloat(now * 3.6).truncatingRemainder(dividingBy: .pi * 2)
+            g.setStrokeColor(srgb(0x4a9bff).cgColor)
+            g.addArc(center: c, radius: r, startAngle: a0, endAngle: a0 + .pi * 1.1, clockwise: false); g.strokePath()
+        }
         drawIsland(g, at: c, scale: 0.5, liveAt: c, now: now)
+        }
         // 三段时间：15 秒给常规排查，40 秒给首次使用（还没配对过）的指引
         let elapsed = CarPlayOverlayState.shownSince > 0 ? now - CarPlayOverlayState.shownSince : 0
         let pairing = CarPlayOverlayState.needsPairing
-        let succeeded = CarPlayOverlayState.pairingSucceededAt.map { now - $0 < 3.0 } ?? false
+        let succeeded = CarPlayOverlayState.snapshotPaired || (CarPlayOverlayState.pairingSucceededAt.map { now - $0 < 3.0 } ?? false)
         let wifiHelp = CarPlayOverlayState.wifiHelp
         let wifiNeedsPassword = CarPlayOverlayState.wifiNeedsPassword
         let needTrust = CarPlayOverlayState.needsTrust
@@ -155,21 +170,43 @@ extension Face {
         let currentPhone: String? = CarPlayPhoneBook.currentName.map { name in
             name.count > 18 ? String(name.prefix(17)) + "…" : name
         }
+        // 插線配對：照 receiver 報的階段說清楚手機上會看到什麼、該按什麼、還剩多久
+        let phase = CarPlayOverlayState.pairPhase
+        let code: String? = CarPlayOverlayState.pairCode.map { c in c.count == 6 ? c.prefix(3) + " " + c.suffix(3) : c }
+        let secondsLeft: Int? = CarPlayOverlayState.pairDeadline.map { max(0, Int(($0 - now).rounded(.up))) }
+        let failReason = CarPlayOverlayState.pairFailReason
         let title = succeeded ? L("status.overlay.pairSuccess", "iPhone 已配对")
-                    : btFailed ? L("status.overlay.pairFailedTitle", "配对还差一步")
+                    : btFailed ? (failReason == "noResponse"
+                                  ? L("status.overlay.pairNoResponseTitle", "找不到这台 iPhone")
+                                  : L("status.overlay.pairFailedTitle", "配对还差一步"))
+                    : btPairing && phase == "confirm" && code != nil
+                        ? String(format: L("status.overlay.pairCodeTitle", "核对数字 %@"), code!)
+                    : btPairing && phase == "retry" ? L("status.overlay.pairRetryTitle", "正在呼叫 iPhone…")
                     : btPairing ? L("status.overlay.pairConfirmTitle", "在 iPhone 上点「配对」")
                     : needTrust ? L("status.overlay.trustTitle", "在 iPhone 上点「信任」")
                     : cable ? L("status.overlay.cableTitle", "用数据线连一次 iPhone")
                     : pairing ? L("status.overlay.pairTitle", "在 iPhone 上配对这个 Mac")
                               : L("status.overlay.title", "正在连接 CarPlay")
-        drawCentered(g, title, font: Self.rounded(54, weight: .bold), kern: 0, y: 722, color: .white)
+        if !retro { drawCentered(g, title, font: Self.rounded(54, weight: .bold), kern: 0, y: 722, color: .white) }
         let subtitle: String
         if succeeded { subtitle = L("status.overlay.pairSuccessBody", "以后自动无线连接，不用再插线；正在打开画面…") }
         else if btFailed {
-            subtitle = L("status.overlay.pairFailedBody", "没看到配对弹窗；拔线再插一次就能重试")
+            subtitle = failReason == "noResponse"
+                ? L("status.overlay.pairNoResponseBody", "确认 iPhone 已解锁、蓝牙已打开，再拔线重插")
+                : failReason == "notConfirmed"
+                    ? L("status.overlay.pairNotConfirmedBody", "刚才没在 iPhone 上点「配对」；拔线再插会再问一次")
+                    : L("status.overlay.pairFailedBody", "没看到配对弹窗；拔线再插一次就能重试")
         }
         else if btPairing {
-            subtitle = L("status.overlay.pairConfirmBody", "配对一次，Mac 就会记住这台 iPhone")
+            if phase == "confirm" {
+                subtitle = L("status.overlay.pairCodeBody", "iPhone 上显示同样的数字，就点「配对」")
+            } else if phase == "retry" {
+                subtitle = L("status.overlay.pairRetryBody", "请保持 iPhone 解锁、蓝牙打开")
+            } else if let host {
+                subtitle = String(format: L("status.overlay.pairRequestBodyHost", "iPhone 会弹出「%@」的蓝牙配对请求，点「配对」"), host)
+            } else {
+                subtitle = L("status.overlay.pairRequestBody", "iPhone 会弹出「蓝牙配对请求」，点「配对」")
+            }
         }
         else if needTrust {
             // 有线首次：iPhone 弹「信任此电脑」，解锁＋点信任＋输密码即连；点完自动继续，不用重启 App
@@ -204,6 +241,11 @@ extension Face {
             subtitle = String(format: format, currentPhone)
         }
         else { subtitle = L("status.overlay.hint", "请稍候，画面即将出现") }
+        if retro {   // 只在要使用者動手（或等太久）時多一個對話盒；平常就是開機畫面
+            let plain = !(succeeded || btFailed || btPairing || needTrust || cable || pairing || wifiHelp || slow)
+            drawWelcome1988(g, note: plain ? nil : (title, subtitle))
+            g.restoreGState(); return
+        }
         drawCentered(g, subtitle, font: Self.rounded(30, weight: .semibold), kern: 0, y: 772,
                      color: NSColor.white.withAlphaComponent(0.6))
         // 没线也能配：一次蓝牙设置。有线的用户插上就自动配对，完全不用进设置。
@@ -226,14 +268,21 @@ extension Face {
                          color: NSColor.white.withAlphaComponent(0.55))
         } else if pairing {
             let hint: String
-            if CarPlayOverlayState.pairingStale {
-                hint = L("status.overlay.pairStale", "iPhone 里若还有这台 Mac 的旧配对：点 ⓘ → 忘记此装置，再重新配对")
+            if CarPlayOverlayState.pairingViaCable {
+                hint = L("status.overlay.pairCableHint", "配好就自动开画面；不想现在配，60 秒后先用有线连上")
+            } else if CarPlayOverlayState.pairingStale {
+                hint = L("status.overlay.pairStale", "iPhone 里若还有这台 Mac 的旧配对：点 ⓘ → 忽略此设备，再重新配对")
             } else if elapsed > 25 {
                 hint = L("status.overlay.pairTrouble", "没看到 Mac？保持两边蓝牙设置开着，等几秒会刷新")
             } else {
                 hint = L("status.overlay.pairUSB", "没带线也没关系：按上面的步骤配对一次即可")
             }
             drawCentered(g, hint, font: Self.rounded(24, weight: .medium), kern: 0, y: 822,
+                         color: NSColor.white.withAlphaComponent(0.55))
+        } else if wifiHelp {
+            // 真機 2026-10-24：iPhone 在拿到 HomePlay 的 Wi-Fi 設定之前就連著這個網路時，要重新連一次 Wi-Fi 才會把它當 CarPlay 網路
+            drawCentered(g, L("status.overlay.wifiToggleHint", "已连同一个 Wi-Fi？在 iPhone 控制中心关开一次 Wi-Fi"),
+                         font: Self.rounded(24, weight: .medium), kern: 0, y: 822,
                          color: NSColor.white.withAlphaComponent(0.55))
         } else if verySlow {
             let hint = L("status.overlay.carPlayReset", "已解锁仍不行：设置 › 通用 › CarPlay › 忘记这台 Mac，再重新连接")
@@ -245,7 +294,10 @@ extension Face {
         let text: String
         if succeeded { text = L("status.overlay.pairSuccessChip", "以后自动无线连接") }
         else if btFailed { text = L("status.overlay.pairFailedChip", "拔线再插一次") }
-        else if btPairing { text = L("status.overlay.pairConfirmChip", "等待 iPhone 确认…") }
+        else if btPairing {
+            text = secondsLeft.map { String(format: L("status.overlay.pairCountdown", "等待 iPhone 确认，还剩 %d 秒"), $0) }
+                ?? L("status.overlay.pairConfirmChip", "等待 iPhone 确认…")
+        }
         else if needTrust { text = L("status.overlay.trustChip", "点了「信任」自动继续") }
         else if cable { text = L("status.overlay.cableChip", "第一次只需一根数据线") }
         else if pairing { text = L("status.overlay.pairWaiting", "两边都点「配对」后自动继续") }
@@ -259,10 +311,10 @@ extension Face {
                 ? L("status.overlay.switchHint", "可右键换一台 iPhone")
                 : L("status.overlay.pairHint", "配对一次，之后走无线")
         }
-        else if slow { text = L("status.overlay.cancelHint", "仍可右键取消连线") }
+        else if slow { text = L("status.overlay.cancelHint", "仍可右键取消连接") }
         else if currentPhone != nil { text = L("status.overlay.carPlayPrompt", "若 iPhone 弹出 CarPlay 提示，请点允许") }
         else { text = L("status.overlay.waiting", "等待第一帧…") }
-        let line = CTLineCreateWithAttributedString(NSAttributedString(string: text, attributes: [.font: font, .foregroundColor: NSColor.white.withAlphaComponent(0.8)]))
+        let line = CTLineCreateWithAttributedString(NSAttributedString(string: text, attributes: Typo.attributes(font, color: NSColor.white.withAlphaComponent(0.8))))
         let w = CGFloat(CTLineGetTypographicBounds(line, nil, nil, nil))
         let chip = CGRect(x: 512 - (w + 44) / 2, y: 886, width: w + 44, height: 56)
         g.setFillColor(NSColor.white.withAlphaComponent(0.12).cgColor)
@@ -285,9 +337,9 @@ enum CarPlayStatus {
                 return String(format: L("status.waitingNamed", "正在等待「%@」"), name)
             }
             return L("status.notConnected", "CarPlay 未连接 · 重按进入")
-        case .live: return L("status.live", "CarPlay 直播中")
+        case .live: return L("status.live", "CarPlay 显示中")
         case .paused: return L("status.paused", "CarPlay 已暂停")
-        case .reconnecting: return L("status.reconnecting", "CarPlay 未连接 · 稍后重连")
+        case .reconnecting: return L("status.reconnecting", "稍后重新连接")
         case .connecting: return L("status.connecting", "CarPlay 连接中…")
         case .pausedResume: return L("status.pausedResume", "CarPlay 已暂停 · 空格继续")
         case .background: return L("status.background", "CarPlay 在后台 · 重按返回")

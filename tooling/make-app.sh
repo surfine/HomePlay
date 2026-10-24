@@ -40,7 +40,7 @@ cat > "$APP/Contents/Info.plist" <<EOF
   <key>CFBundleExecutable</key><string>HomePlay</string>
   <key>CFBundlePackageType</key><string>APPL</string>
   <key>CFBundleIconFile</key><string>AppIcon</string>
-  <key>CFBundleShortVersionString</key><string>0.6.1</string>
+  <key>CFBundleShortVersionString</key><string>1.0.0</string>
   <key>CFBundleVersion</key><string>${BUILD}</string>
   <key>CFBundleDevelopmentRegion</key><string>en</string>
   <key>CFBundleLocalizations</key><array><string>en</string><string>zh-Hans</string><string>zh-Hant</string></array>
@@ -57,6 +57,8 @@ cat > "$APP/Contents/Info.plist" <<EOF
   <key>NSBluetoothAlwaysUsageDescription</key><string>Pairs with your iPhone over Bluetooth to set up wireless CarPlay.</string>
   <key>NSMicrophoneUsageDescription</key><string>Uses the Mac's microphone only for Siri and phone calls in CarPlay.</string>
   <key>NSLocalNetworkUsageDescription</key><string>Receives CarPlay video and audio from your iPhone over the local network.</string>
+  <key>NSLocationUsageDescription</key><string>Uses your approximate location to show local weather on the Weather face.</string>
+  <key>NSLocationWhenInUseUsageDescription</key><string>Uses your approximate location to show local weather on the Weather face.</string>
   <key>NSBonjourServices</key><array><string>_airplay._tcp</string><string>_carplay-ctrl._tcp</string></array>
 </dict>
 </plist>
@@ -70,10 +72,12 @@ else
   echo "· 沒找到 Developer ID Application 憑證，退回 ad-hoc 簽名（不能公證）" >&2
   SIGN=(--force --sign - --timestamp=none)
 fi
-for b in "$APP/Contents/Resources"/*.bundle(N); do codesign "${SIGN[@]}" "$b"; done
+# Apple 的時間戳服務偶爾連不上（The timestamp service is not available）：重試幾次，別留下簽一半的 App
+sign() { local i; for i in 1 2 3 4 5; do codesign "$@" && return 0; echo "· 簽名失敗，5 秒後重試（$i/5）" >&2; sleep 5; done; return 1; }
+for b in "$APP/Contents/Resources"/*.bundle(N); do sign "${SIGN[@]}" "$b"; done
 # 接收器单独签名也要带麦克风 entitlement（launchd 拉起的是它，不是 App 主进程）
-codesign "${SIGN[@]}" --entitlements tooling/HomePlay.entitlements "$APP/Contents/Resources/homeplay-receiver"
-codesign "${SIGN[@]}" --entitlements tooling/HomePlay.entitlements "$APP"
+sign "${SIGN[@]}" --entitlements tooling/HomePlay.entitlements "$APP/Contents/Resources/homeplay-receiver"
+sign "${SIGN[@]}" --entitlements tooling/HomePlay.entitlements "$APP"
 codesign --verify --strict --verbose=1 "$APP"
 spctl -a -vv "$APP" 2>&1 || true
 # 打包 zip 用 Info-ZIP 的 zip（cd 到輸出目錄、zip -qry）：它不存 xattr，壓縮包裡不會有 ._ AppleDouble 檔，

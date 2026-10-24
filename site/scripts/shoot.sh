@@ -11,7 +11,7 @@ extra=()
 for p in "$out" "$SHOOT_GLANCE" "$SHOOT_BLINK"; do [[ -n "$p" ]] && rm -f "$p"; done
 "$bin" --size 900 --at 30000,30000 "$@" "${extra[@]}" --snapshot "$out" >"${SHOOT_LOG:-/dev/null}" 2>&1 &
 pid=$!
-for i in {1..40}; do [[ -s "$out" ]] && break; sleep 0.5; done
+for i in {1..120}; do [[ -s "$out" ]] && break; sleep 0.5; done   # 機器忙時 RealityKit 出第一張圖可能超過 20 秒
 # 主圖先出來，兩張疊圖再各晚 0.12 s；等它們落盤再關窗
 for i in {1..50}; do
   [[ -z "$SHOOT_GLANCE" || -s "$SHOOT_GLANCE" ]] && [[ -z "$SHOOT_BLINK" || -s "$SHOOT_BLINK" ]] && break

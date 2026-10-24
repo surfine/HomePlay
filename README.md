@@ -20,15 +20,15 @@
 一台放在 Mac 桌面上的 HomeView。它有一双会看你的眼睛；用力按一下屏幕，它就变成 iPhone 的 CarPlay。
 
 - **它会看着你。** 一双 👀，十种表情：你靠近，它好奇地看过来；指针停在它身上，它笑眯眯；深夜放着不管，它会打瞌睡。眼睛住在一颗胶囊里，胶囊跟着表盘的年代换材质：纯黑、黑透或 Liquid Glass。
-- **13 款表盘。** 照 HomeView 官方的版式做：岛、照片、模块、Typograph、Flow、天气、日历、浮雕指针、陪伴的痕迹、黑色，还有三款 System 6 复古表盘。大时间是系统的 Liquid Glass，字体和颜色可以像 iOS 27 锁定屏幕那样自己调。
+- **10 款表盘。** 照 HomeView 官方的版式做：岛、照片、模块、Typograph（可换浮雕）、Flow、天气、日历、陪伴的痕迹、黑色，还有 System 6（三种版式）。大时间是系统的 Liquid Glass，字体和颜色可以像 iOS 27 锁定屏幕那样自己调。
 - **用力按，就是 CarPlay。** 第一次插线，之后无线。iPhone 把真正的 CarPlay 画面和声音传到这台小屏幕，你在上面点，就像在车上点。按住 F5，直接和 iPhone 的 Siri 说话。
 - **顺手的小工具。** 番茄钟、正在播放、电量、下一个日程；F7–F9 媒体键切歌，窗口可以置顶，当成 iPhone 曲库的迷你播放器。
 
 <img src="assets/github/grid-v2.webp" alt="HomePlay 正面、背面、真实 CarPlay 音乐画面与拆开图" width="100%">
 
-| 13 款表盘 | 十种表情 |
+| 10 款表盘 | 十种表情 |
 |:---:|:---:|
-| <img src="assets/github/styles-v2.webp" alt="HomePlay 的表盘：岛、Flow、模块、Typograph、天气、日历、浮雕指针与 System 6" width="100%"> | <img src="assets/github/faces-v2.webp" alt="同一双眼睛做出的十种表情" width="100%"> |
+| <img src="assets/github/styles-v2.webp" alt="HomePlay 的表盘：岛、Flow、模块、Typograph、天气、日历、陪伴的痕迹与 System 6" width="100%"> | <img src="assets/github/faces-v2.webp" alt="同一双眼睛做出的十种表情" width="100%"> |
 
 ## 第一次用，三步
 
@@ -36,7 +36,7 @@
 
 1. [**下载 HomePlay-macOS-arm64.zip**](https://github.com/surfine/HomePlay/releases/latest/download/HomePlay-macOS-arm64.zip)，解压，把 `HomePlay.app` 拖进「应用程序」，打开。
 2. 用数据线把 iPhone 连到 Mac 一次，在 iPhone 上点「信任」和「配对」。
-3. 用力按桌宠的屏幕，进入 CarPlay。之后拔掉线，它会自己用无线连接。
+3. 用力按桌宠的屏幕，进入 CarPlay。之后拔掉线，它会自己用无线连接；第一次没切过去的话，在 iPhone 的控制中心把 Wi-Fi 关掉再打开一次。
 
 App 有 Developer ID 签名并通过 Apple 公证，解压后直接打开。想核对下载文件：[`HomePlay-macOS-arm64.zip.sha256`](https://github.com/surfine/HomePlay/releases/latest/download/HomePlay-macOS-arm64.zip.sha256)，`shasum -a 256 -c HomePlay-macOS-arm64.zip.sha256`。
 
@@ -61,15 +61,18 @@ App 有 Developer ID 签名并通过 Apple 公证，解压后直接打开。想�
 >
 > 私以为在 AI 时代，拥有好奇心、释放想象力、发挥创造力、保持判断力和锻炼协同能力是至关重要的。希望 HomePlay 这只桌宠能带给大家一些乐趣。
 
-## 即将推出：0.7.0
+## 1.0 的新东西
 
-下面这些已经做好，正在等无线 CarPlay 的真机验证，验证通过就发布。
+- **10 款表盘，每款都有眼睛。** 岛、照片、模块、Typograph（可换浮雕）、Flow、天气、日历、陪伴的痕迹、黑色、System 6（Finder、闹钟、关于三种版式，照 1988 年原样做）。胶囊跟着表盘的年代换材质：平面版式是纯黑，iOS 27 风格是黑透渐变，HomeView 本身是 Liquid Glass，System 6 是 1-bit 按钮。
+- **10 种表情，各有各的轮廓。** 新增「在想」（等 CarPlay 连接时）和「不耐烦」（连点五下）；远远看也分得出来。
+- **插线配对，之后无线。** 第一次插线就在屏幕上带你配对，配好立刻出画面；之后拔线，CarPlay 自己转到 Wi-Fi，画面和声音不断。重启后约 10–20 秒连回来。
+- **按住 F5 的 Siri 球。** 说话时屏幕上浮出一颗彩色的光球，放开就缩回去。
+- **字体与圆角更像官方。** 时间数字用 SF Pro 的可变字重、字宽与光学尺寸；胶囊、卡片和屏幕圆角保持同心。
+- **更干净。** 换表盘、眨眼不再留残影；「字体与颜色」面板一次看得到全部选项；闲置更省电。
 
-- **每款表盘都有眼睛。** 胶囊跟着表盘的年代换材质：平面版式是纯黑，iOS 27 风格是黑透渐变，HomeView 本身是 Liquid Glass，System 6 是 1-bit 按钮。
-- **新表盘：** 天气、日历、浮雕指针、黑色，和三款照 1988 年原样做的 System 6（Chicago 字体、1-bit 像素）。
-- **按住 F5 的 Siri 球。** 说话时屏幕上浮出一颗彩色的 Siri 光球，放开就缩回去。
-- **字体与圆角更像官方。** 时间数字用 SF Pro 的可变字重、字宽与光学尺寸；屏幕上的胶囊、卡片和机身圆角保持同心。
-- **换表盘不再留残影，** 闲置时也更省电。
+[完整 Release notes](https://github.com/surfine/HomePlay/releases/latest)
+
+**下一步：HomePlay 2.0 Preview** —— 主画面、计时器与闹钟、食谱、家庭，以及自备 API 金钥（Anthropic／DeepSeek）的语音助手 ClioTalk。
 
 ## 隐私与权限
 

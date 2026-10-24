@@ -147,7 +147,7 @@ for (const file of files) {
     const dir = c.renders.replace(/^\//, '');
     for (let i = 0; i < 36; i++) if (!(await exists(path.join(root, dir, 'spin', String(i).padStart(2, '0') + '.webp')))) errors.push(`${l.key}: missing ${dir}spin/${String(i).padStart(2, '0')}.webp`);
     if (!(await exists(path.join(root, dir, 'view-apart.webp')))) errors.push(`${l.key}: missing ${dir}view-apart.webp`);
-    for (const f of ['fx/blink-face-idle.webp', 'fx/blink-face-curious.webp', 'fx/glance-face-idle.webp',
+    for (const f of ['fx/blink-face-idle.webp', 'fx/blink-face-thinking.webp', 'fx/glance-face-idle.webp',
                      'fx/blink-finish-g4.webp', 'fx/glance-finish-g4.webp', 'fx/blink-ambient-night.webp'])
       if (!(await exists(path.join(root, dir, f)))) errors.push(`${l.key}: missing ${dir}${f}`);
   }

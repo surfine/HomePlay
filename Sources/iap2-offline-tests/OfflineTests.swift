@@ -471,8 +471,8 @@ func hexBytes(_ s: String) -> [UInt8] {
                                 ncmReady: false, wirelessTried: false) == .none,
                    "wireless only but Mac has no Wi-Fi → none")
             // 拔线
-            expect(P.onCableGone(live: true, transport: .wifi) == [.freezeFrame, .resumeBluetooth, .keepSession],
-                   "cable gone during a Wi-Fi session: freeze, Bluetooth standby, keep the session")
+            expect(P.onCableGone(live: true, transport: .wifi) == [.resumeBluetooth, .keepSession],
+                   "cable gone during a Wi-Fi session: no freeze, Bluetooth standby, keep the session")
             expect(P.onCableGone(live: true, transport: .usbNCM) == [.freezeFrame, .resumeBluetooth, .expectReconnect],
                    "cable gone during a USB NCM session: freeze, Bluetooth standby, expect reconnect")
             expect(P.onCableGone(live: true, transport: nil) == [.freezeFrame, .resumeBluetooth, .expectReconnect],
@@ -601,6 +601,9 @@ func hexBytes(_ s: String) -> [UInt8] {
             expect(!P.bluetoothRetryIsSlow(live: true, keepBluetooth: true), "Bluetooth is the only iAP2 path → fast retry while live")
             expect(!P.bluetoothRetryIsSlow(live: false, keepBluetooth: false), "no session → normal backoff")
         }
+
+        // 连线状态机情境（docs/design-drafts/連線狀態機.md）
+        ConnectionMachineTests.run(expect)
 
         if failures > 0 { print("\(failures) FAILED"); exit(1) }
         print("PASS iap2 offline")

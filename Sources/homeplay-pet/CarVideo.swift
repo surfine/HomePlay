@@ -239,7 +239,7 @@ final class CarVideoPlayer: NSObject {
             }
             func text(_ s: String, _ x: CGFloat, _ y: CGFloat, _ size: CGFloat, align: CGFloat = 0) {
                 let f = NSFont.systemFont(ofSize: size, weight: .semibold)
-                let line = CTLineCreateWithAttributedString(NSAttributedString(string: s, attributes: [.font: f, .foregroundColor: NSColor.white]))
+                let line = CTLineCreateWithAttributedString(NSAttributedString(string: s, attributes: Typo.attributes(f, color: .white)))
                 let w = CTLineGetTypographicBounds(line, nil, nil, nil)
                 g.saveGState(); g.translateBy(x: x - CGFloat(w) * align, y: y); g.scaleBy(x: 1, y: -1)
                 g.textPosition = .zero; CTLineDraw(line, g); g.restoreGState()

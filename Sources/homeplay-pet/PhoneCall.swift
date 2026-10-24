@@ -47,7 +47,7 @@ struct PhoneCallInfo: Equatable {
         case .ringing: phase = L("call.state.ringing", "来电")
         case .dialing: phase = L("call.state.dialing", "正在拨号…")
         case .active: phase = L("call.state.active", "通话中")
-        case .held: phase = L("call.state.held", "保持中")
+        case .held: phase = L("call.state.held", "通话保持中")
         case .idle: phase = ""
         }
         var parts = [phase]

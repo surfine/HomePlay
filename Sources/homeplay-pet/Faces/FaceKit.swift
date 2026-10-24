@@ -10,26 +10,18 @@ import CoreText
 
 enum FaceType {
     nonisolated(unsafe) private static var cache: [String: NSFont] = [:]
+    static func cached(_ k: String) -> NSFont? { cache[k] }
+    static func store(_ k: String, _ f: NSFont) { cache[k] = f }
+    /// 錶面在螢幕上的大小變了：光學尺寸跟著變，字體重建
+    static func flush() { cache.removeAll(keepingCapacity: true) }
 
     /// SF Pro（可選寬度軸）、等寬數字：數字每分鐘跳動時不會左右晃
     static func sf(_ size: CGFloat, _ weight: NSFont.Weight, width: NSFont.Width = .standard, mono: Bool = true) -> NSFont {
-        let key = "sf|\(size)|\(weight.rawValue)|\(width.rawValue)|\(mono)"
-        if let f = cache[key] { return f }
-        let base = NSFont.systemFont(ofSize: size, weight: weight, width: width)
-        let f = mono ? monoDigits(base) : base
-        cache[key] = f
-        return f
+        sfv(size, wght: wght(weight), wdth: wdth(width), mono: mono)   // Typography.swift：opsz 照螢幕上的實際字級
     }
     /// SF Pro Rounded
     static func rounded(_ size: CGFloat, _ weight: NSFont.Weight, mono: Bool = true) -> NSFont {
-        let key = "rd|\(size)|\(weight.rawValue)|\(mono)"
-        if let f = cache[key] { return f }
-        let base = NSFont.systemFont(ofSize: size, weight: weight)
-        let d = base.fontDescriptor.withDesign(.rounded) ?? base.fontDescriptor
-        let r = NSFont(descriptor: d, size: size) ?? base
-        let f = mono ? monoDigits(r) : r
-        cache[key] = f
-        return f
+        sfv(size, wght: wght(weight), design: .rounded, mono: mono)
     }
     /// New York（系統襯線）：Typograph 的「古典」數字
     static func serif(_ size: CGFloat, _ weight: NSFont.Weight) -> NSFont {
@@ -105,9 +97,11 @@ struct GlyphShape {
     nonisolated(unsafe) private static var cache: [String: CGPath] = [:]
 
     init(_ s: String, font: NSFont, kern: CGFloat = 0) {
-        let key = "\(s)|\(font.fontName)|\(font.pointSize)|\(kern)"
+        // 可變字體同名不同軸（wdth、wght、opsz）：鍵要帶上變數，否則會拿到別的寬度的字形
+        let vari = (CTFontCopyVariation(font as CTFont) as? [NSNumber: NSNumber]).map { $0.sorted { $0.key.intValue < $1.key.intValue }.map { "\($0.key)=\($0.value)" }.joined(separator: ",") } ?? ""
+        let key = "\(s)|\(font.fontName)|\(font.pointSize)|\(kern)|\(vari)|\(Typo.language)"
         if let p = Self.cache[key] { path = p; return }
-        let line = CTLineCreateWithAttributedString(NSAttributedString(string: s, attributes: [.font: font, .kern: kern]))
+        let line = CTLineCreateWithAttributedString(NSAttributedString(string: s, attributes: Typo.attributes(font, kern: kern)))
         let out = CGMutablePath()
         for run in CTLineGetGlyphRuns(line) as! [CTRun] {
             let n = CTRunGetGlyphCount(run)
@@ -427,7 +421,7 @@ extension Face {
         return r
     }
     nonisolated(unsafe) private static var backdropCache: (key: String, image: CGImage)?
-    nonisolated(unsafe) static let ciContext = CIContext(options: [.cacheIntermediates: false])
+    static let ciContext = CIContext(options: [.cacheIntermediates: false])
 
     /// 畫出目前畫布的一個區域成圖（給玻璃當背景）：把同一段繪製再跑一次到小圖上
     func snapshotBackdrop(px: Int = 512, _ draw: (CGContext) -> Void) -> CGImage {
@@ -453,7 +447,7 @@ extension Face {
     }
     /// 按詞折行（英文用空白，中文逐字），最多 maxLines 行，最後一行放不下就截「…」
     static func wrap(_ s: String, _ font: NSFont, _ width: CGFloat, maxLines: Int) -> [String] {
-        func w(_ t: String) -> CGFloat { (t as NSString).size(withAttributes: [.font: font]).width }
+        func w(_ t: String) -> CGFloat { Typo.width(t, font) }
         if w(s) <= width { return [s] }
         let tokens: [String] = s.contains(" ") ? s.split(separator: " ").map(String.init) : s.map(String.init)
         let sep = s.contains(" ") ? " " : ""
@@ -471,7 +465,7 @@ extension Face {
     }
     /// 一行字太長就截成「…」
     static func clipped(_ s: String, _ font: NSFont, _ width: CGFloat) -> String {
-        func w(_ t: String) -> CGFloat { (t as NSString).size(withAttributes: [.font: font]).width }
+        func w(_ t: String) -> CGFloat { Typo.width(t, font) }
         if w(s) <= width { return s }
         var t = s
         while !t.isEmpty && w(t + "…") > width { t.removeLast() }

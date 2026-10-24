@@ -55,7 +55,7 @@ struct GeneralPane: View {
         Form {
             Section {
                 Toggle(isOn: Binding(get: { m.loginItem }, set: { _ in m.perform("menuLoginItem") })) {
-                    RowLabel(title: L("settings.loginItem", "登入时打开 HomePlay"),
+                    RowLabel(title: L("settings.loginItem", "登录时打开 HomePlay"),
                              subtitle: m.loginAvailable ? nil : L("settings.loginItem.needsApp", "打包成 App 后可用"))
                 }.disabled(!m.loginAvailable)
                 Toggle(isOn: Binding(get: { m.alwaysOnTop }, set: { m.app?.setAlwaysOnTop($0); m.refresh() })) {
@@ -78,19 +78,19 @@ struct GeneralPane: View {
                     Text(L("settings.size.large", "大"))
                 }
             } header: {
-                IllustrationHeader(scene: .onTop, note: L("settings.general.heroBody", "浮在桌面上，别的窗口盖不住"))
+                IllustrationHeader(scene: .onTop, note: L("settings.general.heroBody", "陪你待在桌面上"))
             }
             Section {
                 Toggle(isOn: Binding(get: { m.nowPlayingOn }, set: { _ in m.perform("menuNowPlaying") })) {
                     RowLabel(title: L("prefs.nowPlaying", "Mac 正在播放（Music/Spotify）"), subtitle: L("settings.nowPlaying.sub", "CarPlay 播放时优先显示 iPhone"))
                 }
                 Toggle(isOn: Binding(get: { m.calendarOn && m.permissions[.calendar] == .granted }, set: { _ in m.perform("menuCalendarToggle") })) {
-                    RowLabel(title: L("prefs.calendar.on", "读取行事历"),
+                    RowLabel(title: L("prefs.calendar.on", "读取日历"),
                              subtitle: m.permissions[.calendar] == .granted ? L("settings.calendar.sub", "显示下一个行程")
                                                                             : L("settings.calendar.needsPerm", "先在「权限」里允许"))
                 }.disabled(m.permissions[.calendar] != .granted)
             } header: {
-                Text(L("settings.sources", "表面上的资料"))
+                Text(L("settings.sources", "表盘上的数据"))
             } footer: {
                 FooterButtons { Button(L("prefs.hints", "再看一次操作提示")) { m.perform("menuShowHints") } }
             }
@@ -124,13 +124,58 @@ struct AppearancePane: View {
                 Picker(L("settings.finish", "配色"), selection: Binding(get: { m.finish }, set: { m.perform("menuFinish:", $0.rawValue) })) {
                     ForEach(Finish.allCases, id: \.self) { Text($0.title).tag($0) }
                 }
-                Picker(L("settings.face", "表面"), selection: Binding(get: { m.faceStyle }, set: { m.perform("menuStyle:", $0.rawValue) })) {
-                    ForEach(FaceStyle.allCases, id: \.self) { Text($0.title).tag($0) }
+            }
+            Section {
+                Picker(L("settings.face", "表盘"), selection: Binding(get: { m.faceStyle }, set: { m.perform("menuStyle:", $0.rawValue) })) {
+                    ForEach(FaceStyle.lineup, id: \.self) { Text($0.title).tag($0) }
                 }
-                LabeledContent {
-                    Button(L("clockLook.edit", "编辑…")) { m.perform("menuClockLook:") }
+                if m.faceStyle == .island {   // 島錶面自己的三個選項（和右鍵選單「島錶面」同一份動作）
+                    Picker(L("island.clock", "时钟样式"), selection: Binding(get: { m.clockStyle }, set: { m.perform("menuIslandClock:", $0.rawValue) })) {
+                        ForEach(ClockStyle.allCases.filter { $0 != .thin }, id: \.self) { Text($0.title).tag($0) }
+                    }
+                    Picker(L("island.bg", "背景"), selection: Binding(get: { m.islandBackground }, set: { m.perform("menuIslandBackground:", $0.rawValue) })) {
+                        ForEach(IslandBackground.choices(for: m.era), id: \.self) { Text($0.title).tag($0) }
+                    }
+                    Picker(L("island.era", "年代"), selection: Binding(get: { m.era }, set: { m.perform("menuIslandEra:", $0.rawValue) })) {
+                        ForEach(Era.allCases, id: \.self) { Text($0.title).tag($0) }
+                    }
+                }
+                if m.faceStyle == .analog {   // Typograph 的材質（和右鍵選單同一份動作）
+                    Picker(L("typograph.material", "Typograph 材质"), selection: Binding(get: { m.typographMaterial }, set: { m.perform("menuTypographMaterial:", $0.rawValue) })) {
+                        ForEach(TypographMaterial.allCases, id: \.self) { Text($0.title).tag($0) }
+                    }
+                }
+                if m.faceStyle == .system6 {   // System 6 的版式
+                    Picker(L("system6.layout", "System 6 版式"), selection: Binding(get: { m.system6Layout }, set: { m.perform("menuSystem6Layout:", $0.rawValue) })) {
+                        ForEach(System6Layout.allCases, id: \.self) { Text($0.title).tag($0) }
+                    }
+                }
+                if m.faceStyle == .photos || (m.faceStyle == .island && m.islandBackground == .photo) {
+                    LabeledContent(L("settings.photos", "照片")) {
+                        Button(L("prefs.photoFolder", "照片文件夹…")) { m.perform("menuPhotoFolder") }
+                    }
+                }
+            } header: {
+                Text(L("settings.face", "表盘"))
+            }
+            Section {
+                Picker(selection: Binding(get: { m.capsule }, set: { v in
+                    capsuleMaterialSetting = v; UserDefaults.standard.set(v.rawValue, forKey: CapsuleMaterial.defaultsKey)
+                    m.app?.view.face.forceDirty = true; m.refresh()
+                })) {
+                    ForEach(CapsuleMaterial.allCases, id: \.self) { Text($0.title).tag($0) }
                 } label: {
-                    RowLabel(title: L("clockLook.title", "字体与颜色"), subtitle: L("clockLook.subtitle", "岛和照片表盘的大时间"))
+                    RowLabel(title: L("settings.capsule", "胶囊"),
+                             subtitle: m.capsuleLocked ? L("settings.capsule.locked", "这个表盘用它那个年代的样子")
+                                                       : L("settings.capsule.sub", "装着 👀 的那颗；自动＝跟着表盘的年代"))
+                }
+                .disabled(m.capsuleLocked)
+                LabeledContent {
+                    Button(L("clockLook.edit", "编辑…")) { m.perform("menuClockLook:") }.disabled(!m.clockLookApplies)
+                } label: {
+                    RowLabel(title: L("clockLook.title", "字体与颜色"),
+                             subtitle: m.clockLookApplies ? L("clockLook.subtitle", "岛表盘和照片表盘的大时间")
+                                                          : L("clockLook.unavailable", "只用于岛（2026）和照片表盘"))
                 }
             }
         }
@@ -150,9 +195,9 @@ struct GesturesPane: View {
     }
     private var gestures: [Gesture] {
         [Gesture(scene: .pinch, title: L("settings.gesture.pinch.title", "缩放"), subtitle: L("settings.gesture.pinch", "双指张合")),
-         Gesture(scene: .slide, title: L("settings.gesture.slide.title", "转身体"), subtitle: L("settings.gesture.slide", "在机身上双指一起滑")),
-         Gesture(scene: .three, title: L("settings.gesture.three.title", "搬窗口"), subtitle: L("settings.gesture.three", "三指拖移，直播时也行")),
-         Gesture(scene: .force, title: L("settings.gesture.force.title", "进入 CarPlay"), subtitle: L("settings.gesture.force", "稍微用力按下屏幕"))]
+         Gesture(scene: .slide, title: L("settings.gesture.slide.title", "转动机身"), subtitle: L("settings.gesture.slide", "在机身上双指一起滑")),
+         Gesture(scene: .three, title: L("settings.gesture.three.title", "搬窗口"), subtitle: L("settings.gesture.three", "三指拖移，CarPlay 显示时也行")),
+         Gesture(scene: .force, title: L("settings.gesture.force.title", "进入 CarPlay"), subtitle: L("settings.gesture.force", "重按屏幕"))]
     }
 
     var body: some View {
@@ -195,11 +240,12 @@ struct GesturesPane: View {
                 }
             } else {
                 Section {
-                    InfoRow(title: L("settings.gesture.liveSlide", "直播时在屏幕上双指滑"), subtitle: L("settings.gesture.liveSlide.sub", "在 CarPlay 里拖动"))
+                    InfoRow(title: L("settings.gesture.liveSlide", "CarPlay 显示时在屏幕上双指滑"), subtitle: L("settings.gesture.liveSlide.sub", "在 CarPlay 里拖动"))
                     InfoRow(title: L("settings.gesture.reset", "双击机身"), subtitle: L("settings.gesture.reset.sub", "角度回正"))
                     InfoRow(title: L("settings.gesture.apart", "两指轻点两下"), subtitle: L("settings.gesture.apart.sub", "拆开看看，再点两下组回来"))
-                    InfoRow(title: L("settings.gesture.overview", "长按屏幕"), subtitle: L("settings.gesture.overview.sub", "打开表面总览"))
-                    InfoRow(title: L("settings.gesture.keys", "键盘"), subtitle: L("settings.gesture.keys.sub", "空格直播 · F5 Siri · 1–4 视角"))
+                    InfoRow(title: L("settings.gesture.overview", "长按屏幕"), subtitle: L("settings.gesture.overview.sub", "打开表盘总览"))
+                    InfoRow(title: L("settings.gesture.scroll", "滚轮或 ← →"), subtitle: L("settings.gesture.scroll.sub", "换表盘"))
+                    InfoRow(title: L("settings.gesture.keys", "键盘"), subtitle: L("settings.gesture.keys.sub", "空格暂停/继续 · F5 Siri · 1–4 视角"))
                 }
             }
         }
@@ -214,14 +260,37 @@ struct GesturesPane: View {
 
 struct CarPlayPane: View {
     @EnvironmentObject var m: SettingsModel
+    private var cornerNote: String {
+        let what: String
+        switch m.cornerStyle {
+        case .concentric: what = L("settings.corners.concentric.sub", "图标和 Dock 与机身同心，壁纸铺满")
+        case .balanced: what = L("settings.corners.balanced.sub", "介于同心与最大画面之间")
+        case .maximize: what = L("settings.corners.maximize.sub", "只避开机身圆角，画面最大")
+        }
+        guard let px = m.cornerInset else { return what }
+        return what + String(format: L("settings.corners.inset", "（这台 iPhone 每边内收 %d px）"), px)
+    }
     var body: some View {
         Form {
             Section {
                 Toggle(isOn: Binding(get: { m.autoConnect }, set: { _ in m.perform("menuAgentToggle") })) {
-                    RowLabel(title: L("prefs.plugConnect", "后台自动连接"), subtitle: L("settings.autoConnect.sub", "用力按屏幕就是 CarPlay"))
+                    RowLabel(title: L("prefs.plugConnect", "后台自动连接"), subtitle: L("prefs.plugConnect.sub", "开机在后台等待 iPhone；插线一次，之后无线自动连"))
                 }
                 Toggle(isOn: Binding(get: { m.carVideo }, set: { m.app?.setCarVideoAllowed($0); m.refresh() })) {
                     RowLabel(title: L("settings.carVideo", "在 CarPlay 播放视频"), subtitle: L("settings.carVideo.sub", "Mac 不会移动，视为一直停着"))
+                }
+                LabeledContent {
+                    Picker("", selection: Binding(get: { m.cornerStyle }, set: { v in
+                        ConcentricCorners.style = v
+                        m.refresh()
+                        // 接收器每秒看一次設定、立刻重開會話；稍後再讀一次它算好的內收量
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { m.refresh() }
+                    })) {
+                        ForEach(ConcentricCorners.Style.allCases, id: \.self) { Text($0.title).tag($0) }
+                    }
+                    .pickerStyle(.segmented).labelsHidden().fixedSize()
+                } label: {
+                    RowLabel(title: L("settings.corners", "圆角"), subtitle: cornerNote)
                 }
                 LabeledContent {
                     Button(L("settings.airplay.open", "打开设置…")) { AirPlayWatch.openSettings() }
@@ -267,7 +336,7 @@ struct CameraPane: View {
         Form {
             Section {
                 Toggle(isOn: Binding(get: { m.gazeFollow }, set: { _ in m.app?.toggleGazeFollow(); m.refresh() })) {
-                    RowLabel(title: L("settings.follow.title", "跟随我"), subtitle: L("settings.follow.sub", "直播时也会转向你"))
+                    RowLabel(title: L("settings.follow.title", "跟随我"), subtitle: L("settings.follow.sub", "CarPlay 显示时也会转向你"))
                 }
                 Slider(value: Binding(get: { m.followDegrees }, set: { m.app?.setFollowDegrees($0); m.followDegrees = $0 }), in: 10...25, step: 5) {
                     Text(L("settings.followRange", "转向幅度"))
@@ -294,11 +363,11 @@ struct PermissionsPane: View {
     @EnvironmentObject var m: SettingsModel
     private func name(_ k: PermissionKind) -> String {
         switch k {
-        case .camera: return L("settings.perm.camera", "摄像头")
+        case .camera: return L("settings.perm.camera", "相机")
         case .microphone: return L("settings.perm.mic", "麦克风")
         case .inputMonitoring: return L("settings.perm.input", "输入监控")
         case .automation: return L("settings.perm.automation", "自动化（音乐）")
-        case .calendar: return L("settings.perm.calendar", "行事历")
+        case .calendar: return L("settings.perm.calendar", "日历")
         }
     }
     private func summary(_ k: PermissionKind) -> String {
@@ -307,7 +376,7 @@ struct PermissionsPane: View {
         case .microphone: return L("settings.perm.mic.sub", "按住 F5 跟 Siri 说话、CarPlay 通话")
         case .inputMonitoring: return L("settings.perm.input.sub", "在任何 App 里按 F5 都能叫 Siri")
         case .automation: return L("settings.perm.automation.sub", "显示「音乐」或 Spotify 正在播放的歌")
-        case .calendar: return L("settings.perm.calendar.sub", "在模块表面上显示下一个行程")
+        case .calendar: return L("settings.perm.calendar.sub", "在模块表盘上显示下一个行程")
         }
     }
     var body: some View {

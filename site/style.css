@@ -47,7 +47,7 @@ body{margin:0;background:var(--bg);color:var(--ink);font:17px/1.6 var(--font);-w
 img{max-width:100%;display:block}
 a{color:inherit}
 /* 觸控：不要系統的灰色點按閃光與長按彈出（iOS） */
-a,button,summary,.row,.pet,.sw,.spin-stage{-webkit-tap-highlight-color:transparent}
+a,button,summary,.row,.pet,.spin-stage{-webkit-tap-highlight-color:transparent}
 .pet,.spin-stage{-webkit-touch-callout:none}
 :focus-visible{outline:2px solid var(--accent);outline-offset:3px}
 .wrap{max-width:1180px;margin:0 auto;padding:0 24px}
@@ -81,21 +81,8 @@ header .btn{height:36px;padding:0 16px;font-size:14px}
 /* ── Hero：左字右機，機身就是可互動的桌寵 ── */
 .hero{padding:40px 0 72px;min-height:calc(100dvh - 64px);display:flex;align-items:center}
 .hero .wrap{position:relative;display:grid;grid-template-columns:1fr 1.05fr;gap:40px;align-items:center}
-.hero-film{position:absolute;left:50%;top:50%;width:min(1180px,calc(100vw - 48px));aspect-ratio:1180/760;transform:translate(-50%,-50%);border-radius:var(--r);overflow:hidden;z-index:0;pointer-events:none;
-  background:linear-gradient(180deg,#f2f3f5 0%,#eceef1 60%,#e6e9ed 100%);
-  box-shadow:0 30px 70px -40px rgba(20,30,50,.35)}
-.hero-film::after{content:"";position:absolute;inset:0;z-index:1;pointer-events:none;
-  background:linear-gradient(90deg,rgba(236,238,241,.97) 0%,rgba(236,238,241,.88) 34%,transparent 62%);
-  opacity:0;transition:opacity .35s ease}
-.hero.film-on .hero-film::after{opacity:1}
-.hero-film-video{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;opacity:0;transition:opacity .35s ease}
-.hero.film-on .hero-film-video{opacity:1}
 .hero-copy,.hero-bob{position:relative;z-index:1}
 .hero-pet{transition:transform .45s var(--spring),opacity .45s ease}
-.hero.film-on .hero-pet{opacity:0;pointer-events:none}
-.hero-film-replay{display:block;margin:10px 0 0 auto;padding:6px 12px;border:0;border-radius:var(--pill);background:transparent;color:var(--muted);font:600 14px var(--font);cursor:pointer;opacity:0;pointer-events:none;transition:opacity .35s ease,color .2s}
-.hero.film-done .hero-film-replay{opacity:1;pointer-events:auto}
-.hero-film-replay:hover{color:var(--ink)}
 .hero h1{font-size:clamp(38px,4.6vw,62px)}
 .hero h1 span{display:inline-block}
 .hero .lede{margin:22px 0 32px;font-size:19px}
@@ -119,11 +106,6 @@ header .btn{height:36px;padding:0 16px;font-size:14px}
 /* ── 為什麼是眼睛：左邊是時間線，右邊一雙會看人的眼睛 ── */
 .why-grid{display:grid;grid-template-columns:1.15fr .85fr;gap:72px;align-items:start}
 .why-text .lede{margin-top:16px}
-.beats{list-style:none;margin:48px 0 0;padding:0;display:grid;gap:36px}
-.beats li{display:grid;grid-template-columns:minmax(96px,auto) 1fr;gap:24px;align-items:start;padding-top:24px;border-top:1px solid var(--line)}
-.beats .yr{font-size:clamp(40px,5vw,60px);font-weight:700;letter-spacing:-.04em;line-height:1;color:var(--accent);font-variant-numeric:tabular-nums}
-.beats h3{font-size:21px}
-.beats p{color:var(--muted);margin-top:8px;font-size:16px}
 .essay-close{margin-top:44px;font-size:19px;line-height:1.7;max-width:34em}
 .why-eyes{position:sticky;top:104px}
 .eyes-card{width:min(100%,340px);aspect-ratio:1;border-radius:var(--r);background:linear-gradient(160deg,#3a4c7c,#9e869c 55%,#d8a87c);
@@ -161,12 +143,6 @@ header .btn{height:36px;padding:0 16px;font-size:14px}
 .carplay.live .dot{animation-play-state:running}
 @keyframes flow{0%{transform:translateX(0);opacity:0}12%{opacity:1}88%{opacity:1}100%{transform:translateX(100cqw);opacity:0}}
 @keyframes flow-back{0%{transform:translateX(100cqw);opacity:0}12%{opacity:1}88%{opacity:1}100%{transform:translateX(0);opacity:0}}
-.sources{margin-top:40px;display:grid;grid-template-columns:1.2fr 1fr 1fr;gap:14px}
-.src{padding:22px;border-radius:20px;background:rgba(255,255,255,.06)}
-.src h3{font-size:17px;margin-bottom:6px}.src p{font-size:14.5px;color:#c5d2ef}
-.src .flag{margin-top:10px}
-.sources-note{margin-top:18px;font-size:14.5px;color:#c5d2ef}
-.src code{font:13px var(--mono);color:#fff}
 
 /* ── 轉一圈：拖著轉，canvas 畫預載好的 36 格 ── */
 .spin{text-align:center}
@@ -191,44 +167,14 @@ header .btn{height:36px;padding:0 16px;font-size:14px}
 .apart-parts li{display:flex;align-items:baseline;gap:9px;padding:8px 0;border-bottom:1px solid var(--line);font-size:15px}
 .apart-parts li span{width:1.4em;flex:none;color:var(--muted);font:12px var(--mono);font-variant-numeric:tabular-nums}
 @media (max-width:700px){.apart-parts ol{grid-template-columns:1fr 1fr;gap:6px 16px}.apart-parts li{font-size:14px}}
-.gestures{margin:48px auto 0;max-width:860px;display:grid;grid-template-columns:1fr 1fr;gap:10px 40px;text-align:left}
-.g{display:flex;justify-content:space-between;gap:16px;padding:10px 0;border-bottom:1px solid var(--line);font-size:15.5px}
-.g span:last-child{color:var(--muted);text-align:right}
 
-/* ── 外觀：色票換機身 ── */
-.finish .wrap{display:grid;grid-template-columns:1.1fr .9fr;gap:56px;align-items:center}
-.finish .pet{max-width:520px;margin:0;aspect-ratio:1200/1300}
-.finish .lede{margin-top:14px}
-.swatches{display:flex;gap:12px;margin:30px 0 14px}
-.sw{all:unset;box-sizing:border-box;cursor:pointer;width:34px;height:34px;border-radius:50%;box-shadow:inset 0 0 0 1px rgba(0,0,0,.12);transition:transform .25s var(--spring)}
-.sw[aria-pressed=true]{outline:2px solid var(--accent);outline-offset:3px}
-.sw:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
-@media (hover:hover) and (pointer:fine){.sw:hover{transform:scale(1.08)}}
-.sw:active{transform:scale(.96)}
-.sw-g4{background:#f4f5f3}.sw-silver{background:#c9ccd0}.sw-starlight{background:#e6dccb}.sw-rose{background:#e8c9c2}.sw-gray{background:#5d6066}
-.swname{font-weight:600}.swdesc{color:var(--muted);font-size:15px;margin-top:4px;min-height:3.2em}
 
-/* ── 開機／夜裡／睡著：三格 ── */
-.moments .grid{margin-top:40px;display:grid;grid-template-columns:1.25fr 1fr 1fr;gap:14px;text-align:left}
-.cell{border-radius:var(--r);padding:28px 28px 0;overflow:hidden;display:flex;flex-direction:column}
-.cell h3{font-size:20px}.cell p{color:var(--muted);font-size:15px;margin-top:6px}
-.shot{position:relative;margin:22px auto -12%;width:86%}
-.shot img{width:100%;height:auto}
-.shot .fx{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;opacity:0;pointer-events:none;transition:opacity .14s linear}
-.shot .fx.on{opacity:1;transition-duration:.055s}
-.hello-canvas{position:absolute;inset:0;width:100%;height:100%}
-.cell.playing .shot img{opacity:0}
-.textbtn{all:unset;box-sizing:border-box;align-self:flex-start;margin-top:10px;cursor:pointer;font-size:14px;font-weight:600;color:#2a4f9a;padding:4px 12px;border-radius:var(--pill);box-shadow:inset 0 0 0 1px rgba(26,29,34,.2)}
-.textbtn:hover{background:rgba(255,255,255,.4)} .textbtn:focus-visible{outline:2px solid var(--accent);outline-offset:2px} .textbtn:disabled{opacity:.5;cursor:default}
-.textbtn[hidden]{display:none}
-.c1{background:linear-gradient(170deg,#f3d9c4,#c9d5ec)} .c1 p{color:#4f5560} .c1 h3{color:#1a1d22}
-.c2{background:#262a36;color:#e9ecf2} .c2 p{color:#a4abb8}
 .c3{background:#151821;color:#e9ecf2} .c3 p{color:#9198a6}
 
 /* ── 跑起來 ── */
-.run .wrap{display:grid;grid-template-columns:.85fr 1.15fr;gap:56px}
+.run .wrap{max-width:860px}
 .run .lede{margin-top:16px}
-.run .dl{margin:22px 0 0;display:grid;gap:10px;justify-self:start}
+.run .dl{margin:24px 0 0;display:flex;flex-wrap:wrap;align-items:center;gap:12px 20px}
 .run .dl-note{margin:0;max-width:46ch;font-size:14px;line-height:1.7;color:var(--muted)}
 .hero-note{margin:18px 0 0;font-size:14px;letter-spacing:.01em;color:var(--muted)}
 
@@ -239,12 +185,15 @@ header .btn{height:36px;padding:0 16px;font-size:14px}
   .hero .ctas{animation:rise .52s var(--ease-out) .36s backwards}
   .hero-note{animation:rise .42s var(--ease-out) .48s backwards}
 }
-.run .first-use{margin-top:30px}
-.run .first-use h3,.run .build h3{margin:0 0 12px;font-size:15px;font-weight:650;letter-spacing:.01em;color:var(--ink)}
-.run .first-use ol{margin:0;padding:0;list-style:none;counter-reset:step;display:grid;gap:12px}
-.run .first-use li{position:relative;padding-left:34px;color:var(--muted);font-size:15px;line-height:1.65}
-.run .first-use li::before{counter-increment:step;content:counter(step);position:absolute;left:0;top:.08em;width:22px;height:22px;border-radius:50%;background:var(--accent);color:var(--accent-ink);font:600 12px/22px var(--font);text-align:center}
-.run .build ul{margin:0 0 18px}
+.first-use{margin-top:40px;padding-top:28px;border-top:1px solid rgba(255,255,255,.14)}
+.first-use h3{margin:0 0 14px;font-size:17px;font-weight:650;color:#fff}
+.first-use ol{margin:0;padding:0;list-style:none;counter-reset:step;display:grid;grid-template-columns:repeat(3,1fr);gap:14px 28px}
+.first-use li{position:relative;padding-left:34px;color:#c5d2ef;font-size:15px;line-height:1.65}
+.first-use li::before{counter-increment:step;content:counter(step);position:absolute;left:0;top:.1em;width:22px;height:22px;border-radius:50%;background:#fff;color:#0e2453;font:650 12px/22px var(--font);text-align:center}
+@media (max-width:820px){.first-use ol{grid-template-columns:1fr}}
+.run .build{margin-top:36px;border-top:1px solid var(--line);padding-top:6px}
+.run .build summary{padding:14px 0;font-size:16px;font-weight:600}
+.run .build ul{margin:6px 0 18px}
 .run .build .code{margin-top:4px}
 .run ul{margin:22px 0 0;padding:0;list-style:none;display:grid;gap:12px}
 .run li{padding-left:22px;position:relative;color:var(--muted)}
@@ -281,25 +230,15 @@ footer .links{display:flex;gap:8px 20px;flex-wrap:wrap}
 @keyframes rise{from{opacity:0;transform:translateY(16px)}}
 @keyframes breathe{0%,100%{transform:scale(1)}50%{transform:scale(1.004)}}
 @media (prefers-reduced-motion:no-preference){
-  #asleep-cell .shot img{animation:breathe 6.4s ease-in-out infinite;transform-origin:50% 100%}
 }
 @media (prefers-reduced-motion:no-preference) and (scripting:enabled){
   .rise{opacity:0;transform:translateY(16px);transition:opacity .7s ease,transform .8s var(--ease-out)}
   .rise.in{opacity:1;transform:none}
-  .beats li{opacity:0;transform:translateY(20px);transition:opacity .6s ease,transform .7s var(--ease-out)}
-  .beats.in li{opacity:1;transform:none}
-  .beats.in li:nth-child(2){transition-delay:.12s} .beats.in li:nth-child(3){transition-delay:.24s}
 }
 @media (prefers-reduced-motion:reduce){
   html{scroll-behavior:auto}
-  .pet,.pet img,.btn,.sw,.row,summary::after,.spin-stage img,.spin-stage canvas,.spin-hint,.copy{transition:none}
+  .pet,.pet img,.btn,.row,summary::after,.spin-stage img,.spin-stage canvas,.spin-hint,.copy{transition:none}
   .dot{display:none}
-  .hero-film,.hero-film-replay{display:none}
-  .hero.film-on .hero-pet{opacity:1;pointer-events:auto}
-}
-@media (max-width:820px){
-  .hero-film,.hero-film-replay{display:none}
-  .hero.film-on .hero-pet{opacity:1;pointer-events:auto}
 }
 
 /* 手機：全部單欄，16px 邊；頂欄第二行放可橫滑的區塊膠囊，導覽不消失 */
@@ -311,7 +250,7 @@ footer .links{display:flex;gap:8px 20px;flex-wrap:wrap}
   nav{display:flex;order:5;flex-basis:100%;gap:8px;overflow-x:auto;padding:8px 0 12px;
     -webkit-overflow-scrolling:touch;scrollbar-width:none}
   /* 手機只留三個入口，避免第五個膠囊被硬切；其餘段落靠滾動到達 */
-  header nav:not(.langs) a:nth-child(2),header nav:not(.langs) a:nth-child(6){display:none}   /* 手機上收起「為什麼是眼睛」「轉一圈」 */
+  header nav:not(.langs) a:nth-child(5){display:none}   /* 手機上收起「轉一圈」 */
   nav::-webkit-scrollbar{display:none}
   /* 右邊還有膠囊沒滑到時，邊緣漸隱，暗示可以橫滑；滑到底就不再漸隱 */
   nav.fade{-webkit-mask-image:linear-gradient(90deg,#000 calc(100% - 36px),transparent);
@@ -321,9 +260,8 @@ footer .links{display:flex;gap:8px 20px;flex-wrap:wrap}
   nav a[aria-current="true"]{background:var(--ink);color:var(--bg);box-shadow:none}
   .langs{gap:10px}.langs a{font-size:13px;padding:12px 2px}
   header .btn{height:32px;padding:0 12px;font-size:13px}
-  .hero .wrap,.faces .wrap,.finish .wrap,.run .wrap,.why-grid{grid-template-columns:1fr}
+  .hero .wrap,.faces .wrap,.why-grid{grid-template-columns:1fr}
   .why-grid{gap:40px}.why-eyes{position:static}
-  .beats li{grid-template-columns:1fr;gap:10px}
   .hero{min-height:auto;padding:24px 0 56px}.pet{margin:0 auto}
   .faces .stick{position:relative;top:0}
   .carplay .panel{padding:32px 22px}
@@ -333,16 +271,10 @@ footer .links{display:flex;gap:8px 20px;flex-wrap:wrap}
   .link::after{left:50%;right:auto;top:auto;bottom:1px;margin:0 0 0 -4px;transform:rotate(135deg)}
   .dot{left:50%;top:0;margin:-4px 0 0 -4px;animation-name:flow-v}
   .dot.back{left:calc(50% + 7px);top:0;margin:-3px 0 0 -3px;animation-name:flow-v-back}
-  .sources,.moments .grid,.gestures{grid-template-columns:1fr}
-  .beats .yr{font-size:44px}
-  .finish .pet{order:-1;margin:0 auto}
   .row{grid-template-columns:1fr}.row .r{text-align:left}
-  .sw{width:40px;height:40px}
-  .textbtn{padding:10px 18px;font-size:15px}
   .copy{padding:8px 16px;font-size:14px}
   pre{padding:20px 18px;white-space:pre-wrap} /* 手機上長命令換行而不是截斷；要整段複製有按鈕 */
-  .run .wrap{gap:32px}
-  .moments .cell{padding:24px 20px 0}
+
 }
 @keyframes flow-v{0%{transform:translateY(0);opacity:0}12%{opacity:1}88%{opacity:1}100%{transform:translateY(100cqh);opacity:0}}
 @keyframes flow-v-back{0%{transform:translateY(100cqh);opacity:0}12%{opacity:1}88%{opacity:1}100%{transform:translateY(0);opacity:0}}
@@ -399,15 +331,10 @@ footer .links{display:flex;gap:8px 20px;flex-wrap:wrap}
   .style-grid .style{opacity:0;transform:translateY(18px);transition:opacity .7s ease,transform .9s var(--ease-out)}
   .style-grid.in .style{opacity:1;transform:none}
   .style-grid.in .style:nth-child(2){transition-delay:.08s}.style-grid.in .style:nth-child(3){transition-delay:.16s}
-  .style-grid.in .style:nth-child(4){transition-delay:.24s}.style-grid.in .style:nth-child(5){transition-delay:.32s}.style-grid.in .style:nth-child(6){transition-delay:.4s}
+  .style-grid.in .style:nth-child(4){transition-delay:.24s}.style-grid.in .style:nth-child(5){transition-delay:.32s}.style-grid.in .style:nth-child(6){transition-delay:.4s}.style-grid.in .style:nth-child(7){transition-delay:.48s}.style-grid.in .style:nth-child(8){transition-delay:.56s}
 }
 
-/* ── 使用前須知、開發者的話 ── */
-.notes{padding-top:0}
-.note-grid{margin-top:28px;display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
-.note{border-top:1px solid var(--line);padding-top:18px}
-.note h3{font-size:17px}
-.note p{color:var(--muted);font-size:15px;line-height:1.65;margin-top:8px}
+/* ── 開發者的話 ── */
 .dev{padding-top:40px}
 .dev-card{margin:0 auto;max-width:760px;text-align:center;background:var(--surface);border-radius:var(--r);padding:48px 40px;box-shadow:inset 0 0 0 1px var(--line)}
 .dev-eyes{font-size:56px;line-height:1}
@@ -422,7 +349,7 @@ footer .links{display:flex;gap:8px 20px;flex-wrap:wrap}
 
 @media (max-width:980px){.hl-grid{grid-template-columns:repeat(2,1fr)}}
 @media (max-width:760px){
-  .hl-grid,.note-grid{grid-template-columns:1fr}
+  .hl-grid{grid-template-columns:1fr}
   .style-grid{grid-template-columns:repeat(2,1fr)}
   .dev-card{padding:36px 22px}
 }

@@ -38,7 +38,7 @@
     // 眨眼／眼神是同一格畫面的另一張渲染，只有眼睛不同；疊上去做 brief 的替換。
     // 兩張圖出自同一個 homeplay-pet 行程，機身、玻璃反射、時鐘逐像素對齊。
     const fxPath = (kind, n) => `fx/${kind}-${el.dataset.prefix}${n}.webp`;
-    const wantsGlance = n => el.dataset.glance === 'always' || (el.dataset.glance === 'auto' && (n === 'idle' || n === 'curious'));
+    const wantsGlance = n => el.dataset.glance === 'always' || (el.dataset.glance === 'auto' && (n === 'idle' || n === 'thinking'));
 
     function makeFx(kind) {
       const i = new Image();
@@ -173,7 +173,7 @@
     if (Date.now() < locked || over) return;
     const r = heroEl.getBoundingClientRect();
     const dx = Math.max(r.left - e.clientX, 0, e.clientX - r.right), dy = Math.max(r.top - e.clientY, 0, e.clientY - r.bottom);
-    hero.set(Math.hypot(dx, dy) < 160 ? 'curious' : 'idle');
+    hero.set(Math.hypot(dx, dy) < 160 ? 'thinking' : 'idle');
   }, { passive: true });
   heroEl.addEventListener('pointerenter', () => {
     over = true; clearOver();
@@ -183,53 +183,16 @@
   heroEl.addEventListener('pointerleave', () => {
     over = false; clearOver();
     if (Date.now() > locked) hero.set('happy');
-    setTimeout(() => !over && hero.set('curious'), 600);
+    setTimeout(() => !over && hero.set('idle'), 600);
   });
   heroEl.addEventListener('pointerdown', () => {
     heroEl.classList.add('press');
     const now = Date.now(); clicks = clicks.filter(t => now - t < 1500); clicks.push(now);
-    if (clicks.length >= 5) { hero.set('focus'); locked = now + 1600; clicks = []; }
-    else { hero.set('surprised'); locked = now + 400; setTimeout(() => hero.set(over ? 'happy' : 'curious'), 420); }
+    if (clicks.length >= 5) { hero.set('annoyed'); locked = now + 1600; clicks = []; }
+    else { hero.set('surprised'); locked = now + 400; setTimeout(() => hero.set(over ? 'happy' : 'idle'), 420); }
   });
   addEventListener('pointerup', () => heroEl.classList.remove('press'));
   addEventListener('pointercancel', () => heroEl.classList.remove('press'));
-
-  // ── Hero film：播一次，落定後交棒給可互動的桌寵 ──
-  (() => {
-    const sec = $('.hero');
-    const panel = $('#hero-film');
-    const video = panel && panel.querySelector('video');
-    const replay = $('#film-replay');
-    if (!sec || !panel || !video || reduce || !matchMedia('(min-width: 821px)').matches) return;
-    const seenKey = 'homeplay-film-seen-v1';
-    let seen = false;
-    try { seen = sessionStorage.getItem(seenKey) === '1'; } catch {}
-    if (seen) { sec.classList.add('film-done'); return; }
-    let endTimer = 0;
-    const markSeen = () => { try { sessionStorage.setItem(seenKey, '1'); } catch {} };
-    const finish = () => {
-      clearTimeout(endTimer);
-      sec.classList.remove('film-on');
-      sec.classList.add('film-done');
-    };
-    const play = () => {
-      sec.classList.add('film-on');
-      sec.classList.remove('film-done');
-      try { video.currentTime = 0; } catch {}
-      const p = video.play();
-      if (p && p.catch) p.catch(finish);
-    };
-    video.addEventListener('playing', () => { markSeen(); clearTimeout(endTimer); endTimer = setTimeout(finish, 7000); });
-    video.addEventListener('pause', () => clearTimeout(endTimer));
-    video.addEventListener('ended', finish);
-    video.addEventListener('error', finish);
-    if (replay) replay.addEventListener('click', play);
-    addEventListener('visibilitychange', () => {
-      if (document.hidden) video.pause();
-      else if (sec.classList.contains('film-on')) video.play().catch(() => {});
-    });
-    play();
-  })();
 
   // ── 表情段：一行一個觸發 ──
   const faceEl = $('#face-pet');
@@ -242,19 +205,6 @@
     facePet.set(row.dataset.face);
   };
   rows.forEach(r => { r.addEventListener('pointerenter', () => pick(r)); r.addEventListener('focus', () => pick(r)); r.addEventListener('click', () => pick(r)); });
-
-  // ── 外觀 ──
-  const finEl = $('#finish-pet');
-  const fin = mountPet(finEl);
-  fillNear(fin, finEl);
-  const sws = $$('.sw');
-  sws.forEach(b => b.addEventListener('click', () => {
-    const f = b.dataset.finish, [name, desc] = I18N.finishes[f];
-    fin.fill(); fin.set(f);
-    sws.forEach(s => s.setAttribute('aria-pressed', String(s === b)));
-    $('#swname').textContent = name; $('#swdesc').textContent = desc;
-    finEl.setAttribute('aria-label', fmt(I18N.finishLabel, 'finish', name));
-  }));
 
   // ── 手機頂欄的區塊膠囊：畫面走到哪一段就亮哪一個（IntersectionObserver，不聽 scroll）──
   (() => {

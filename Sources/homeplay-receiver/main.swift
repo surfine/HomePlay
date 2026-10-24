@@ -420,6 +420,7 @@ func wifiStartupReady(_ iface: String) -> Bool {
 /// Wi-Fi 硬件关着（powerOff）就说明不是竞态，等也没用——照旧往下走，有线还能用。
 func waitUntilWiFiReady(iface: String) {
     let deadline = Date().addingTimeInterval(30)
+    var noted = false
     while !wifiStartupReady(iface) {
         let power = CWWiFiClient.shared().interface(withName: iface)?.powerOn() ?? false
         guard power, Date() < deadline else {
@@ -427,8 +428,9 @@ func waitUntilWiFiReady(iface: String) {
             else { Wireless.note("Wi-Fi 30 秒内未就绪：按当前状态继续（runDual 会按有线/无线可用性选路）") }
             return
         }
-        Wireless.note("Wi-Fi 还没就绪（IPv4/信道未拿到）——等 5 秒再试（开机自启时 Wi-Fi 关联常需要几秒）")
-        Thread.sleep(forTimeInterval: 5)
+        // 每 0.5 秒看一次：Wi-Fi 一就绪就走（原本每 5 秒，开机时平白多等几秒）
+        if !noted { Wireless.note("Wi-Fi 还没就绪（IPv4/信道未拿到）——每 0.5 秒再看（开机自启时 Wi-Fi 关联常需要几秒）"); noted = true }
+        Thread.sleep(forTimeInterval: 0.5)
     }
 }
 
@@ -581,7 +583,7 @@ do { server = try WSServer(port: port) }
 catch {
     if isAddressInUse(error) {
         FileHandle.standardError.write("监听 \(port) 失败：另一个接收器实例已在运行，本实例退出。\n".data(using: .utf8)!)
-        exit(0)
+        exit(Wireless.portInUseExitCode)   // 原地重启出来的映像交给 launchd 再拉一次
     }
     FileHandle.standardError.write("监听 \(port) 失败：\(error)\n".data(using: .utf8)!); exit(1)
 }

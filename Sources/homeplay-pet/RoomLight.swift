@@ -53,7 +53,7 @@ final class RoomLightEstimator {
             lastClassify = now
             let req = VNClassifyImageRequest()
             let handler = VNImageRequestHandler(cvPixelBuffer: buffer, orientation: .up, options: [:])
-            if (try? handler.perform([req])) != nil, let obs = req.results as? [VNClassificationObservation] {
+            if (try? handler.perform([req])) != nil, let obs = req.results {
                 let outdoor = Self.best(obs, ["outdoor", "sky", "daylight", "sunlight", "nature", "landscape"])
                 let indoor = Self.best(obs, ["indoor", "room", "office", "living room", "bedroom", "interior"])
                 sceneOutdoor += (outdoor - sceneOutdoor) * 0.5
