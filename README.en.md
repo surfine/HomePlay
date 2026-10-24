@@ -1,7 +1,7 @@
 <div align="center">
   <img src="assets/github/hero-v2.gif" alt="HomePlay: an eye close-up pulls back into a tiny 3D HomeView on a Mac desktop" width="720">
   <h1>HomePlay</h1>
-  <p><strong>It looks at you, and brings CarPlay to your Mac.</strong></p>
+  <p><strong>It watches you, and brings CarPlay to your Mac.</strong></p>
   <p>HomeView, made into a desk pet for your Mac: try the HomeView software before the hardware ships.</p>
   <p><a href="README.md">简体中文</a> · <a href="https://homeplay.aaronlau.me/en/">Website</a></p>
   <p>
@@ -15,26 +15,45 @@
 
 > Experimental personal project. Not affiliated with, endorsed by, or certified by Apple. CarPlay and HomeView are trademarks of Apple Inc. Use at your own risk.
 
-## ⭐️ Features
+## What it is
 
-- **Plug in once, then wireless.** Pairing works like a Magic accessory: connect the iPhone to the Mac with a cable once, it switches to wireless when pairing is done, and unplugging later doesn't drop CarPlay.
-- **Ten expressions, many faces.** Ten expressions and a set of faces (Liquid Glass numerals, Flow bubbles, Modular, Analog, Bedside…) to add a little life to ordinary days, and help you feel a bit more calm and at ease.
-- **Press a little harder, and it's CarPlay.** A continuous CarPlay experience on your Mac desktop. Unlike iPhone Mirroring, you can reach your iPhone's Siri through the Mac: hold F5 and just talk, completely hands-free, so work stays focused.
-- **More than CarPlay.** A Pomodoro timer, battery and Now Playing widgets, and an always-on-top window: like the iTunes MiniPlayer, but playing your iPhone's library, more flexible than AirPlay to Mac (F7–F9 skip tracks).
+A HomeView that lives on your Mac’s desktop. It has a pair of eyes that watch you, and one firm press turns it into your iPhone’s CarPlay.
+
+- **It watches you.** One pair of 👀, ten expressions. Come closer and it looks over, curious. Rest your pointer on it and it smiles. Leave it alone late at night and it dozes off. The eyes live in a capsule that matches the face’s era: solid black, smoked, or Liquid Glass.
+- **13 faces.** Laid out like Apple’s HomeView faces: Island, Photos, Modular, Typograph, Flow, Weather, Calendar, Embossed Hands, Days Together, Black, plus three System 6 throwbacks. The big time is the system’s own Liquid Glass, and you can pick its font and color the way you do on the iOS 27 Lock Screen.
+- **Press firmly for CarPlay.** Plug in once, then it’s wireless. Your iPhone sends real CarPlay video and sound to the little screen, and tapping it works like tapping the screen in a car. Hold F5 to talk to your iPhone’s Siri.
+- **Handy extras.** Focus timer, Now Playing, battery and your next event. F7–F9 skip tracks, and the window can float on top like a mini player for your iPhone’s library.
 
 <img src="assets/github/grid-v2.webp" alt="HomePlay front view, back view, real CarPlay music screen, and exploded anatomy" width="100%">
 
-| Faces | Ten expressions |
+| 13 faces | Ten expressions |
 |:---:|:---:|
-| <img src="assets/github/styles-v2.webp" alt="Island, Flow, Modular, Analog, Pocket and Bedside faces" width="100%"> | <img src="assets/github/faces-v2.webp" alt="Ten expressions made from the same pair of eyes" width="100%"> |
+| <img src="assets/github/styles-v2.webp" alt="HomePlay faces: Island, Flow, Modular, Typograph, Weather, Calendar, Embossed Hands and System 6" width="100%"> | <img src="assets/github/faces-v2.webp" alt="Ten expressions made from the same pair of eyes" width="100%"> |
 
-<img src="assets/github/finishes-v2.webp" alt="G4 white, silver, starlight, rose, and space gray finishes" width="100%">
+## First time: three steps
 
-## 💡 Before you start
+**Requires** macOS 14 or later on Apple silicon.
 
-- **Tested iPhones:** so far only an iPhone SE (1st generation, Lightning) on iOS 15 and an iPhone 18 Pro (USB-C) on iOS 27. Reports on other models are welcome.
-- **Gestures:** pinch to zoom, two-finger swipe to rotate, three-finger drag to move.
-- **It follows you:** the context menu has a DockKit-style follow mode, like the iMac G4 ad, and can match the room's light.
+1. [**Download HomePlay-macOS-arm64.zip**](https://github.com/surfine/HomePlay/releases/latest/download/HomePlay-macOS-arm64.zip), unzip, drag `HomePlay.app` into Applications and open it.
+2. Connect your iPhone to the Mac with a cable once, then tap Trust and Pair on the iPhone.
+3. Press firmly on the pet’s screen to enter CarPlay. After that you can unplug, and it reconnects wirelessly on its own.
+
+The app is signed with a Developer ID and notarized by Apple, so it opens straight away. To check the download: [`HomePlay-macOS-arm64.zip.sha256`](https://github.com/surfine/HomePlay/releases/latest/download/HomePlay-macOS-arm64.zip.sha256), `shasum -a 256 -c HomePlay-macOS-arm64.zip.sha256`.
+
+**Tested so far on two iPhones only:** an iPhone SE (1st generation, Lightning) on iOS 15 and an iPhone 18 Pro (USB-C) on iOS 27. Reports from other models are welcome.
+
+## How to use it
+
+| To… | Do this |
+|---|---|
+| Enter or leave CarPlay | Press firmly on the screen (Force Click) |
+| Talk to Siri | Hold F5 |
+| Change faces | Scroll or press ← →; press and hold the screen to see them all |
+| Turn it | Drag or two-finger swipe on the body; double-click to face front |
+| Zoom | Pinch, ⌥-scroll, or ⌘+ ⌘− ⌘0 |
+| Move it | Three-finger drag, or ⌘-drag |
+| Take it apart | Double-tap with two fingers |
+| Settings | Right-click, or ⌘, |
 
 ## 🧑🏻‍💻 From the developer
 
@@ -42,66 +61,19 @@
 >
 > I believe that in the age of AI, staying curious, freeing your imagination, being creative, keeping your judgment and learning to work together matter more than ever. I hope this little desk pet brings you some fun.
 
-## Install
+## Coming in 0.7.0
 
-**Requirements:** macOS 14 or later, Apple Silicon.
+These are done and waiting on real-device testing of wireless CarPlay; they ship as soon as that passes.
 
-[**Download HomePlay-macOS-arm64.zip**](https://github.com/surfine/HomePlay/releases/latest/download/HomePlay-macOS-arm64.zip), then:
-
-1. Unzip and drag `HomePlay.app` into Applications.
-2. Open it. The desk pet appears with its clock and eyes. No account, profile, or setup.
-3. For CarPlay, connect an iPhone over USB once and accept Trust and Pair on the iPhone.
-4. Press firmly on the pet to enter CarPlay. Unplugging switches to wireless after the first pairing.
-
-The release is Developer ID signed and notarized by Apple, so Gatekeeper opens it after unzipping. The matching checksum is [`HomePlay-macOS-arm64.zip.sha256`](https://github.com/surfine/HomePlay/releases/latest/download/HomePlay-macOS-arm64.zip.sha256). Verify with `shasum -a 256 -c HomePlay-macOS-arm64.zip.sha256`.
-
-## What's new in 0.6.1
-
-- **The system's own Liquid Glass.** The big numerals are drawn by the same engine macOS 27 uses for Liquid Glass: the lensing, the thickness and the rim light all match the system. On Flow, the rims follow you.
-- **Font & Color.** Like the iOS 27 Lock Screen: six system clock fonts with a weight slider, swatches (or match the wallpaper) with a tone slider, Glass or Solid. Right-click › Faces › Font & Color, or Settings › Appearance.
-- **The system clock numerals.** The same digits as the iOS Lock Screen, which grow taller without distorting; the hairline inside the "9" is gone.
-- **Lighter on power.** Idle CPU down from about 9% to about 5%.
-
-[Full release notes](https://github.com/surfine/HomePlay/releases/tag/v0.6.1)
-
-## Technical details
-
-- **Real CarPlay**: wireless (Bluetooth iAP2 to Wi-Fi) or wired USB, H.264 and HEVC video, touch sent back to the iPhone, sound through the Mac, and Now Playing in Control Center.
-- **Built from the official product**: Apple's HomeView USDZ geometry and materials, five finishes, a back USB-C port, and RealityKit IBL at Quick Look quality.
-- **Quiet and power-aware**: idle turns into a static poster and the ARView leaves the window; occlusion and display sleep stop rendering. No notifications, no feedback, no telemetry.
-- **Zero setup**: the receiver finds the current Wi-Fi and matches the phone; pairing and unplugging switch automatically. No Keychain access and no admin password.
-- **Public-facing**: one instance, VoiceOver labels, English, Simplified Chinese and Traditional Chinese, localized permission strings, GPL source.
-
-## How it works
-
-```mermaid
-flowchart LR
-  iPhone[iPhone CarPlay] -- "USB / Wi-Fi + iAP2" --> Receiver[homeplay-receiver]
-  Receiver -- "WebSocket H.264 / HEVC" --> Pet[homeplay-pet, RealityKit]
-  Pet -- "HID touch" --> Receiver
-```
-
-## Gestures
-
-<details>
-<summary>All gestures</summary>
-
-| Gesture | Result |
-|---|---|
-| Drag, or two-finger swipe | Turn the body |
-| Three-finger drag, or ⌘ drag | Move it (drag the frame while streaming) |
-| Pinch, ⌘+, ⌘−, ⌘0 | Zoom (⌘0 resets) |
-| Press firmly | Enter or leave CarPlay |
-| Long press the screen | Change the face |
-| Double-click | Reset the angle |
-| Two-finger double tap | Take it apart or put it back |
-| ⌘H | Hide the pet (the menu bar icon brings it back) |
-
-</details>
+- **Eyes on every face.** The capsule follows each face’s era: solid black on the flat layouts, smoked on the iOS 27 ones, Liquid Glass on HomeView’s own, and a 1-bit button on System 6.
+- **New faces:** Weather, Calendar, Embossed Hands, Black, and three System 6 faces rebuilt the way they looked in 1988 (Chicago type, 1-bit pixels).
+- **A Siri orb for F5.** While you talk, a colorful Siri orb rises on the screen; let go and it shrinks back.
+- **Type and corners closer to Apple’s.** The time uses SF Pro’s variable weight, width and optical size, and the capsule, cards and body corners stay concentric.
+- **No more ghosting when faces change,** and it sips less power while idle.
 
 ## Privacy and permissions
 
-HomePlay talks to no server. There is no account and no telemetry. Permissions are requested one feature at a time:
+There is no account and no telemetry. The only thing that goes online on its own is the Weather face, which sends your approximate location to Open-Meteo to look up local weather. Permissions are requested one feature at a time:
 
 | Permission | When it is asked | If denied |
 |---|---|---|
@@ -109,6 +81,7 @@ HomePlay talks to no server. There is no account and no telemetry. Permissions a
 | Microphone | The first CarPlay call or Siri request | The CarPlay screen and touch still work |
 | Bluetooth | The first iPhone pairing | USB still works |
 | Local Network | Receiving the CarPlay picture | CarPlay cannot connect |
+| Location (approximate) | The first time the Weather face appears | Weather shows the last known city, or no weather |
 | Calendar | When the calendar face is enabled | Other faces still work |
 | Automation | When Mac Now Playing is enabled | Other features still work |
 

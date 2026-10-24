@@ -15,26 +15,45 @@
 
 > 个人实验项目，与 Apple Inc. 无关，也未经 Apple 认证或背书。CarPlay 与 HomeView 是 Apple Inc. 的商标，这里只用来说明兼容性。请自行评估使用风险。
 
-## ⭐️ Features
+## 它是什么
 
-- **插线连接，然后无线。** 如同妙控系列配件一样的配对体验：第一次用数据线连上 Mac，配好就自动换成无线，之后拔线 CarPlay 也不会断。
-- **十种表情和多款表盘。** 初步设计了十种表情和多款表盘（Liquid Glass 大数字、Flow 泡泡字、模块、指针、床头夜灯……），旨在为平凡的日常注入一丝活力，帮助你收获更多平静、自在和从容。
-- **稍微用力按下屏幕，就是 CarPlay。** 在 Mac 桌面上获得连贯的 CarPlay 车载体验。与 iPhone 镜像不同的是，你可以通过 Mac 访问 iPhone 上的 Siri：按住 F5 直接开口说话，全程免提操作，在工作时减少分心。
-- **不只是 CarPlay。** 还整合了番茄钟、电量显示和“正在播放”小组件，并支持窗口置顶，相当于 iTunes 迷你播放器，但播的是 iPhone 上的曲库，比 AirPlay to Mac 更灵活和主动（F7–F9 媒体键切歌）。
+一台放在 Mac 桌面上的 HomeView。它有一双会看你的眼睛；用力按一下屏幕，它就变成 iPhone 的 CarPlay。
+
+- **它会看着你。** 一双 👀，十种表情：你靠近，它好奇地看过来；指针停在它身上，它笑眯眯；深夜放着不管，它会打瞌睡。眼睛住在一颗胶囊里，胶囊跟着表盘的年代换材质：纯黑、黑透或 Liquid Glass。
+- **13 款表盘。** 照 HomeView 官方的版式做：岛、照片、模块、Typograph、Flow、天气、日历、浮雕指针、陪伴的痕迹、黑色，还有三款 System 6 复古表盘。大时间是系统的 Liquid Glass，字体和颜色可以像 iOS 27 锁定屏幕那样自己调。
+- **用力按，就是 CarPlay。** 第一次插线，之后无线。iPhone 把真正的 CarPlay 画面和声音传到这台小屏幕，你在上面点，就像在车上点。按住 F5，直接和 iPhone 的 Siri 说话。
+- **顺手的小工具。** 番茄钟、正在播放、电量、下一个日程；F7–F9 媒体键切歌，窗口可以置顶，当成 iPhone 曲库的迷你播放器。
 
 <img src="assets/github/grid-v2.webp" alt="HomePlay 正面、背面、真实 CarPlay 音乐画面与拆开图" width="100%">
 
-| 多款表盘 | 十种表情 |
+| 13 款表盘 | 十种表情 |
 |:---:|:---:|
-| <img src="assets/github/styles-v2.webp" alt="岛、Flow、模块、指针、岛的口袋与床头夜灯六款表盘" width="100%"> | <img src="assets/github/faces-v2.webp" alt="同一双眼睛做出的十种表情" width="100%"> |
+| <img src="assets/github/styles-v2.webp" alt="HomePlay 的表盘：岛、Flow、模块、Typograph、天气、日历、浮雕指针与 System 6" width="100%"> | <img src="assets/github/faces-v2.webp" alt="同一双眼睛做出的十种表情" width="100%"> |
 
-<img src="assets/github/finishes-v2.webp" alt="G4 白、银、星光、玫瑰与深空灰五种外观" width="100%">
+## 第一次用，三步
 
-## 💡 使用前须知
+**需求：** macOS 14 及以上、Apple 芯片。
 
-- **测试过的 iPhone：** 只测试了运行 iOS 15、配备 Lightning 接口的 iPhone SE（第 1 代）和运行 iOS 27、配备 USB-C 接口的 iPhone 18 Pro，其他机型待反馈。
-- **手势：** 双指张合以缩放，双指滑动以旋转，三指拖移换位置。
-- **跟着你转：** 右键菜单还有一个类似 iMac G4 广告的 DockKit 跟随效果，并可匹配室内光线。
+1. [**下载 HomePlay-macOS-arm64.zip**](https://github.com/surfine/HomePlay/releases/latest/download/HomePlay-macOS-arm64.zip)，解压，把 `HomePlay.app` 拖进「应用程序」，打开。
+2. 用数据线把 iPhone 连到 Mac 一次，在 iPhone 上点「信任」和「配对」。
+3. 用力按桌宠的屏幕，进入 CarPlay。之后拔掉线，它会自己用无线连接。
+
+App 有 Developer ID 签名并通过 Apple 公证，解压后直接打开。想核对下载文件：[`HomePlay-macOS-arm64.zip.sha256`](https://github.com/surfine/HomePlay/releases/latest/download/HomePlay-macOS-arm64.zip.sha256)，`shasum -a 256 -c HomePlay-macOS-arm64.zip.sha256`。
+
+**目前只在这两台 iPhone 上测过：** iOS 15 的 iPhone SE（第 1 代，Lightning）和 iOS 27 的 iPhone 18 Pro（USB-C）。其他机型欢迎反馈。
+
+## 怎么操作
+
+| 想做什么 | 怎么做 |
+|---|---|
+| 进入／退出 CarPlay | 用力按屏幕（Force Click） |
+| 和 Siri 说话 | 按住 F5 |
+| 换表盘 | 滚动鼠标滚轮或按 ← →；长按屏幕看全部 |
+| 转身体 | 在机身上拖动或双指滑动；双击回正 |
+| 放大缩小 | 双指张合、⌥＋滚轮，或 ⌘+ ⌘− ⌘0 |
+| 移动位置 | 三指拖移，或 ⌘ 拖动 |
+| 拆开看看 | 双指轻点两下 |
+| 设置 | 右键，或 ⌘, |
 
 ## 🧑🏻‍💻 开发者的话
 
@@ -42,66 +61,19 @@
 >
 > 私以为在 AI 时代，拥有好奇心、释放想象力、发挥创造力、保持判断力和锻炼协同能力是至关重要的。希望 HomePlay 这只桌宠能带给大家一些乐趣。
 
-## 安装
+## 即将推出：0.7.0
 
-**需求：** macOS 14 以上、Apple Silicon。
+下面这些已经做好，正在等无线 CarPlay 的真机验证，验证通过就发布。
 
-[**下载 HomePlay-macOS-arm64.zip**](https://github.com/surfine/HomePlay/releases/latest/download/HomePlay-macOS-arm64.zip)，然后：
-
-1. 解压，把 `HomePlay.app` 拖进「应用程序」。
-2. 打开。桌宠会带着时间与眼睛出现；不需要账号、配置文件或任何设置。
-3. 第一次用 CarPlay：用 USB 线把 iPhone 连到 Mac 一次，在 iPhone 上点「信任」与「配对」。
-4. 重按桌宠进入 CarPlay。配对稳定后拔线会自动切到无线。
-
-Release 有 Developer ID 签名并通过 Apple 公证，解压后 Gatekeeper 会直接放行。对应的 checksum 是 [`HomePlay-macOS-arm64.zip.sha256`](https://github.com/surfine/HomePlay/releases/latest/download/HomePlay-macOS-arm64.zip.sha256)，可用 `shasum -a 256 -c HomePlay-macOS-arm64.zip.sha256` 验证。
-
-## 0.6.1 的新东西
-
-- **系统自己的 Liquid Glass：** 表盘大数字直接用 macOS 27 画 Liquid Glass 的那套引擎，折射、厚度、沿轮廓的亮边都和系统一样；Flow 的亮边会跟着你转。
-- **字体与颜色：** 照 iOS 27 锁定画面——六款系统时钟字体加粗细滑杆、色票（或跟随壁纸）加色调滑杆、玻璃或实线；右键 › 表盘 › 字体与颜色，或在设置 › 外观里打开。
-- **系统时钟数字：** 改用 iOS 锁定画面同一套数字字体，长高时笔画不变形；修掉了「9」里面那条细线。
-- **更省电：** 闲置 CPU 从约 9% 降到约 5%。
-
-[完整 Release notes](https://github.com/surfine/HomePlay/releases/tag/v0.6.1)
-
-## 特色（技术细节）
-
-- **真的 CarPlay**：无线（蓝牙 iAP2 到 Wi-Fi）或有线 USB；H.264 与 HEVC；触控回传；声音走 Mac 扬声器；iPhone 的「正在播放」接到 Mac 系统 Now Playing 与控制中心。
-- **从官方产品出发**：Apple 官方 HomeView USDZ 几何与材质、五种机身外观、背面 USB-C 母座；RealityKit 实时渲染与 Quick Look 同级 IBL。
-- **安静、省电**：闲置后换成静态海报，ARView 离开画面；被遮住或屏幕休眠时停止渲染。没有通知、没有反馈、没有 telemetry。
-- **零设置**：自动取得当前 Wi-Fi、自动匹配手机、插线与拔线自动切换；不读系统钥匙串，不弹管理员密码。
-- **面向公开**：单一实例、VoiceOver 可按、英／简／繁、权限说明本地化、GPL 开源。
-
-## 运作方式
-
-```mermaid
-flowchart LR
-  iPhone[iPhone CarPlay] -- "USB / Wi-Fi + iAP2" --> Receiver[homeplay-receiver]
-  Receiver -- "WebSocket H.264 / HEVC" --> Pet[homeplay-pet, RealityKit]
-  Pet -- "HID touch" --> Receiver
-```
-
-## 手势
-
-<details>
-<summary>全部手势</summary>
-
-| 动作 | 结果 |
-|---|---|
-| 拖动、双指滑 | 转身体 |
-| 三指拖移、⌘ 拖动 | 移动位置（直播时拖边框） |
-| 捏合、⌘+、⌘−、⌘0 | 放大缩小（⌘0 归位） |
-| 重按 | 进入／退出 CarPlay |
-| 长按屏幕 | 切换表盘 |
-| 双击 | 角度回正 |
-| 双指轻点两下 | 拆开／装回 |
-| ⌘H | 隐藏桌宠（状态栏图标可再显示） |
-
-</details>
+- **每款表盘都有眼睛。** 胶囊跟着表盘的年代换材质：平面版式是纯黑，iOS 27 风格是黑透渐变，HomeView 本身是 Liquid Glass，System 6 是 1-bit 按钮。
+- **新表盘：** 天气、日历、浮雕指针、黑色，和三款照 1988 年原样做的 System 6（Chicago 字体、1-bit 像素）。
+- **按住 F5 的 Siri 球。** 说话时屏幕上浮出一颗彩色的 Siri 光球，放开就缩回去。
+- **字体与圆角更像官方。** 时间数字用 SF Pro 的可变字重、字宽与光学尺寸；屏幕上的胶囊、卡片和机身圆角保持同心。
+- **换表盘不再留残影，** 闲置时也更省电。
 
 ## 隐私与权限
 
-HomePlay 不连任何服务器，没有账号，也没有 telemetry。权限按功能逐项申请：
+HomePlay 没有账号，也没有 telemetry。唯一会自己联网的是天气表盘：用大致位置向 Open-Meteo 查当地天气。权限按功能逐项申请：
 
 | 权限 | 什么时候会问 | 拒绝后 |
 |---|---|---|
@@ -109,6 +81,7 @@ HomePlay 不连任何服务器，没有账号，也没有 telemetry。权限按�
 | 麦克风 | 第一次进入 CarPlay 通话／Siri 时 | CarPlay 画面与触控仍可用 |
 | 蓝牙 | 第一次配对 iPhone 时 | 可用 USB 连接 |
 | 局域网 | 接收 iPhone 的 CarPlay 画面时 | 无法使用 CarPlay |
+| 位置（大致） | 天气表盘第一次出现时 | 天气表盘显示上次的城市或不显示天气 |
 | 日历 | 开启日历表盘时 | 其他表盘照常使用 |
 | Automation | 开启 Mac Now Playing 时 | 其他功能照常使用 |
 
