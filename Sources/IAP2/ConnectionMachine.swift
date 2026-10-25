@@ -41,6 +41,7 @@ package enum TimerID: Hashable, Sendable {
 package enum Hint: Equatable, Sendable {
     case wifiHelp
     case needPairing                                        // 没有任何已配对的 iPhone：交给插线优先／配对引导
+    case usbNoNetwork                                       // 有线：iPhone 的 NCM 网口 60 秒没出现，有线 0x4301 送不出去
     case cableGone(live: Bool, transport: CarPlayTransport?)  // 照 CarPlayTransportPolicy.onCableGone 冻结／恢复画面
 }
 
@@ -64,6 +65,7 @@ package enum ConnectionEvent: Equatable, Sendable {
     case sessionActive
     case sessionEnded(SessionEndReason)
     case displayChanged
+    case wifiChanged             // 使用者改了 Wi-Fi 名稱／密碼：交接中就立刻用新設定再叫一次手機
     case sleep, wake
     case suspend(SuspendReason, Bool)
     case restartDenied(RestartKind)
@@ -242,6 +244,7 @@ package struct ConnectionMachine: Sendable {
         case .sessionActive: onSessionActive()
         case .sessionEnded(let why): onSessionEnded(why)
         case .displayChanged: onDisplayChanged()
+        case .wifiChanged: onWiFiChanged()
         case .sleep: onSleep()
         case .wake: onWake()
         case .suspend(let why, let on): onSuspend(why, on)
@@ -677,10 +680,20 @@ package struct ConnectionMachine: Sendable {
             reopen("手机在 RECORD 后 \(String(format: "%.1f", env.now - since)) 秒就结束会话")
         case .silence:
             set(.silence, after: Self.silenceWait)
+        case .controlClosed:
+            // 手機掛了控制連線、但連結（USB／藍牙）還在：沒人會再送 0x4301，畫面就永遠停在「正在連線」。
+            // 真機 2026-10-25：第一次插線量完圓角重開會話，手機 0.6 秒後掛線、再也沒回來。連結還在就重送（reopen 有 30 秒 3 次的上限）
+            if case .up = link { reopen("手机关了控制连接，连结还在") }
         default:
             break
         }
         if link == .idle, !retryPending { ensureLink() }
+    }
+
+    /// 只在交接中（送了 0x4301、手機還沒連回）才重送；直播中改 Wi-Fi 設定不打斷畫面，下次交接自然用新值。
+    private mutating func onWiFiChanged() {
+        guard !isLive, case .handoff = link else { return }
+        reopen("Wi-Fi 设置改了")
     }
 
     private mutating func onDisplayChanged() {
@@ -776,6 +789,7 @@ package struct ConnectionMachine: Sendable {
             } else {
                 ncmSince = nil
                 out.append(.log("NCM 等了 60 秒仍没就绪"))
+                out.append(.notify(.usbNoNetwork))
             }
         case .cabledWait:
             guard !isLive, !sawAvailability, case .up(.bluetooth, let a?, _) = link, usb?.phone == a else { return }

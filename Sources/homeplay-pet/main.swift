@@ -1,3 +1,4 @@
+import Accelerate
 // HomeView 桌宠（自用，不分发）——RealityKit 版（USDZ 原生几何/材质）。
 //
 // 身体直接用 Apple 的 apple-homeview.usdz（Quick Look 的同一份资产）：几何、材质、网罩、
@@ -41,8 +42,7 @@ func log(_ s: String) { FileHandle.standardError.write(Data((s + "\n").utf8)) }
 /// 診斷日誌的落地點。`appendDiag` 會被事件 tap、相機佇列這些不能等磁碟的地方呼叫，
 /// 所以一律丟進這條序列佇列非同步寫；每支檔案超過 1 MB 就輪轉成 `<name>.1`，只留一份舊檔。
 private let diagQueue = DispatchQueue(label: "homeplay.diag", qos: .utility)
-private let diagDir: URL = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-    .appendingPathComponent("HomePlay")
+private let diagDir: URL = HomePlayState.directory
 private let diagLimit: UInt64 = 1 << 20
 private var diagHandles: [String: FileHandle] = [:]   // 只在 diagQueue 上存取
 
@@ -50,8 +50,11 @@ private func diagHandle(_ name: String) -> FileHandle? {
     if let h = diagHandles[name] { return h }
     try? FileManager.default.createDirectory(at: diagDir, withIntermediateDirectories: true)
     let url = diagDir.appendingPathComponent(name)
+    // 日誌只給自己讀寫（0600）：新建就是 0600，舊版留下的 0644 第一次打開時修正
     if !FileManager.default.fileExists(atPath: url.path) {
-        FileManager.default.createFile(atPath: url.path, contents: nil)
+        FileManager.default.createFile(atPath: url.path, contents: nil, attributes: [.posixPermissions: 0o600])
+    } else {
+        chmod(url.path, 0o600)
     }
     guard let h = try? FileHandle(forWritingTo: url) else { return nil }
     h.seekToEndOfFile()
@@ -76,6 +79,36 @@ private func diagWrite(_ name: String, _ text: String) {
     _ = try? h.write(contentsOf: data)
 }
 
+/// 舊版（0.4 之前）把每個按鍵寫進 keys.log：只刪這兩個確切檔名，其他檔不碰。回傳刪了幾個。
+@discardableResult
+func removeLegacyKeyLogs(in dir: URL) -> Int {
+    var removed = 0
+    for name in ["keys.log", "keys.log.1"] {
+        let url = dir.appendingPathComponent(name)
+        if FileManager.default.fileExists(atPath: url.path), (try? FileManager.default.removeItem(at: url)) != nil { removed += 1 }
+    }
+    return removed
+}
+let legacyKeyLogsKey = "HomePlayLegacyKeyLogsRemoved"
+
+/// 啟動時把 HomePlay 資料夾裡所有日誌（含輪轉的 .1、舊版留下的）收成 0600：
+/// receiver.log 有 Wi-Fi 名稱與手機位址，舊版的 keys.log 有按鍵紀錄，都不該給同機其他帳號讀。不刪、不改內容。
+func tightenLogPermissions() {
+    diagQueue.async {
+        // 一次性：刪掉舊版留下的按鍵紀錄（只記一行，不讀內容）
+        if !UserDefaults.standard.bool(forKey: legacyKeyLogsKey) {
+            if removeLegacyKeyLogs(in: diagDir) > 0 { log("removed legacy keys.log") }
+            UserDefaults.standard.set(true, forKey: legacyKeyLogsKey)
+        }
+        guard let names = try? FileManager.default.contentsOfDirectory(atPath: diagDir.path) else { return }
+        for n in names where n.hasSuffix(".log") || n.hasSuffix(".log.1") {
+            let path = diagDir.appendingPathComponent(n).path
+            if let mode = (try? FileManager.default.attributesOfItem(atPath: path))?[.posixPermissions] as? Int, mode & 0o077 != 0 {
+                chmod(path, 0o600)
+            }
+        }
+    }
+}
 /// 诊断日志：异步追加一行到 Application Support/HomePlay/<name>。
 func appendDiag(_ name: String, _ line: String) {
     let text = "[\(Date())] \(line)\n"
@@ -737,7 +770,21 @@ final class Face {
     private var paletteKey = -1
     private(set) var flow = CGPoint.zero, flowV = CGPoint.zero, builtFlow = CGPoint(x: 9, y: 9)
     private var lastWall = 0.0
-    private static let ci = CIContext()
+    /// 輕量模糊（兩次 tent ≈ 高斯）：不經過 GPU／Core Image
+    static func cpuBlur(_ img: CGImage, radius: Int) -> CGImage? {
+        let w = img.width, h = img.height, rb = w * 4
+        guard let ctx = CGContext(data: nil, width: w, height: h, bitsPerComponent: 8, bytesPerRow: rb, space: CGColorSpaceCreateDeviceRGB(),
+                                  bitmapInfo: CGImageAlphaInfo.premultipliedFirst.rawValue), let src = ctx.data else { return nil }
+        ctx.draw(img, in: CGRect(x: 0, y: 0, width: w, height: h))
+        guard let tmp = malloc(rb * h) else { return nil }
+        defer { free(tmp) }
+        var a = vImage_Buffer(data: src, height: vImagePixelCount(h), width: vImagePixelCount(w), rowBytes: rb)
+        var b = vImage_Buffer(data: tmp, height: vImagePixelCount(h), width: vImagePixelCount(w), rowBytes: rb)
+        let k = UInt32(radius * 2 + 1)
+        guard vImageTentConvolve_ARGB8888(&a, &b, nil, 0, 0, k, k, nil, vImage_Flags(kvImageEdgeExtend)) == kvImageNoError,
+              vImageTentConvolve_ARGB8888(&b, &a, nil, 0, 0, k, k, nil, vImage_Flags(kvImageEdgeExtend)) == kvImageNoError else { return nil }
+        return ctx.makeImage()
+    }
     private static let blobSpots: [(CGPoint, CGFloat, CGFloat)] =   // 位置、半径、视差（跟游标漂的比例）
         [(CGPoint(x: 780, y: 230), 360, 1.0), (CGPoint(x: 170, y: 840), 420, -0.7),
          (CGPoint(x: 900, y: 930), 300, 0.5), (CGPoint(x: 330, y: 470), 260, -1.2)]
@@ -782,10 +829,9 @@ final class Face {
             g.setFillColor(NSColor.white.withAlphaComponent(0.07).cgColor)
             g.fillEllipse(in: CGRect(x: 820 - 260, y: 180 - 260, width: 520, height: 520))
         }
-        let ciImg = CIImage(cgImage: img)
-        let out = ciImg.clampedToExtent().applyingGaussianBlur(sigma: 5.5).cropped(to: ciImg.extent)
         wallpaper = img
-        frosted = Self.ci.createCGImage(out, from: ciImg.extent) ?? img
+        // 用 CPU（Accelerate）模糊：真機 2026-10-25 首次設定時 Core Image 在這裡 GPU 段錯誤閃退
+        frosted = Self.cpuBlur(img, radius: 7) ?? img
         builtFlow = flow
     }
 
@@ -1074,8 +1120,8 @@ final class Face {
         let date = Self.displayDate, red = srgb(0xa8241c)
         drawCentered(g, Self.dateLine(date), font: FaceType.sf(36, .semibold), kern: 0.6, y: 150, color: srgb(0x5e1712))
         let (hh, mm) = Self.hourMinute(date)
-        let a = GlyphShape.adaptive(hh, height: 470, maxWidth: 400, at: CGPoint(x: 492, y: 210), anchorX: 1, weight: 220)
-        let b = GlyphShape.adaptive(mm, height: 470, maxWidth: 400, at: CGPoint(x: 532, y: 210), anchorX: 0, weight: 220)
+        let (a, b) = GlyphShape.centeredPair(GlyphShape.adaptive(hh, height: 470, maxWidth: 400, at: CGPoint(x: 492, y: 210), anchorX: 1, weight: 220),
+                                             GlyphShape.adaptive(mm, height: 470, maxWidth: 400, at: CGPoint(x: 532, y: 210), anchorX: 0, weight: 220))
         // 一點點同色的光暈，像夜裡的 LED，不是平面貼字
         g.saveGState()
         g.setShadow(offset: .zero, blur: 26, color: red.withAlphaComponent(0.45).cgColor)
@@ -2538,6 +2584,13 @@ final class ReceiverClient: NSObject, URLSessionWebSocketDelegate {
     func sendRestorePhones() {
         send(#"{"type":"restorePhones"}"#)
     }
+    /// 只送 Wi-Fi 名稱（自動讀到的）：接收器保留原本的密碼；不寫 wireless.json
+    func sendSSID(_ ssid: String) {
+        if let data = try? JSONSerialization.data(withJSONObject: ["type": "setWiFi", "ssid": ssid]),
+           let text = String(data: data, encoding: .utf8) { send(text) }
+    }
+    /// 「拷貝診斷報告」：接收器回 {"type":"diagnostics","report":…}（只有次數、秒數、狀態）
+    func requestDiagnostics() { send(#"{"type":"diagnostics"}"#) }
     /// 告诉 receiver 桌宠现在是在前台看引导，还是只在后台等画面。
     /// 后台挂接时 receiver 不要为配对自己弹系统设置。
     func sendEngaged(_ engaged: Bool) {
@@ -2626,6 +2679,7 @@ final class PetView: NSView {
     var onSetWiFi: ((String, String) -> Void)?
     var onForgetPhone: ((String) -> Void)?
     var onRestorePhones: (() -> Void)?
+    var onCopyDiagnostics: (() -> Void)?   // 右鍵 › iPhone › 拷貝診斷報告：AppDelegate 向接收器要現場
     var onVideoState: ((Bool) -> Void)?   // 直播开始/结束：AppDelegate 据此启停健康检查与统计
     private var forceStage = 0
 
@@ -3540,6 +3594,11 @@ final class PetView: NSView {
     private var pendingWink: Double?
     private var nodStart: Double?, shakeStart: Double?
     private var rotateMoved = false
+    private var rotateTravel: CGFloat = 0          // 這次轉身體拖了多遠（點）：搬位置提示用
+    private var moveHint = MoveHintDetector()
+    /// 拖它就搬窗口的部位：底座那一截（螢幕、鉸鏈仍是轉身體）
+    private static let standAnatomy: Set<AnatomyPart> = [.radiators, .baseModule, .power, .climate, .woofer, .foot]
+    static var standAnatomyForTest: Set<AnatomyPart> { standAnatomy }
     private static let standParts: Set<String> = ["hinge", "dome", "grille", "driver", "foot"]
 
     /// 换外观：模型换材质；G4 白的屏幕走 Aqua，转头幅度也大一点（向日葵）
@@ -3955,7 +4014,12 @@ final class PetView: NSView {
         // System 6 錶面：单击屏幕（没拖、也不是双击）才打开 AI System 6，放手后等过双击间隔再开
         system6Pending = face.style == .system6 && face.system6Layout == .finder && !showingVideo && event.clickCount == 1 && screenUV(p) != nil
         if event.clickCount >= 2 { system6Token += 1 }
-        if event.modifierFlags.contains(.command) { window?.performDrag(with: event); return }
+        if event.modifierFlags.contains(.command) {
+            let before = window?.frame.origin
+            window?.performDrag(with: event)   // 拖完才回來
+            if let before, window?.frame.origin != before { MoveHint.noteMoved() }
+            return
+        }
         if inResizeCorner(p) {
             drag = .resize; winStart = window?.frame ?? .zero; mouseStart = NSEvent.mouseLocation; return
         }
@@ -3988,10 +4052,19 @@ final class PetView: NSView {
         }
         let now = CACurrentMediaTime()
         mood.activity(now: now, hour: Calendar.current.component(.hour, from: Date()))
-        if hitsModel(p) { pressTarget = 0.975; if mood.poke(now: now) { shake(now) } }
+        let onStand = hitsStand(p)
+        if hitsModel(p) { pressTarget = 0.975; if !onStand, mood.poke(now: now) { shake(now) } }
         dragVel = 0; lastDragT = event.timestamp
         if event.clickCount == 2, hitsModel(p) { resetOrientation(); drag = .none; return }
-        drag = .rotate; last = p; rotateMoved = false; rotLock.reset(); touring = false
+        // 拖底座＝搬窗口（不用按 ⌘）；螢幕和鉸鏈以上照舊轉身體
+        if onStand {
+            touring = false
+            drag = .move; winStart = window?.frame ?? .zero; mouseStart = NSEvent.mouseLocation
+            rotateMoved = false
+            appendDiag("gesture.log", "stand drag start")
+            return
+        }
+        drag = .rotate; last = p; rotateMoved = false; rotateTravel = 0; rotLock.reset(); touring = false
     }
 
     override func mouseDragged(with event: NSEvent) {
@@ -4008,6 +4081,7 @@ final class PetView: NSView {
             updateFaceScale()
         case .rotate:
             let dx = p.x - last.x, dy = p.y - last.y; last = p
+            rotateTravel += abs(dx) + abs(dy)
             // 单轴锁：起手判主轴（左右＝偏航、上下＝俯仰），被锁的轴不动
             let (lx, ly) = rotLock.pass(dx: dx, dy: dy)
             atHome = false
@@ -4071,6 +4145,7 @@ final class PetView: NSView {
                 // 三指拖移机器上的「点一下」：保留摸头等点击语义（直播中不打扰）
                 if !showingVideo, hitsModel(p) { mood.show(.happy, for: 1.0, now: CACurrentMediaTime()) }
             } else if let w = window {
+                MoveHint.noteMoved()
                 log("moved \(Int(w.frame.minX)),\(Int(w.frame.minY))")
                 if !NSScreen.screens.contains(where: { $0.visibleFrame.intersects(w.frame) }) {
                 // 整个拖出屏幕：拉回主屏
@@ -4081,6 +4156,13 @@ final class PetView: NSView {
             }
         case .rotate where rotateMoved:
             mood.show(.happy, for: 1.2, now: CACurrentMediaTime())   // 放下：笑一下
+            // 拖機身是轉身體；一路拖到窗外（或拖很遠）兩次，多半其實想搬走它：提示一次怎麼搬
+            if MoveHint.shouldOffer, let w = window,
+               moveHint.rotateDragEnded(now: CACurrentMediaTime(), leftWindow: !w.frame.contains(NSEvent.mouseLocation),
+                                        travel: Double(rotateTravel), width: Double(w.frame.width)) {
+                MoveHint.show(near: w)
+                appendDiag("gesture.log", "move hint shown")
+            }
             // 甩出去：照 Apple 的动量投射（减速率 0.995），目标往前推，弹簧接着当前速度转过去
             if event.timestamp - lastDragT < 0.08 { ty += max(-.pi, min(.pi, dragVel * 0.2)) }
             rotLock.reset()        default: break
@@ -4168,6 +4250,11 @@ final class PetView: NSView {
     private var anatomyActive: Bool { apartT > 0.4 && !showingVideo }
 
     /// 這個點（視圖座標）底下是哪一件
+    /// 點在底座那一截（不在螢幕上、真的打到機身、拆開看看時不算）
+    private func hitsStand(_ p: NSPoint) -> Bool {
+        guard !anatomyActive, screenUV(p) == nil, hitsModel(p), let part = pickAnatomy(p)?.0 else { return false }
+        return Self.standAnatomy.contains(part)
+    }
     private func pickAnatomy(_ p: NSPoint) -> (AnatomyPart, SIMD3<Float>)? {
         guard let ray = render.ray(through: p) else { return nil }
         return model.pickAnatomy(origin: ray.origin, direction: ray.direction)
@@ -4347,6 +4434,7 @@ final class PetView: NSView {
         f.origin.x += dx * scale
         f.origin.y += dy * scale                     // 触控板 y 向上＝窗口向上（直接操纵）
         w.setFrameOrigin(clampToScreen(f).origin)
+        if abs(dx) + abs(dy) > 0.002 { MoveHint.noteMoved() }
         base = p; threeFinger = base
     }
     override func touchesEnded(with event: NSEvent) { threeFinger = nil; pressTarget = 1 }
@@ -4563,6 +4651,14 @@ final class PetView: NSView {
                 menu.addItem(item)
             }
         }
+        // iPhone：連接步驟、Wi-Fi 設定、配對新的、拷貝診斷報告（連線卡上的「右鍵 → iPhone → …」都指這裡）
+        let iphone = NSMenu()
+        iphone.addItem(menuItem(L("menu.connectSteps", "连接步骤…"), #selector(menuConnectSteps), symbol: "list.number"))
+        iphone.addItem(menuItem(L("menu.wifiPassword", "Wi-Fi 设置…"), #selector(menuWiFiPassword), symbol: "wifi"))
+        iphone.addItem(menuItem(L("menu.pairNewPhone", "配对新 iPhone…"), #selector(menuPairNewPhone), symbol: "plus.circle"))
+        iphone.addItem(.separator())
+        iphone.addItem(menuItem(L("menu.copyDiagnostics", "拷贝诊断报告"), #selector(menuCopyDiagnostics), symbol: "doc.on.clipboard"))
+        menu.addItem(submenuItem(L("menu.iphone", "iPhone"), iphone, symbol: "iphone"))
         menu.addItem(.separator())
 
         // 表盘：全部表盘（打勾）、岛表盘样式、表盘总览
@@ -4859,6 +4955,8 @@ final class PetView: NSView {
         onSelectPhone?(address)
     }
     @objc private func menuPairNewPhone() { onPairNewPhone?() }
+    @objc func menuConnectSteps() { ConnectHelp.showSteps() }
+    @objc func menuCopyDiagnostics() { onCopyDiagnostics?() }
     @objc private func menuForgetPhone(_ sender: NSMenuItem) {
         guard let address = sender.representedObject as? String, !address.isEmpty else { return }
         NSApp.activate(ignoringOtherApps: true)
@@ -5117,8 +5215,7 @@ enum ReceiverLauncher {
     }
 
     static func configURL() -> URL {
-        FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("HomePlay/wireless.json")
+        HomePlayState.directory.appendingPathComponent("wireless.json")
     }
 
     static func loadConfig() -> Config {
@@ -5245,7 +5342,9 @@ enum ReceiverLauncher {
             try? FileManager.default.removeItem(at: logURL)
         }
         if !FileManager.default.fileExists(atPath: logURL.path) {
-            FileManager.default.createFile(atPath: logURL.path, contents: nil)
+            FileManager.default.createFile(atPath: logURL.path, contents: nil, attributes: [.posixPermissions: 0o600])   // 有 Wi-Fi 名稱與手機位址
+        } else {
+            chmod(logURL.path, 0o600)
         }
         var logHandle: FileHandle?
         if let h = FileHandle(forWritingAtPath: logURL.path) {
@@ -5272,7 +5371,8 @@ enum ReceiverLauncher {
 /// 开机自启的 LaunchAgent：receiver 以 --source auto 常驻（RunAtLoad），
 /// 参数读 wireless.json；装/卸都是一条 launchctl。妙控体验的最后一块——桌面常在，插线即连。
 enum ReceiverAgent {
-    static let label = "me.aaron.homeplay.receiver"
+    /// 首次配對演練（HOMEPLAY_STATE_NAME）用另一個標籤：不覆蓋、不卸載使用者平常的 LaunchAgent
+    static let label = HomePlayState.isolated ? "me.aaron.homeplay.receiver.rehearsal" : "me.aaron.homeplay.receiver"
     static var plistURL: URL {
         FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent("Library/LaunchAgents/\(label).plist")
@@ -5376,7 +5476,9 @@ enum ReceiverAgent {
   <key>RunAtLoad</key><true/>
   <!-- 只在异常退出（接收器自愈 exit(1)）时由 launchd 重新拉起；用户主动停止是 exit(0)，不会重启。 -->
   <key>KeepAlive</key><dict><key>SuccessfulExit</key><false/></dict>
-  <key>ThrottleInterval</key><integer>10</integer>
+  <key>ThrottleInterval</key><integer>10</integer>\(HomePlayState.isolated ? "\n  <key>EnvironmentVariables</key><dict><key>HOMEPLAY_STATE_NAME</key><string>\(HomePlayState.name)</string></dict>" : "")
+  <!-- Umask 077：launchd 建的 receiver.log 與接收器寫的檔都只給自己讀寫（日誌裡有 Wi-Fi 名稱與手機位址） -->
+  <key>Umask</key><integer>63</integer>
   <key>StandardOutPath</key><string>\(logPath.path)</string>
   <key>StandardErrorPath</key><string>\(logPath.path)</string>
 </dict></plist>
@@ -5608,6 +5710,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     var client: ReceiverClient?
     private var pendingUsePhone: String?   // 还没连上 receiver 时先记住，WS 打开后补发
     private var pendingPairNew = false
+    private var diagnosticsWaiter: ((String?) -> Void)?   // 等接收器回診斷報告（2 秒沒回就只交桌寵這邊的）
+    private var diagnosticsTimeout: DispatchWorkItem?
+    private var ssidDialogShown = false                    // 「Wi-Fi 名稱未知」時自動開一次 Wi-Fi 設定（自動讀不到才用）
+    private var locationAsked = false                      // 這次執行已為 Wi-Fi 名稱出過定位說明卡
     private var pendingSiri = false
     /// F5 按住說話：按下是否已送出（沒送出就放開＝改送一次「按一下」）
     private var siriHold = SiriHoldKey()
@@ -6239,6 +6345,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ note: Notification) {
         wirePermissionMoods()
+        if HomePlayState.isolated { log("rehearsal state: Application Support/\(HomePlayState.name), agent \(ReceiverAgent.label)") }
+        tightenLogPermissions()
         // 除錯／截图：开机 3 秒后在桌宠上弹出右键菜单（--show-menu）
         if CommandLine.arguments.contains("--show-menu") {
             DispatchQueue.main.asyncAfter(deadline: .now() + 3) { [weak self] in
@@ -6288,7 +6396,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         Pet.aspect = Pet.aspect(for: ViewMode.saved)   // 挂墙时窗口只框屏幕模组
         rememberFrame = remember
         let restored = remember ? WindowFrameStore.restore(WindowFrameStore.load(), visible: NSScreen.screens.map(\.visibleFrame)) : nil
-        let size = restored?.size ?? NSSize(width: initialWidth, height: initialWidth / Pet.aspect)
+        // 第一次打開（沒有記住的大小）：開大一點（380 pt），設定引導的字才清楚好讀；之後照使用者調的大小
+        let firstWidth = (restored == nil && !sizeGiven) ? max(initialWidth, 380) : initialWidth
+        let size = restored?.size ?? NSSize(width: firstWidth, height: firstWidth / Pet.aspect)
         window = PetWindow(size: size)
         view = PetView(frame: NSRect(origin: .zero, size: size), initialApart: initialApart, yaw: initialYaw, pitch: initialPitch)
         if let t = initialApartT { view.setInitialApart(t) }
@@ -6336,6 +6446,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         view.onForceEnter = { [weak self] in self?.enterCarPlay() }
         view.onSelectPhone = { [weak self] address in self?.switchPhone(to: address) }
         view.onPairNewPhone = { [weak self] in self?.pairNewPhone() }
+        view.onCopyDiagnostics = { [weak self] in self?.copyDiagnostics() }
         view.onSetWiFi = { [weak self] ssid, password in
             ReceiverLauncher.saveWiFi(ssid: ssid, passphrase: password)
             CarPlayWiFi.ssid = ssid
@@ -6764,6 +6875,103 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     /// 右键「配对新 iPhone…」：即使已经有一台在用，也让 receiver 打开蓝牙设置等新配对。
+    /// Wi-Fi 名稱：讀得到就送；卡住且沒問過就說明卡 → 定位權限；被拒／讀不到就開 Wi-Fi 設定手填（WiFiName.decide）
+    func autoFillSSID(receiverKnows: Bool, stuck: Bool) {
+        let action = WiFiName.decide(receiverKnows: receiverKnows, readable: WiFiName.current(), auth: WiFiName.auth,
+                                     stuck: stuck, quiet: quietAttach, alreadyAsked: locationAsked)
+        switch action {
+        case .send(let name):
+            client?.sendSSID(name)
+            CarPlayWiFi.ssid = name
+            if CarPlayOverlayState.connectReason == "ssidUnknown" { CarPlayOverlayState.wifiHelp = false }   // 接收器會馬上重叫手機
+            log("Wi-Fi name filled from CoreWLAN (value not logged)")
+        case .askPermission:
+            locationAsked = true
+            log("Wi-Fi name unknown: asking for Location to read it")
+            withPermission(.location) { [weak self] ok in
+                guard let self else { return }
+                guard CarPlayWiFi.ssid.isEmpty else { return }   // 等定位的時候 iPhone 已經分享了 Wi-Fi：什麼都不用做
+                guard ok else { self.openWiFiDialogOnce(); return }
+                // 剛允許時 macOS 要過幾秒才把 SSID 交給 App：每 0.5 秒再讀，最多 10 秒，讀不到才開手填
+                log("Location granted: waiting for macOS to reveal the Wi-Fi name")
+                func poll(_ n: Int) {
+                    if WiFiName.current() != nil { self.autoFillSSID(receiverKnows: false, stuck: true); return }
+                    if n >= 20 { log("Wi-Fi name still hidden 10 s after Location was granted"); self.openWiFiDialogOnce(); return }
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { poll(n + 1) }
+                }
+                poll(0)
+            }
+        case .manual:
+            openWiFiDialogOnce()
+        case .nothing:
+            break
+        }
+    }
+    private func openWiFiDialogOnce() {
+        guard !ssidDialogShown, !quietAttach, !isLive else { return }
+        ssidDialogShown = true
+        settingsPerform("menuWiFiPassword", nil)
+    }
+
+    /// 第一次進配對引導（桌寵在前台）時自動出一次「連接步驟」：先講清楚哪條路對，免得在 iPhone 藍牙裡亂點
+    private func showConnectStepsOnce() {
+        guard !quietAttach, !UserDefaults.standard.bool(forKey: ConnectHelp.stepsShownKey) else { return }
+        UserDefaults.standard.set(true, forKey: ConnectHelp.stepsShownKey)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) { ConnectHelp.showSteps() }
+    }
+
+    /// 右鍵 › iPhone › 拷貝診斷報告：桌寵這邊的狀態＋接收器的現場＋日誌里程碑次數，放進剪貼簿。
+    /// 不含 Wi-Fi 名稱、密碼、位址、裝置名稱（接收器那段見 ConnectDiagnostics.reportLines）。
+    func copyDiagnostics() {
+        let started = CACurrentMediaTime()
+        func finish(_ receiver: String?) {
+            diagnosticsWaiter = nil
+            diagnosticsTimeout?.cancel(); diagnosticsTimeout = nil
+            let info = Bundle.main.infoDictionary
+            let v = ProcessInfo.processInfo.operatingSystemVersion
+            #if arch(arm64)
+            let arch = "arm64"
+            #else
+            let arch = "x86_64"
+            #endif
+            let f = DateFormatter(); f.dateFormat = "yyyy-MM-dd HH:mm ZZZZZ"
+            let reason = CarPlayOverlayState.connectReason ?? "-"
+            let helpFor = CarPlayOverlayState.helpSince.map { " for \(Int(CACurrentMediaTime() - $0)) s" } ?? ""
+            var card = "none"
+            if CarPlayOverlayState.needsCable { card = "needCable" }
+            else if CarPlayOverlayState.needsTrust { card = "needTrust" }
+            else if CarPlayOverlayState.bluetoothPairing { card = "bluetoothPairing(\(CarPlayOverlayState.pairPhase ?? "-"))" }
+            else if CarPlayOverlayState.bluetoothPairFailed { card = "bluetoothPairFailed(\(CarPlayOverlayState.pairFailReason ?? "-"))" }
+            else if CarPlayOverlayState.needsPairing { card = "needPairing" }
+            else if CarPlayOverlayState.wifiHelp { card = "connectHelp(\(reason))\(helpFor)" }
+            let pet = [
+                "HomePlay \(info?["CFBundleShortVersionString"] as? String ?? "dev") (\(info?["CFBundleVersion"] as? String ?? "-"))"
+                    + " · macOS \(v.majorVersion).\(v.minorVersion).\(v.patchVersion) · \(arch) · \(L10n.language.rawValue)",
+                "Created: \(f.string(from: Date()))",
+                "Pet: receiver connected \(client != nil ? "yes" : "no") · status \(view.face.status) · video \(view.showingVideo ? "yes" : "no")"
+                    + " · card \(card) · iPhones known \(CarPlayPhoneBook.phones.count)"
+                    + (HomePlayState.isolated ? " · rehearsal state" : ""),
+            ]
+            let text = ConnectHelp.compose(petLines: pet, receiver: receiver, log: ConnectHelp.logSummary())
+            NSPasteboard.general.clearContents()
+            NSPasteboard.general.setString(text, forType: .string)
+            log("diagnostic report copied (\(text.count) chars, receiver \(receiver == nil ? "silent" : "answered") in \(Int((CACurrentMediaTime() - started) * 1000)) ms)")
+            NSApp.activate(ignoringOtherApps: true)
+            let alert = NSAlert()
+            alert.messageText = L("diag.copiedTitle", "诊断报告已拷贝")
+            alert.informativeText = L("diag.copiedBody", "直接粘贴给帮你看的人。里面只有次数、时间和状态，不含 Wi-Fi 名称、密码、地址或设备名称。")
+            alert.addButton(withTitle: L("gaze.denied.ok", "好"))
+            alert.runModal()
+        }
+        guard diagnosticsWaiter == nil else { return }   // 上一次還在等接收器
+        guard let c = client else { finish(nil); return }
+        diagnosticsWaiter = { report in finish(report) }
+        c.requestDiagnostics()
+        let timeout = DispatchWorkItem { [weak self] in self?.diagnosticsWaiter?(nil) }
+        diagnosticsTimeout = timeout
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2, execute: timeout)
+    }
+
     func pairNewPhone() {
         switchingPhone = true
         handoffFreeze = false
@@ -6867,6 +7075,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         quietAttach = quiet
         c.onLive = { [weak self] live in
             guard let self else { return }
+            // 畫面出來了：設定流程裡還掛著的定位說明卡一律收掉（它只是為了 Wi-Fi 名稱，已經不需要了）
+            if live, PermissionPrimer.kind == .location { PermissionPrimer.dismiss() }
             if !live, self.handoffFreeze {
                 self.isLive = false
                 log("handoff: wired session ended; holding last frame")
@@ -6993,12 +7203,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 }
                 return
             }
+            if s.contains("\"type\":\"diagnostics\"") {
+                if let data = s.data(using: .utf8),
+                   let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                   let report = obj["report"] as? String {
+                    self.diagnosticsWaiter?(report)
+                }
+                return
+            }
             if s.contains("\"type\":\"wifiHelp\"") {
                 self.engageQuietAttach()
+                if !CarPlayOverlayState.wifiHelp { CarPlayOverlayState.helpSince = CACurrentMediaTime() }
                 CarPlayOverlayState.wifiHelp = true
                 if let data = s.data(using: .utf8),
                    let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
                     CarPlayOverlayState.wifiNeedsPassword = (obj["passphraseMissing"] as? Bool) ?? false
+                    let reason = obj["reason"] as? String
+                    if reason != CarPlayOverlayState.connectReason { CarPlayOverlayState.helpSince = CACurrentMediaTime() }
+                    CarPlayOverlayState.connectReason = reason
+                    CarPlayOverlayState.helpSSID = obj["ssid"] as? String ?? ""
+                    log("connect help: \(reason ?? "wifi")")
+                    // Wi-Fi 名稱未知（macOS 對 App 隱藏）：有定位權限就自己讀；沒問過先出說明卡；被拒才打開 Wi-Fi 設定手填
+                    if reason == "ssidUnknown", !self.isLive {
+                        DispatchQueue.main.async { self.autoFillSSID(receiverKnows: false, stuck: true) }
+                    }
                 }
                 return
             }
@@ -7007,6 +7235,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                    let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
                    let value = obj["ssid"] as? String {
                     CarPlayWiFi.ssid = value
+                    // 接收器不知道名稱：已有定位權限就悄悄補上。不在這裡問定位——接收器一連上 iPhone 就先請它
+                    // 分享 Wi-Fi（一次點按、連密碼一起來）；iPhone 拒絕而真的卡住時才走定位／手填
+                    if value.isEmpty { DispatchQueue.main.async { self.autoFillSSID(receiverKnows: false, stuck: false) } }
+                    // iPhone 已經分享（或使用者手填）了：還掛著的定位說明卡就收掉，不要蓋在 CarPlay 畫面上
+                    else if PermissionPrimer.kind == .location { DispatchQueue.main.async { PermissionPrimer.dismiss() } }
                 }
                 return
             }
@@ -7026,6 +7259,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     self.view.face.status = .connecting
                 }
                 log("first pairing: waiting for a cable")
+                self.showConnectStepsOnce()
                 return
             }
             if s.contains("\"type\":\"requestUI\"") {
@@ -7101,6 +7335,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     self.view.face.status = .connecting
                 }
                 log("needs pairing")
+                self.showConnectStepsOnce()
             }
             if s.contains("\"type\":\"phoneForgotten\"") {
                 // 忘記之後還要使用者做的步驟：iPhone 上忘記這台車；Mac 刪不掉系統配對時再加一步
@@ -7141,6 +7376,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 log("USB needs trust")
             }
             if s.contains("\"type\":\"trustDone\"") {
+                // 有线排障卡（usb 开头的原因）也跟着收：解锁了、信任了、或拔线了
+                if CarPlayOverlayState.connectReason?.hasPrefix("usb") == true { CarPlayOverlayState.wifiHelp = false }
                 if CarPlayOverlayState.needsTrust, !self.isLive {
                     self.view.face.status = .notConnected
                 }
@@ -7519,6 +7756,61 @@ if CommandLine.arguments.contains("--selftest") {
     check(AnatomyPart.allCases.allSatisfy { mdl.anatomyAnchor($0) != nil }, "每个零件都挑得到")
     let frontHit = mdl.pickAnatomy(origin: SIMD3<Float>(0, 10.5, 60), direction: SIMD3<Float>(0, 0, -1))?.0
     check(frontHit == .coverGlass, "正面先打到盖板玻璃（\(frontHit?.rawValue ?? "nil")）")
+    // 拖底座＝搬窗口：组好时从正面打底座那一截，挑到的是底座零件；打屏幕不算
+    let standYs: [Float] = [-1, 0, 1, 2, 3, 4, 5, 6, 7, 8]
+    let standHits = standYs.map { mdl.pickAnatomy(origin: SIMD3<Float>(0, $0, 60), direction: SIMD3<Float>(0, 0, -1))?.0 }
+    log("selftest stand picks \(zip(standYs, standHits).map { "\($0)=\($1?.rawValue ?? "nil")" }.joined(separator: " "))")
+    check(standHits.contains { $0.map { PetView.standAnatomyForTest.contains($0) } ?? false }, "正面打底座挑到底座零件")
+    check(!PetView.standAnatomyForTest.contains(frontHit ?? .coverGlass), "屏幕不是底座")
+    // 搬位置提示：拖到窗外两次（30 秒内）才提示；拖一点点、隔太久都不算
+    do {
+        var d = MoveHintDetector()
+        check(!d.rotateDragEnded(now: 0, leftWindow: true, travel: 50, width: 220), "搬位置提示：第一次不提示")
+        check(!d.rotateDragEnded(now: 5, leftWindow: false, travel: 40, width: 220), "搬位置提示：小幅转动不算")
+        check(d.rotateDragEnded(now: 10, leftWindow: false, travel: 400, width: 220), "搬位置提示：30 秒内第二次拖很远就提示")
+        check(!d.rotateDragEnded(now: 11, leftWindow: true, travel: 0, width: 220), "搬位置提示：提示后重新计数")
+        check(!d.rotateDragEnded(now: 60, leftWindow: true, travel: 0, width: 220), "搬位置提示：隔太久不累计")
+    }
+    // 舊版按鍵紀錄：只刪 keys.log／keys.log.1，同資料夾其他檔（含名字相近的）都留著
+    do {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("homeplay-selftest-\(UUID().uuidString)")
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        for n in ["keys.log", "keys.log.1", "keys.log.bak", "syskeys.log", "receiver.log"] {
+            FileManager.default.createFile(atPath: dir.appendingPathComponent(n).path, contents: Data("x".utf8))
+        }
+        let removed = removeLegacyKeyLogs(in: dir)
+        let left = Set((try? FileManager.default.contentsOfDirectory(atPath: dir.path)) ?? [])
+        check(removed == 2 && left == ["keys.log.bak", "syskeys.log", "receiver.log"], "旧按键纪录：只删 keys.log 与 keys.log.1")
+        check(removeLegacyKeyLogs(in: dir) == 0, "旧按键纪录：再跑一次什么都不删")
+        try? FileManager.default.removeItem(at: dir)
+    }
+    // Wi-Fi 名称自动补：读得到就送；没卡住不打扰；卡住且没问过才问定位；被拒或问过才手填
+    do {
+        typealias W = WiFiName
+        check(W.decide(receiverKnows: true, readable: "Home", auth: .granted, stuck: true, quiet: false, alreadyAsked: false) == .nothing, "Wi-Fi 名称：接收器已知就不动")
+        check(W.decide(receiverKnows: false, readable: "Home", auth: .granted, stuck: false, quiet: true, alreadyAsked: false) == .send("Home"), "Wi-Fi 名称：有权限就悄悄补上")
+        check(W.decide(receiverKnows: false, readable: "<redacted>", auth: .denied, stuck: false, quiet: false, alreadyAsked: false) == .nothing, "Wi-Fi 名称：没卡住不弹东西")
+        check(W.decide(receiverKnows: false, readable: nil, auth: .notDetermined, stuck: true, quiet: false, alreadyAsked: false) == .askPermission, "Wi-Fi 名称：卡住且没问过才问定位")
+        check(W.decide(receiverKnows: false, readable: nil, auth: .notDetermined, stuck: true, quiet: false, alreadyAsked: true) == .manual, "Wi-Fi 名称：问过（选了以后）就手填")
+        check(W.decide(receiverKnows: false, readable: nil, auth: .denied, stuck: true, quiet: false, alreadyAsked: false) == .manual, "Wi-Fi 名称：被拒就手填")
+        check(W.decide(receiverKnows: false, readable: nil, auth: .granted, stuck: true, quiet: false, alreadyAsked: false) == .manual, "Wi-Fi 名称：允许了却读不到（没连 Wi-Fi）就手填")
+        check(W.decide(receiverKnows: false, readable: nil, auth: .notDetermined, stuck: true, quiet: true, alreadyAsked: false) == .nothing, "Wi-Fi 名称：背景挂着不打扰")
+        check(W.usable(" Home ") == "Home" && W.usable("<redacted>") == nil && W.usable("") == nil, "Wi-Fi 名称：脱敏占位不算")
+    }
+    // 连不上的排障卡：每个原因各有标题；40 秒后给插线退路；网络名带进句子；日志只数次数
+    do {
+        let reasons = ["macFirewall", "localNetwork", "carPlayConsent", "ssidUnknown", "inboundBlocked", "wifiNoConnectBack",
+                       "usbNoData", "usbLocked", "usbTrustExpired", "usbNoNetwork"]
+        let titles = Set(reasons.map { ConnectHelp.card(reason: $0, ssid: "Home", needsPassword: false, helpElapsed: 0).title })
+        check(titles.count == reasons.count, "排障卡：每个原因（无线六个、有线四个）各有标题")
+        let early = ConnectHelp.card(reason: "wifiNoConnectBack", ssid: "Home", needsPassword: false, helpElapsed: 5)
+        let late = ConnectHelp.card(reason: "wifiNoConnectBack", ssid: "Home", needsPassword: false, helpElapsed: 45)
+        check(early.subtitle.contains("Home") && early.hint == nil && late.hint != nil && late.chip != early.chip, "排障卡：40 秒后改给插线与诊断报告")
+        check(ConnectHelp.card(reason: nil, ssid: "", needsPassword: true, helpElapsed: 0).hint != nil, "排障卡：旧接收器没给原因也有提示")
+        let selftestLog = Substring("[1] 无线：身份自检通过\n[2] 无线：送 0x4301：无线 10.0.0.2\n[3] 无线：手机连入控制口 10.0.0.3\n[4] 无线：会话开始，等画面\n")
+        let sum = ConnectHelp.summarizeLog(selftestLog)
+        check(sum.contains("start sent 1") && sum.contains("sessions 1") && !sum.contains("10.0.0"), "诊断报告：日志只数次数、不抄地址")
+    }
     mdl.apply(1)
     let baseHit = mdl.pickAnatomy(origin: SIMD3<Float>(0, -5.9, 60), direction: SIMD3<Float>(0, 0, -1))?.0
     check(baseHit == .foot, "拆开后最下面是底脚（\(baseHit?.rawValue ?? "nil")）")
@@ -7762,6 +8054,11 @@ if CommandLine.arguments.contains("--pairing-code") {   // 快照用：插線配
 }
 if CommandLine.arguments.contains("--wifi-help") {   // 快照用：手機報了可用卻沒從 Wi-Fi 連回
     CarPlayOverlayState.wifiHelp = true; CarPlayOverlayState.forced = true
+}
+if let r = arg("--connect-reason") {   // 快照用：排障卡（macFirewall localNetwork carPlayConsent ssidUnknown inboundBlocked wifiNoConnectBack）
+    CarPlayOverlayState.wifiHelp = true; CarPlayOverlayState.forced = true
+    CarPlayOverlayState.connectReason = r; CarPlayOverlayState.helpSSID = arg("--help-ssid") ?? ""
+    CarPlayOverlayState.helpSince = CACurrentMediaTime() - (arg("--help-age").flatMap(Double.init) ?? 0)   // --help-age 45：40 秒後的那一格
 }
 if CommandLine.arguments.contains("--pairing-no-response") {   // 快照用：叫不到手機
     CarPlayOverlayState.bluetoothPairFailed = true; CarPlayOverlayState.pairFailReason = "noResponse"; CarPlayOverlayState.forced = true

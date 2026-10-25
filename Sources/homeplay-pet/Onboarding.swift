@@ -2,7 +2,7 @@ import AppKit
 import CoreGraphics
 
 // 第一次打开的操作提示（稿：V2FirstRun.dc.html，640 稿 ×1.6）：hello 写完后，屏幕上浮一张玻璃卡，
-// 三条最常用的手势；点一下或 12 秒后收起，记下 HomePlayOnboarded。菜单「再看一次操作提示」可以重看。
+// 四条最常用的手势；点一下或 12 秒后收起，记下 HomePlayOnboarded。菜单「再看一次操作提示」可以重看。
 
 enum Onboarding {
     static let defaultsKey = "HomePlayOnboarded"
@@ -46,12 +46,15 @@ extension Face {
         let x = r.minX + 56
         let title = L("onboarding.title", "嗨，我是 HomePlay")
         drawLeft(g, title, font: Self.fitted(title, size: 80, weight: .bold, maxWidth: r.width - 112), x: x, y: r.minY + 108, color: .white)
-        let rows = [L("onboarding.carplay", "重按进入 CarPlay"), L("onboarding.menu", "右键看菜单"), L("onboarding.drag", "拖动转动机身，双击回正")]
-        let rowMax = r.maxX - 56 - (x + 104 + 30)
-        let rowSize = rows.map { Self.fitted($0, size: 60, weight: .semibold, maxWidth: rowMax).pointSize }.min() ?? 60   // 三行同字級
+        // 第四行講怎麼搬位置：拖機身是轉身體，第一次用的人常找不到怎麼搬
+        let rows = [L("onboarding.carplay", "重按进入 CarPlay"), L("onboarding.menu", "右键看菜单"), L("onboarding.drag", "拖动转动机身，双击回正"),
+                    L("onboarding.move", "拖底座或按住 ⌘ 拖：移动位置")]
+        let side: CGFloat = 92, gap: CGFloat = 16
+        let rowMax = r.maxX - 56 - (x + side + 30)
+        let rowSize = rows.map { Self.fitted($0, size: 56, weight: .semibold, maxWidth: rowMax).pointSize }.min() ?? 56   // 四行同字級
         for (i, text) in rows.enumerated() {
-            let top = r.minY + 150 + CGFloat(i) * (104 + 24)
-            let box = CGRect(x: x, y: top, width: 104, height: 104)
+            let top = r.minY + 146 + CGFloat(i) * (side + gap)
+            let box = CGRect(x: x, y: top, width: side, height: side)
             g.setFillColor(NSColor(white: 1, alpha: 0.18).cgColor)
             g.addPath(continuousRoundedRect(box, radius: box.width * 0.2237)); g.fillPath()
             drawTipGlyph(g, i, in: box)
@@ -82,6 +85,16 @@ extension Face {
             g.addPath(CGPath(roundedRect: CGRect(x: 4, y: 4, width: 16, height: 16), cornerWidth: 4, cornerHeight: 4, transform: nil))
             g.move(to: CGPoint(x: 9, y: 9)); g.addLine(to: CGPoint(x: 15, y: 9))
             g.move(to: CGPoint(x: 9, y: 13)); g.addLine(to: CGPoint(x: 15, y: 13))
+        case 3:
+            // 搬位置：十字四向箭頭（同 SF Symbols 的 arrow.up.and.down.and.arrow.left.and.right）
+            g.move(to: CGPoint(x: 12, y: 3.5)); g.addLine(to: CGPoint(x: 12, y: 20.5))
+            g.move(to: CGPoint(x: 3.5, y: 12)); g.addLine(to: CGPoint(x: 20.5, y: 12))
+            for (tip, a, b) in [(CGPoint(x: 12, y: 3.5), CGPoint(x: 9.5, y: 6), CGPoint(x: 14.5, y: 6)),
+                                (CGPoint(x: 12, y: 20.5), CGPoint(x: 9.5, y: 18), CGPoint(x: 14.5, y: 18)),
+                                (CGPoint(x: 3.5, y: 12), CGPoint(x: 6, y: 9.5), CGPoint(x: 6, y: 14.5)),
+                                (CGPoint(x: 20.5, y: 12), CGPoint(x: 18, y: 9.5), CGPoint(x: 18, y: 14.5))] {
+                g.move(to: a); g.addLine(to: tip); g.addLine(to: b)
+            }
         default:
             // 大半圈弧（左边缺口）加一个箭头：用折线逼近，免得受翻转坐标系的方向影响
             let a0 = CGFloat.pi, a1 = CGFloat.pi * 2.72

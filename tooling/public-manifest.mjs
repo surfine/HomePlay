@@ -17,6 +17,8 @@ export const includePaths = [
   "docs/performance.md",
   "docs/carplay-best-practices.md",
   "docs/wireless.md",
+  "docs/first-pair-flow.md",
+  "docs/first-pair-test.md",
   "docs/room-light.md",
   "docs/design-drafts/",
   "docs/evidence/",

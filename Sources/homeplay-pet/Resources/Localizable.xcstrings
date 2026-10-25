@@ -4032,19 +4032,19 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Settings › Bluetooth → tap “%@”"
+            "value": "Settings › Bluetooth › Other Devices → tap “%@”"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "设置 › 蓝牙 → 点「%@」"
+            "value": "设置 › 蓝牙 › 其他设备 → 点「%@」"
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "設定 › 藍牙 → 點「%@」"
+            "value": "設定 › 藍牙 › 其他裝置 → 點「%@」"
           }
         }
       }
@@ -4054,19 +4054,19 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Settings › Bluetooth → tap this Mac"
+            "value": "Settings › Bluetooth › Other Devices → tap this Mac"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "设置 › 蓝牙 → 点这台 Mac 的名字"
+            "value": "设置 › 蓝牙 › 其他设备 → 点这台 Mac 的名字"
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "設定 › 藍牙 → 點這台 Mac 的名字"
+            "value": "設定 › 藍牙 › 其他裝置 → 點這台 Mac 的名字"
           }
         }
       }
@@ -4221,28 +4221,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "沒看到 Mac？保持兩邊藍牙設定開著，等幾秒會重新整理"
-          }
-        }
-      }
-    },
-    "status.overlay.pairUSB": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "No cable? Pair once with the steps above"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "没带线也没关系：按上面的步骤配对一次即可"
-          }
-        },
-        "zh-Hant": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "沒帶線也沒關係：按上面的步驟配對一次即可"
           }
         }
       }
@@ -4463,28 +4441,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "等待第一幀…"
-          }
-        }
-      }
-    },
-    "status.overlay.wifiHelp": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "iPhone didn’t join the Wi-Fi? Enter the iPhone’s network name"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "iPhone 没连上 Wi-Fi？填 iPhone 所连的网络名"
-          }
-        },
-        "zh-Hant": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "iPhone 沒連上 Wi-Fi？填 iPhone 所連的網路名"
           }
         }
       }
@@ -10187,24 +10143,1542 @@
         }
       }
     },
-    "status.overlay.wifiToggleHint": {
+    "diag.copiedTitle": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Already on this Wi-Fi? Turn Wi-Fi off and on once on iPhone"
+            "value": "Diagnostic report copied"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "已连同一个 Wi-Fi？在 iPhone 控制中心关开一次 Wi-Fi"
+            "value": "诊断报告已拷贝"
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "已連同一個 Wi-Fi？在 iPhone 控制中心關開一次 Wi-Fi"
+            "value": "診斷報告已拷貝"
+          }
+        }
+      }
+    },
+    "diag.copiedBody": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Paste it to whoever is helping you. It only has counts, timings and states — no Wi-Fi names, passwords, addresses or device names."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "直接粘贴给帮你看的人。里面只有次数、时间和状态，不含 Wi-Fi 名称、密码、地址或设备名称。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "直接貼給幫你看的人。裡面只有次數、時間和狀態，不含 Wi-Fi 名稱、密碼、位址或裝置名稱。"
+          }
+        }
+      }
+    },
+    "menu.connectSteps": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "How to Connect…"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "连接步骤…"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "連接步驟…"
+          }
+        }
+      }
+    },
+    "menu.copyDiagnostics": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Copy Diagnostic Report"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "拷贝诊断报告"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "拷貝診斷報告"
+          }
+        }
+      }
+    },
+    "moveHint.text": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hold ⌘ and drag (or drag the base) to move HomePlay"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "按住 ⌘ 拖动（或拖底座）就能移动 HomePlay"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "按住 ⌘ 拖曳（或拖底座）就能移動 HomePlay"
+          }
+        }
+      }
+    },
+    "onboarding.move": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Drag the base or ⌘-drag to move"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "拖底座或按住 ⌘ 拖：移动位置"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "拖底座或按住 ⌘ 拖曳：移動位置"
+          }
+        }
+      }
+    },
+    "settings.gesture.move": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Drag the base, or ⌘-drag"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "拖底座或按住 ⌘ 拖"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "拖底座或按住 ⌘ 拖曳"
+          }
+        }
+      }
+    },
+    "settings.gesture.move.sub": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Move it"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "移动位置"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "移動位置"
+          }
+        }
+      }
+    },
+    "status.help.autoRetry": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Retries automatically once fixed"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "改好后自动重试"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "改好後自動重試"
+          }
+        }
+      }
+    },
+    "status.help.cable": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Still stuck? Plug in a cable once and tap Trust on iPhone"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "还不行？插线连一次：解锁 iPhone 点「信任」"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "還不行？插線連一次：解鎖 iPhone 點「信任」"
+          }
+        }
+      }
+    },
+    "status.help.consent.body": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Unlock iPhone and tap Connect on the CarPlay prompt"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "解锁 iPhone，CarPlay 提示出现时点「连接」"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "解鎖 iPhone，CarPlay 提示出現時點「連接」"
+          }
+        }
+      }
+    },
+    "status.help.consent.chip": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No prompt? Settings › General › CarPlay"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "没看到提示？设置 › 通用 › CarPlay"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "沒看到提示？設定 › 一般 › CarPlay"
+          }
+        }
+      }
+    },
+    "status.help.consent.title": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tap Connect on your iPhone"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "在 iPhone 上点「连接」"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "在 iPhone 上點「連接」"
+          }
+        }
+      }
+    },
+    "status.help.copyReport": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Right-click → iPhone → Copy Diagnostic Report"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "右键 → iPhone → 拷贝诊断报告"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "右鍵 → iPhone → 拷貝診斷報告"
+          }
+        }
+      }
+    },
+    "status.help.firewall.body": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "System Settings › Network › Firewall › Options"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "系统设置 › 网络 › 防火墙 › 选项"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "系統設定 › 網路 › 防火牆 › 選項"
+          }
+        }
+      }
+    },
+    "status.help.firewall.hint": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Turn off “Block all incoming connections” and allow homeplay-receiver"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "关掉「阻止所有传入连接」，并允许 homeplay-receiver"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "關閉「阻擋所有傳入連線」，並允許 homeplay-receiver"
+          }
+        }
+      }
+    },
+    "status.help.firewall.title": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The Mac firewall is blocking iPhone"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mac 防火墙挡住了 iPhone"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mac 防火牆擋住了 iPhone"
+          }
+        }
+      }
+    },
+    "status.help.inbound.body": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Same Wi-Fi but blocked: check the firewall or apps like Little Snitch or LuLu"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "同一个 Wi-Fi 却被挡住：检查防火墙或 Little Snitch、LuLu 这类 App"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "同一個 Wi-Fi 卻被擋住：檢查防火牆或 Little Snitch、LuLu 這類 App"
+          }
+        }
+      }
+    },
+    "status.help.inbound.title": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "iPhone can’t reach this Mac"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "iPhone 连不进这台 Mac"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "iPhone 連不進這台 Mac"
+          }
+        }
+      }
+    },
+    "status.help.localNetwork.body": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "System Settings › Privacy & Security › Local Network"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "系统设置 › 隐私与安全性 › 本地网络"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "系統設定 › 隱私權與安全性 › 區域網路"
+          }
+        }
+      }
+    },
+    "status.help.localNetwork.hint": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Turn on the switch next to HomePlay"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "打开 HomePlay 旁边的开关"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "打開 HomePlay 旁邊的開關"
+          }
+        }
+      }
+    },
+    "status.help.localNetwork.title": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Allow HomePlay on the local network"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "允许 HomePlay 使用本地网络"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "允許 HomePlay 使用區域網路"
+          }
+        }
+      }
+    },
+    "status.help.notSupported": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "“Not supported” on iPhone is expected — don’t tap Forget This Device"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "iPhone 说「不支持」是正常的，别点「忽略此设备」"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "iPhone 說「不支援」是正常的，別點「忘記此裝置」"
+          }
+        }
+      }
+    },
+    "status.help.ssid.body": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "macOS hides the Wi-Fi name from apps — enter the network your iPhone uses"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "macOS 不让 App 读取 Wi-Fi 名称，请填 iPhone 所连的网络"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "macOS 不讓 App 讀取 Wi-Fi 名稱，請填 iPhone 所連的網路"
+          }
+        }
+      }
+    },
+    "status.help.ssid.hint": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Save it and HomePlay tries again right away"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "填好保存后会马上再连一次"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "填好儲存後會馬上再連一次"
+          }
+        }
+      }
+    },
+    "status.help.ssid.title": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tell HomePlay your Wi-Fi"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "告诉 HomePlay 你的 Wi-Fi"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "告訴 HomePlay 你的 Wi-Fi"
+          }
+        }
+      }
+    },
+    "status.help.wifi.body": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "iPhone must be on the same Wi-Fi as this Mac, not a guest network"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "iPhone 要和这台 Mac 连同一个 Wi-Fi，不是访客网络"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "iPhone 要和這台 Mac 連同一個 Wi-Fi，不是訪客網路"
+          }
+        }
+      }
+    },
+    "status.help.wifi.bodyNamed": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "iPhone must be on “%@” — not a guest or separate 5G/2.4G network"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "iPhone 要连「%@」，不是访客网络或另一个 5G／2.4G 名称"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "iPhone 要連「%@」，不是訪客網路或另一個 5G／2.4G 名稱"
+          }
+        }
+      }
+    },
+    "status.help.wifi.title": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Turn Wi-Fi off and on once on iPhone"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "在 iPhone 上关开一次 Wi-Fi"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "在 iPhone 上關開一次 Wi-Fi"
+          }
+        }
+      }
+    },
+    "status.overlay.pairOnce": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tap it once; if iPhone says “Not supported”, don’t tap Forget This Device"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "只点一次；iPhone 说「不支持」也别点「忽略此设备」"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "只點一次；iPhone 說「不支援」也別點「忘記此裝置」"
+          }
+        }
+      }
+    },
+    "steps.title": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Connecting iPhone for the First Time"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "第一次连接 iPhone"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "第一次連接 iPhone"
+          }
+        }
+      }
+    },
+    "steps.cableHeader": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "With a cable (easiest)"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "有线（最简单）"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "有線（最簡單）"
+          }
+        }
+      }
+    },
+    "steps.cable1": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Connect iPhone to this Mac with a cable, unlock it, tap Trust and enter its passcode."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "用数据线把 iPhone 接到这台 Mac，解锁 iPhone，点「信任」并输入密码。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "用資料線把 iPhone 接到這台 Mac，解鎖 iPhone，點「信任」並輸入密碼。"
+          }
+        }
+      }
+    },
+    "steps.cable2": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "When HomePlay asks you to pair, tap this Mac once under iPhone Settings › Bluetooth › Other Devices. Skip it and the cable is used after 60 s."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "HomePlay 请你配对时，在 iPhone 设置 › 蓝牙 › 其他设备里点这台 Mac 一次；不想配，60 秒后先用有线。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "HomePlay 請你配對時，在 iPhone 設定 › 藍牙 › 其他裝置裡點這台 Mac 一次；不想配，60 秒後先用有線。"
+          }
+        }
+      }
+    },
+    "steps.cable3": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Once paired you can unplug; it connects wirelessly from then on."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "配好之后拔线也能用，以后自动无线连接。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "配好之後拔線也能用，以後自動無線連線。"
+          }
+        }
+      }
+    },
+    "steps.btHeader": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Without a cable"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "没有线"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "沒有線"
+          }
+        }
+      }
+    },
+    "steps.bt1": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "When HomePlay shows “Pair this Mac on your iPhone”, open iPhone Settings › Bluetooth."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "HomePlay 显示「在 iPhone 上配对这个 Mac」时，打开 iPhone 设置 › 蓝牙。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "HomePlay 顯示「在 iPhone 上配對這個 Mac」時，打開 iPhone 設定 › 藍牙。"
+          }
+        }
+      }
+    },
+    "steps.bt2": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Under Other Devices, tap this Mac’s name once, then tap Pair on both."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "在「其他设备」里点这台 Mac 的名字一次，两边都点「配对」。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "在「其他裝置」裡點這台 Mac 的名字一次，兩邊都點「配對」。"
+          }
+        }
+      }
+    },
+    "steps.bt3": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "If iPhone says “Not supported”, that’s expected: don’t tap Forget This Device, and don’t tap it again under My Devices."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "iPhone 若说「不支持」，是正常的：别点「忽略此设备」，也别在「我的设备」里再点它。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "iPhone 若說「不支援」，是正常的：別點「忘記此裝置」，也別在「我的裝置」裡再點它。"
+          }
+        }
+      }
+    },
+    "steps.bt4": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "When iPhone shows the CarPlay prompt, tap Connect."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "iPhone 弹出 CarPlay 提示时点「连接」。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "iPhone 跳出 CarPlay 提示時點「連接」。"
+          }
+        }
+      }
+    },
+    "steps.bt5": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "iPhone and Mac must be on the same Wi-Fi (not a guest network). Stuck on “Connecting”? Turn Wi-Fi off and on once in iPhone’s Control Center."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "iPhone 和 Mac 要连同一个 Wi-Fi（不是访客网络）；卡在「正在连接」就在 iPhone 控制中心关开一次 Wi-Fi。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "iPhone 和 Mac 要連同一個 Wi-Fi（不是訪客網路）；卡在「正在連線」就在 iPhone 控制中心關開一次 Wi-Fi。"
+          }
+        }
+      }
+    },
+    "steps.footer": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Still can’t connect? Right-click → iPhone → Copy Diagnostic Report and send it to whoever is helping."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "连不上时：右键 → iPhone → 拷贝诊断报告，发给帮你看的人。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "連不上時：右鍵 → iPhone → 拷貝診斷報告，傳給幫你看的人。"
+          }
+        }
+      }
+    },
+    "perm.location.title": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Read the Wi-Fi name"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "读取 Wi-Fi 名称"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "讀取 Wi-Fi 名稱"
+          }
+        }
+      }
+    },
+    "perm.location.body": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "iPhone needs the Wi-Fi name to join CarPlay wirelessly\nmacOS only shows network names to apps with Location access"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "iPhone 要知道连哪个 Wi-Fi 才能无线连 CarPlay\nmacOS 只给有定位权限的 App 看网络名称"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "iPhone 要知道連哪個 Wi-Fi 才能無線連 CarPlay\nmacOS 只給有定位權限的 App 看網路名稱"
+          }
+        }
+      }
+    },
+    "perm.location.granted": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wi-Fi name handed to iPhone"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wi-Fi 名称已交给 iPhone"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wi-Fi 名稱已交給 iPhone"
+          }
+        }
+      }
+    },
+    "settings.perm.location": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Location"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "定位"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "定位"
+          }
+        }
+      }
+    },
+    "settings.perm.location.sub": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reads the Wi-Fi name for wireless CarPlay; Weather face"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "自动读取 Wi-Fi 名称给无线 CarPlay；天气表盘"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "自動讀取 Wi-Fi 名稱給無線 CarPlay；天氣錶面"
+          }
+        }
+      }
+    },
+    "status.help.usbNoData.title": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "iPhone is charging but not sharing data"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "iPhone 在充电，但没在传数据"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "iPhone 在充電，但沒在傳資料"
+          }
+        }
+      }
+    },
+    "status.help.usbNoData.body": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Unlock iPhone; if it asks to allow the accessory, tap Allow"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "解锁 iPhone；若问是否允许配件连接，点「允许」"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "解鎖 iPhone；若詢問是否允許配件連接，點「允許」"
+          }
+        }
+      }
+    },
+    "status.help.usbNoData.hint": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Still nothing? Use a data cable straight into the Mac, not a hub"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "还不行？换一根能传数据的线，直接插 Mac、不经扩展坞"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "還不行？換一條能傳資料的線，直接插 Mac、不經擴充座"
+          }
+        }
+      }
+    },
+    "status.help.unlockChip": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Continues once unlocked"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "解锁后自动继续"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "解鎖後自動繼續"
+          }
+        }
+      }
+    },
+    "status.help.usbLocked.title": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Unlock your iPhone"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "解锁 iPhone"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "解鎖 iPhone"
+          }
+        }
+      }
+    },
+    "status.help.usbLocked.body": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A locked iPhone won’t start CarPlay over the cable"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "iPhone 锁着时不让 Mac 通过数据线打开 CarPlay"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "iPhone 鎖著時不讓 Mac 透過資料線打開 CarPlay"
+          }
+        }
+      }
+    },
+    "status.help.usbTrust.title": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Trust this Mac again"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "重新信任这台 Mac"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "重新信任這台 Mac"
+          }
+        }
+      }
+    },
+    "status.help.usbTrust.body": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Unplug, unlock iPhone, plug in again and tap Trust"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "拔线，解锁 iPhone 再插上，点「信任」"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "拔線，解鎖 iPhone 再插上，點「信任」"
+          }
+        }
+      }
+    },
+    "status.help.usbNet.title": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cable connected, but CarPlay didn’t start"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "数据线连上了，CarPlay 没起来"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "資料線連上了，CarPlay 沒起來"
+          }
+        }
+      }
+    },
+    "status.help.usbNet.body": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Unplug and plug in again, straight into the Mac (no hub)"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "拔掉再插一次，直接插 Mac、不经扩展坞"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "拔掉再插一次，直接插 Mac、不經擴充座"
+          }
+        }
+      }
+    },
+    "status.help.usbNet.hint": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Or unplug and go wireless: same Wi-Fi on iPhone and Mac"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "或拔线改用无线：iPhone 和 Mac 连同一个 Wi-Fi"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "或拔線改用無線：iPhone 和 Mac 連同一個 Wi-Fi"
+          }
+        }
+      }
+    },
+    "status.overlay.calmVerySlow": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Keep your iPhone unlocked and near this Mac — it usually takes just a moment longer"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "让 iPhone 保持解锁、靠近这台 Mac，通常再等一下就好"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "讓 iPhone 保持解鎖、靠近這台 Mac，通常再等一下就好"
+          }
+        }
+      }
+    },
+    "status.overlay.calmWaitingNamed": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Waiting for “%@”…"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在等「%@」回应…"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在等「%@」回應…"
+          }
+        }
+      }
+    },
+    "status.overlay.calmWaiting": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Waiting for your iPhone…"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在等 iPhone 回应…"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在等 iPhone 回應…"
+          }
+        }
+      }
+    },
+    "status.step.pair": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pair"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "配对"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "配對"
+          }
+        }
+      }
+    },
+    "status.step.confirm": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Confirm on iPhone"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "在 iPhone 上确认"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "在 iPhone 上確認"
+          }
+        }
+      }
+    },
+    "status.step.done": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Done"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "完成"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "完成"
+          }
+        }
+      }
+    },
+    "status.help.share.title": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tap “Share” on your iPhone"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "在 iPhone 上点「分享」"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "在 iPhone 上點「分享」"
+          }
+        }
+      }
+    },
+    "status.help.share.body": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your iPhone shares its Wi‑Fi with HomePlay — no password to type"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "iPhone 会把现在的 Wi-Fi 分享给 HomePlay，不用打密码"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "iPhone 會把現在的 Wi‑Fi 分享給 HomePlay，不用打密碼"
+          }
+        }
+      }
+    },
+    "status.help.share.hint": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Don’t see it? Unlock your iPhone and check the top of the screen"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "没看到？解锁 iPhone 看一下通知或屏幕顶端"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "沒看到？解鎖 iPhone 看一下通知或螢幕頂端"
+          }
+        }
+      }
+    },
+    "status.help.share.chip": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The picture appears a few seconds after you share"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "分享后几秒就会出现画面"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "分享後幾秒就會出現畫面"
+          }
+        }
+      }
+    },
+    "status.help.consent.hint": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Don’t see it? Open Settings › General › CarPlay on your iPhone and tap HomePlay"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "没看到？打开 iPhone 设置 › 通用 › CarPlay，点 HomePlay"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "沒看到？打開 iPhone 設定 › 一般 › CarPlay，點 HomePlay"
+          }
+        }
+      }
+    },
+    "status.help.consent.chip2": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The picture appears as soon as you tap it"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "点了就会出现画面"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "點了就會出現畫面"
           }
         }
       }

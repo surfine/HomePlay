@@ -184,6 +184,11 @@ struct GlyphShape {
     }
     /// 置中：墨跡中心對到 c
     func centered(at c: CGPoint) -> GlyphShape { moved(c.x - ink.midX, c.y - ink.midY) }
+    /// 時與分一組置中：12 小時制的單位數小時（2:49）也落在畫面正中，不偏右（24 小時制兩位數時本來就對稱）
+    static func centeredPair(_ a: GlyphShape, _ b: GlyphShape, midX: CGFloat = 512) -> (GlyphShape, GlyphShape) {
+        let dx = midX - a.ink.union(b.ink).midX
+        return (a.moved(dx, 0), b.moved(dx, 0))
+    }
 }
 
 /// 液態玻璃的參數（Portraits 的數字偏霜白、Flow 的泡泡偏飽滿）

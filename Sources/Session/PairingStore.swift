@@ -1,6 +1,7 @@
 // 配件长期身份（Ed25519 + 配对 ID）与已配对控制器（手机）的持久化。
 // 参照 MacPlay identity.ts / pairings.ts，合并为一个文件：~/Library/Application Support/HomePlay/pairing.json，权限 0600。
 import CryptoKit
+import Wire
 import Foundation
 
 package struct AccessoryIdentity {
@@ -38,8 +39,7 @@ package final class PairingStore: @unchecked Sendable {
     }
 
     package static var defaultDirectory: URL {
-        FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("HomePlay", isDirectory: true)
+        HomePlayState.directory
     }
 
     private let lock = NSLock()

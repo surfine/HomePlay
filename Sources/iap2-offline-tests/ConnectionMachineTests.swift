@@ -360,6 +360,18 @@ enum ConnectionMachineTests {
             expect(!fx.contains { $0.startKind != nil }, "9 a teardown long after RECORD is not reopened")
         }
 
+        // 9b. 手機掛控制連線、連結還在 → 重送 0x4301（真機 2026-10-25：插線量完圓角重開，手機掛線後沒人再叫它）
+        do {
+            var s = MachineSim(paired: [A], nearby: [A], processAge: 300)
+            s.send(.start(preferred: A))
+            s.connectOK()
+            s.send(.controlConnected(.wifi))
+            s.send(.sessionActive)
+            s.advance(0.6)
+            let fx = s.send(.sessionEnded(.controlClosed))
+            expect(fx.contains { $0.startKind != nil }, "9b control closed with the link still up re-sends the start")
+        }
+
         // 10. Wi-Fi 短断 → 15 秒没回来就重连；回来了就不动
         do {
             var s = MachineSim(paired: [A], nearby: [A], processAge: 300)

@@ -15,8 +15,7 @@ enum ConcentricCorners {
         }
     }
     static var url: URL {
-        FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("HomePlay/carplay-display.json")
+        HomePlayState.directory.appendingPathComponent("carplay-display.json")
     }
     private static var file: [String: Any] {
         guard let d = try? Data(contentsOf: url), let o = try? JSONSerialization.jsonObject(with: d) as? [String: Any] else { return [:] }

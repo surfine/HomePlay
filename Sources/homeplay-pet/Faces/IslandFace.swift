@@ -65,7 +65,7 @@ extension Face {
         // 島在數字下面置中：寬 ≈ 512（稿：face('眼睛') 寬 300／600、y 405／600）
         var islandAt = CGPoint(x: 512, y: 694), islandScale: CGFloat = 512 / 588, liveAt = CGPoint(x: 512, y: 700)
         var dateY: CGFloat = 70
-        // 數字：時在左、分在右，以中線為界各自貼齊中間的縫（單位數的小時不會漂到左邊）
+        // 數字：時在左、分在右，各自貼齊中間的縫，再整組置中（12 小時制的單位數小時也在正中）
         // 系統的 SF Adaptive Numeric：HGHT 軸往上長高、筆畫不變形（iOS 26 鎖定畫面／HomeView Portraits 的大時間）
         // 字體、粗細、顏色、玻璃／實線都照「字體與顏色」（ClockLook）
         var look = ClockLook.active
@@ -76,7 +76,7 @@ extension Face {
             let w = 512 - gap / 2 - 52
             let hS = GlyphShape.clock(hh, look: look, height: height, maxWidth: w, at: CGPoint(x: 512 - gap / 2, y: top), anchorX: 1, weightBoost: boost)
             let mS = GlyphShape.clock(mm, look: look, height: height, maxWidth: w, at: CGPoint(x: 512 + gap / 2, y: top), anchorX: 0, weightBoost: boost)
-            return (hS, mS)
+            return GlyphShape.centeredPair(hS, mS)
         }
         let textAlpha = 0.72 + 0.28 * rv
         switch clockStyle {

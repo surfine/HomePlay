@@ -13,8 +13,7 @@ import Metal
 /// 檔案不存在＝允許（Mac 不會移動，預設當作一直停著）。
 enum CarVideoSetting {
     static var url: URL {
-        FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("HomePlay/carplay-video.json")
+        HomePlayState.directory.appendingPathComponent("carplay-video.json")
     }
     static var allowed: Bool {
         get {

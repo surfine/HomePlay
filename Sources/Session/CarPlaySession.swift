@@ -53,6 +53,8 @@ package final class CarPlaySession {
     package var onEnded: ((String) -> Void)?
     /// 手机的控制连接一接入就叫（比 RECORD 早）：用来取消 IPv6 备用重试
     package var onControlConnected: ((String) -> Void)?
+    /// 探測手機的 _carplay-ctrl 時的結構化事件（診斷用；在探測佇列上呼叫）
+    package var onProbeEvent: ((CtrlProbeEvent) -> Void)?
     /// 手机发来的 `POST /command`（控制口或事件通道），已自动 ack：type 与 params（disableBluetooth、modesChanged…）
     package var onCommand: ((_ type: String, _ params: [String: Any]) -> Void)?
     /// 手机 SETUP 了流 130（iAP 数据通道）：交出隧道句柄。在会话队列上叫；上层自己切线程。
@@ -194,6 +196,7 @@ package final class CarPlaySession {
         guard config.probeForPhone, probe == nil else { return }
         let p = CtrlProbe(deviceId: config.info.deviceID, phoneBluetoothAddress: config.phoneBluetoothAddress)
         p.onLog = { [weak self] s in self?.log(s) }
+        p.onEvent = { [weak self] e in self?.onProbeEvent?(e) }
         p.start(); probe = p
     }
 

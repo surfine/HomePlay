@@ -9,13 +9,23 @@
 # Info.plist 寫明各權限的用途說明：沒有這些，系統不會跳行事曆、自動化、藍牙、區域網路的授權。
 # 最後 ad-hoc 簽名，讓權限記在這個 App 名下。
 # 用法：tooling/make-app.sh [輸出路徑，預設 dist/HomePlay.app]
+# 首次配對演練版：HOMEPLAY_VARIANT=rehearsal tooling/make-app.sh → dist/HomePlay Rehearsal.app
+#   另一個 bundle id（偏好設定、權限都是全新的）、狀態放 ~/Library/Application Support/HomePlay Rehearsal、
+#   LaunchAgent 用另一個標籤；不碰平常那份。步驟見 docs/first-pair-test.md。
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
 swift build -c release --product homeplay-pet
 swift build -c release --product homeplay-receiver
 
-APP=${1:-dist/HomePlay.app}
+VARIANT=${HOMEPLAY_VARIANT:-}
+if [[ "$VARIANT" == rehearsal ]]; then
+  NAME="HomePlay Rehearsal"; BUNDLE_ID=me.aaronlau.homeplay.rehearsal
+  EXTRA_PLIST="  <key>LSEnvironment</key><dict><key>HOMEPLAY_STATE_NAME</key><string>HomePlay Rehearsal</string></dict>"
+else
+  NAME="HomePlay"; BUNDLE_ID=me.aaronlau.homeplay; EXTRA_PLIST=""
+fi
+APP=${1:-dist/$NAME.app}
 BUILD=$(git rev-list --count HEAD 2>/dev/null || echo 1)
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
@@ -32,15 +42,16 @@ cat > "$APP/Contents/Info.plist" <<EOF
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-  <key>CFBundleName</key><string>HomePlay</string>
+  <key>CFBundleName</key><string>${NAME}</string>
   <key>CFBundleDevelopmentRegion</key><string>en</string>
   <key>CFBundleLocalizations</key><array><string>en</string><string>zh-Hans</string><string>zh-Hant</string></array>
-  <key>CFBundleDisplayName</key><string>HomePlay</string>
-  <key>CFBundleIdentifier</key><string>me.aaronlau.homeplay</string>
+  <key>CFBundleDisplayName</key><string>${NAME}</string>
+  <key>CFBundleIdentifier</key><string>${BUNDLE_ID}</string>
+${EXTRA_PLIST}
   <key>CFBundleExecutable</key><string>HomePlay</string>
   <key>CFBundlePackageType</key><string>APPL</string>
   <key>CFBundleIconFile</key><string>AppIcon</string>
-  <key>CFBundleShortVersionString</key><string>1.0.1</string>
+  <key>CFBundleShortVersionString</key><string>1.0.2</string>
   <key>CFBundleVersion</key><string>${BUILD}</string>
   <key>CFBundleDevelopmentRegion</key><string>en</string>
   <key>CFBundleLocalizations</key><array><string>en</string><string>zh-Hans</string><string>zh-Hant</string></array>
@@ -57,8 +68,8 @@ cat > "$APP/Contents/Info.plist" <<EOF
   <key>NSBluetoothAlwaysUsageDescription</key><string>Pairs with your iPhone over Bluetooth to set up wireless CarPlay.</string>
   <key>NSMicrophoneUsageDescription</key><string>Uses the Mac's microphone only for Siri and phone calls in CarPlay.</string>
   <key>NSLocalNetworkUsageDescription</key><string>Receives CarPlay video and audio from your iPhone over the local network.</string>
-  <key>NSLocationUsageDescription</key><string>Uses your approximate location to show local weather on the Weather face.</string>
-  <key>NSLocationWhenInUseUsageDescription</key><string>Uses your approximate location to show local weather on the Weather face.</string>
+  <key>NSLocationUsageDescription</key><string>Reads the Wi-Fi network name so your iPhone can join wireless CarPlay on the same network, and uses your approximate location for the Weather face.</string>
+  <key>NSLocationWhenInUseUsageDescription</key><string>Reads the Wi-Fi network name so your iPhone can join wireless CarPlay on the same network, and uses your approximate location for the Weather face.</string>
   <key>NSBonjourServices</key><array><string>_airplay._tcp</string><string>_carplay-ctrl._tcp</string></array>
 </dict>
 </plist>

@@ -9,7 +9,7 @@ import EventKit
 // （2026-10-22 Aaron 定案：动画放在桌宠屏幕上的卡片＋表情，不用原生弹窗。）
 
 enum PermissionKind: String, CaseIterable {
-    case camera, microphone, inputMonitoring, automation, calendar
+    case camera, microphone, inputMonitoring, automation, calendar, location
 
     /// 系统设置 › 隐私与安全性 里对应的那一页
     var settingsURL: URL? {
@@ -20,6 +20,7 @@ enum PermissionKind: String, CaseIterable {
         case .inputMonitoring: pane = "Privacy_ListenEvent"
         case .automation: pane = "Privacy_Automation"
         case .calendar: pane = "Privacy_Calendars"
+        case .location: pane = "Privacy_LocationServices"
         }
         return URL(string: "x-apple.systempreferences:com.apple.preference.security?\(pane)")
     }
@@ -31,6 +32,7 @@ enum PermissionKind: String, CaseIterable {
         case .inputMonitoring: return L("perm.input.title", "让 F5 叫出 Siri")
         case .automation: return L("perm.automation.title", "显示 Mac 正在播放")
         case .calendar: return L("perm.calendar.title", "显示下一个行程")
+        case .location: return L("perm.location.title", "读取 Wi-Fi 名称")
         }
     }
     var body: String {
@@ -40,6 +42,7 @@ enum PermissionKind: String, CaseIterable {
         case .inputMonitoring: return L("perm.input.body", "任何 App 里按 F5 叫 Siri\n只认这一个键")
         case .automation: return L("perm.automation.body", "显示正在播放的歌\n点一下播放或暂停")
         case .calendar: return L("perm.calendar.body", "显示你的下一个行程\n只读取，不离开这台 Mac")
+        case .location: return L("perm.location.body", "iPhone 要知道连哪个 Wi-Fi 才能无线连 CarPlay\nmacOS 只给有定位权限的 App 看网络名称")
         }
     }
     var grantedLine: String {
@@ -49,6 +52,7 @@ enum PermissionKind: String, CaseIterable {
         case .inputMonitoring: return L("perm.input.granted", "F5 已经可以叫 Siri")
         case .automation: return L("perm.automation.granted", "正在播放会显示在胶囊上")
         case .calendar: return L("perm.calendar.granted", "下一个行程已就位")
+        case .location: return L("perm.location.granted", "Wi-Fi 名称已交给 iPhone")
         }
     }
 }
@@ -82,6 +86,12 @@ enum PermissionCenter {
             case .notDetermined: return .notDetermined
             default: return .denied
             }
+        case .location:
+            switch WiFiName.auth {
+            case .granted: return .granted
+            case .notDetermined: return .notDetermined
+            case .denied: return .denied
+            }
         }
     }
 
@@ -111,6 +121,8 @@ enum PermissionCenter {
             }
         case .calendar:
             EKEventStore().requestFullAccessToEvents { ok, _ in done(ok) }
+        case .location:
+            WiFiName.request(done)
         }
     }
 
@@ -450,6 +462,16 @@ extension Face {
                 let cell = CGRect(x: page.minX + 14 + CGFloat(i % 3) * 26, y: page.minY + 36 + CGFloat(i / 3) * 24, width: 16, height: 14)
                 g.setFillColor(NSColor.white.withAlphaComponent(i == lit ? 1 : 0.35).cgColor)
                 g.fill(cell)
+            }
+        case .location:
+            // Wi-Fi 扇形：底下一點，三道弧由內往外依次點亮（要的是網路名稱，不是地圖）
+            let base = CGPoint(x: c.x, y: c.y + 40)
+            g.fillEllipse(in: CGRect(x: base.x - 9, y: base.y - 9, width: 18, height: 18))
+            let lit = calm ? 3 : Int(phase * 2.5) % 4
+            for i in 0..<3 {
+                g.setStrokeColor(NSColor.white.withAlphaComponent(i < lit ? 1 : 0.35).cgColor)
+                g.addArc(center: base, radius: CGFloat(30 + i * 24), startAngle: -.pi * 0.75, endAngle: -.pi * 0.25, clockwise: false)
+                g.strokePath()
             }
         }
         g.restoreGState()

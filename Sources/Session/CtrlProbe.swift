@@ -23,6 +23,13 @@ package struct CtrlProbeSchedule {
     }
 }
 
+/// 給診斷用的結構化事件（日誌照舊另寫）。browse：ready／waiting／denied（本地網路權限被拒）／failed。
+package enum CtrlProbeEvent: Sendable, Equatable {
+    case browse(String)
+    case services(Int)
+    case probe(answered: Bool)
+}
+
 package final class CtrlProbe {
     private let deviceId: String
     private let phoneId: String?          // 手机 TXT 里的 id=（蓝牙地址），给了就只探这台
@@ -35,6 +42,14 @@ package final class CtrlProbe {
     private var lastReportedCount = -1
     private var reportedFiltered = false
     package var onLog: ((String) -> Void)?
+    /// 在探測佇列上呼叫
+    package var onEvent: ((CtrlProbeEvent) -> Void)?
+
+    /// macOS 15 起「本地網路」權限被拒時，Bonjour／連線會停在 waiting，錯誤是 kDNSServiceErr_PolicyDenied（-65570）
+    package static func isPolicyDenied(_ e: NWError) -> Bool {
+        if case .dns(let code) = e { return code == -65570 }
+        return false
+    }
 
     package init(deviceId: String, phoneBluetoothAddress: String?) {
         self.deviceId = deviceId
@@ -56,13 +71,19 @@ package final class CtrlProbe {
             if results.count != self.lastReportedCount {
                 self.lastReportedCount = results.count
                 self.onLog?("ctrl 浏览到 \(results.count) 个控制服务")
+                self.onEvent?(.services(results.count))
             }
             self.latest = Array(results); self.next()
         }
         b.stateUpdateHandler = { [weak self] st in
             switch st {
-            case .ready: self?.onLog?("ctrl 浏览就绪")
-            case .failed(let e): self?.onLog?("ctrl 浏览失败：\(e)")
+            case .ready: self?.onLog?("ctrl 浏览就绪"); self?.onEvent?(.browse("ready"))
+            case .waiting(let e):
+                self?.onLog?("ctrl 浏览等待：\(e)")
+                self?.onEvent?(.browse(Self.isPolicyDenied(e) ? "denied" : "waiting"))
+            case .failed(let e):
+                self?.onLog?("ctrl 浏览失败：\(e)")
+                self?.onEvent?(.browse(Self.isPolicyDenied(e) ? "denied" : "failed"))
             default: break
             }
         }
@@ -107,6 +128,7 @@ package final class CtrlProbe {
             guard !done else { return }
             done = true; busy = false; c.cancel()
             onLog?("ctrl 探测 \(name) 第 \(attempt) 次：\(why)")
+            onEvent?(.probe(answered: why.hasPrefix("HTTP/")))
         }
         c.stateUpdateHandler = { st in
             switch st {
@@ -129,6 +151,9 @@ package final class CtrlProbe {
                     finish(line.isEmpty ? "无应答" : line)
                 }
             case .failed(let e): finish("失败 \(e)")
+            case .waiting(let e) where Self.isPolicyDenied(e):
+                self.onEvent?(.browse("denied"))
+                finish("本地网络权限被拒")
             case .cancelled: if !answered { finish("取消") }
             default: break
             }

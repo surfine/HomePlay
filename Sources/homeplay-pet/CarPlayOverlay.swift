@@ -17,6 +17,9 @@ enum CarPlayOverlayState {
     static var snapshotPaired = false        // 快照用：固定在配對成功那一格
     static var wifiHelp = false       // receiver 發出 Wi-Fi 配置後 30 秒手機仍沒連回：給一次排障提示
     static var wifiNeedsPassword = false   // 沒回連＋本地沒存密碼：提示填一次密碼（右鍵 Wi-Fi 設定）
+    static var connectReason: String?     // receiver 判斷的卡住原因（ConnectDiagnostics.Reason）；舊 receiver 沒有
+    static var helpSSID = ""              // 要讓 iPhone 連的網路名（空＝receiver 不知道）
+    static var helpSince: Double?         // 排障卡這次亮起的時間：40 秒後改給插線退路與診斷報告
     static var needsTrust = false     // USB 插著但 iPhone 沒點「信任」：解鎖並點信任的卡片
     static var needsCable = false     // 首次配對：receiver 先等 20 秒插線（不會打開系統設定）
     static var bluetoothPairing = false   // 有線會話已發起 IOBluetoothDevicePair：iPhone 上點「配對」
@@ -156,7 +159,11 @@ extension Face {
         let pairing = CarPlayOverlayState.needsPairing
         let succeeded = CarPlayOverlayState.snapshotPaired || (CarPlayOverlayState.pairingSucceededAt.map { now - $0 < 3.0 } ?? false)
         let wifiHelp = CarPlayOverlayState.wifiHelp
-        let wifiNeedsPassword = CarPlayOverlayState.wifiNeedsPassword
+        // 卡住時照 receiver 判斷的原因給一張照做就能過的卡（ConnectHelp.card）
+        let helpCard = ConnectHelp.card(reason: CarPlayOverlayState.connectReason, ssid: CarPlayOverlayState.helpSSID,
+                                        needsPassword: CarPlayOverlayState.wifiNeedsPassword,
+                                        helpElapsed: CarPlayOverlayState.helpSince.map { now - $0 } ?? 0)
+        let recentlyPaired = CarPlayOverlayState.pairingSucceededAt.map { now - $0 < 120 } ?? false
         let needTrust = CarPlayOverlayState.needsTrust
         let cable = CarPlayOverlayState.needsCable
         let btPairing = CarPlayOverlayState.bluetoothPairing
@@ -186,8 +193,14 @@ extension Face {
                     : needTrust ? L("status.overlay.trustTitle", "在 iPhone 上点「信任」")
                     : cable ? L("status.overlay.cableTitle", "用数据线连一次 iPhone")
                     : pairing ? L("status.overlay.pairTitle", "在 iPhone 上配对这个 Mac")
+                    : wifiHelp ? helpCard.title
                               : L("status.overlay.title", "正在连接 CarPlay")
-        if !retro { drawCentered(g, title, font: Self.rounded(54, weight: .bold), kern: 0, y: 722, color: .white) }
+        if !retro {
+            // 三步進度：①配對 ②在 iPhone 上確認（分享 Wi-Fi、連接）③完成。目前那步亮、做完的打勾
+            let step = succeeded ? 3 : (pairing || btPairing || btFailed || needTrust || cable) ? 1 : 2
+            drawSetupSteps(g, current: step, y: 652)
+            drawCentered(g, title, font: Self.rounded(54, weight: .bold), kern: 0, y: 722, color: .white)
+        }
         let subtitle: String
         if succeeded { subtitle = L("status.overlay.pairSuccessBody", "以后自动无线连接，不用再插线；正在打开画面…") }
         else if btFailed {
@@ -217,24 +230,18 @@ extension Face {
         }
         else if pairing {
             // 蓝牙优先：Mac 的蓝牙设置面板打开时可被 iPhone 发现，由手机发起配对。
-            let body = L("status.overlay.pairBody", "设置 › 蓝牙 → 点「%@」")
+            let body = L("status.overlay.pairBody", "设置 › 蓝牙 › 其他设备 → 点「%@」")
             subtitle = host.map { String(format: body, $0) }
-                ?? L("status.overlay.pairBodyNoHost", "设置 › 蓝牙 → 点这台 Mac 的名字")
+                ?? L("status.overlay.pairBodyNoHost", "设置 › 蓝牙 › 其他设备 → 点这台 Mac 的名字")
         }
-        else if wifiHelp {
-            subtitle = wifiNeedsPassword
-                ? L("status.overlay.wifiNeedPassword", "iPhone 所连的 Wi-Fi 可能需要密码（只填一次）")
-                : L("status.overlay.wifiHelp", "iPhone 没连上 Wi-Fi？填 iPhone 所连的网络名")
-        }
+        else if wifiHelp { subtitle = helpCard.subtitle }
         else if verySlow {
-            let format = L("status.overlay.slowNamed", "连不上「%@」？确认 iPhone 已解锁、蓝牙已开、同一 Wi-Fi")
-            subtitle = currentPhone.map { String(format: format, $0) }
-                ?? L("status.overlay.slow", "确认 iPhone 已解锁、蓝牙已开、和这台 Mac 在同一 Wi-Fi")
+            // 40 秒：才給一個具體、溫和的下一步（不用「連不上？」這種會讓人慌的問句）
+            subtitle = L("status.overlay.calmVerySlow", "让 iPhone 保持解锁、靠近这台 Mac，通常再等一下就好")
         }
         else if slow {
-            let format = L("status.overlay.slowNamed", "连不上「%@」？确认 iPhone 已解锁、蓝牙已开、同一 Wi-Fi")
-            subtitle = currentPhone.map { String(format: format, $0) }
-                ?? L("status.overlay.slow", "确认 iPhone 已解锁、蓝牙已开、和这台 Mac 在同一 Wi-Fi")
+            let format = L("status.overlay.calmWaitingNamed", "正在等「%@」回应…")
+            subtitle = currentPhone.map { String(format: format, $0) } ?? L("status.overlay.calmWaiting", "正在等 iPhone 回应…")
         }
         else if let currentPhone {
             let format = L("status.overlay.connectingNamed", "正在连接「%@」…")
@@ -275,13 +282,20 @@ extension Face {
             } else if elapsed > 25 {
                 hint = L("status.overlay.pairTrouble", "没看到 Mac？保持两边蓝牙设置开着，等几秒会刷新")
             } else {
-                hint = L("status.overlay.pairUSB", "没带线也没关系：按上面的步骤配对一次即可")
+                // 只在「其他裝置」點一次；配好後 iPhone 常說「不支援」，那是正常的，忘記它才會壞事
+                hint = L("status.overlay.pairOnce", "只点一次；iPhone 说「不支持」也别点「忽略此设备」")
             }
             drawCentered(g, hint, font: Self.rounded(24, weight: .medium), kern: 0, y: 822,
                          color: NSColor.white.withAlphaComponent(0.55))
         } else if wifiHelp {
             // 真機 2026-10-24：iPhone 在拿到 HomePlay 的 Wi-Fi 設定之前就連著這個網路時，要重新連一次 Wi-Fi 才會把它當 CarPlay 網路
-            drawCentered(g, L("status.overlay.wifiToggleHint", "已连同一个 Wi-Fi？在 iPhone 控制中心关开一次 Wi-Fi"),
+            //（這一步現在是 wifiNoConnectBack 卡的標題；其他原因各有自己的下一步）
+            if let hint = helpCard.hint {
+                drawCentered(g, hint, font: Self.rounded(24, weight: .medium), kern: 0, y: 822,
+                             color: NSColor.white.withAlphaComponent(0.55))
+            }
+        } else if recentlyPaired {
+            drawCentered(g, L("status.help.notSupported", "iPhone 说「不支持」是正常的，别点「忽略此设备」"),
                          font: Self.rounded(24, weight: .medium), kern: 0, y: 822,
                          color: NSColor.white.withAlphaComponent(0.55))
         } else if verySlow {
@@ -301,11 +315,7 @@ extension Face {
         else if needTrust { text = L("status.overlay.trustChip", "点了「信任」自动继续") }
         else if cable { text = L("status.overlay.cableChip", "第一次只需一根数据线") }
         else if pairing { text = L("status.overlay.pairWaiting", "两边都点「配对」后自动继续") }
-        else if wifiHelp {
-            text = wifiNeedsPassword
-                ? L("status.overlay.wifiPasswordChip", "右键 → iPhone → Wi-Fi 设置填密码")
-                : L("status.overlay.wifiHelpChip", "右键 → iPhone → Wi-Fi 设置")
-        }
+        else if wifiHelp { text = helpCard.chip }
         else if verySlow {
             text = currentPhone != nil
                 ? L("status.overlay.switchHint", "可右键换一台 iPhone")
@@ -321,6 +331,36 @@ extension Face {
         g.addPath(CGPath(roundedRect: chip, cornerWidth: 28, cornerHeight: 28, transform: nil)); g.fillPath()
         drawCentered(g, text, font: font, kern: 0, y: chip.minY + 37, color: NSColor.white.withAlphaComponent(0.8))
         g.restoreGState()
+    }
+}
+
+extension Face {
+    /// 設定的三步進度：①配對 ②確認 ③完成（目前步驟白色，做完的綠色打勾，未到的淡）
+    func drawSetupSteps(_ g: CGContext, current: Int, y: CGFloat) {
+        let labels = [L("status.step.pair", "配对"), L("status.step.confirm", "在 iPhone 上确认"), L("status.step.done", "完成")]
+        let font = Self.rounded(24, weight: .semibold)
+        let widths = labels.map { Typo.width($0, font) + 44 }
+        let gap: CGFloat = 26
+        var x = 512 - (widths.reduce(0, +) + gap * 2) / 2
+        for (i, label) in labels.enumerated() {
+            let n = i + 1
+            let done = n < current, now = n == current
+            let dot = CGRect(x: x, y: y - 14, width: 28, height: 28)
+            g.setFillColor((done ? srgb(0x34c759) : NSColor.white.withAlphaComponent(now ? 0.95 : 0.22)).cgColor)
+            g.fillEllipse(in: dot)
+            if done {
+                g.setStrokeColor(NSColor.white.cgColor); g.setLineWidth(3.5); g.setLineCap(.round); g.setLineJoin(.round)
+                g.move(to: CGPoint(x: dot.minX + 8, y: dot.midY)); g.addLine(to: CGPoint(x: dot.minX + 12.5, y: dot.midY + 5))
+                g.addLine(to: CGPoint(x: dot.maxX - 7, y: dot.minY + 9)); g.strokePath()
+            } else {
+                let nf = Self.rounded(18, weight: .bold)
+                drawLeft(g, "\(n)", font: nf, x: dot.midX - Typo.width("\(n)", nf) / 2, y: dot.midY + 6.5,
+                         color: now ? srgb(0x050607) : NSColor.white.withAlphaComponent(0.7))
+            }
+            drawLeft(g, label, font: font, x: dot.maxX + 10, y: y + 8.5,
+                     color: NSColor.white.withAlphaComponent(done ? 0.75 : now ? 0.95 : 0.4))
+            x += widths[i] + gap
+        }
     }
 }
 

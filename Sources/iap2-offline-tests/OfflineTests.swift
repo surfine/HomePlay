@@ -23,6 +23,19 @@ func hexBytes(_ s: String) -> [UInt8] {
     }
 
     static func main() {
+        // Wi-Fi 資訊分享：0x5700 沒有參數；0x5701 回狀態＋名稱＋密碼（字串可能帶 NUL）
+        do {
+            expect(Iap2Csm.requestWiFiInformationFrame().messageId == 0x5700, "wifi info request is 0x5700")
+            let reply = Iap2Csm.Frame(messageId: 0x5701, parameters: [
+                Iap2Csm.Parameter(id: 0, payload: [0]), Iap2Csm.Parameter(id: 1, payload: [2]),
+                Iap2Csm.Parameter(id: 2, payload: Array("家裡".utf8) + [0]), Iap2Csm.Parameter(id: 3, payload: Array("pw".utf8) + [0])])
+            let (parsed, _) = Iap2Csm.parse(from: reply.encoded)
+            let r = parsed.first.map(Iap2Csm.parseWiFiInformation)
+            expect(r?.status == 0 && r?.ssid == "家裡" && r?.passphrase == "pw", "wifi info reply parses status, NUL-terminated ssid, passphrase")
+            let declined = Iap2Csm.parseWiFiInformation(Iap2Csm.Frame(messageId: 0x5701, parameters: [Iap2Csm.Parameter(id: 0, payload: [1])]))
+            expect(declined.status == 1 && declined.ssid == nil, "declined wifi share has no ssid")
+            expect(Iap2Csm.messagesSentByAccessory.contains(0x5700) && Iap2Csm.messagesReceivedFromPhone.contains(0x5701), "wifi info sharing declared in identification")
+        }
         // 无线 CarPlay 交接：0x5703 与 0x4301 的字节布局（对照 MacPlay iap2-csm 的编码规则手算）
         do {
             let wifi = Iap2Csm.accessoryWiFiConfiguration(ssid: "AB", passphrase: "pw", security: .wpaWpa2, channel: 36)
@@ -604,6 +617,8 @@ func hexBytes(_ s: String) -> [UInt8] {
 
         // 连线状态机情境（docs/design-drafts/連線狀態機.md）
         ConnectionMachineTests.run(expect)
+        // 首次配对连不上：失败树与诊断报告
+        ConnectDiagnosticsTests.run(expect)
 
         if failures > 0 { print("\(failures) FAILED"); exit(1) }
         print("PASS iap2 offline")

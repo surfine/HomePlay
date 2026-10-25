@@ -244,6 +244,7 @@ struct GesturesPane: View {
             } else {
                 Section {
                     InfoRow(title: L("settings.gesture.liveSlide", "CarPlay 显示时在屏幕上双指滑"), subtitle: L("settings.gesture.liveSlide.sub", "在 CarPlay 里拖动"))
+                    InfoRow(title: L("settings.gesture.move", "拖底座或按住 ⌘ 拖"), subtitle: L("settings.gesture.move.sub", "移动位置"))
                     InfoRow(title: L("settings.gesture.reset", "双击机身"), subtitle: L("settings.gesture.reset.sub", "角度回正"))
                     InfoRow(title: L("settings.gesture.apart", "两指轻点两下"), subtitle: L("settings.gesture.apart.sub", "拆开看看，再点两下组回来"))
                     InfoRow(title: L("settings.gesture.overview", "长按屏幕"), subtitle: L("settings.gesture.overview.sub", "打开表盘总览"))
@@ -371,6 +372,7 @@ struct PermissionsPane: View {
         case .inputMonitoring: return L("settings.perm.input", "输入监控")
         case .automation: return L("settings.perm.automation", "自动化（音乐）")
         case .calendar: return L("settings.perm.calendar", "日历")
+        case .location: return L("settings.perm.location", "定位")
         }
     }
     private func summary(_ k: PermissionKind) -> String {
@@ -380,6 +382,7 @@ struct PermissionsPane: View {
         case .inputMonitoring: return L("settings.perm.input.sub", "在任何 App 里按 F5 都能叫 Siri")
         case .automation: return L("settings.perm.automation.sub", "显示「音乐」或 Spotify 正在播放的歌")
         case .calendar: return L("settings.perm.calendar.sub", "在模块表盘上显示下一个行程")
+        case .location: return L("settings.perm.location.sub", "自动读取 Wi-Fi 名称给无线 CarPlay；天气表盘")
         }
     }
     var body: some View {

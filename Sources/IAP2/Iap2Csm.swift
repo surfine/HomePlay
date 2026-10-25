@@ -120,6 +120,7 @@ package enum Iap2Csm {
         0x4154, 0x4156,            // 通话状态更新开关
         0x4301,                    // CarPlay 开始会话
         0x5703,                    // Wi-Fi 配置信息（无线）
+        0x5700,                    // Wi-Fi 資訊分享：向 iPhone 要它現在連的網路（iPhone 問一次「分享 Wi-Fi？」）
     ]
 
     package static let messagesReceivedFromPhone: [UInt16] = [
@@ -130,7 +131,23 @@ package enum Iap2Csm {
         0x4158, 0x4155,            // 通讯 / 通话状态更新
         0x4300,                    // CarPlay 可用性
         0x4e0d, 0x4e0e, 0x5702,    // 无线：手机侧 Wi-Fi/链路消息
+        0x5701,                    // Wi-Fi 資訊分享的回覆（名稱＋密碼）
     ]
+
+    // MARK: Wi-Fi 資訊分享（配件向 iPhone 要它目前的 Wi-Fi；iPhone 先問使用者）
+    package static let requestWiFiInformation: UInt16 = 0x5700
+    package static let wiFiInformation: UInt16 = 0x5701
+    package static func requestWiFiInformationFrame() -> Frame { Frame(messageId: requestWiFiInformation, parameters: []) }
+    /// 0x5701：0＝狀態（0 成功）、1＝一個位元組（推測是安全類型）、2＝SSID、3＝密碼（UTF-8，帶 NUL）。真機 iOS 27 2026-10-25 量到的欄位
+    package static func parseWiFiInformation(_ f: Frame) -> (status: Int, ssid: String?, passphrase: String?) {
+        func text(_ id: UInt16) -> String? {
+            guard let p = f.parameters.first(where: { $0.id == id }) else { return nil }
+            let bytes = p.payload.prefix { $0 != 0 }
+            return String(bytes: bytes, encoding: .utf8)
+        }
+        let status: Int = f.parameters.first(where: { $0.id == 0 })?.payload.first.map { Int($0) } ?? 0
+        return (status, text(2), text(3))
+    }
 
     /// 无线（蓝牙引导）识别信息。mac 是六段冒号大写地址；ssid 不为空。
     package static func identificationInformation(

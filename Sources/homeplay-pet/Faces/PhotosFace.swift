@@ -92,7 +92,7 @@ extension Face {
         let look = ClockLook.active, top: CGFloat = 62, h: CGFloat = 542, gap: CGFloat = 52, w = 512 - gap / 2 - 58
         let a = GlyphShape.clock(hh, look: look, height: h, maxWidth: w, at: CGPoint(x: 512 - gap / 2, y: top), anchorX: 1, weightBoost: 0.1)
         let b = GlyphShape.clock(mm, look: look, height: h, maxWidth: w, at: CGPoint(x: 512 + gap / 2, y: top), anchorX: 0, weightBoost: 0.1)
-        return (a, b)
+        return GlyphShape.centeredPair(a, b)
     }
 
     /// 沒有照片：溫暖的漸層當底，同一套 Portraits 版面（玻璃大時間、島在下面），中間一行告訴人照片要放哪裡

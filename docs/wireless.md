@@ -63,6 +63,29 @@ iPhone 上如果跳「要使用 CarPlay 嗎」之類的提示，按允許。
 
 不通就把日誌從頭貼回來，記下停在哪一段；不要猜。
 
+## 首次配對連不上：「CarPlay 清單裡有 HomePlay，卻一直停在正在連線」（2026-10-25）
+
+接收器用 `ConnectDiagnostics`（`Sources/IAP2/ConnectDiagnostics.swift`）記每次嘗試的時間點與次數，卡住時按下表
+由上而下判斷，送 `wifiHelp` 帶 `reason`，桌寵照原因給一張卡（`ConnectHelp.card`）。判不出來就當 Wi-Fi 沒連回。
+
+| 原因 `reason` | 怎麼判斷 | 觸發 | 卡上叫使用者做什麼 | 自動恢復 |
+|---|---|---|---|---|
+| `macFirewall` | `socketfilterfw` 唯讀查詢：開著且「阻止所有傳入連接」或接收器被拒 | 交接逾時（15 秒）／等同意 20 秒 | 系統設定 › 網路 › 防火牆 › 選項：允許 homeplay-receiver | 0x4301 照舊補發，改好就連上 |
+| `localNetwork` | `_carplay-ctrl` 瀏覽或探測停在 `PolicyDenied`（-65570） | 同上 | 系統設定 › 隱私與安全性 › 本地網路：打開 HomePlay | 同上 |
+| `carPlayConsent` | iAP2 認證後 20 秒沒有 0x4E0D／0x4300（iPhone 等使用者在 CarPlay 提示上點「連接」） | 認證後 20 秒 | 解鎖 iPhone 點「連接」；「不支援」是正常的，別忘記此裝置 | 連結保持，不重連 |
+| `ssidUnknown` | 不知道 Wi-Fi 名稱：macOS 26 起 `ipconfig getsummary` 與 CoreWLAN 對沒有定位權限的 App 都隱藏 SSID（本機實測），0x5703／0x4301 裡是空的 | 送出 0x4301 後 5 秒沒回連 | 填 iPhone 所連的網路（桌寵自動開一次 Wi-Fi 設定） | 存好立刻 `wifiChanged` → 重送 0x5703＋0x4301 |
+| `inboundBlocked` | iPhone 回了我們的 `GET /ctrl-int/1/connect`（同網、Mac→iPhone 通），但沒連進控制口 | 交接逾時 | 檢查防火牆或 Little Snitch／LuLu 這類 App | — |
+| `wifiNoConnectBack` | 其餘：交了 Wi-Fi 設定、送了 0x4301，沒從 Wi-Fi 連回 | 交接逾時 | 在 iPhone 關開一次 Wi-Fi；要連「<SSID>」，不是訪客網路或另一個 5G／2.4G 名稱 | 補發 8 次（含 IPv6、換安全類型）；40 秒後卡片改給「插線一次」與診斷報告 |
+
+**診斷報告**：右鍵 › iPhone › 拷貝診斷報告。桌寵送 `{"type":"diagnostics"}`，接收器回 `reportLines`
+（判斷、Wi-Fi 頻段／信道／安全類型／是否知道名稱與密碼、防火牆、已配對數、這次嘗試各段的秒數、累計次數、
+`_carplay-ctrl` 瀏覽與探測結果、最近幾次連線耗時），桌寵加上版本、系統、卡片狀態與 receiver.log 里程碑次數。
+不含 SSID、密碼、IP、藍牙位址、裝置名稱與身份；接收器沒回應也照樣出桌寵那一段。
+
+**配對走 iPhone 設定 › 藍牙 › 其他裝置**（真機 2026-10-24：Mac 主動配對 6 次只叫到 2 次，iPhone 端配對每次幾秒）。
+配好後 iPhone 可能顯示「不支援」（HomePlay 只提供 iAP2／CarPlay，沒有通話或音樂藍牙），那是正常的；
+點了「忘記此裝置」才會讓 Mac 留下 iPhone 已經不認的配對。連接步驟（右鍵 › iPhone › 連接步驟…）第一次進配對引導時自動出一次。
+
 ## 雙模（妙控配件式）：配對一次，之後永遠無感
 
 `--source auto`（重按拉起、開機自啟都用它）的規則（2026-10-22 真機定案）：

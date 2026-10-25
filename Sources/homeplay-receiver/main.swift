@@ -239,8 +239,7 @@ func isAddressInUse(_ error: Error) -> Bool {
 }
 /// 桌宠写的本地配置（wireless.json）；密码字段只在这里读，不进命令行、不打印。
 func wirelessConfigStringArray(_ key: String) -> [String] {
-    let url = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-        .appendingPathComponent("HomePlay/wireless.json")
+    let url = HomePlayState.directory.appendingPathComponent("wireless.json")
     guard let data = try? Data(contentsOf: url),
           let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
           let values = obj[key] as? [String] else { return [] }
@@ -248,8 +247,7 @@ func wirelessConfigStringArray(_ key: String) -> [String] {
 }
 
 func wirelessConfigString(_ key: String) -> String? {
-    let url = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-        .appendingPathComponent("HomePlay/wireless.json")
+    let url = HomePlayState.directory.appendingPathComponent("wireless.json")
     guard let data = try? Data(contentsOf: url),
           let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
           let value = obj[key] as? String, !value.isEmpty else { return nil }
@@ -375,8 +373,7 @@ func wpa3OnlyNetwork(ssid: String) -> Bool? {
 }
 
 private var wifiSecurityCacheURL: URL {
-    FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-        .appendingPathComponent("HomePlay/wifi-security.json")
+    HomePlayState.directory.appendingPathComponent("wifi-security.json")
 }
 /// 按 SSID 缓存的 0x4301 安全类型（只存枚举值，不存密码）。
 func cachedWiFiSecurity(ssid: String) -> Iap2Csm.WiFiSecurity? {
@@ -431,6 +428,15 @@ func waitUntilWiFiReady(iface: String) {
         // 每 0.5 秒看一次：Wi-Fi 一就绪就走（原本每 5 秒，开机时平白多等几秒）
         if !noted { Wireless.note("Wi-Fi 还没就绪（IPv4/信道未拿到）——每 0.5 秒再看（开机自启时 Wi-Fi 关联常需要几秒）"); noted = true }
         Thread.sleep(forTimeInterval: 0.5)
+    }
+}
+
+// 日誌裡有 Wi-Fi 名稱和手機位址：只給自己讀寫（舊版由 launchd／桌寵以 0644 建立，起來時修一次）
+do {
+    let dir = HomePlayState.directory
+    for name in ["receiver.log"] {
+        let path = dir.appendingPathComponent(name).path
+        if FileManager.default.fileExists(atPath: path) { chmod(path, 0o600) }
     }
 }
 
@@ -627,7 +633,13 @@ if sourceKind == "wireless" || sourceKind == "usb" || sourceKind == "auto" {
                                 ?? wirelessConfigString("passphrase")
                                 ?? "")
     if let c = flag("--channel"), let n = UInt8(c) { o.channel = n }
+    // 沒指定就用系統的 Wi-Fi 網卡：桌上型 Mac 插網線時 en0 是乙太網、Wi-Fi 是 en1，
+    // 照舊寫死 en0 會讀不到信道、整條無線退成有線（介面名不受定位權限限制）
     if let i = flag("--iface") { o.iface = i }
+    else if let w = CWWiFiClient.shared().interface()?.interfaceName, !w.isEmpty, w != o.iface {
+        Wireless.note("Wi-Fi 网卡是 \(w)（不是 \(o.iface)）：改用它")
+        o.iface = w
+    }
     if let p = flag("--control-port"), let n = UInt16(p) { o.controlPort = n }  // --port 是 WS 口（WSServer），別混
     if let sz = flag("--size") {
         let wh = sz.split(separator: "x").compactMap { Int($0) }
