@@ -217,69 +217,75 @@ extension Face {
 
     nonisolated(unsafe) private static var formatters: [String: DateFormatter] = [:]
     /// 快取的 DateFormatter（每分鐘重畫時不要每次新建）
-    static func formatter(_ template: String, raw: Bool = false) -> DateFormatter {
+    static func formatter(_ template: String, raw: Bool = false, timeZone: TimeZone? = nil) -> DateFormatter {
         let loc = L10n.language.locale
-        let key = "\(template)|\(raw)|\(loc.identifier)"
+        let key = "\(template)|\(raw)|\(loc.identifier)|\(timeZone?.identifier ?? "")"
         if let f = formatters[key] { return f }
         let f = DateFormatter(); f.locale = loc
-        f.dateFormat = raw ? template : (DateFormatter.dateFormat(fromTemplate: template, options: 0, locale: loc) ?? template)
+        if let timeZone { f.timeZone = timeZone }
+        f.dateFormat = raw ? template : localizedFormat(template, loc)
         formatters[key] = f
         return f
+    }
+    /// 2.0 depth：系統設定的 12／24 小時制。Locale.current 帶著使用者在「日期與時間」的覆寫；
+    /// 介面語言的 locale（L10n.language.locale）是用 identifier 建的，沒有這個覆寫，所以時制只問 current、寫法才問介面語言。
+    /// 快照可用 HOMEPLAY_HOUR_CYCLE=12／24 固定。
+    static var uses12Hour: Bool {
+        if let v = ProcessInfo.processInfo.environment["HOMEPLAY_HOUR_CYCLE"] { return v == "12" }
+        return (DateFormatter.dateFormat(fromTemplate: "j", options: 0, locale: Locale.current) ?? "H").contains("h")
+    }
+    /// 時間的模板（給 setLocalizedDateFormatFromTemplate／formatter）：時制照系統，上午／AM 的寫法與位置照介面語言
+    static var timeTemplate: String { uses12Hour ? "hmm" : "Hmm" }
+    /// 模板 → 這個語言的寫法。中文的 h 會帶出「清晨／凌晨」這種時段（B），iOS 的時間一律寫「上午／下午」（a），這裡換回 a
+    static func localizedFormat(_ template: String, _ loc: Locale) -> String {
+        let f = DateFormatter.dateFormat(fromTemplate: template, options: 0, locale: loc) ?? template
+        return f.contains("B") ? f.replacingOccurrences(of: "B", with: "a") : f
+    }
+    /// 另外建的 DateFormatter 用：照 timeTemplate（前面可接日期模板）設好時間的寫法
+    static func setTimeFormat(_ f: DateFormatter, datePrefix: String = "") { f.dateFormat = localizedFormat(datePrefix + timeTemplate, f.locale) }
+    /// 清單、小工具、訊息裡的時間：「上午 7:12」「7:12 AM」「07:12」
+    static func shortTime(_ d: Date, timeZone: TimeZone? = nil) -> String { formatter(timeTemplate, timeZone: timeZone).string(from: d) }
+    /// 外殼右上的時間（iOS 狀態列）：12 小時制也不帶上午／下午
+    static func statusClock(_ d: Date) -> String { formatter(uses12Hour ? "h:mm" : "H:mm", raw: true).string(from: d) }
+    /// 逐時預報的小時（iOS 天氣）：12 小時制「下午3時」「3 PM」，24 小時制「15」
+    static func hourLabel(_ hour: Int) -> String {
+        guard uses12Hour, let d = Calendar.current.date(bySettingHour: hour, minute: 0, second: 0, of: Date()) else { return String(format: "%02d", hour) }
+        return formatter("ha").string(from: d)
+    }
+    /// 大數字的時間（鬧鐘列）：數字照系統時制，上午／下午拆出來畫小一號（iOS 鬧鐘），前或後照介面語言
+    static func timeParts(hour: Int, minute: Int) -> (time: String, period: String?, periodFirst: Bool) {
+        guard uses12Hour else { return (String(format: "%02d:%02d", hour, minute), nil, false) }
+        let f = formatter("hmm"), h12 = hour % 12 == 0 ? 12 : hour % 12
+        let period = hour < 12 ? f.amSymbol ?? "AM" : f.pmSymbol ?? "PM"
+        return (String(format: "%d:%02d", h12, minute), period, (f.dateFormat ?? "").hasPrefix("a"))
     }
     /// 時與分（尊重系統 12／24 小時制，但大數字不帶 am/pm）
     static func hourMinute(_ d: Date) -> (h: String, m: String) {
         let c = Calendar.current.dateComponents([.hour, .minute], from: d)
         var h = c.hour ?? 0
-        let uses12 = (DateFormatter.dateFormat(fromTemplate: "j", options: 0, locale: Locale.current) ?? "H").contains("h")
-        if uses12 { h = h % 12; if h == 0 { h = 12 } }
+        if uses12Hour { h = h % 12; if h == 0 { h = 12 } }
         return (String(h), String(format: "%02d", c.minute ?? 0))
     }
 
-    /// 液態玻璃字：path 是畫布座標的字形；backdrop 是整張 1024² 背景（最好已模糊）。
-    /// 給 cacheKey 時，只跟字形有關的部分（落影、斜面、厚度、霜白、鏡面）快取成一張透明圖，
-    /// 每幀只重畫「透出來的背景」——Flow 這種背景一直在動的錶面才不會每幀重算一堆模糊陰影。
-    /// 光學液態玻璃（Faces/LiquidGlass.swift，GPU）：clear 是清楚的背景、frosted 是模糊版；整組字形當同一片玻璃。
-    /// GPU 不可用時退回下面的 CoreGraphics 版。
+    /// 液態玻璃字形（大時間、溫度、Flow 的水珠、家庭模塊的磚）：自己的厚玻璃 shader（Faces/LiquidGlass.swift，GPU），
+    /// 參數照官方錶面圖校準（每款錶面一組）；GPU 不可用退回 CoreGraphics 版。clear 是清楚的背景、frosted 是模糊版；整組字形當同一片玻璃。
+    /// tint：染色（字體與顏色的玻璃色）；lightTurn：亮邊轉多少（弧度，Flow 的光跟著人轉）
     func drawLiquidGlass(_ g: CGContext, _ shapes: [GlyphShape], key: String? = nil, clear: CGImage?, frosted: CGImage?,
-                         params: LiquidGlassParams = .portrait, system: SystemGlassParams = .portrait, lightTurn: CGFloat = 0,
+                         params: LiquidGlassParams = .faceTime, tint: NSColor? = nil, lightTurn: CGFloat = 0,
                          fallback: GlassLook = .portrait) {
         let path = CGMutablePath()
         for s in shapes { path.addPath(s.path) }
-        // 先用系統自己的 Liquid Glass（私有 CA 零件）；不行再用自己的光學 shader；再不行退回 CG 版
-        if let clear, let r = SystemGlass.shared.render(path: path, key: key, scale: renderPixelScale, backdrop: clear, params: system,
-                                                         lightTurn: lightTurn) {
-            // 字外一圈柔和落影（玻璃浮在背景上）：只畫在字形外面，字裡交給玻璃；跟背景無關，按字形快取
-            glassShadow(g, path, key: key)
-            g.saveGState(); g.addPath(path); g.clip()
-            drawUpright(g, r.image, in: r.rect)
-            g.restoreGState()
-        } else if let clear, let r = LiquidGlass.shared.render(path: path, key: key, scale: renderPixelScale, backdrop: clear, frosted: frosted, params: params) {
+        var params = params
+        params.lightTurn = Float(lightTurn)
+        if let t = tint?.usingColorSpace(.sRGB) { params.tint = SIMD4(Float(t.redComponent), Float(t.greenComponent), Float(t.blueComponent), Float(t.alphaComponent)) }
+        // 斜面厚度相對「單顆字形」的高度（多行拼成一副時，聯集高度會讓小水珠變成巨厚透鏡、折射位移破百 px）
+        let hs = shapes.map(\.ink.height).sorted(); let bezelHeight = hs.isEmpty ? path.boundingBoxOfPath.height : hs[hs.count / 2]
+        if let clear, let r = LiquidGlass.shared.render(path: path, key: key, scale: renderPixelScale, backdrop: clear, frosted: frosted, params: params, bezelHeight: bezelHeight) {
             drawUpright(g, r.image, in: r.rect)
         } else {
             for s in shapes { drawGlass(g, s, backdrop: frosted, look: fallback) }
         }
     }
-
-    private func glassShadow(_ g: CGContext, _ path: CGPath, key: String?) {
-        let ink = path.boundingBoxOfPath, sc = renderPixelScale
-        let pad = ink.height * 0.08 + 8
-        let rect = ink.insetBy(dx: -pad, dy: -pad).intersection(CGRect(x: 0, y: 0, width: 1024, height: 1024)).integral
-        guard !rect.isNull, rect.width > 1, rect.height > 1 else { return }
-        let ck = key.map { "\($0)|\(Int(sc * 100))|\(rect)" }
-        let img: CGImage
-        if let ck, let hit = Self.shadowCache, hit.key == ck { img = hit.image } else {
-            img = makeImage(Int((rect.width * sc).rounded(.up)), Int((rect.height * sc).rounded(.up))) { c in
-                c.scaleBy(x: sc, y: sc); c.translateBy(x: -rect.minX, y: -rect.minY)
-                c.addRect(CGRect(x: -100, y: -100, width: 1224, height: 1224)); c.addPath(path); c.clip(using: .evenOdd)
-                c.setShadow(offset: CGSize(width: 0, height: -ink.height * 0.012 * sc), blur: ink.height * 0.035 * sc,
-                            color: NSColor.black.withAlphaComponent(0.22).cgColor)
-                c.addPath(path); c.setFillColor(NSColor.black.withAlphaComponent(0.5).cgColor); c.fillPath()
-            }
-            if let ck { Self.shadowCache = (ck, img) }
-        }
-        drawUpright(g, img, in: rect)
-    }
-    nonisolated(unsafe) private static var shadowCache: (key: String, image: CGImage)?
 
     func drawGlass(_ g: CGContext, _ shape: GlyphShape, backdrop: CGImage?, look: GlassLook = .portrait, cacheKey: String? = nil) {
         guard shape.ink.width > 1, shape.ink.height > 1 else { return }
@@ -475,5 +481,22 @@ extension Face {
         var t = s
         while !t.isEmpty && w(t + "…") > width { t.removeLast() }
         return t + "…"
+    }
+
+    /// 中間刪節號（HIG-LIST-23）：太長時保留頭尾、中間換「…」——單集名稱、電話號碼這種辨識重在頭尾的字用這個
+    static func clippedMiddle(_ s: String, _ font: NSFont, _ width: CGFloat) -> String {
+        func w(_ t: String) -> CGFloat { Typo.width(t, font) }
+        if w(s) <= width { return s }
+        let ellipsis = "…"
+        // 二分搜最多保留幾個字（頭尾各半），頭 + 「…」+ 尾要塞得進 width
+        var lo = 0, hi = max(0, s.count - 1)
+        while lo < hi {
+            let mid = (lo + hi + 1) / 2
+            let head = s.prefix(mid / 2), tail = s.suffix(mid - mid / 2)
+            if w(head + ellipsis + tail) <= width { lo = mid } else { hi = mid - 1 }
+        }
+        guard lo > 0 else { return ellipsis }
+        let head = s.prefix(lo / 2), tail = s.suffix(lo - lo / 2)
+        return head + ellipsis + tail
     }
 }

@@ -618,8 +618,8 @@ final class Face {
     static var pocketA = 0.0, pocketC = 0.0, pocketD = 0.0
     /// 這段時間很值得用 60fps 畫（眨眼／hello／引導）——環境漂動不算
     func needsSmooth(_ now: Double) -> Bool {
-        blinkEnd > 0 || helloStart >= 0 && now - helloStart < Self.helloDuration || onboardingActive
-            || PermissionPrimer.visible || approaching
+        blinkEnd > 0 || helloStart >= 0 && helloTime(now) < Self.helloDuration || onboardingActive   // 2.0 hello
+            || PermissionPrimer.visible || approaching || PeopleOverlay.visible   // 2.0: 谁在看的问候／录脸引导
     }      // 效能基準用：臉部軟體重繪次數
     private var lastTick = CACurrentMediaTime()
     private var nextBlink = CACurrentMediaTime() + 2.5, blinkEnd = 0.0, doubleBlink = false
@@ -633,6 +633,8 @@ final class Face {
         expression = e; target = .of(e); forceDirty = true
         if snap { cur = target }
     }
+    /// 2.0: 新訊息進來時瞄一眼（跟待機的「瞄」同一個動作）
+    func glanceNow() { if expression == .idle { glanceEnd = CACurrentMediaTime() + 1.4 } }
     /// 让下一次 tick 眨一下（可延迟）：转头落定、刚看到人时用来收尾。
     func blinkSoon(after delay: Double = 0) {
         guard !frozen, expression != .asleep else { return }
@@ -763,8 +765,8 @@ final class Face {
         let t = parts.first ?? status.text
         return (t.prefix(1).uppercased() + t.dropFirst(), parts.count > 1 ? parts[1] : nil)
     }
-    private var helloStart = -1.0
-    static let helloDuration = 2.6
+    var helloStart = -1.0
+    static var helloDuration: Double { HelloIntro.duration }   // 2.0 hello：Hello/HelloScene.swift
 
     private(set) var wallpaper: CGImage?, frosted: CGImage?
     private var paletteKey = -1
@@ -838,7 +840,7 @@ final class Face {
     /// 启动时的彩蛋：屏幕先用手写体写一个 hello，再换成脸（G4 白外观才有）
     func sayHello(_ now: Double) { helloStart = now; forceDirty = true }
     func cancelHello() { helloStart = -1; forceDirty = true }
-    var sayingHello: Bool { helloStart >= 0 && CACurrentMediaTime() - helloStart < Self.helloDuration }
+    var sayingHello: Bool { helloStart >= 0 && helloTime(CACurrentMediaTime()) < Self.helloDuration }   // 2.0 hello
 
     /// 每帧推进壁纸、展开、Flow；有变化返回 true
     private func tickScreen(_ now: Double, _ dt: Double) -> Bool {
@@ -853,7 +855,7 @@ final class Face {
 
         // Flow：临界阻尼弹簧，响应 1.2 s；漂动时最多每秒重画 20 次
         var goal = CGPoint.zero
-        if flowActive || style == .flow, let p = pointer { goal = CGPoint(x: max(-1, min(1, p.x)), y: max(-1, min(1, p.y))) }
+        if flowActive || style == .flow, let p = Self.pointerOverride ?? pointer { goal = CGPoint(x: max(-1, min(1, p.x)), y: max(-1, min(1, p.y))) }   // 2.0: --pointer 也钉住 Flow 的场（快照校準要重現）
         let k = pow(2 * Double.pi / 1.2, 2), c = 2 * sqrt(k)
         flowV.x += CGFloat((Double(goal.x - flow.x) * k - Double(flowV.x) * c) * dt); flow.x += flowV.x * CGFloat(dt)
         flowV.y += CGFloat((Double(goal.y - flow.y) * k - Double(flowV.y) * c) * dt); flow.y += flowV.y * CGFloat(dt)
@@ -861,7 +863,7 @@ final class Face {
             lastWall = now; rebuildWallpaper(); dirty = true; Face.dbgFlow += 1
         }
         if helloStart >= 0 {
-            if now - helloStart < Self.helloDuration { dirty = true } else { helloStart = -1; dirty = true }
+            if helloTime(now) < Self.helloDuration { dirty = true } else { helloStart = -1; dirty = true }   // 2.0 hello
             Face.dbgHello += 1
         }
         return dirty
@@ -939,7 +941,7 @@ final class Face {
     var lastFrame: CGImage?
     /// 這一幀膠囊（眼睛）佔的範圍（1024 畫布）：海報補丁只補這裡面的變化（眨眼、瞄一眼）
     var islandRect: CGRect?
-    private var islandRectBuilding: CGRect?
+    var islandRectBuilding: CGRect?   // 2.0: 外殼的頂端藥丸也記進來（Shell/HomeScreen.swift）
     var faceTransition: (sharp: CGImage, frosted: CGImage, start: Double)?
     /// 島錶面的自由组合（见 IslandOptions.swift）
     var clockStyle: ClockStyle = .bold { didSet { if clockStyle != oldValue { forceDirty = true } } }
@@ -979,9 +981,9 @@ final class Face {
     static let timerInTile: Set<FaceStyle> = [.modular, .pocket]
     var bannerShowing: Bool { CACurrentMediaTime() < bannerUntil }
 
-    func startTimer(seconds: Double, now: Double = CACurrentMediaTime()) {
-        timerTotal = max(1, seconds); timerEnd = now + timerTotal; bannerUntil = 0; forceDirty = true
-        timerEndWall = Date().timeIntervalSinceReferenceDate + timerTotal
+    func startTimer(seconds: Double, now: Double = CACurrentMediaTime(), total: Double? = nil) {   // 2.0: total＝多組計時器鏡射進來時的原長度
+        timerTotal = max(1, total ?? seconds); timerEnd = now + max(1, seconds); bannerUntil = 0; forceDirty = true
+        timerEndWall = Date().timeIntervalSinceReferenceDate + max(1, seconds)
     }
     /// Mac 睡眠时 CACurrentMediaTime 不走：醒来按墙上时间把到点时刻对回来
     private var timerEndWall: Double?
@@ -997,7 +999,7 @@ final class Face {
 
     /// 计时器、展开动画、横幅、照片：有变化回 true
     private func tickLive(_ now: Double, _ dt: Double) -> Bool {
-        var dirty = false
+        var dirty = tickShell(now, dt)   // 2.0: 主畫面、App、多組計時器（Shell/）
         if let end = timerEnd {
             if now >= end {
                 timerEnd = nil; showBanner(now: now); onTimerDone?(); dirty = true
@@ -1008,7 +1010,7 @@ final class Face {
         }
         if tickMusic(now) { dirty = true }
         if siriOrb.active(now) || (siriOrb.upAt > 0 && now - siriOrb.upAt < SiriOrbState.think + SiriOrbState.settle + 0.1) { dirty = true }
-        let goal: CGFloat = (timerActive || musicActive(now)) && !Self.timerInTile.contains(style) ? 1 : 0
+        let goal: CGFloat = (timerActive || musicActive(now) || faceHasOtherActivity(now)) && !Self.timerInTile.contains(style) ? 1 : 0   // 2.0: 通話、訊息、ClioTalk 也讓膠囊長開
         if liveT != goal {
             liveT += (goal - liveT) * CGFloat(1 - exp(-dt / 0.12))
             if abs(goal - liveT) < 0.003 { liveT = goal }
@@ -1019,6 +1021,8 @@ final class Face {
         if style == .photos || (style == .island && background == .photo) || FaceOverview.active, photos.tick(now) { dirty = true }
         if tickCarPlayOverlay(now, dt) { dirty = true }   // 连线中过场的淡入淡出与转圈
         if tickPermissionPrimer(now, dt) { dirty = true }   // 权限说明卡（PermissionPrimer.swift）
+        if tickClioTalk(now, dt) { dirty = true }   // 2.0: ClioTalk 回答卡（ClioTalk/ClioTalkPanel.swift）
+        if tickPeopleOverlay(now, dt) { dirty = true }   // 2.0: 谁在看（People/PeopleOverlay.swift）
         // 各錶面自己要不要重画（秒针、轮替、漂动…），实现在 Faces/ 里
         switch style {
         case .analog: if (typographMaterial == .embossed ? tickEmbossedFace(now) : tickAnalogFace(now)) { dirty = true }
@@ -1058,13 +1062,14 @@ final class Face {
         let tr = faceTransitionProgress(now)
         islandRectBuilding = nil
         defer { islandRect = islandRectBuilding }
-        let frame = makeImage(px, px) { g in
+        var frame = makeImage(px, px) { g in   // 2.0 P07：var＝收尾可能再套 True Tone 的白點微調
             if sc != 1 { g.scaleBy(x: sc, y: sc) }
+            HPAX.begin(g); defer { HPAX.end() }   // 2.0: P05 元件記下畫了什麼給 VoiceOver（Design/HPAccessibility.swift）
             if let tr { beginFaceTransitionFrame(g, tr) }
-            if helloStart >= 0, now - helloStart < Self.helloDuration {
-                if let wallpaper { drawUpright(g, wallpaper, in: CGRect(x: 0, y: 0, width: 1024, height: 1024)) }
-                drawHello(g, CGFloat((now - helloStart) / Self.helloDuration)); return
+            if helloStart >= 0, helloTime(now) < Self.helloDuration, !helloInHandoff(now) {   // 2.0 hello：網格漸層＋一筆寫出的 hello（Hello/HelloScene.swift）
+                drawHelloScene(g, helloTime(now)); return
             }
+            if shellCoversFace { renderShell(g, now) } else {   // 2.0: 主畫面與 App 蓋掉錶面（Shell/HomeScreen.swift）
             switch style {
             case .island: renderIslandFace(g, now)
             case .photos: renderPhotosFace(g, now)
@@ -1089,18 +1094,28 @@ final class Face {
             case .alarmClock: renderAlarmClockFace(g, now)    // Faces/System6Series.swift
             case .about: renderAboutFace(g, now)              // Faces/System6Series.swift
             }
+            }
             if let tr { endFaceTransitionFrame(g, tr) }   // 舊錶面像起霧的玻璃一樣化開
+            drawShellOverlays(g, now)    // 2.0: 控制中心、ClioTalk、亮度
+            MessagesDemo.draw(g)   // 2.0: --messages-demo 快照：示範資料的訊息畫面蓋在錶面上（Messages/MessagesDemo.swift）
             drawCarPlayOverlay(g, now)   // 连线中过场（CarPlayOverlay.swift）
             if FaceOverview.active { drawOverview(g, now) }   // 长按换錶面总览盖在最上面
+            if helloInHandoff(now), helloTime(now) < Self.helloDuration { drawHelloScene(g, helloTime(now)) }   // 2.0 hello：淡出、露出 👀 錶面
             if Onboarding.active { drawOnboarding(g, now) }   // 第一次打开的操作提示
+            drawClioTalk(g, now)                               // 2.0: ClioTalk 回答卡（ClioTalk/ClioTalkPanel.swift）
             drawPermissionPrimer(g, now)                       // 权限说明卡盖在最上面（要点按钮）
+            drawPeopleOverlay(g, now)                          // 2.0: 谁在看的问候／录脸引导
+            drawShellFocusRing(g)                              // 2.0: P05 鍵盤焦點環（Shell/ShellAccessibility.swift）
             if bannerUntil > now { drawBanner(g, red: style == .bedside) }
             if cur.dim > 0.005 && style != .bedside {
                 g.setFillColor(NSColor.black.withAlphaComponent(cur.dim).cgColor)
                 g.fill(CGRect(x: 0, y: 0, width: 1024, height: 1024))
             }
         }
+        // 2.0 P07：True Tone——房間色溫偏移時整面微調白點（Faces/TrueTone.swift；HV-MAIN-36）
+        if let tuned = TrueTone.apply(frame, warmth: TrueTone.forced ?? Shell.trueToneWarmth) { frame = tuned }
         lastFrame = frame
+        RemotePrivacy.noteRender(self, frame)   // 2.0: 網頁串流記下這一幀能不能給訪客看（Remote/RemoteInput.swift）
         return frame
     }
 
@@ -1121,7 +1136,7 @@ final class Face {
         drawCentered(g, Self.dateLine(date), font: FaceType.sf(36, .semibold), kern: 0.6, y: 150, color: srgb(0x5e1712))
         let (hh, mm) = Self.hourMinute(date)
         let (a, b) = GlyphShape.centeredPair(GlyphShape.adaptive(hh, height: 470, maxWidth: 400, at: CGPoint(x: 492, y: 210), anchorX: 1, weight: 220),
-                                             GlyphShape.adaptive(mm, height: 470, maxWidth: 400, at: CGPoint(x: 532, y: 210), anchorX: 0, weight: 220))
+                                             GlyphShape.adaptive(mm, height: 470, maxWidth: 400, at: CGPoint(x: 532, y: 210), anchorX: 0, weight: 220))   // 12 小時制的單位數小時也整組置中
         // 一點點同色的光暈，像夜裡的 LED，不是平面貼字
         g.saveGState()
         g.setShadow(offset: .zero, blur: 26, color: red.withAlphaComponent(0.45).cgColor)
@@ -1130,8 +1145,8 @@ final class Face {
         drawIsland(g, at: CGPoint(x: 512, y: 820), scale: 0.62, liveAt: CGPoint(x: 512, y: 820), now: now, red: true)
     }
 
-    // 錶面每次重畫都會叫：DateFormatter 建一次約幾十微秒，用 FaceKit 的快取（依語言分開）
-    static func clock(_ d: Date) -> String { formatter("H:mm", raw: true).string(from: d) }
+    // 錶面每次重畫都會叫：DateFormatter 建一次約幾十微秒，用 FaceKit 的快取（依語言分開）；時制照系統（12 小時制不補零）
+    static func clock(_ d: Date) -> String { formatter(uses12Hour ? "h:mm" : "H:mm", raw: true).string(from: d) }
     static func dateLine(_ d: Date) -> String { formatter("MMMMdEEEE").string(from: d) }
     /// 電量狀態一行字（模組、口袋共用）
     static func batteryState(_ b: Battery.Reading) -> String {
@@ -1190,14 +1205,16 @@ final class Face {
                 for s: CGFloat in [-1, 1] { drawEye(g, cx: ex + s * p.sep * ke, cy: c.y, side: s, blinkF: bf, k: ke) }
             }
         }
-        if lt > 0.02, timerEnd == nil { drawMusicCapsule(g, rect: rect, c: c, lt: lt, now: now, red: red) }
+        // 2.0: 主活動不是計時器／正在播放就由 Shell/LiveActivityStack.swift 畫；其他活動在膠囊下方成 minimal；夜間只貼回眼睛
+        if !drawFaceActivities(g, rect: rect, eyesX: ex, eyesK: ke, lt: lt, now: now, red: red), lt > 0.02, timerEnd == nil { drawMusicCapsule(g, rect: rect, c: c, lt: lt, now: now, red: red) }
         if lt > 0.02, let end = timerEnd {
             let left = max(0, end - now), frac = CGFloat(left / timerTotal)
-            let accent = red ? srgb(0xb3261e) : srgb(0xffb340)
+            // 2.0 P07：夜間的強調色——走「亮度→紅」映射的錶面畫白（映射後＝最亮的紅）；自畫夜間紅的 Modular 直接用夜間紅
+            let accent = red ? srgb(0xb3261e) : nightOwnPalette ? HPTokens.Night.primary : Shell.nightTint(srgb(0xffb340), self)
             g.saveGState(); g.setAlpha(min(1, (lt - 0.3) / 0.7))
             drawLeft(g, timerLabel, font: Self.rounded(34, weight: .bold), x: rect.minX + 300, y: c.y - 14, color: accent)
             drawLeft(g, L("timer.left", "还剩"), font: Self.rounded(30, weight: .semibold), x: rect.minX + 300, y: c.y + 36,
-                     color: NSColor.white.withAlphaComponent(red ? 0.35 : 0.6))
+                     color: nightOwnPalette ? HPTokens.Night.secondary : NSColor.white.withAlphaComponent(red ? 0.35 : 0.6))
             let font = Self.rounded(118, weight: .semibold), txt = timerClock(left)
             let tw = Typo.width(txt, font)
             drawLeft(g, txt, font: font, x: rect.maxX - 200 - tw, y: c.y + 42, color: accent)
@@ -1220,7 +1237,8 @@ final class Face {
 
     /// 计时器到点的横幅：顶上一块液态玻璃（夜灯时是暗红），点一下屏幕收起，12 秒后自己收
     private func drawBanner(_ g: CGContext, red: Bool) {
-        let r = CGRect(x: 56, y: 56, width: 912, height: 230), rad = Screen.concentric(inset: 56)   // 跟螢幕圓角同心
+        // 10-grid：左緣 64／右緣 960（HPTokens.bannerCard），同心圓角跟著上緣 inset；內距只用 8 的倍數
+        let r = HPTokens.bannerCard, rad = Screen.concentric(inset: 56)   // 跟螢幕圓角同心
         if red {
             g.setFillColor(srgb(0x1a0504).cgColor)
             g.addPath(continuousRoundedRect(r, radius: rad)); g.fillPath()
@@ -1228,17 +1246,17 @@ final class Face {
             glass(g, r, radius: rad, tint: NSColor(white: 1, alpha: 0.18), band: 14)
         }
         let accent = red ? srgb(0xb3261e) : srgb(0xff9f0a)
-        let icon = CGRect(x: r.minX + 44, y: r.midY - 60, width: 120, height: 120)
+        let icon = CGRect(x: r.minX + 48, y: r.midY - 60, width: 120, height: 120)
         g.setFillColor(accent.cgColor)
         g.addPath(continuousRoundedRect(icon, radius: icon.width * 0.2237)); g.fillPath()   // App 圖示的連續圓角比例
         g.setStrokeColor((red ? NSColor.black : NSColor.white).cgColor); g.setLineWidth(9); g.setLineCap(.round)
         g.addArc(center: CGPoint(x: icon.midX, y: icon.midY + 6), radius: 34, startAngle: 0, endAngle: .pi * 2, clockwise: false); g.strokePath()
         g.move(to: CGPoint(x: icon.midX, y: icon.midY + 6)); g.addLine(to: CGPoint(x: icon.midX, y: icon.midY - 16)); g.strokePath()
         let fg = red ? srgb(0xb3261e) : NSColor.white
-        drawLeft(g, bannerTexts?.title ?? L("timer.banner.title", "计时器 · 现在"), font: Self.rounded(32, weight: .bold), x: icon.maxX + 34, y: r.minY + 92, color: fg.withAlphaComponent(0.7))
-        drawLeft(g, bannerTexts?.big ?? L("timer.banner.done", "时间到了"), font: Self.rounded(64, weight: .bold), x: icon.maxX + 34, y: r.minY + 168, color: fg)
+        drawLeft(g, bannerTexts?.title ?? L("timer.banner.title", "计时器 · 现在"), font: Self.rounded(32, weight: .bold), x: icon.maxX + 32, y: r.minY + 92, color: fg.withAlphaComponent(0.7))
+        drawLeft(g, bannerTexts?.big ?? L("timer.banner.done", "时间到了"), font: Self.rounded(64, weight: .bold), x: icon.maxX + 32, y: r.minY + 168, color: fg)
         let df = Self.rounded(30, weight: .semibold), dismiss = L("timer.banner.dismiss", "点一下收起")
-        drawLeft(g, dismiss, font: df, x: r.maxX - 44 - Typo.width(dismiss, df), y: r.minY + 168, color: fg.withAlphaComponent(0.6))
+        drawLeft(g, dismiss, font: df, x: r.maxX - 48 - Typo.width(dismiss, df), y: r.minY + 168, color: fg.withAlphaComponent(0.6))
     }
 
 
@@ -1249,29 +1267,6 @@ final class Face {
         let line = CTLineCreateWithAttributedString(NSAttributedString(string: s, attributes: Typo.attributes(f, color: color, kern: kern)))
         g.saveGState(); g.translateBy(x: x, y: y); g.scaleBy(x: 1, y: -1)
         g.textPosition = .zero; CTLineDraw(line, g); g.restoreGState()
-    }
-
-    /// hello：手写体从左到右「写」出来（裁切框跟着长），写完停一下，再淡出
-    private func drawHello(_ g: CGContext, _ t: CGFloat) {
-        // 字体：Macintosh Skeletal Filled（npwitk/Macintosh-Skeletal-Filled，个人非商业使用，装在 ~/Library/Fonts，不进仓库）；
-        // 没装就退回 Snell Roundhand
-        func line(_ size: CGFloat) -> CTLine {
-            let font = NSFont(name: "MacintoshSkeletalFilled-Regular", size: size)
-                ?? NSFont(name: "SnellRoundhand-Bold", size: size) ?? NSFont.systemFont(ofSize: size, weight: .light)
-            return CTLineCreateWithAttributedString(NSAttributedString(string: "hello", attributes: [.font: font, .foregroundColor: NSColor.white]))
-        }
-        let probe = CTLineGetBoundsWithOptions(line(200), .useGlyphPathBounds)
-        let line = line(200 * 700 / max(1, probe.width))          // 写满屏宽的约 70%
-        let b = CTLineGetBoundsWithOptions(line, .useGlyphPathBounds)
-        let x0 = 512 - b.width / 2 - b.minX, base: CGFloat = 512 + (b.minY + b.maxY) / 2
-        let write = min(1, t / 0.55), fade = t > 0.8 ? (1 - (t - 0.8) / 0.2) : 1
-        g.saveGState()
-        g.setAlpha(fade)
-        g.clip(to: CGRect(x: x0 + b.minX - 20, y: 0, width: (b.width + 40) * write, height: 1024))
-        g.setShadow(offset: .zero, blur: 24, color: NSColor(white: 1, alpha: 0.45).cgColor)
-        g.translateBy(x: x0, y: base); g.scaleBy(x: 1, y: -1)
-        g.textPosition = .zero; CTLineDraw(line, g)
-        g.restoreGState()
     }
 
     func drawEye(_ g: CGContext, cx: CGFloat, cy: CGFloat, side: CGFloat, blinkF: CGFloat, k: CGFloat = 1.4) {
@@ -1575,6 +1570,7 @@ final class HomeViewModel {
     private var grilleBackingParts: [BodyPart] = []
     private var grilleMask: TextureResource?
     private var usbPort: USBCPortAssembly?
+    private var originalMaterials: DeviceFinish.MaterialMap?   // 2.0 device: 原檔（Starlight 變體）的材質
 
     /// 拆解時逐件位移：九層（見 Anatomy.swift）各自一個時間窗，外層先動。只平移，不轉。
     private struct ExplodeMover {
@@ -1983,6 +1979,16 @@ final class HomeViewModel {
         finish = f
         generation += 1
         usbPort?.apply(finish: f)
+        // 2.0 device: 真機四色直接用 USDZ 自帶的 Color 變體（Apple 的材質，DeviceFinish.swift）；
+        // G4 白先還原成原檔（星光色）材質，再走下面的白塑料。變體載不到才退回舊的染色。
+        if let root = usdzRoot {
+            if originalMaterials == nil { originalMaterials = DeviceFinish.snapshot(root) }
+            if let map = f == .starlight ? originalMaterials : DeviceFinish.materials(for: f) {
+                DeviceFinish.apply(map, to: root)
+                DeviceFinish.darkenCavity((grilleInnerParts + grilleBackingParts).map(\.entity)); return
+            }
+            if f == .g4, let o = originalMaterials { DeviceFinish.apply(o, to: root) }
+        }
         for part in bodyParts {
             if f == .starlight {
                 part.entity.model?.materials = part.materials
@@ -2881,6 +2887,7 @@ final class PetView: NSView {
             render.environment.lighting.resource = studio
             log("Quick Look object-mode IBL loaded")
         }
+        if ProductShot.on { render.environment.lighting.intensityExponent = ProductShot.iblExponent }   // 2.0 device: 官圖的高調棚拍
         render.__enableAutomaticFrameRate = false
         render.__preferredFrameRate = 60
         // 这不是 AR 场景：走 RealityKit 的非 ARKit 设备路径，别让 ARView 维持 ARKit 的
@@ -2911,7 +2918,7 @@ final class PetView: NSView {
         bodyAnchor.addChild(model.holder)
         render.scene.addAnchor(bodyAnchor)
         setFinish(Finish(rawValue: UserDefaults.standard.string(forKey: Finish.defaultsKey) ?? "") ?? .starlight)
-        if model.finish == .g4 { face.sayHello(CACurrentMediaTime()) }   // G4 白：开机先写一个 hello
+        if model.finish == .g4 { face.beginHello(CACurrentMediaTime()) }   // G4 白：开机先写一个 hello（2.0：Hello/HelloScene.swift）
         let savedStyle = FaceStyle(rawValue: UserDefaults.standard.string(forKey: FaceStyle.defaultsKey) ?? "") ?? .island
         face.style = savedStyle.inLineup
         face.restoreFaceOptions(migrating: savedStyle)   // Typograph 材質／System 6 版式（舊的浮雕、Alarm Clock、About 在這裡搬進來）
@@ -2960,6 +2967,8 @@ final class PetView: NSView {
         RunLoop.main.add(batteryTimer!, forMode: .common)
         if NowPlayingPoller.enabled { NowPlayingPoller.shared.start(face: face) }   // 只在 Music/Spotify 已在跑时才问
         CalendarSource.shared.start(face: face)   // 已授权才读，没授权只更新状态
+        if !CommandLine.arguments.contains("--screen-png"), !CommandLine.arguments.contains("--snapshot") { HomeDoorbell.shared.start() }   // 2.0 第四輪：門鈴接管（有裝家庭小幫手才連）
+        if !CommandLine.arguments.contains("--screen-png"), !CommandLine.arguments.contains("--snapshot") { PhoneHandoff.start() }   // 2.0 promo：從 iPhone 傳網頁（設定裡開）
         // 计时器到点：岛吓一跳、甩头，横幅从上面出来；之后笑一下
         face.onTimerDone = { [weak self] in
             guard let self else { return }
@@ -2977,6 +2986,7 @@ final class PetView: NSView {
             pc.fieldOfViewInDegrees = 24
             pc.near = 1
             pc.far = 600
+            if ProductShot.on { pc.fieldOfViewInDegrees = ProductShot.fov; pc.near = 50; pc.far = 5000 }   // 2.0 device: 官圖機位（ProductShot.swift）
             cameraEntity.components.set(pc)
         } else {
             log("RealityKit 默认相机不可用")
@@ -3103,6 +3113,10 @@ final class PetView: NSView {
 
     /// 臉部貼圖只用「畫到螢幕上實際需要的像素」：省 CPU 光柵與每幀紋理上傳
     func updateFaceScale() {
+        if CommandLine.arguments.contains("--screen-png") {   // 10-grid：--screen-png 永遠出 1024²（網格合約的畫布，別讓視窗大小決定）
+            if face.renderScale != 1 { face.renderScale = 1; face.forceDirty = true }
+            return
+        }
         // 螢幕佔視窗寬約 0.71（USDZ 量的）：貼圖像素要 ≥ 螢幕上實際像素，否則放大後發糊；上限 2048
         let need = bounds.width * (window?.backingScaleFactor ?? 2) * 0.72
         Typo.pointsPerUnit = max(80, bounds.width) * 0.72 / 1024   // 字體的光學尺寸與字距照螢幕上的實際大小（Typography.swift）
@@ -3486,6 +3500,15 @@ final class PetView: NSView {
             cameraEntity.orientation = simd_quatf(angle: Float(yaw), axis: SIMD3<Float>(0, 1, 0))
                 * simd_quatf(angle: -Float(pitch), axis: SIMD3<Float>(1, 0, 0))
         }
+        // 2.0 device: --product-shot：沿螢幕法線的 18° 長焦、螢幕扶正，整機朝向歸零（ProductShot.swift）
+        if ProductShot.on, !isApart, !wall, let cameraEntity {
+            let t = Float(HomeViewModel.tilt), dz = 4.28 - HomeViewModel.rigHome.z
+            let c = ProductShot.screenCenter(hinge: HomeViewModel.rigHome + SIMD3<Float>(0, Float(bob), 0),
+                                             dy: Float(HomeViewModel.rigY - HomeViewModel.hingeY), dz: dz, tilt: t)
+            let shot = ProductShot.camera(screenCenter: c, tilt: ProductShot.elevation, screenWidth: HomeViewModel.screenSize)
+            cameraEntity.position = shot.position
+            cameraEntity.orientation = simd_quatf(angle: -shot.pitch, axis: SIMD3<Float>(1, 0, 0))
+        }
         updateAnatomyCallout(now)
 
         // 转太快会吓一跳；拆开组回后甩头、眨单眼
@@ -3497,7 +3520,9 @@ final class PetView: NSView {
         }
         if let w = pendingWink, now >= w { pendingWink = nil; mood.show(.wink, for: 0.6, now: now) }
         rigMotion(now)
+        if ProductShot.on { model.setRig(pitch: ProductShot.rigPitch(tilt: Float(HomeViewModel.tilt)), yaw: 0); model.setAim(yaw: 0) }   // 2.0 device: 產品照螢幕扶正、不轉頭
 
+        shellStep(now)   // 2.0: 遠距回錶面、CarPlay 優先（Shell/ShellInput.swift）
         let expr = lockedFace ?? mood.current(now: now, hour: cachedHour)
         face.set(expr)
         face.followPointer = mood.near && lockedFace == nil
@@ -3547,6 +3572,10 @@ final class PetView: NSView {
             || CarPlayOverlayState.alpha > 0.002
             || !aim.settled
             || PermissionPrimer.visible
+            || ClioTalkPanel.animating(now)   // 2.0: ClioTalk 卡片進出場、彩球在轉
+            || PeopleOverlay.visible   // 2.0
+            || ClockKit.live(now)   // 2.0: 時鐘 App 的秒針、計時器刻度、數字捲動在動時跑 60 fps（Shell/Apps/ClockKit.swift）
+            || WeatherLiveSky.wantsFrames(now)   // 2.0: 天氣 App 的動態天空在畫（減少動態效果時不要幀）
     }
 
     /// 現在該用幾 fps：直播有進幀 60（畫面靜止半秒沒進幀就 12，進幀立刻回 60）；
@@ -3562,6 +3591,7 @@ final class PetView: NSView {
         if asleep { return 1 }
         if throttled { return moving ? 30 : 8 }
         if moving { return 60 }
+        if let h = ClockKit.hz(now) { return h }   // 2.0: 時鐘 App 的秒針閒著時 30 fps（Shell/Apps/ClockKit.swift）
         // 沒人靠近超過一分鐘：降到 6fps（眨眼仍走 30fps 窗口，看不出差別）
         let far = now - lastNear > 60
         let idle = idleHzOverride ?? (far ? 4 : 6)
@@ -3587,6 +3617,8 @@ final class PetView: NSView {
     private var reassembling = false
     private var hotUntil: Double = 0        // 這段時間內視為「有動作」，維持 60fps
     private var lastNear = CACurrentMediaTime()   // 最近一次游標靠近／互動：長時間沒人看就降到 6fps
+    /// 2.0 idle: iPhone／iPad 上的觸控也算有人在用：過場照 60fps 跑（Remote/RemoteInput.swift）
+    func remoteActivity() { lastNear = CACurrentMediaTime(); hotUntil = lastNear + 0.6 }
     private var smoothUntil: Double = 0     // 眨眼這類小動畫只要 30fps（省一半渲染）
     private var loopHz = 60
     private var thermal: ProcessInfo.ThermalState = ProcessInfo.processInfo.thermalState
@@ -3607,6 +3639,10 @@ final class PetView: NSView {
     /// 摄像头房间光的样本：亮度/色温/主光方向 → 主光、环境贴图。
     func apply(roomLight s: RoomLightSample) {
         let active = s.confidence > 0.02
+        Shell.roomIntensity = active ? s.intensity : nil   // 2.0 R12：暗處 App 轉深色、錶面轉紅（Shell/HomeScreen.swift）
+        // 2.0 P07：True Tone——色溫變了就重畫螢幕貼圖（微調白點；變化小於 0.02 不重畫，避免一直重繪）
+        let tt = active ? max(-1, min(1, s.warmth)) : 0
+        if abs(tt - Shell.trueToneWarmth) > 0.02 { Shell.trueToneWarmth = tt; face.forceDirty = true } else { Shell.trueToneWarmth = tt }
         if active {
             let k = max(0, min(1.5, s.intensity))
             let t = max(0, min(1, (k - 0.4) / 1.1))
@@ -3806,6 +3842,7 @@ final class PetView: NSView {
     /// 菜单开关：关掉时把追人状态清干净，让机器回正。
     func setGazeEnabled(_ on: Bool) {
         gazeEnabled = on
+        WhoIsLooking.shared.setFollowActive(on)   // 2.0: 「跟随我」开着才认人
         gazeHeadOn = false
         if !on {
             gazePresent = false
@@ -3938,14 +3975,14 @@ final class PetView: NSView {
 
     /// 屏幕四个角在视图里的投影（左下原点），顺序：左上、右上、右下、左下。
     /// 用单应变换把点击映射回屏幕 UV；比 raycast 更稳，也不会被边框挡住。
-    private func screenCorners() -> [CGPoint] {
+    func screenCorners() -> [CGPoint] {   // 2.0: P05 輔助使用的框也用這份投影（Shell/ShellAccessibility.swift）
         let a = model.screenAnchor
         let pts = [SIMD3<Float>(-6.27, 6.27, 0), SIMD3<Float>(6.27, 6.27, 0),
                    SIMD3<Float>(6.27, -6.27, 0), SIMD3<Float>(-6.27, -6.27, 0)]
         return pts.compactMap { render.project(a.convert(position: $0, to: nil)) }
     }
     /// 屏幕正面是否朝向相机（背面不接触控）
-    private func screenFacingCamera() -> Bool {
+    func screenFacingCamera() -> Bool {   // 2.0: P05
         let m = model.screenAnchor.transformMatrix(relativeTo: nil)
         let n = simd_normalize(SIMD3<Float>(m.columns.2.x, m.columns.2.y, m.columns.2.z))
         guard let cam = cameraEntity else { return true }
@@ -4005,6 +4042,14 @@ final class PetView: NSView {
         if PermissionPrimer.visible, !showingVideo {
             if let uv = screenUV(local(event)) { drag = .none; PermissionPrimer.press(x: uv.x * 1024, y: uv.y * 1024); face.forceDirty = true; return }
         }
+        if face.sayingHello, !showingVideo, screenUV(local(event)) != nil, face.skipHello(CACurrentMediaTime()) { drag = .none; return }   // 2.0 hello：点屏幕直接交给錶面（停着等设定卡时归卡片；拖机身照旧）
+        if PeopleOverlay.capturesClicks, !showingVideo, let uv = screenUV(local(event)) {   // 2.0: 录脸引导卡（取消钮）
+            drag = .none; PeopleOverlay.press(x: uv.x * 1024, y: uv.y * 1024); face.forceDirty = true; return
+        }
+        if ClioTalkPanel.visible, !showingVideo, let uv = screenUV(local(event)) {   // 2.0: ClioTalk 卡片上的點擊歸卡片
+            drag = .none; ClioTalkPanel.press(x: uv.x * 1024, y: uv.y * 1024); face.forceDirty = true; return
+        }
+        if shellMouseDown(event, uv: screenUV(local(event))) { return }      // 2.0: 主畫面、App、控制中心（Shell/ShellInput.swift）
         if overviewMouseDown(event, uv: screenUV(local(event))) { return }   // 长按换錶面总览
         if face.onboardingActive {   // 第一次的操作提示：点一下收起（并取消刚排上的长按）
             face.dismissOnboarding(); FaceOverview.pressToken += 1; FaceOverview.pressAt = nil; return
@@ -4070,6 +4115,7 @@ final class PetView: NSView {
     override func mouseDragged(with event: NSEvent) {
         lastNear = CACurrentMediaTime()
         hotUntil = CACurrentMediaTime() + 0.4
+        if shellMouseDragged(event, uv: screenUV(local(event))) { return }   // 2.0
         if overviewMouseDragged(event) { return }   // 总览里不转身体
         let p = local(event)
         switch drag {
@@ -4107,9 +4153,16 @@ final class PetView: NSView {
 
     override func mouseUp(with event: NSEvent) {
         lastDragEndAt = CACurrentMediaTime()
+        if shellMouseUp(event, uv: screenUV(local(event))) { drag = .none; pressTarget = 1; return }   // 2.0
         if PermissionPrimer.tracking {
             let uv = screenUV(local(event))
             PermissionPrimer.release(x: uv.map { $0.x * 1024 }, y: uv.map { $0.y * 1024 })
+            face.forceDirty = true
+            return
+        }
+        if ClioTalkPanel.tracking {   // 2.0: ClioTalk 卡片
+            let uv = screenUV(local(event))
+            ClioTalkPanel.release(x: uv.map { $0.x * 1024 }, y: uv.map { $0.y * 1024 })
             face.forceDirty = true
             return
         }
@@ -4375,7 +4428,7 @@ final class PetView: NSView {
     @objc func menuViewAbove() { setView(yaw: nil, pitch: 1.3, label: "above") }
 
     /// 自动环绕（网站的 auto tour）：慢慢转给人看，任何转动操作都会停下
-    private var touring = false
+    private(set) var touring = false   // 2.0 P06: 設定的「自動環繞」開關要讀它
     @objc func menuTour() {
         touring.toggle()
         if touring { atHome = false; tourIndex = -1; tourNext = 0 }
@@ -4444,6 +4497,7 @@ final class PetView: NSView {
         lastNear = CACurrentMediaTime()
         hotUntil = CACurrentMediaTime() + 0.4
         if overviewScroll(e) { return }   // 总览里滚轮／触控板挑錶面，不转身体
+        if shellScroll(e, uv: screenUV(local(e))) { return }   // 2.0: 錶面頭尾滾到主畫面、App 裡捲動
         // 「正在播放」胶囊上滚＝上一首／下一首；只在胶囊活跃时占用这条带，其余照旧（转身体／换錶面）
         if !showingVideo, abs(e.scrollingDeltaY) > 0.05, capsuleHit(local(e)), face.musicActive(CACurrentMediaTime()) {
             NowPlayingPoller.shared.control(e.scrollingDeltaY > 0 ? .next : .previous)
@@ -4634,6 +4688,8 @@ final class PetView: NSView {
     }
 
     /// 右键菜单（状态栏图标的菜单也復用它，兩处永远一致）
+    /// 2.0 P06：三组——画面（CarPlay·表盘·主屏幕·控制中心）｜机身（计时器·拆装·跟随·外观）｜收尾（ClioTalk·设置·关于·结束）。
+    /// 图标只给主要动作和标准项（HIG Menus）；视角、大小、岛表盘选项都搬去设置，菜单里不再列。
     func buildContextMenu() -> NSMenu {
         CalendarSource.shared.refresh()   // 授权状态可能在系统设置里改过
         let menu = NSMenu()
@@ -4641,15 +4697,17 @@ final class PetView: NSView {
         // 直播中＝退出（同一手势可再进）；已暂停＝继续；重连中＝重新连接；连线中＝取消。
         let cp = carPlayAction
         menu.addItem(menuItem(cp.title, cp.action, hint: cp.hint, symbol: cp.symbol))
-        // 配对过两台以上：手机直接列在第一层，打勾的是现在这台，点一下就换（不用进偏好设定）
+        // 配对过两台以上：手机收进一个子菜单，打勾的是现在这台，点一下就换（不用进偏好设定）
         let phones = CarPlayPhoneBook.menuEntries()
         if phones.count > 1 {
+            let sub = NSMenu()
             for entry in phones {
-                let item = menuItem(entry.title, #selector(menuUsePhone(_:)), symbol: "iphone")
+                let item = menuItem(entry.title, #selector(menuUsePhone(_:)))
                 item.representedObject = entry.address
                 item.state = entry.current ? .on : .off
-                menu.addItem(item)
+                sub.addItem(item)
             }
+            menu.addItem(submenuItem(L("menu.iphone", "iPhone"), sub))
         }
         // iPhone：連接步驟、Wi-Fi 設定、配對新的、拷貝診斷報告（連線卡上的「右鍵 → iPhone → …」都指這裡）
         let iphone = NSMenu()
@@ -4661,32 +4719,31 @@ final class PetView: NSView {
         menu.addItem(submenuItem(L("menu.iphone", "iPhone"), iphone, symbol: "iphone"))
         menu.addItem(.separator())
 
-        // 表盘：全部表盘（打勾）、岛表盘样式、表盘总览
+        // 表盘：全部表盘（打勾）＋总览；样式选项（岛、Typograph、System 6、字体与颜色、照片文件夹）在设置的「外观」
         let styles = NSMenu()
         for st in FaceStyle.lineup {
-            let item = menuItem(st.title, #selector(menuStyle(_:)), hint: face.style == st ? L("menu.hint.scrollArrows", "滚轮 / ← →") : nil,
-                                symbol: Self.faceSymbols[st])
+            let item = menuItem(st.title, #selector(menuStyle(_:)), hint: face.style == st ? L("menu.hint.scrollArrows", "滚轮 / ← →") : nil)
             item.representedObject = st.rawValue; item.state = face.style == st ? .on : .off
             styles.addItem(item)
         }
         styles.addItem(.separator())
-        styles.addItem(menuItem(L("prefs.photoFolder", "照片文件夹…"), #selector(menuPhotoFolder),
-                                hint: face.photos.folder.lastPathComponent, symbol: "folder"))
-        styles.addItem(.separator())
-        let islandOptItem = submenuItem(L("menu.islandFace", "岛表盘样式"), islandOptionsMenu(), symbol: "slider.horizontal.3")
-        styles.addItem(islandOptItem)
-        for i in faceOptionMenuItems() { styles.addItem(i) }   // Typograph 材质／System 6 版式（FaceOptions.swift）
-        styles.addItem(menuItem(L("clockLook.menu", "字体与颜色…"), #selector(menuClockLook(_:)), symbol: "textformat.size"))
-        styles.addItem(menuItem(L("menu.faceOverview", "表盘总览…"), #selector(menuFaceOverview), hint: L("menu.hint.longPress", "长按屏幕"),
-                                symbol: "square.grid.3x3"))
-        menu.addItem(submenuItem(L("menu.faces", "表盘"), styles, symbol: "clock"))
+        styles.addItem(menuItem(L("menu.faceOverview", "显示表盘总览"), #selector(menuFaceOverview), hint: L("menu.hint.longPress", "长按屏幕")))
+        styles.addItem(menuItem(L("menu.sayHello", "打个招呼"), #selector(menuSayHello)))   // 2.0 hello：再写一次开机的 hello
+        menu.addItem(submenuItem(L("menu.faces", "表盘"), styles))
+        // 2.0: 主畫面與控制中心（滑鼠沒有滑動手勢，這兩項加上鍵盤 ↑、C）
+        let home = menuItem(L("shell.menu.home", "显示主屏幕"), #selector(menuShellHome), hint: "↑", symbol: "square.grid.3x3.fill")
+        home.state = Shell.nav.screen.coversFace ? .on : .off
+        menu.addItem(home)
+        menu.addItem(menuItem(L("shell.menu.controlCenter", "显示控制中心"), #selector(menuShellControlCenter), hint: "C", symbol: "switch.2"))
+        menu.addItem(menuItem(L("recipe.menu.clipboard", "在 Safari 中打开食谱"), #selector(menuRecipeFromClipboard)))   // 2.0: 食譜
+        menu.addItem(.separator())
 
         // 计时器：跑的时候标题显示剩余时间，多一项取消
         let timers = NSMenu()
         if face.pomodoro.active {
-            timers.addItem(menuItem(L("pomodoro.stop", "停止番茄钟"), #selector(menuPomodoroStop), symbol: "stop.circle"))
+            timers.addItem(menuItem(L("pomodoro.stop", "停止番茄钟"), #selector(menuPomodoroStop)))
         } else {
-            timers.addItem(menuItem(L("pomodoro.start", "番茄钟（25 + 5 分钟）"), #selector(menuPomodoroStart), symbol: "leaf"))
+            timers.addItem(menuItem(L("pomodoro.start", "开始番茄钟"), #selector(menuPomodoroStart)))
         }
         let today = Pomodoro.todayCount
         if today > 0 {
@@ -4695,30 +4752,29 @@ final class PetView: NSView {
         }
         timers.addItem(.separator())
         for m in [1.0, 3, 5, 10, 25] {
-            let item = menuItem(String(format: L("timer.minutes", "%d 分钟"), Int(m)), #selector(menuTimer(_:)), symbol: "timer")
+            let item = menuItem(String(format: L("timer.minutes", "%d 分钟"), Int(m)), #selector(menuTimer(_:)))   // 分钟清单不带图标
             item.representedObject = m
             if face.timerEnd != nil, !face.pomodoro.active, abs(face.timerTotal - m * 60) < 0.5 { item.state = .on }
             timers.addItem(item)
         }
         if face.timerEnd != nil {
             timers.addItem(.separator())
-            timers.addItem(menuItem(L("timer.cancel", "取消计时器"), #selector(menuTimerCancel), symbol: "xmark.circle"))
+            timers.addItem(menuItem(L("timer.cancel", "取消计时器"), #selector(menuTimerCancel)))
         }
-        let timerItem = submenuItem(timerMenuTitle(CACurrentMediaTime()), timers, symbol: "timer")
+        let timerItem = submenuItem(timerMenuTitle(CACurrentMediaTime()), timers)
         liveTimerItem = timerItem
         menu.addItem(timerItem)
 
         menu.addItem(menuItem(isApart ? L("menu.apart.putBack", "组回来") : L("menu.apart.takeApart", "拆开看看"),
                               viewMode == .wall ? nil : #selector(menuApart),   // 挂墙没有底座可拆：灰掉
-                              hint: L("menu.hint.twoFingerTap", "两指轻点两下"), symbol: isApart ? "cube" : "cube.transparent"))
+                              hint: L("menu.hint.twoFingerTap", "两指轻点两下")))
         // 跟随我：最常开关的一项放在第一层（设置里有完整说明）
-        let follow = menuItem(L("prefs.gaze", "跟随我（相机）"), #selector(menuGazeToggle), symbol: "viewfinder")
+        let follow = menuItem(L("prefs.gaze", "跟随我"), #selector(menuGazeToggle))
         follow.state = gazeEnabled ? .on : .off
         menu.addItem(follow)
 
-        // 外观：机身配色 · 视角 · 大小——都关「长什么样」，收进同一个子菜单
+        // 外观：机身配色（朝向、视角、大小在设置的「外观」，快捷键 1–4、⌘+ ⌘− ⌘0 照旧）
         let looks = NSMenu()
-        looks.addItem(NSMenuItem.sectionHeader(title: L("settings.finish", "配色")))
         for f in Finish.allCases {
             let item = menuItem(f.title, #selector(menuFinish(_:)))
             item.image = finishSwatch(f)
@@ -4727,60 +4783,21 @@ final class PetView: NSView {
             looks.addItem(item)
         }
         looks.addItem(.separator())
-        looks.addItem(NSMenuItem.sectionHeader(title: L("settings.facing", "朝向")))
-        // 朝向：自动（窗口在哪边就朝中央、开了跟随就转向人）／正面固定（永远正对、不倾斜）
-        for mode in ViewMode.allCases {
-            let title: String, symbol: String
-            switch mode {
-            case .auto: title = L("menu.view.auto", "自动朝向（窗口位置 + 跟随）"); symbol = "arrow.left.arrow.right"
-            case .front: title = L("menu.view.fixedFront", "正面固定（不倾斜）"); symbol = "rectangle"
-            case .wall: title = L("menu.view.wall", "挂墙（只有屏幕）"); symbol = "photo.artframe"
-            }
-            let item = menuItem(title, #selector(menuViewMode(_:)), symbol: symbol)
-            item.representedObject = mode.rawValue
-            item.state = viewMode == mode ? .on : .off
-            looks.addItem(item)
-        }
-        looks.addItem(.separator())
-        looks.addItem(NSMenuItem.sectionHeader(title: L("settings.angle", "视角")))
-        // 视角：当前机位打勾（拖过之后就不勾任何一项）
-        let viewPresets: [(String, Selector, String, CGFloat, CGFloat)] = [
-            (L("menu.view.front", "正面"), #selector(menuViewFront), "1", 0, 0.12),
-            (L("menu.view.side", "侧面"), #selector(menuViewSide), "2", .pi / 2, 0.18),
-            (L("menu.view.back", "背面"), #selector(menuViewBack), "3", .pi, 0.15),
-            (L("menu.view.top", "俯视"), #selector(menuViewAbove), "4", .nan, 1.3),
-        ]
-        let presetSymbols = ["square", "square.lefthalf.filled", "square.dashed", "square.tophalf.filled"]
-        for (i, (title, sel, key, vy, vpitch)) in viewPresets.enumerated() {
-            let item = menuItem(title, viewMode == .wall ? nil : sel, key: key, symbol: presetSymbols[i])   // 挂墙不转：灰掉
-            let yawMatches = vy.isNaN || abs(ty - vy) < 0.02
-            if !touring, yawMatches, abs(tp - vpitch) < 0.02 { item.state = .on }
-            looks.addItem(item)
-        }
-        let tour = menuItem(L("menu.view.tour", "自动环绕"), viewMode == .wall ? nil : #selector(menuTour), symbol: "rotate.3d")
-        tour.state = touring ? .on : .off
-        looks.addItem(tour)
-        looks.addItem(menuItem(L("menu.resetAngle", "回正"), #selector(menuResetOrientation), hint: L("menu.hint.doubleClick", "双击机身"),
-                               symbol: "arrow.counterclockwise"))
-        looks.addItem(.separator())
-        looks.addItem(NSMenuItem.sectionHeader(title: L("settings.size", "大小")))
-        looks.addItem(menuItem(L("menu.zoomIn", "放大"), #selector(menuZoomIn), key: "+", mods: .command, symbol: "plus.magnifyingglass"))
-        looks.addItem(menuItem(L("menu.zoomOut", "缩小"), #selector(menuZoomOut), key: "-", mods: .command, symbol: "minus.magnifyingglass"))
-        looks.addItem(menuItem(L("menu.zoomDefault", "默认"), #selector(menuZoomDefault), key: "0", mods: .command, symbol: "1.magnifyingglass"))
-        looks.addItem(menuItem(L("menu.zoomMax", "最大"), #selector(menuZoomMax), symbol: "arrow.up.left.and.arrow.down.right"))
-        menu.addItem(submenuItem(L("menu.finish", "外观"), looks, symbol: "paintpalette"))
+        looks.addItem(menuItem(L("menu.appearanceSettings", "外观设置…"), #selector(menuAppearanceSettings)))
+        menu.addItem(submenuItem(L("menu.finish", "外观"), looks))
 
         menu.addItem(.separator())
 
+        menu.addItem(menuItem(L("menu.clioTalk", "问 ClioTalk"), #selector(menuClioTalk), hint: L("menu.hint.f5", "F5"), symbol: "bubble.left.and.text.bubble.right"))   // 2.0
         menu.addItem(menuItem(L("menu.settings", "设置…"), #selector(menuSettings), key: ",", mods: .command, symbol: "gearshape"))
-        menu.addItem(menuItem(L("prefs.about", "关于 HomePlay"), #selector(menuAbout), symbol: "info.circle"))
+        // 2.0: 「关于 HomePlay」搬到菜单栏的 App 菜单第一项（installMainMenu），右键菜单不再放
         menu.addItem(.separator())
         menu.addItem(menuItem(L("menu.quit", "退出 HomePlay"), #selector(menuQuit), key: "q", mods: .command, symbol: "power"))
         return menu
     }
 
     /// 菜单项：key＝真快捷键（系统画在右边）；hint＝没有快捷键的手势提示，灰字靠右；
-    /// symbol＝左边的 SF Symbol（WindowShade 的规则：每一项都带符号）
+    /// symbol＝左边的 SF Symbol（2.0 P06：只给主要动作和标准项——CarPlay、主屏幕、控制中心、ClioTalk、设置、结束）
     private func menuItem(_ title: String, _ sel: Selector?, key: String = "", mods: NSEvent.ModifierFlags = [], hint: String? = nil,
                           symbol: String? = nil) -> NSMenuItem {
         let item = NSMenuItem(title: title, action: sel, keyEquivalent: key)
@@ -4822,17 +4839,16 @@ final class PetView: NSView {
         }
         return img
     }
-    private static let faceSymbols: [FaceStyle: String] = [
-        .island: "capsule", .photos: "photo", .modular: "square.grid.2x2", .analog: "clock",
-        .flow: "wind", .growth: "leaf", .system6: "desktopcomputer",
-        .weather: "cloud.sun", .calendar: "calendar", .black: "circle.fill",
-    ]
 
     // MARK: 偏好设定（菜单里的子菜单，不另开窗口）
 
     static let photoFolderKey = "HomePlayPhotoFolder"
     @objc private func menuSettings() {
         if let app = NSApp.delegate as? AppDelegate { SettingsWindowController.show(app: app) }
+    }
+    /// 2.0 P06：外观子菜单底下的「外观设置…」——朝向、视角、大小、岛表盘选项都在那一页
+    @objc private func menuAppearanceSettings() {
+        if let app = NSApp.delegate as? AppDelegate { SettingsWindowController.show(app: app, pane: .appearance) }
     }
     @objc private func menuLoginItem() {
         let svc = SMAppService.mainApp
@@ -4919,10 +4935,6 @@ final class PetView: NSView {
         (NSApp.delegate as? AppDelegate)?.toggleRoomLight()
     }
     @objc private func menuShowHints() { Onboarding.armed = false; Onboarding.active = false; face.armOnboarding() }
-    @objc private func menuAbout() {
-        NSApp.activate(ignoringOtherApps: true)
-        NSApp.orderFrontStandardAboutPanel(nil)
-    }
     @objc func menuFaceOverview() {
         guard !showingVideo, !face.inOverview else { return }
         face.beginOverview()
@@ -5105,9 +5117,9 @@ final class PetView: NSView {
     @objc private func menuQuit() { NSApp.terminate(nil) }
     @objc func menuZoomIn() { zoom(by: 1.25) }
     @objc func menuZoomOut() { zoom(by: 0.8) }
-    @objc private func menuZoomMax() { zoomMax() }
+    @objc func menuZoomMax() { zoomMax() }
     @objc func menuZoomDefault() { setZoom(width: Pet.defaultWidth) }
-    @objc private func menuResetOrientation() { resetOrientation() }
+    @objc func menuResetOrientation() { resetOrientation() }
     @objc private func menuAgentToggle() {
         let result = ReceiverAgent.toggle()
         log("agent \(result.message)")
@@ -5121,12 +5133,17 @@ final class PetView: NSView {
         return domains.contains { UserDefaults(suiteName: $0)?.bool(forKey: "TrackpadThreeFingerDrag") ?? false }
     }
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+    // 2.0: 把食譜網址拖到桌寵上（Shell/Apps/RecipeInput.swift；registerForDraggedTypes 在 applyShellSnapshotFlags）
+    override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation { recipeDragEntered(sender) }
+    override func performDragOperation(_ sender: NSDraggingInfo) -> Bool { recipePerformDrag(sender) }
     /// VoiceOver 用户「按下」＝进入/退出 CarPlay（和重按同一条路）
     override func accessibilityPerformPress() -> Bool { onForceEnter?(); return true }
 
     override func keyDown(with event: NSEvent) {
         endPoster()
         if overviewKeyDown(event) { return }   // 总览里 Esc 只收起、Return 套用、← → 挑
+        if face.sayingHello, [49, 36, 53].contains(event.keyCode), face.skipHello(CACurrentMediaTime()) { return }   // 2.0 hello：空格、Return、Esc 跳过
+        if shellKeyDown(event) { return }      // 2.0: Esc／↓ 回上一層、↑ 主畫面、C 控制中心
         if event.modifierFlags.contains(.command) {
             switch event.keyCode {
             case 12: NSApp.terminate(nil)                  // ⌘Q
@@ -5143,6 +5160,7 @@ final class PetView: NSView {
         case 53:
             if event.isARepeat { return }
             if PermissionPrimer.active { PermissionPrimer.dismiss() }
+            else if ClioTalkController.shared.isOpen { ClioTalkController.shared.close() }   // 2.0: 收起 ClioTalk
             else if face.onboardingActive { face.dismissOnboarding(); FaceOverview.pressToken += 1 }
             else if showingVideo { onToggleLive?() }
         case 49: onToggleLive?()                      // 空格
@@ -5669,6 +5687,7 @@ enum SystemKeyTap {
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusItem: NSStatusItem?
+    private var menuBarTimer: MenuBarTimer?   // 2.0 P06: 計時器進行中，選單列圖示旁顯示 mm:ss（Shell/MenuBarTimer.swift）
     private var healthTimer: Timer?
     private var statsTimer: Timer?
     private var globalMagnify: Any?
@@ -5853,7 +5872,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         appMenu.addItem(.separator())
         let settings = NSMenuItem(title: L("menu.settings", "设置…"), action: #selector(showSettings(_:)), keyEquivalent: ",")
         settings.target = self
-        settings.image = NSImage(systemSymbolName: "gearshape", accessibilityDescription: nil)
+        settings.image = NSImage(systemSymbolName: "gearshape", accessibilityDescription: settings.title)   // 2.0: P05 圖示也有標籤
         appMenu.addItem(settings)
         appMenu.addItem(.separator())
         let hide = NSMenuItem(title: L("menu.hidePet", "隐藏桌宠"), action: #selector(hidePet), keyEquivalent: "h")
@@ -5868,10 +5887,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if let view {
             for (title, sel, key, mods) in [
                 (view.carPlayAction.title, view.carPlayAction.action, "", NSEvent.ModifierFlags()),
-                (L("menu.faceOverview", "表盘总览…"), #selector(PetView.menuFaceOverview), "", NSEvent.ModifierFlags()),
+                (L("menu.faceOverview", "显示表盘总览"), #selector(PetView.menuFaceOverview), "", NSEvent.ModifierFlags()),
                 (L("menu.zoomIn", "放大"), #selector(PetView.menuZoomIn), "+", .command),
                 (L("menu.zoomOut", "缩小"), #selector(PetView.menuZoomOut), "-", .command),
-                (L("menu.zoomDefault", "默认"), #selector(PetView.menuZoomDefault), "0", .command),
+                (L("menu.zoomDefault", "实际大小"), #selector(PetView.menuZoomDefault), "0", .command),
+                (L("menu.zoomMax", "放到最大"), #selector(PetView.menuZoomMax), "", NSEvent.ModifierFlags()),   // 2.0 P06：右键菜单的「最大」搬到这里
             ] as [(String, Selector, String, NSEvent.ModifierFlags)] {
                 let item = NSMenuItem(title: title, action: sel, keyEquivalent: key)
                 item.keyEquivalentModifierMask = mods
@@ -5879,7 +5899,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 petMenu.addItem(item)
             }
         }
-        let siri = NSMenuItem(title: L("menu.siri", "叫 Siri（F5）"), action: #selector(menuSiri), keyEquivalent: "")
+        let siri = NSMenuItem(title: L("menu.siri", "叫 iPhone 的 Siri（F5）"), action: #selector(menuSiri), keyEquivalent: "")
         siri.target = self
         petMenu.addItem(.separator())
         petMenu.addItem(siri)
@@ -5898,6 +5918,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             b.sendAction(on: [.leftMouseUp, .rightMouseUp])
         }
         statusItem = item
+        menuBarTimer = MenuBarTimer(item: item) { [weak self] in
+            guard let end = self?.view?.face.timerEnd else { return nil }
+            return end - CACurrentMediaTime()
+        }   // 2.0 P06
         log("status item installed visible=\(item.isVisible) button=\(item.button != nil)")
     }
 
@@ -5993,6 +6017,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// F5 按住說話：按下＝requestSiri 按下（開始聽）、放開＝按鍵放開（結束）。
     /// 還沒直播時先進 CarPlay，連上後依當時是否還按著補送按下或按一下（接收器在 RECORD 前也會先記著）。
     func siriKey(down: Bool) {
+        // 2.0: CarPlay 沒在直播時 F5 交給 ClioTalk（直播中照舊給 iPhone 的 Siri；設定裡可關）
+        if ClioTalkController.shared.handleF5(down: down, carPlayLive: isLive, view: view) { return }
         let now = CACurrentMediaTime()
         if down {
             guard siriHold.press(now: now) else { return }
@@ -6283,7 +6309,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSApp.activate(ignoringOtherApps: true)
         let a = NSAlert()
         a.messageText = L("mic.denied.title", "麦克风权限未开启")
-        a.informativeText = L("mic.denied.body", "CarPlay 画面不受影响；Siri 和电话通话需要麦克风。请在系统设置 › 隐私与安全性 › 麦克风里允许 HomePlay。")
+        a.informativeText = L("mic.denied.body", "CarPlay 画面不受影响；ClioTalk、iPhone 的 Siri 和电话通话需要麦克风。请在系统设置 › 隐私与安全性 › 麦克风里允许 HomePlay。")
         a.addButton(withTitle: L("mic.openSettings", "打开系统设置"))
         a.addButton(withTitle: L("gaze.denied.ok", "好"))
         if a.runModal() == .alertFirstButtonReturn,
@@ -6304,7 +6330,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             NSApp.activate(ignoringOtherApps: true)
             let a = NSAlert()
             a.messageText = L("mic.allowed.title", "麦克风已允许")
-            a.informativeText = L("mic.allowed.body", "CarPlay 通话和 Siri 可以使用麦克风；屏幕画面与本地播放不受影响。")
+            a.informativeText = L("mic.allowed.body", "ClioTalk、CarPlay 通话和 iPhone 的 Siri 可以使用麦克风；屏幕画面与本地播放不受影响。")
             a.addButton(withTitle: L("gaze.denied.ok", "好"))
             a.runModal()
         @unknown default:
@@ -6366,6 +6392,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let pane = SettingsSection(rawValue: name) ?? .general
             if CommandLine.arguments.contains("--dark") { NSApp.appearance = NSAppearance(named: .darkAqua) }   // 截图：深色外观
             DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) { SettingsWindowController.show(app: self, pane: pane) }
+            if let j = CommandLine.arguments.firstIndex(of: "--settings-out"), j + 1 < CommandLine.arguments.count {   // 2.0 第六輪：拍下那一頁（原生表單驗收）
+                let out = CommandLine.arguments[j + 1]
+                DispatchQueue.main.asyncAfter(deadline: .now() + 5) {
+                    if let v = SettingsWindowController.shared?.window?.contentView, let rep = v.bitmapImageRepForCachingDisplay(in: v.bounds) {
+                        v.cacheDisplay(in: v.bounds, to: rep)
+                        try? rep.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: out))
+                    }
+                    exit(0)
+                }
+            }
         }
         if CommandLine.arguments.contains("--nowplaying-selftest") {
             let ok = PhoneNowPlayingBridge.shared.selftest()
@@ -6394,6 +6430,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // 上次的位置与大小（给了 --at / --size / --snapshot 就不动它，也不写回）
         let remember = origin == nil && !sizeGiven && snapshotPath == nil
         Pet.aspect = Pet.aspect(for: ViewMode.saved)   // 挂墙时窗口只框屏幕模组
+        if ProductShot.on { Pet.aspect = ProductShot.aspect }   // 2.0 device: 官圖畫布 2576×2061
         rememberFrame = remember
         let restored = remember ? WindowFrameStore.restore(WindowFrameStore.load(), visible: NSScreen.screens.map(\.visibleFrame)) : nil
         // 第一次打開（沒有記住的大小）：開大一點（380 pt），設定引導的字才清楚好讀；之後照使用者調的大小
@@ -6405,6 +6442,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if let p = initialPart { view.pinAnatomy(p) }
         window.contentView = view
         view.updateFaceScale()
+        RemoteServer.shared.view = view   // 2.0 idle: 網頁串流（Remote/）；預設關，設定 › iPhone 與 iPad 打開才開
+        if RemoteStore.enabled && !diagnosticRun || CommandLine.arguments.contains("--remote-test") { RemoteServer.shared.startFromLaunch() }
         if let lockedFace { view.lockFace(lockedFace) }
         if let finish { view.setFinish(finish) }   // 只给这次用，不写进偏好
         if let photosDir { view.face.photos = PhotoShelf(folder: URL(fileURLWithPath: photosDir, isDirectory: true)) }
@@ -6413,11 +6452,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         if let eventTest { view.face.calendarTile = Self.testEvent(eventTest) }
         if Onboarding.forced || (snapshotPath == nil && !Onboarding.done) { view.face.armOnboarding() }   // hello 写完再出
+        // 2.0: --demo-official 的主畫面照官方圖：後面是「照片」錶面（Portraits），不是這台 Mac 上次選的錶面
+        if faceStyle == nil, OfficialDemo.on, ["--home", "--library", "--app"].contains(where: CommandLine.arguments.contains) { faceStyle = .photos }
+        if snapshotPath == nil, benchSeconds == 0, !forceHello, !Self.isDiagnosticRun, HelloIntro.takeFirstLaunch() { view.face.beginHello(CACurrentMediaTime(), local: true) }   // 2.0 hello：HomePlay 2 第一次打開（設定卡已排上：hello 停住當它的背景）
         if let faceStyle { view.setFaceStyle(faceStyle, remember: false) }
-        if forceHello { view.face.sayHello(CACurrentMediaTime()) }   // 官網素材：從這裡重新計時，逐格才穩定
+        if forceHello { view.face.beginHello(CACurrentMediaTime()) }   // 官網素材：從這裡重新計時，逐格才穩定
         if let timerSeconds { view.face.startTimer(seconds: timerSeconds) }
         if let musicTest { view.face.setNowPlaying(Self.testMusic(musicTest)) }
         if showBanner { view.face.showBanner() }
+        view.applyShellSnapshotFlags()   // 2.0: --home --app --control-center --live-activity --demo-timers
+        HelloProduct.startIfAsked(view)   // 2.0 hello：--hello-product 逐格拍產品版（Hello/HelloProduct.swift）
+        if let out = arg("--screen-png") {   // 2.0: 只出 1024² 螢幕平面圖（不等 RealityKit），對照設計用
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { [weak self] in
+                guard let self else { exit(2) }
+                self.view.face.forceDirty = true
+                if let n = arg("--frames").flatMap({ Int($0) }) { HPFrames.run(self.view.face, out: out, count: n); exit(0) }   // 2.0: 動效包逐格（Design/HPFrames.swift）
+                let img = self.view.face.render()
+                try? NSBitmapImageRep(cgImage: img).representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: out))
+                exit(0)
+            }
+        }
+        MessagesApp.shared.install()     // 2.0: 監看新訊息（頂端藥丸、眼睛瞄一下）
         if let hourOverride { view.face.hourOverride = hourOverride }
         if forceNear { view.forceNear = true }
         view.onTouch = { [weak self] x, y, down in self?.client?.sendTouch(x: x, y: y, down: down) }
@@ -6584,6 +6639,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if snapshotPath == nil, benchSeconds == 0, roomLightOn {
             startRoomLight(announce: false)
         }
+        // 2.0: 「谁在看」借「跟随我」的相机；--people-probe 是隐藏的阈值校准工具（只打印相似度数字）
+        if snapshotPath == nil, benchSeconds == 0 {
+            WhoIsLooking.shared.install(app: self)
+            if CommandLine.arguments.contains("--people-probe") { WhoIsLooking.shared.startProbe(app: self) }
+        }
         // 上次打开过「跟随我」：登录后自动恢复（权限已授权时不会再弹窗）
         if snapshotPath == nil, benchSeconds == 0, gazeFollow {
             startGazeFollow(announce: false)
@@ -6673,6 +6733,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             DispatchQueue.main.asyncAfter(deadline: .now() + snapshotDelay) { [weak self] in
                 guard let self else { exit(2) }
                 self.view.logPose()
+                self.view.shellAXDumpIfAsked()   // 2.0: P05 --ax-dump
                 var steps: [(path: String, note: String, prepare: () -> Void)] = [(snapshotPath, "open", {})]
                 if let p = self.snapshotGlancePath { steps.append((p, "glance", { Face.glanceOverride = true })) }
                 if let p = self.snapshotBlinkPath {
@@ -7065,7 +7126,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// 截图／基准／设置预览这类诊断进程：不挂接收器、退出时也不发 stop，绝不碰用户正在用的 CarPlay
     static var isDiagnosticRun: Bool {
         let a = CommandLine.arguments
-        return ["--snapshot", "--bench", "--open-settings", "--show-menu", "--clock-look-panel"].contains { a.contains($0) }
+        return ["--snapshot", "--screen-png", "--bench", "--open-settings", "--show-menu", "--clock-look-panel", "--remote-test", "--hello-product"].contains { a.contains($0) }   // 2.0 idle: 串流測試也不碰接收器
     }
     private func connect(_ endpoint: String, quiet: Bool = false) {
         guard !Self.isDiagnosticRun else { log("diagnostic run: not attaching to receiver"); return }
@@ -7089,6 +7150,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
             let wasQuiet = self.quietAttach
             self.isLive = live
+            if live { ClioTalkController.shared.carPlayWentLive() }   // 2.0: CarPlay 的 Siri 要用麥克風，ClioTalk 先放掉
             if !live { self.carPlayInBackground = false }
             if live { self.quietAttach = false }
             if !wasQuiet || live {
@@ -7621,6 +7683,20 @@ func arg(_ n: String) -> String? {
 }
 
 if CommandLine.arguments.contains("--home-dump") { runHomeDump() }   // 連 HomePlay Home 幫手，印摘要就結束
+if let i = CommandLine.arguments.firstIndex(of: "--home-set"), i + 2 < CommandLine.arguments.count {   // 2.0: 真機驗證寫入
+    runHomeSet(name: CommandLine.arguments[i + 1], on: CommandLine.arguments[i + 2] == "on")
+}
+if CommandLine.arguments.contains("--fetch-official-icons") { runFetchOfficialIcons() }   // 2.0: 抓官網的鬧鐘／計時器／世界時鐘／對講圖示（Shell/OfficialIcons.swift）
+if let o = arg("--hpicons-png") { HPIcons.writeSheet(o); exit(0) }   // 2.0 第四輪：自畫圖示排一張（Design/HPIcons.swift）
+if let o = arg("--avatars-png") { HPAvatar.writeSheet(o); exit(0) }   // 2.0 第四輪：👀 人物頭像排一張（Design/HPAvatar.swift）
+if let o = arg("--avatar-editor-png") { AvatarEditorSnapshot.write(o) }   // 2.0 第四輪：換頭像表單的快照（People/PeoplePane.swift）
+
+if CommandLine.arguments.contains("--cliotalk-speech-probe") { ClioSpeechProbe.run() }   // 2.0: 本機聽寫支援哪些語系（不開麥克風）
+if let i = CommandLine.arguments.firstIndex(of: "--glass-calibrate"), i + 1 < CommandLine.arguments.count {   // 2.0 glass: 真的 NSGlassEffectView 對我們的玻璃（Design/GlassCalibrate.swift）
+    let a = CommandLine.arguments
+    if #available(macOS 27.0, *) { GlassCalibrate.run(a[i + 1], what: i + 2 < a.count && !a[i + 2].hasPrefix("--") ? a[i + 2] : "all") }
+    print("--glass-calibrate needs macOS 27"); exit(2)
+}
 
 if CommandLine.arguments.contains("--selftest") {
     // 纯函数自检：方屏 uv → 画面坐标（留黑扣掉）
@@ -7819,7 +7895,7 @@ if CommandLine.arguments.contains("--selftest") {
     check(ClockStyle(rawValue: "bogus") == nil && IslandBackground.photo.effective(hasPhoto: false) == .daytime
           && IslandBackground.solid.effective(hasPhoto: false) == .solid && IslandBackground.photo.effective(hasPhoto: true) == .photo, "島錶面背景：没照片退回随时段")
     let part = Face.clockParts(Calendar.current.date(from: DateComponents(year: 2026, month: 1, day: 1, hour: 9, minute: 5))!)
-    check(part.h == "09" && part.m == "05", "直排时钟两位小时分钟")
+    check(part.h == "9" && part.m == "05", "直排时钟照系统时制（小时不补零）")
     // 换錶面总览：到头不绕回；弹簧 0.3 s 内到位、不冲过头
     check(FaceOverview.step(0, -1, count: 9) == 0 && FaceOverview.step(8, 1, count: 9) == 8 && FaceOverview.step(3, 1, count: 9) == 4, "总览挪格到头停")
     var sx: CGFloat = 0, sv: CGFloat = 0, over = false
@@ -7851,7 +7927,13 @@ if CommandLine.arguments.contains("--selftest") {
     let evs = [ev("allday", 0, 0, 23, 59, allDay: true), ev("late", 15, 0, 16, 0), ev("past", 8, 0, 9, 0), ev("early", 10, 30, 11, 0)]
     let picked = CalendarLogic.pick(evs, now: t0)?.title == "early" && CalendarLogic.pick([evs[0], evs[2]], now: t0)?.title == "allday" && CalendarLogic.pick([evs[2]], now: t0) == nil
     check(picked, "行事历：挑下一个行程")
-    check(CalendarLogic.range(evs[3]) == "10:30–11:00" && CalendarLogic.range(ev("x", 9, 5, 18, 0)) == "09:05–18:00", "行事历：时间段写法")
+    // 行事历：时间段写法（時制照系統：24 小時照舊補零「10:30–11:00」「09:05–18:00」；12 小時帶上午／下午、小時不補零）
+    let am = Face.formatter("hmm").amSymbol ?? "AM", pm = Face.formatter("hmm").pmSymbol ?? "PM"
+    let rSame = CalendarLogic.range(evs[3]), rCross = CalendarLogic.range(ev("x", 9, 5, 18, 0))
+    let ok24 = !Face.uses12Hour && rSame == "10:30–11:00" && rCross == "09:05–18:00"
+    let ok12 = Face.uses12Hour && rSame.contains("10:30") && rSame.contains("11:00") && rSame.contains(am)
+        && rCross.contains("9:05") && !rCross.contains("09:05") && rCross.contains("6:00") && !rCross.contains("18:00") && rCross.contains(am) && rCross.contains(pm)
+    check(ok24 || ok12, "行事历：时间段写法（\(Face.uses12Hour ? 12 : 24) 小时制：\(rSame)、\(rCross)）")
     let tiles4 = CalendarLogic.tile(auth: .notDetermined, on: true, event: nil) == .notConnected && CalendarLogic.tile(auth: .denied, on: true, event: nil) == .denied
         && CalendarLogic.tile(auth: .fullAccess, on: true, event: nil) == .empty && CalendarLogic.tile(auth: .fullAccess, on: false, event: evs[3]) == .notConnected
         && CalendarLogic.tile(auth: .fullAccess, on: true, event: evs[3]) == .event(evs[3])
@@ -8000,6 +8082,20 @@ if CommandLine.arguments.contains("--selftest") {
         check(FirstFrameLatch.replay([nil, started, nil]) == [true, true], "首幀：只收到 started 也重新報 live")
         check(FirstFrameLatch.replay([nil, #"{"type":"nowplaying"}"#, nil]) == [true, false], "首幀：別的文字不重置")
     }
+    ShellSelfTest.run(check)   // 2.0: 外殼導覽與多組計時器（Shell/ShellNav.swift）
+    HomeAppSelfTest.run(check)   // 2.0: 家庭 App（Shell/HomeAppModel.swift）
+    GlassSelfTest.run(check)   // 2.0 glass: 玻璃的形狀辨識、融合遮罩（Design/GlassCalibrate.swift）
+    HPAccessibilitySelfTest.run(check)   // 2.0 glass: WCAG 對比（Design/HPAccessibility.swift）
+    ClioSelftest.run(check)   // 2.0: ClioTalk（ClioTalk/ClioSelftest.swift）
+    for f in MessagesSelftest.run() { check(false, f) }   // 2.0: 訊息資料層（Messages/MessagesSelftest.swift）
+    peopleSelftest(check)   // 2.0: 谁在看（People/PeopleSelftest.swift）
+    ProductShot.selftest(check); DeviceFinish.selftest(check)   // 2.0 device
+    HelloSelfTest.run(check); HelloProduct.selftest(check)   // 2.0 hello（Hello/）
+    ShellAccessibility.selftest(check)   // 2.0: P05 畫出來的螢幕的輔助使用（Shell/ShellAccessibility.swift）
+    GridSelftest.run(check)   // 10-grid: 網格與對齊合約的版面自檢（Design/GridSelftest.swift）
+    ShellIntegrationSelftest.run(check)   // 2.0: 個人內容的門、訊息確認、Live Activity 隱私（Shell/ShellIntegrationSelftest.swift）
+    RemoteSelftest.run(check)   // 2.0 idle: 網頁串流的配對、加密、區網、撤銷（Remote/RemoteSelftest.swift）
+    PromoSelfTest.run(check)   // 2.0 promo：Handoff、烹飪、宣傳片時間軸（Shell/Apps/PromoDemo.swift）
     log(ok ? "selftest OK" : "selftest FAIL"); exit(ok ? 0 : 1)
 }
 
@@ -8028,7 +8124,7 @@ if let s = arg("--style") {
     let mig = st.migratedOptions
     if let m = mig.material { faceOptionSnapshotOverride.material = m }
     if let l = mig.layout { faceOptionSnapshotOverride.layout = l }
-    delegate.faceStyle = st.inLineup
+    delegate.faceStyle = CommandLine.arguments.contains("--style-raw") ? st : st.inLineup   // 2.0: 第三輪快照：不在陣容裡的舊款（homeModular）也拍得到
 }
 if let s = arg("--typograph-material") {   // 快照用：flat embossed
     guard let m = TypographMaterial(rawValue: s) else { log("--typograph-material 只认：flat embossed"); exit(2) }
@@ -8044,7 +8140,7 @@ if let s = arg("--bg") { islandSnapshotOverride.bg = IslandBackground(rawValue: 
 if let s = arg("--era") { islandSnapshotOverride.era = ["1988": Era.y1988, "2002": .y2002, "2026": .y2026][s] }
 if let s = arg("--capsule"), let m = CapsuleMaterial(rawValue: s) { capsuleMaterialSetting = m }   // 快照用：auto black smoke glass
 if let s = arg("--siri") { SiriOrbState.snapshotPhase = s }   // 快照用：listen | think
-if arg("--snapshot") != nil || ProcessInfo.processInfo.environment["HOMEPLAY_DEMO"] != nil { Face.demoData = true }   // 快照：Home Modular 用示範資料
+if arg("--snapshot") != nil || arg("--screen-png") != nil || ProcessInfo.processInfo.environment["HOMEPLAY_DEMO"] != nil { Face.demoData = true }   // 快照：Home Modular 用示範資料
 if let s = arg("--timer"), let t = Double(s) { delegate.timerSeconds = t }   // 快照用：开一个 t 秒的计时器
 if let s = arg("--music") { delegate.musicTest = s; NowPlayingPoller.disabled = true }   // 快照用：固定一个「正在播放」
 if CommandLine.arguments.contains("--connecting") { CarPlayOverlayState.forced = true }
@@ -8072,6 +8168,14 @@ if let s = arg("--pair-host") { CarPlayOverlayState.pairingHost = s }   // 快�
 if CommandLine.arguments.contains("--onboarding") { Onboarding.forced = true }   // 快照用：强制显示第一次的操作提示
 if let s = arg("--event") { delegate.eventTest = s; CalendarSource.disabled = true }   // 快照用：固定一个「下一个行程」
 if CommandLine.arguments.contains("--banner") { delegate.showBanner = true }   // 快照用：显示「时间到了」横幅
+if CommandLine.arguments.contains("--messages-probe") { MessagesDemo.probe() }
+if CommandLine.arguments.contains("--photos-probe") { PhotosWidgetSource.probe(); exit(0) }   // 2.0: 照片小工具只印筆數（Shell/PhotosWidget.swift）   // 2.0: 只印筆數的讀取路徑自檢
+if let s = arg("--messages-demo") {   // 2.0: 快照用：訊息畫面（list|thread|fda|nodb），示範資料
+    guard MessagesDemo.model(s) != nil else { log("--messages-demo 只认：list thread confirm fda nodb"); exit(2) }
+    MessagesDemo.mode = s
+}
+// 2.0 隱私：任何快照／示範出圖一律不讀真的訊息與聯絡人（截圖可能被存檔、比對或公開）
+if SnapshotPrivacy.active, MessagesDemo.mode == nil { MessagesDemo.mode = "list" }
 if CommandLine.arguments.contains("--hello") { delegate.forceHello = true }     // 快照用：强制开机写 hello
 if CommandLine.arguments.contains("--overview") { FaceOverview.forced = true }   // 快照用：长按换錶面总览
 delegate.photosDir = arg("--photos")
@@ -8089,6 +8193,11 @@ if let s = arg("--permission"), let k = PermissionKind(rawValue: s) {   // 快�
     default: PermissionPrimer.phase = .intro
     }
 }
+if CommandLine.arguments.contains("--people-demo") { PeopleOverlay.demoGreeting = true }   // 快照（2.0）：个人问候「早安，名字」
+if CommandLine.arguments.contains("--people-demo-enroll") {   // 快照（2.0）：录脸引导，--people-demo-progress 0…1
+    PeopleOverlay.demoEnroll = true
+    if let v = arg("--people-demo-progress").flatMap(Double.init) { PeopleOverlay.demoProgress = max(0, min(1, v)) }
+}
 if let s = arg("--window-x"), let v = Double(s) { PetView.windowXOverride = max(0, min(1, v)) }   // 快照：窗口横向位置 0…1
 // 快照／基准默认当作窗口居中：官网和文档的产品图不该因为拍照时窗口落在哪而歪
 else if arg("--snapshot") != nil || arg("--bench") != nil { PetView.windowXOverride = 0.5 }
@@ -8101,6 +8210,7 @@ if let s = arg("--time") {      // 快照用：固定屏幕上的时间，例如
     let v = s.split(separator: ":").compactMap { Int($0) }
     if v.count == 2 { snapshotDateOverride = Calendar.current.date(bySettingHour: v[0], minute: v[1], second: 0, of: Date()) }
 }
+if OfficialDemo.on { snapshotDateOverride = OfficialDemo.date(time: arg("--time")) }   // 2.0: 官方原圖的日期（2026-04-01 星期三 10:09）
 if CommandLine.arguments.contains("--near") { delegate.forceNear = true }
 if let s = arg("--finish") {
     guard let f = Finish(rawValue: s) else {

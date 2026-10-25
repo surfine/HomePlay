@@ -4,6 +4,7 @@
 //   node tooling/public-snapshot.mjs                 # 建快照 + 閘門 + 跟公開倉庫比對（dry-run，什麼都不推）
 //   node tooling/public-snapshot.mjs --ref <commit>  # 從指定提交建（預設 main）
 //   node tooling/public-snapshot.mjs --push          # 以上全過之後，追加一個提交到公開倉庫 main
+//   node tooling/public-snapshot.mjs --ref <c> --branch beta --push   # 預覽版推到 beta 分支
 //
 // 只讀 git 裡已提交的內容（git archive），工作區沒提交的改動永遠不會進快照。
 // 推送只發生在一次性的暫存 clone 裡，不碰這個倉庫的分支和 remote；不用 --force。
@@ -19,6 +20,8 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const args = process.argv.slice(2);
 const ref = args.includes("--ref") ? args[args.indexOf("--ref") + 1] : "main";
 const push = args.includes("--push");
+// --branch <名>：推到公開倉庫的另一條分支（2.0 beta 用 beta；穩定版照舊 main）
+const branch = args.includes("--branch") ? args[args.indexOf("--branch") + 1] : M.publicBranch;
 const out = path.join(root, ".build", "public-snapshot");
 
 const git = (a, opts = {}) => execFileSync("git", a, { cwd: root, encoding: "utf8", maxBuffer: 1 << 28, ...opts }).trim();
@@ -75,7 +78,7 @@ const work = mkdtempSync(path.join(tmpdir(), "homeplay-public-"));
 try {
   let empty = false;
   try {
-    execFileSync("git", ["clone", "--quiet", "--branch", M.publicBranch, "--single-branch", M.publicRepo, work], { stdio: "pipe" });
+    execFileSync("git", ["clone", "--quiet", "--branch", branch, "--single-branch", M.publicRepo, work], { stdio: "pipe" });
   } catch (e) {
     const msg = String(e.stderr || e.message);
     if (/not found in upstream|Remote branch .* not found|empty repository/i.test(msg)) {
@@ -97,8 +100,8 @@ try {
   if (!push) { console.log("· dry-run：沒有提交也沒有推送。確認無誤後加 --push。"); process.exit(0); }
   const [name, email] = M.commitAuthor.match(/^(.*) <(.*)>$/).slice(1);
   execFileSync("git", ["-c", `user.name=${name}`, "-c", `user.email=${email}`, "commit", "--quiet", "-m", `Sync public snapshot (${sha})`], { cwd: work });
-  execFileSync("git", ["push", "origin", `HEAD:${M.publicBranch}`], { cwd: work, stdio: "inherit" });
-  console.log(`✓ 已推到 ${M.publicRepo} ${M.publicBranch}`);
+  execFileSync("git", ["push", "origin", `HEAD:${branch}`], { cwd: work, stdio: "inherit" });
+  console.log(`✓ 已推到 ${M.publicRepo} ${branch}`);
 } finally {
   rmSync(work, { recursive: true, force: true });
 }

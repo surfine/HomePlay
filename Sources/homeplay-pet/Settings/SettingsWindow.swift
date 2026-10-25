@@ -35,6 +35,7 @@ final class SettingsModel: ObservableObject {
     /// 「字體與顏色」只作用在 2026 的島與照片錶面
     var clockLookApplies: Bool { (faceStyle == .island && era == .y2026) || faceStyle == .photos }
     @Published var viewMode = ViewMode.auto
+    @Published var touring = false   // 2.0 P06: 自動環繞（從右鍵選單搬來）
 
     @Published var phones: [CarPlayPhoneBook.Phone] = []
     @Published var currentPhone: String?
@@ -57,7 +58,7 @@ final class SettingsModel: ObservableObject {
         cornerInset = ConcentricCorners.appliedInset
         language = PetLanguage.chosen?.rawValue ?? "system"
         calendarOn = CalendarSource.enabled; nowPlayingOn = NowPlayingPoller.enabled
-        finish = s.finish; faceStyle = s.faceStyle; viewMode = s.viewMode; capsule = capsuleMaterialSetting
+        finish = s.finish; faceStyle = s.faceStyle; viewMode = s.viewMode; touring = app.view?.touring ?? false; capsule = capsuleMaterialSetting
         if let f = app.view?.face { clockStyle = f.clockStyle == .thin ? .bold : f.clockStyle; islandBackground = f.background; era = f.era; typographMaterial = f.typographMaterial; system6Layout = f.system6Layout }
         phones = CarPlayPhoneBook.phones; currentPhone = CarPlayPhoneBook.current
         gazeFollow = s.gazeFollow; followDegrees = s.followDegrees; gazePitch = s.gazePitch; roomLight = s.roomLight; petWidth = s.petWidth
@@ -75,7 +76,7 @@ final class SettingsModel: ObservableObject {
 
 /// 侧边栏的分页（顺序＝显示顺序）；上次看到哪一页会记住
 enum SettingsSection: String, CaseIterable, Identifiable {
-    case general, appearance, gestures, carplay, camera, permissions
+    case general, appearance, gestures, carplay, cliotalk, camera, people, devices, permissions   // 2.0：ClioTalk、people＝家人、devices＝iPhone 與 iPad（網頁串流）
     var id: String { rawValue }
     static let key = "HomePlaySettingsSection"
     var title: String {
@@ -84,7 +85,10 @@ enum SettingsSection: String, CaseIterable, Identifiable {
         case .appearance: return L("settings.appearance", "外观")
         case .gestures: return L("settings.gestures", "手势")
         case .carplay: return L("settings.carplay", "CarPlay")
+        case .cliotalk: return L("settings.cliotalk", "ClioTalk")
         case .camera: return L("settings.camera", "相机")
+        case .people: return L("settings.people", "家人")
+        case .devices: return L("settings.devices", "iPhone 与 iPad")
         case .permissions: return L("settings.permissions", "权限")
         }
     }
@@ -95,19 +99,25 @@ enum SettingsSection: String, CaseIterable, Identifiable {
         case .appearance: return "circle.lefthalf.filled"
         case .gestures: return "hand.point.up.left"
         case .carplay: return "car"
+        case .cliotalk: return "bubble.left.and.text.bubble.right"
         case .camera: return "camera"
+        case .people: return "person.2"
+        case .devices: return "ipad.and.iphone"
         case .permissions: return "hand.raised"
         }
     }
     /// 搜索用：这一页里每一行的标题（按当前语言）
     private var keywordKeys: [String] {
         switch self {
-        case .general: return ["settings.loginItem", "settings.alwaysOnTop", "settings.language", "settings.size", "prefs.nowPlaying", "prefs.calendar.on", "prefs.hints"]
+        case .general: return ["settings.loginItem", "settings.alwaysOnTop", "settings.language", "settings.size", "prefs.nowPlaying", "settings.lyrics", "prefs.calendar.on", "prefs.hints"]
         case .appearance: return ["settings.facing", "settings.angle", "settings.finish", "settings.face"]
         case .gestures: return ["settings.gesture.pinch.title", "settings.gesture.slide.title", "settings.gesture.three.title", "settings.gesture.force.title",
                                 "settings.gesture.liveSlide", "settings.gesture.reset", "settings.gesture.apart", "settings.gesture.overview", "settings.gesture.keys"]
-        case .carplay: return ["prefs.plugConnect", "menu.iphone", "menu.pairNewPhone", "menu.wifiPassword"]
+        case .carplay: return ["prefs.plugConnect", "menu.iphone", "menu.pairNewPhone", "menu.wifiPassword", "handoff.header"]   // 2.0 promo
+        case .cliotalk: return ["clio.provider", "clio.key", "clio.fast", "clio.deep", "clio.section.data", "clio.cap", "clio.speak", "clio.f5", "clio.clear"]
         case .camera: return ["settings.follow.title", "settings.followRange", "settings.followPitch", "settings.roomLight.title"]
+        case .people: return ["people.pane.recognize", "people.pane.family", "people.pane.addTitle", "people.pane.deleteAll"]
+        case .devices: return ["remote.enable", "remote.section.devices", "remote.section.add", "remote.device.personal"]
         case .permissions: return ["settings.perm.camera", "settings.perm.mic", "settings.perm.input", "settings.perm.automation", "settings.perm.calendar"]
         }
     }
@@ -198,6 +208,7 @@ struct SettingsRoot: View {
                 }
                 .tag(s)
             }
+            .overlay { if visible.isEmpty { ContentUnavailableView.search(text: query) } }   // 2.0 depth：搜不到時照系統設定寫「沒有結果」
             .searchable(text: $query, placement: .sidebar, prompt: L("settings.search", "搜索"))
             .onChange(of: query) { _, _ in
                 if let first = visible.first, !visible.contains(m.section) { m.section = first }
@@ -210,7 +221,10 @@ struct SettingsRoot: View {
                 case .appearance: AppearancePane()
                 case .gestures: GesturesPane()
                 case .carplay: CarPlayPane()
+                case .cliotalk: ClioTalkPane()
                 case .camera: CameraPane()
+                case .people: PeoplePane()
+                case .devices: RemoteDevicesPane()
                 case .permissions: PermissionsPane()
                 }
             }

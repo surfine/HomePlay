@@ -42,9 +42,8 @@ struct IllustrationStage: View {
                 Button { play(from: scene.key, until: scene.key + scene.cycle) } label: {
                     Image(systemName: "play.fill").font(.system(size: 9, weight: .semibold))
                         .frame(width: 22, height: 22)
-                        .background(.regularMaterial, in: Circle())
                 }
-                .buttonStyle(PressScaleStyle())
+                .modifier(SystemCircleButtonStyle())   // 2.0 glass（P01）：系統按鈕樣式（macOS 26＋是玻璃），不自己鋪 .regularMaterial
                 .foregroundStyle(.secondary)
                 .padding(8)
                 .help(L("settings.demo.play", "再播一次"))
@@ -110,3 +109,45 @@ private extension View {
     }
 }
 
+/// 2.0 glass（P01）：小圓鈕用系統的按鈕樣式——macOS 26 起 .glass（系統自己的 Liquid Glass，也會照輔助使用設定換樣子），更舊用 .bordered
+struct SystemCircleButtonStyle: ViewModifier {
+    func body(content: Content) -> some View {
+        if #available(macOS 26.0, *) {
+            content.buttonStyle(.glass).buttonBorderShape(.circle)
+        } else {
+            content.buttonStyle(.bordered).buttonBorderShape(.circle)
+        }
+    }
+}
+
+/// 2.0 P06（HIG Sliders）：滑桿右邊顯示目前的值（等寬數字），停在上面也有提示；有 step 就畫刻度。
+/// 版面是系統分組表單的一行：標題（可帶副標題）在左，滑桿＋數值在右。
+struct ValueSlider: View {
+    let title: String
+    var subtitle: String? = nil
+    @Binding var value: Double
+    let range: ClosedRange<Double>
+    var step: Double? = nil
+    let minLabel: String
+    let maxLabel: String
+    let format: (Double) -> String
+
+    var body: some View {
+        LabeledContent {
+            HStack(spacing: 8) {
+                slider.accessibilityLabel(title).accessibilityValue(format(value))
+                Text(format(value)).monospacedDigit().foregroundStyle(.secondary)
+                    .frame(minWidth: 44, alignment: .trailing)
+            }
+        } label: { RowLabel(title: title, subtitle: subtitle) }
+        .help(format(value))
+    }
+
+    @ViewBuilder private var slider: some View {
+        if let step {
+            Slider(value: $value, in: range, step: step) { EmptyView() } minimumValueLabel: { Text(minLabel) } maximumValueLabel: { Text(maxLabel) }
+        } else {
+            Slider(value: $value, in: range) { EmptyView() } minimumValueLabel: { Text(minLabel) } maximumValueLabel: { Text(maxLabel) }
+        }
+    }
+}

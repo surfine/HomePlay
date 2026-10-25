@@ -83,12 +83,12 @@ extension Face {
         case .bold, .thin:
             // Portraits：Compressed 半粗、頂到上緣（日期之下），佔到約 59% 的高度，下面留給島
             let (a, b) = tallPair(top: 100, height: 488, gap: 56, boost: clockStyle == .bold ? 0.1 : 0)
-            drawClockDigits(g, [a, b], look: look, clear: islandClear(bg, now), frosted: backdrop, alpha: textAlpha, system: .portraitFrosted)
+            drawClockDigits(g, [a, b], look: look, clear: islandClear(bg, now), frosted: backdrop, alpha: textAlpha)
         case .stacked:
             // 上時下分（X-Large 的排法），各一行
             let top = GlyphShape.clock(hh, look: look, height: 330, maxWidth: 820, at: CGPoint(x: 512, y: 132), anchorX: 0.5, weightBoost: 0.15)
             let bot = GlyphShape.clock(mm, look: look, height: 330, maxWidth: 820, at: CGPoint(x: 512, y: 500), anchorX: 0.5, weightBoost: 0.15)
-            drawClockDigits(g, [top, bot], look: look, clear: islandClear(bg, now), frosted: backdrop, alpha: textAlpha, system: .portraitFrosted)
+            drawClockDigits(g, [top, bot], look: look, clear: islandClear(bg, now), frosted: backdrop, alpha: textAlpha)
             dateY = 84; islandAt = CGPoint(x: 512, y: 912); islandScale = 0.6; liveAt = CGPoint(x: 512, y: 880)
         case .compact:
             // 島是主角：上面一行不大的時間，島放大置中（字小，玻璃看不出來：一律實線，顏色照設定）

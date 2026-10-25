@@ -44,24 +44,39 @@ private struct WeatherCache {
 nonisolated(unsafe) private var weatherCache = WeatherCache()
 
 extension Face {
-    private static func weatherText(_ code: Int) -> String {
+    static func weatherText(_ code: Int) -> String {   // 2.0: 主畫面的天氣小工具也用
         switch code {
         case 0: return L("weather.cond.clear", "晴")
         case 1: return L("weather.cond.mostlyClear", "大致晴朗")
         case 2: return L("weather.cond.partly", "晴时多云")
         case 3: return L("weather.cond.cloudy", "阴")
         case 45, 48: return L("weather.cond.fog", "雾")
-        case 51...57: return L("weather.cond.drizzle", "毛毛雨")
-        case 61...65, 66, 67: return L("weather.cond.rain", "雨")
-        case 71...77: return L("weather.cond.snow", "雪")
-        case 80...82: return L("weather.cond.showers", "阵雨")
+        // 2.0 depth：WMO 代碼照 iOS 天氣的條件名稱分開——凍毛毛雨、凍雨、大雨、大雪、冰雹不再併進「雨」「雪」「雷雨」
+        case 51...55: return L("weather.cond.drizzle", "毛毛雨")
+        case 56, 57: return L("weather.cond.freezingDrizzle", "冻毛毛雨")
+        case 61, 63: return L("weather.cond.rain", "雨")
+        case 65, 82: return L("weather.cond.heavyRain", "大雨")
+        case 66, 67: return L("weather.cond.freezingRain", "冻雨")
+        case 71, 73, 77: return L("weather.cond.snow", "雪")
+        case 75: return L("weather.cond.heavySnow", "大雪")
+        case 80, 81: return L("weather.cond.showers", "阵雨")
         case 85, 86: return L("weather.cond.snowShowers", "阵雪")
-        case 95...99: return L("weather.cond.storm", "雷雨")
+        case 95: return L("weather.cond.storm", "雷雨")
+        case 96, 99: return L("weather.cond.hail", "冰雹")
         default: return L("weather.cond.cloudy", "阴")
         }
     }
 
-    private static var weatherImperial: Bool { Locale.current.measurementSystem == .us }
+    private static var weatherImperial: Bool { OfficialDemo.on || Locale.current.measurementSystem == .us }   // 第四輪：官方示範是華氏
+
+    /// 第四輪：快照沒有真資料時的示範天氣（--demo-official 照官方 face-weather：舊金山 54°、晴時多雲、高 57 低 49、日落 19:32、風 7 mph、濕度 76%、AQI 21）
+    static var demoWeather: WeatherData? {
+        if OfficialDemo.on {
+            return WeatherData(temp: 12.2, hi: 13.9, lo: 9.4, code: 2, wind: 11.3, humidity: 76, aqi: 21, sunset: "19:32", city: "San Francisco", night: false)   // l10n-ignore：示範城市
+        }
+        guard Face.demoData else { return nil }
+        return WeatherData(temp: 22, hi: 25, lo: 19, code: 2, wind: 11, humidity: 76, aqi: 21, sunset: "17:21", city: L("city.taipeiCity", "台北市"), night: false)
+    }
 
     private static func isNight(_ d: WeatherData?, _ date: Date) -> Bool {
         if let n = d?.night { return n }
@@ -75,7 +90,7 @@ extension Face {
     func renderWeatherFace(_ g: CGContext, _ now: Double) {
         let src = WeatherSource.shared
         src.activate { [weak self] in self?.forceDirty = true }
-        let d = src.data
+        let d = src.data ?? (src.statusText == nil ? Self.demoWeather : nil)
         let date = Self.displayDate
         let night = Self.isNight(d, date)
         let sky = WeatherSky.of(code: d?.code ?? 2)
@@ -105,10 +120,12 @@ extension Face {
         let symName = night ? sky.symbol.night : sky.symbol.day
         shadowed {
             drawMulticolorSymbol(g, symName, in: CGRect(x: 74, y: 62, width: 82, height: 62))
-            drawLeft(g, d.map { Self.weatherText($0.code) } ?? dash, font: FaceType.sf(48, .semibold, mono: false), x: 164, y: 126, color: white)
+            // 2.0 depth：沒資料時寫原因（沒定位、連不上），不是一個「—」
+            let cf = FaceType.sf(48, .medium, mono: false)
+            drawLeft(g, d.map { Self.weatherText($0.code) } ?? WeatherSource.shared.statusShort.map { Self.clipped($0, cf, 470) } ?? dash, font: cf, x: 164, y: 126, color: white)
             let hiLo = d.map { String(format: L("weather.hiLo", "高 %d° 低 %d°"), temp($0.hi), temp($0.lo)) }
                 ?? String(format: L("weather.hiLo", "高 %d° 低 %d°"), 0, 0).replacingOccurrences(of: "0", with: dash)
-            drawLeft(g, hiLo, font: FaceType.sf(44, .semibold, mono: false), x: 78, y: 184, color: white)
+            drawLeft(g, hiLo, font: FaceType.sf(44, .medium, mono: false), x: 78, y: 184, color: white)
             // 右上：時間
             let (hh, mm) = Self.hourMinute(date)
             let ts = "\(hh):\(mm)", tf = FaceType.sf(100, .semibold)
@@ -125,9 +142,7 @@ extension Face {
         let b0 = shape.ink
         if b0.width * k > 590 { k = 590 / b0.width }
         shape = shape.transformed(CGAffineTransform(translationX: 84 - b0.minX * k, y: 538).scaledBy(x: k, y: k))
-        drawLiquidGlass(g, [shape], key: "weather|\(skyKey)|\(big)", clear: weatherCache.clear, frosted: weatherCache.frosted,
-                        system: SystemGlassParams(refractionHeight: 1.0, refractionAmount: -4.3, blurRadius: 9, highlight: 0.55, white: 1.0, black: 0.0,
-                                                  saturation: 1.3, fill: night ? 0.14 : 0.36, rim: 1.0, keyAmount: 0.9, fillAmount: 0.5, ringShadow: 0.25))
+        drawLiquidGlass(g, [shape], key: "weather|\(skyKey)|\(big)", clear: weatherCache.clear, frosted: weatherCache.frosted, params: .weatherTemp)
 
         // 膠囊：在溫度右邊（寬約 256）；眼睛的朝向由表情決定，不另畫
         faceEyeLook = CGPoint(x: -5, y: -14); defer { faceEyeLook = nil }   // 望向天空
@@ -137,18 +152,18 @@ extension Face {
         let aqiSym = NSImage(systemSymbolName: "aqi.medium", accessibilityDescription: nil) != nil ? "aqi.medium" : "circle.dotted"
         let wind = d.map { imperial ? String(format: "%.0f mph", $0.wind * 0.621371) : String(format: "%.0f km/h", $0.wind) } ?? dash
         let cols: [(x: CGFloat, sym: String, value: String, label: String)] = [
-            (157, "sunset", d?.sunset ?? dash, L("weather.sunset", "日落")),
+            (157, "sunset", d?.sunset.map(Self.localTime) ?? dash, L("weather.sunset", "日落")),
             (393, "wind", wind, L("weather.wind", "风速")),
             (638, "humidity", d.map { String(format: "%.0f%%", $0.humidity) } ?? dash, L("weather.humidity", "湿度")),
             (874, aqiSym, d?.aqi.map { String(format: "%.0f", $0) } ?? dash, "AQI"),
         ]
+        // 第四輪：照官方 face-weather——數值與標籤是 medium（不是 semibold）、白 92%，數值基線 868、標籤 926
+        let cf = FaceType.sf(48, .medium, mono: false), soft = white.withAlphaComponent(0.92)
         shadowed {
             for c in cols {
                 drawSymbol(g, c.sym, in: CGRect(x: c.x - 52, y: 690, width: 104, height: 82), color: white, weight: .regular)
-                drawLeft(g, c.value, font: FaceType.sf(48, .semibold, mono: false), x: c.x - Self.weatherWidth(c.value, FaceType.sf(48, .semibold, mono: false)) / 2,
-                         y: 858, color: white)
-                drawLeft(g, c.label, font: FaceType.sf(48, .semibold, mono: false), x: c.x - Self.weatherWidth(c.label, FaceType.sf(48, .semibold, mono: false)) / 2,
-                         y: 920, color: white)
+                drawLeft(g, c.value, font: cf, x: c.x - Self.weatherWidth(c.value, cf) / 2, y: 868, color: soft)
+                drawLeft(g, c.label, font: cf, x: c.x - Self.weatherWidth(c.label, cf) / 2, y: 926, color: soft)
             }
         }
     }
@@ -161,12 +176,19 @@ extension Face {
         return minute != weatherCache.minute || v != weatherCache.version
     }
 
+    /// 「HH:mm」→ 介面語言的短時間（英文 7:32 PM、中文 19:32）
+    static func localTime(_ hm: String) -> String {
+        let v = hm.split(separator: ":").compactMap { Int($0) }
+        guard v.count == 2, let d = Calendar.current.date(bySettingHour: v[0], minute: v[1], second: 0, of: Date()) else { return hm }
+        return Face.shortTime(d)
+    }
+
     private static func weatherWidth(_ s: String, _ f: NSFont) -> CGFloat {
         CTLineGetTypographicBounds(CTLineCreateWithAttributedString(NSAttributedString(string: s, attributes: Typo.attributes(f))), nil, nil, nil)
     }
 
     /// 多色 SF Symbol（太陽黃、雲白）
-    private func drawMulticolorSymbol(_ g: CGContext, _ name: String, in r: CGRect) {
+    func drawMulticolorSymbol(_ g: CGContext, _ name: String, in r: CGRect) {
         let cfg = NSImage.SymbolConfiguration(pointSize: r.height, weight: .semibold).applying(.preferringMulticolor())
         guard let img = NSImage(systemSymbolName: name, accessibilityDescription: nil)?.withSymbolConfiguration(cfg) else { return }
         let s = img.size, k = min(r.width / max(1, s.width), r.height / max(1, s.height))

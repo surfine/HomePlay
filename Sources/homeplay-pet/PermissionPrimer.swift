@@ -1,15 +1,19 @@
 import AppKit
 import AVFoundation
 import CoreGraphics
+import CoreLocation
 import CoreText
 import EventKit
+import Photos
 
 // 权限：先在桌宠屏幕上说清楚「要什么、为什么、只在本机」，用户点「继续」才弹系统框；
 // 系统框之后给回馈——允许就笑眼打勾、功能立刻开始；拒绝就担心脸，卡片给「打开系统设置」。
 // （2026-10-22 Aaron 定案：动画放在桌宠屏幕上的卡片＋表情，不用原生弹窗。）
 
 enum PermissionKind: String, CaseIterable {
-    case camera, microphone, inputMonitoring, automation, calendar, location
+    case camera, microphone, inputMonitoring, automation, calendar
+    case photos   // 2.0 第六輪：主畫面的「照片」小工具（Shell/PhotosWidget.swift）
+    case location, reminders   // 2.0 depth：天氣（定位）與提醒事項 App——以前只在各自的畫面裡問，設定的「權限」看不到、也關不掉
 
     /// 系统设置 › 隐私与安全性 里对应的那一页
     var settingsURL: URL? {
@@ -20,7 +24,9 @@ enum PermissionKind: String, CaseIterable {
         case .inputMonitoring: pane = "Privacy_ListenEvent"
         case .automation: pane = "Privacy_Automation"
         case .calendar: pane = "Privacy_Calendars"
+        case .photos: pane = "Privacy_Photos"
         case .location: pane = "Privacy_LocationServices"
+        case .reminders: pane = "Privacy_Reminders"
         }
         return URL(string: "x-apple.systempreferences:com.apple.preference.security?\(pane)")
     }
@@ -28,31 +34,37 @@ enum PermissionKind: String, CaseIterable {
     var title: String {
         switch self {
         case .camera: return L("perm.camera.title", "让我看见你")
-        case .microphone: return L("perm.mic.title", "让 Siri 听见你")
-        case .inputMonitoring: return L("perm.input.title", "让 F5 叫出 Siri")
+        case .microphone: return L("perm.mic.title", "让我听见你")
+        case .inputMonitoring: return L("perm.input.title", "让 F5 叫出 ClioTalk")
         case .automation: return L("perm.automation.title", "显示 Mac 正在播放")
         case .calendar: return L("perm.calendar.title", "显示下一个行程")
-        case .location: return L("perm.location.title", "读取 Wi-Fi 名称")
+        case .photos: return L("perm.photos.title", "让我看看你的照片")
+        case .location: return L("perm.location.title", "用你的位置")
+        case .reminders: return L("perm.reminders.title", "显示你的提醒事项")
         }
     }
     var body: String {
         switch self {
         case .camera: return L("perm.camera.body", "转头看你、配合房间光线\n不录制、不上传")
-        case .microphone: return L("perm.mic.body", "按住 F5 跟 Siri 说话\n声音只送到你的 iPhone")
-        case .inputMonitoring: return L("perm.input.body", "任何 App 里按 F5 叫 Siri\n只认这一个键")
+        case .microphone: return L("perm.mic.body", "按住 F5 说话\n声音不录下，只交给这台 Mac 或你的 iPhone")
+        case .inputMonitoring: return L("perm.input.body", "任何 App 里按 F5 叫 ClioTalk\n只认这一个键")
         case .automation: return L("perm.automation.body", "显示正在播放的歌\n点一下播放或暂停")
         case .calendar: return L("perm.calendar.body", "显示你的下一个行程\n只读取，不离开这台 Mac")
-        case .location: return L("perm.location.body", "iPhone 要知道连哪个 Wi-Fi 才能无线连 CarPlay\nmacOS 只给有定位权限的 App 看网络名称")
+        case .photos: return L("perm.photos.body", "主屏幕的「照片」小组件显示精选照片\n只读取，不离开这台 Mac")
+        case .location: return L("perm.location.body", "天气用你的大概位置\n无线 CarPlay 也要靠它读出 Wi-Fi 名称")
+        case .reminders: return L("perm.reminders.body", "在提醒事项 App 里看清单、点圆圈完成\n不会离开这台 Mac")
         }
     }
     var grantedLine: String {
         switch self {
         case .camera: return L("perm.camera.granted", "开始跟着你了")
         case .microphone: return L("perm.mic.granted", "按住 F5 就能说话")
-        case .inputMonitoring: return L("perm.input.granted", "F5 已经可以叫 Siri")
+        case .inputMonitoring: return L("perm.input.granted", "F5 已经可以叫 ClioTalk")
         case .automation: return L("perm.automation.granted", "正在播放会显示在胶囊上")
         case .calendar: return L("perm.calendar.granted", "下一个行程已就位")
-        case .location: return L("perm.location.granted", "Wi-Fi 名称已交给 iPhone")
+        case .photos: return L("perm.photos.granted", "精选照片已就位")
+        case .location: return L("perm.location.granted", "天气和 Wi-Fi 名称都已就位")
+        case .reminders: return L("perm.reminders.granted", "提醒事项已就位")
         }
     }
 }
@@ -86,11 +98,18 @@ enum PermissionCenter {
             case .notDetermined: return .notDetermined
             default: return .denied
             }
+        case .photos: return PhotosWidgetSource.status
         case .location:
-            switch WiFiName.auth {
-            case .granted: return .granted
+            switch CLLocationManager().authorizationStatus {
+            case .authorizedAlways, .authorized: return .granted
             case .notDetermined: return .notDetermined
-            case .denied: return .denied
+            default: return .denied
+            }
+        case .reminders:
+            switch ReminderSource.auth {
+            case .fullAccess: return .granted
+            case .notDetermined: return .notDetermined
+            default: return .denied
             }
         }
     }
@@ -121,8 +140,17 @@ enum PermissionCenter {
             }
         case .calendar:
             EKEventStore().requestFullAccessToEvents { ok, _ in done(ok) }
+        case .photos:
+            // 沒有用途說明（沒打包的執行檔）就去問，系統會直接讓進程崩掉：當作沒允許
+            guard PhotosWidgetSource.canRequest else { done(false); return }
+            PHPhotoLibrary.requestAuthorization(for: .readWrite) { st in done(st == .authorized || st == .limited) }
         case .location:
-            WiFiName.request(done)
+            // 沒有用途說明（沒打包的執行檔）就去問，系統會直接讓進程崩掉：當作沒允許
+            guard WeatherSource.canAskLocation else { done(false); return }
+            LocationAsker.ask(done)
+        case .reminders:
+            guard Bundle.main.object(forInfoDictionaryKey: ReminderSource.usageKey) != nil else { done(false); return }
+            EKEventStore().requestFullAccessToReminders { ok, _ in done(ok) }
         }
     }
 
@@ -135,6 +163,27 @@ enum PermissionCenter {
         let target = NSAppleEventDescriptor(bundleIdentifier: "com.apple.Music")
         guard let desc = target.aeDesc else { return OSStatus(procNotFound) }
         return AEDeterminePermissionToAutomateTarget(desc, typeWildCard, typeWildCard, ask)
+    }
+}
+
+/// 2.0 depth：設定「權限」裡問定位用的一次性委派（要留著到系統回答為止）
+private final class LocationAsker: NSObject, CLLocationManagerDelegate {
+    nonisolated(unsafe) private static var current: LocationAsker?
+    private let manager = CLLocationManager()
+    private let done: (Bool) -> Void
+    private init(_ done: @escaping (Bool) -> Void) { self.done = done; super.init(); manager.delegate = self }
+    static func ask(_ done: @escaping (Bool) -> Void) {
+        DispatchQueue.main.async {
+            let a = LocationAsker(done)
+            current = a
+            a.manager.requestWhenInUseAuthorization()
+        }
+    }
+    func locationManagerDidChangeAuthorization(_ m: CLLocationManager) {
+        guard m.authorizationStatus != .notDetermined else { return }
+        let ok = m.authorizationStatus == .authorizedAlways || m.authorizationStatus == .authorized
+        Self.current = nil
+        done(ok)
     }
 }
 
@@ -463,6 +512,40 @@ extension Face {
                 g.setFillColor(NSColor.white.withAlphaComponent(i == lit ? 1 : 0.35).cgColor)
                 g.fill(cell)
             }
+        case .location:
+            // 地圖針：一上一下輕輕跳，底下一圈漣漪
+            let hop = calm ? 0 : abs(CGFloat(sin(phase * 2.6))) * 10
+            let pin = CGRect(x: c.x - 28, y: c.y - 52 - hop, width: 56, height: 56)
+            g.strokeEllipse(in: pin)
+            g.move(to: CGPoint(x: pin.minX + 5, y: pin.midY + 20)); g.addLine(to: CGPoint(x: c.x, y: c.y + 36 - hop))
+            g.addLine(to: CGPoint(x: pin.maxX - 5, y: pin.midY + 20)); g.strokePath()
+            g.fillEllipse(in: CGRect(x: c.x - 9, y: pin.midY - 9, width: 18, height: 18))
+            let ripple = calm ? 0.5 : CGFloat((phase * 0.8).truncatingRemainder(dividingBy: 1))
+            g.setStrokeColor(NSColor.white.withAlphaComponent(calm ? 0.35 : (1 - ripple) * 0.8).cgColor); g.setLineWidth(5)
+            g.strokeEllipse(in: CGRect(x: c.x - 20 - ripple * 30, y: c.y + 36 - 7 - ripple * 8, width: 40 + ripple * 60, height: 14 + ripple * 16))
+        case .reminders:
+            // 清單：三行的圓圈依序打勾
+            let lit = calm ? -1 : Int(phase * 1.6) % 4
+            for i in 0..<3 {
+                let y = c.y - 40 + CGFloat(i) * 36
+                let ring = CGRect(x: c.x - 52, y: y - 11, width: 22, height: 22)
+                g.setLineWidth(5)
+                if i < lit { g.fillEllipse(in: ring) } else { g.strokeEllipse(in: ring) }
+                g.setStrokeColor(NSColor.white.withAlphaComponent(i < lit ? 0.9 : 0.5).cgColor)
+                g.move(to: CGPoint(x: c.x - 18, y: y)); g.addLine(to: CGPoint(x: c.x + 52, y: y)); g.strokePath()
+                g.setStrokeColor(NSColor.white.cgColor)
+            }
+        case .photos:
+            // 相框：山與太陽，太陽慢慢升起
+            let frame = CGRect(x: c.x - 54, y: c.y - 42, width: 108, height: 84)
+            g.addPath(CGPath(roundedRect: frame, cornerWidth: 14, cornerHeight: 14, transform: nil)); g.strokePath()
+            g.saveGState(); g.addPath(CGPath(roundedRect: frame, cornerWidth: 14, cornerHeight: 14, transform: nil)); g.clip()
+            let rise = calm ? 0 : CGFloat(sin(phase * 1.6)) * 6
+            g.fillEllipse(in: CGRect(x: c.x + 14, y: c.y - 26 + rise, width: 20, height: 20))
+            g.move(to: CGPoint(x: frame.minX - 4, y: frame.maxY - 6)); g.addLine(to: CGPoint(x: c.x - 18, y: c.y - 2))
+            g.addLine(to: CGPoint(x: c.x + 6, y: c.y + 20)); g.addLine(to: CGPoint(x: c.x + 22, y: c.y + 8))
+            g.addLine(to: CGPoint(x: frame.maxX + 4, y: frame.maxY - 6)); g.strokePath()
+            g.restoreGState()
         case .location:
             // Wi-Fi 扇形：底下一點，三道弧由內往外依次點亮（要的是網路名稱，不是地圖）
             let base = CGPoint(x: c.x, y: c.y + 40)

@@ -163,14 +163,11 @@ extension GlyphShape {
 
 extension Face {
     /// 照「字體與顏色」畫一組大時間：玻璃（系統 Liquid Glass，可染色）或實線
-    func drawClockDigits(_ g: CGContext, _ shapes: [GlyphShape], look: ClockLook, clear: CGImage?, frosted: CGImage?, alpha: CGFloat,
-                         system: SystemGlassParams = .portrait) {
+    func drawClockDigits(_ g: CGContext, _ shapes: [GlyphShape], look: ClockLook, clear: CGImage?, frosted: CGImage?, alpha: CGFloat) {
         let color = look.color(wallpaper: wallpaperTone(frosted))
         g.saveGState(); g.setAlpha(alpha)
         if look.glass {
-            var sys = system
-            sys.tint = look.glassTint > 0 ? color.withAlphaComponent(look.glassTint).cgColor : nil
-            drawLiquidGlass(g, shapes, clear: clear, frosted: frosted, system: sys)
+            drawLiquidGlass(g, shapes, clear: clear, frosted: frosted, tint: look.glassTint > 0 ? color.withAlphaComponent(look.glassTint) : nil)
         } else {
             for s in shapes { fillShape(g, s, color, shadow: 0.18) }
         }

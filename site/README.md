@@ -38,8 +38,11 @@ SITE_ORIGIN=https://example.com npm run build && SITE_ORIGIN=https://example.com
 - `scripts/content.mjs`：所有文案，`zh-Hant`、`zh-Hans`、`en` 三份同一個形狀，`LANGS` 定義網址與語言切換；站點 origin、GitHub 與 NOTICE 連結常數也在這裡。改字只動這個檔。寫法：說人話，先說它做了什麼，再說怎麼做到；人文那一段（`essay`）的年份與人名都要可查。
 - `scripts/build.mjs`：頁面模板、SEO 與分享（canonical、三語 hreflang + x-default、OG、Twitter、JSON-LD：WebSite／SoftwareSourceCode／FAQPage）、微信等 IM 用的隱藏方圖（`share-square.jpg`，頁面第一張圖）、404、`_headers`（嚴格 CSP、`/media/*` 快取一天）、`_redirects`。所有 `/media/` 網址自動加內容雜湊 `?v=`，換圖不會被邊緣快取卡住。
 - `style.css`、`app.js`：樣式與互動。沒有行內樣式、行內處理器或行內腳本（CSP 不允許）；各語言的表情名稱與外觀說明放在頁面的 `<script type="application/json" id="i18n">`，那不是可執行腳本。
+- `scripts/history.mjs`、`history.css`、`history.js`、`exhibits/`：互動長文〈小工具往事〉（`/history/`、`/zh-hans/history/`、`/en/history/`）。正文與出處只在 `history.mjs`；每章一件展品是 `exhibits/<id>.{js,css,strings.json}`（三語文案在 strings.json），建置時接到 `history.js`／`history.css` 後面，共用 `history.js` 裡的 `HX` 執行環境（快捲到才掛上、離開畫面就停、`say()` 寫進朗讀狀態列）。展品全部自己畫：沒有截圖、原廠圖示、字型、角色或標誌。`docs/plans/widgets-history.md` 是全文稿。這三頁的出處是外連，`check.mjs` 只對它們、只對 `<a href>` 放行出處清單裡的主機。`npm run dev` 也送出正式站的 CSP，展品用了行內樣式或外部資源，在本機就會被擋。
 - `scripts/check.mjs`：發布前檢查，見下。
 - `public/media/`：全部發布素材，原樣複製進 `dist/`。
+- 2.0 Preview 頁（`/2.0/`、`/zh-hans/2.0/`、`/en/2.0/`）：文案在 `scripts/preview.mjs`，版面在 `scripts/preview-page.mjs`，樣式與互動在 `preview.css`、`preview.js`（小工具往事頁也用同一套：建置時 `preview.css` 併進 `history.css`）。素材 `public/media/2.0/<語言>/` 由 `scripts/render-preview.sh <暫存資料夾>`（`homeplay-pet --demo-official` 現拍，示範資料）加 `python3 -I scripts/encode-preview.py <暫存資料夾>` 產生（AVIF＋WebP 兩種寬度、雨景 MP4）；兩頁的分享卡片 `og-preview-*.jpg`、`og-history-*.jpg` 用 `python3 -I scripts/make-og-pages.py`。八項逐輪對照紀錄在上層 `docs/plans/site-2.0-passes.md`。
+- `npm run dev` 的本機預覽送出和線上相同的 CSP，文字檔照 Pages 壓縮（br／gzip），Lighthouse 量到的傳輸量才接近線上。
 
 `npm run check` 會擋下：引用到不存在的本地檔案、缺 title／description／canonical／og:image／hreflang、分享圖不是 1200 × 630 JPEG、可見文字出現破折號（U+2014、U+2013）、src／href 指向本站與 github.com 以外的主機、行內處理器或行內腳本、圖片缺 width／height。
 

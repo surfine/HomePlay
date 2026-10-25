@@ -24,6 +24,13 @@ struct HomeValue: Codable, Equatable {
     var isOn: Bool? { bool ?? raw.map { $0 != 0 } }
 }
 
+extension HomeValue {
+    /// 寫進 JSON 用（布林優先，其次數字）
+    var jsonAny: Any { if let bool { return bool }; return raw ?? 0 }
+    init(number n: Double) { raw = n }
+    init(bool b: Bool) { bool = b; raw = b ? 1 : 0 }
+}
+
 struct HomeCharacteristic: Codable, Equatable {
     var id: String
     var type: String            // power brightness hue saturation currentTemp targetTemp currentMode targetMode lockCurrent lockTarget doorState humidity contact motion occupancy battery
@@ -33,6 +40,8 @@ struct HomeCharacteristic: Codable, Equatable {
     var min: Double?
     var max: Double?
     var step: Double?
+    var service: String? = nil      // 2.0 第六輪：所屬 HomeKit 服務的 id（多鍵開關要靠它分開；舊幫手沒有這欄）
+    var serviceName: String? = nil  // 該服務的名稱
 }
 
 struct HomeAccessory: Codable, Equatable {
@@ -44,6 +53,7 @@ struct HomeAccessory: Codable, Equatable {
     var categoryName: String?   // 系統給的名稱，例：Lightbulb
     var reachable: Bool
     var characteristics: [HomeCharacteristic]
+    var camera: Bool?           // 2.0：幫手標出有攝影機設定檔的配件（舊幫手沒有這欄）
     func characteristic(_ type: String) -> HomeCharacteristic? { characteristics.first { $0.type == type } }
 }
 
@@ -97,6 +107,7 @@ final class HomeLink: @unchecked Sendable {
     private var running = false
     private var pending: [(Bool, String?) -> Void] = []   // 依序對應回應；鎖保護
     private var lastLaunch = Date.distantPast
+    private var lastImage: Data?   // 最近一則回應帶的快照圖；鎖保護
 
     func start() {
         lock.lock(); defer { lock.unlock() }
@@ -112,6 +123,50 @@ final class HomeLink: @unchecked Sendable {
 
     func set(characteristic: String, value: Any, completion: ((Bool, String?) -> Void)? = nil) {
         send(["op": "set", "characteristic": characteristic, "value": value], completion)
+    }
+
+    /// 2.0：要一張攝影機快照（JPEG 資料）。幫手端用 HMCameraSnapshotControl（未驗證，見 Helpers/HomeBridge/Src/HomeBridge.swift）
+    func cameraSnapshot(id: String, completion: @escaping (Data?, String?) -> Void) {
+        // 回呼在讀取執行緒上、緊接在 lastImage 設好之後被叫，所以這裡取到的一定是自己的那張
+        sendRaw(["op": "cameraSnapshot", "id": id]) { [weak self] ok, err in
+            guard let self else { DispatchQueue.main.async { completion(nil, "gone") }; return }
+            self.lock.lock(); let img = self.lastImage; self.lastImage = nil; self.lock.unlock()
+            let e = ok ? (img == nil ? "no image" : nil) : err
+            DispatchQueue.main.async { completion(ok ? img : nil, e) }
+        }
+    }
+
+    /// 2.0：寫入之後先把本機快照改成新值（幫手的 changed 事件隨後會校正）；只在主執行緒叫
+    func applyLocal(characteristic id: String, value: HomeValue) {
+        for ai in snapshot.accessories.indices {
+            for ci in snapshot.accessories[ai].characteristics.indices where snapshot.accessories[ai].characteristics[ci].id == id {
+                snapshot.accessories[ai].characteristics[ci].value = value
+                NotificationCenter.default.post(name: .homeLinkChanged, object: HomeChange(accessory: snapshot.accessories[ai].id, characteristic: id, type: snapshot.accessories[ai].characteristics[ci].type, value: value))
+            }
+        }
+    }
+
+    /// 回應行裡的 image（base64 JPEG）解成資料；不是快照回應就 nil（純函式，selftest 用）
+    static func decodeImage(line: Data) -> Data? {
+        guard let e = try? JSONDecoder().decode(Envelope.self, from: line), e.ok == true, let b = e.image else { return nil }
+        return Data(base64Encoded: b)
+    }
+
+    /// 2.0 第四輪：重讀一個特性（寫入成功後校正磚的狀態）。新幫手回 ok、新值走 changed 事件；
+    /// 舊幫手不認得 read（unknownOp）就改要一份整個快照（快照回應會直接套用）
+    func reread(characteristic id: String, completion: ((Bool) -> Void)? = nil) {
+        sendRaw(["op": "read", "characteristic": id]) { [weak self] ok, err in
+            if !ok, (err ?? "").contains("unknownOp") {
+                self?.sendRaw(["op": "snapshot"]) { ok2, _ in DispatchQueue.main.async { completion?(ok2) } }
+                return
+            }
+            DispatchQueue.main.async { completion?(ok) }
+        }
+    }
+    /// 2.0 第四輪：本機快照裡某個特性目前的值（寫入失敗時還原用；主執行緒）
+    func value(of id: String) -> HomeValue? {
+        for a in snapshot.accessories { if let c = a.characteristics.first(where: { $0.id == id }) { return c.value } }
+        return nil
     }
 
     func runScene(id: String, completion: ((Bool, String?) -> Void)? = nil) {
@@ -201,6 +256,7 @@ final class HomeLink: @unchecked Sendable {
         var characteristic: String?
         var type: String?
         var value: HomeValue?
+        var image: String?
     }
 
     private func handle(_ line: Data) {
@@ -216,7 +272,9 @@ final class HomeLink: @unchecked Sendable {
         }
         if let ok = e.ok {
             if ok, let s = e.snapshot { DispatchQueue.main.async { self.apply(s) } }
-            lock.lock(); let cb = pending.isEmpty ? nil : pending.removeFirst(); lock.unlock()
+            lock.lock()
+            lastImage = e.image.flatMap { Data(base64Encoded: $0) }   // 緊接著的 pending 回呼（cameraSnapshot）會取走
+            let cb = pending.isEmpty ? nil : pending.removeFirst(); lock.unlock()
             cb?(ok, e.error)
         }
     }
@@ -250,13 +308,18 @@ final class HomeLink: @unchecked Sendable {
     // MARK: 送出
 
     private func send(_ obj: [String: Any], _ completion: ((Bool, String?) -> Void)?) {
-        lock.lock(); let f = fd; lock.unlock()
-        guard f >= 0 else { completion?(false, "not connected"); return }
-        lock.lock()
-        pending.append({ ok, err in
+        sendRaw(obj) { ok, err in
             guard let completion else { return }
             DispatchQueue.main.async { completion(ok, err) }
-        })
+        }
+    }
+
+    /// 回呼直接在讀取執行緒上叫（不回主執行緒）
+    private func sendRaw(_ obj: [String: Any], _ cb: @escaping (Bool, String?) -> Void) {
+        lock.lock(); let f = fd; lock.unlock()
+        guard f >= 0 else { DispatchQueue.main.async { cb(false, "not connected") }; return }
+        lock.lock()
+        pending.append(cb)
         lock.unlock()
         writeLine(f, obj)
     }
@@ -299,6 +362,12 @@ func runHomeDump() -> Never {
         if let n = v.number { return c.type.hasSuffix("Temp") ? String(format: "%.1f°", n) : String(format: "%g", n) }
         return v.string
     }
+    if CommandLine.arguments.contains("all") {   // --home-dump all：每個配件拆成幾塊磚、各叫什麼
+        for a in s.accessories {
+            let tiles = HomeAppModel.tiles(a)
+            if tiles.count > 1 { print("  * \(a.name): \(tiles.count) 塊 → \(tiles.map(\.name).joined(separator: "、"))") }
+        }
+    }
     for a in s.accessories.prefix(10) {
         var bits: [String] = []
         if let p = fmt(a.characteristic("power")) { bits.append("power=\(p)") }
@@ -306,4 +375,27 @@ func runHomeDump() -> Never {
         print("  - \(a.name) [\(a.categoryName ?? a.category)]\(a.reachable ? "" : " (unreachable)") \(bits.joined(separator: " "))")
     }
     exit(0)
+}
+
+/// `homeplay-pet --home-set <配件名> on|off`：真機驗證寫入——連上幫手、照名字找配件、寫 power、等回覆、重讀一次狀態印出來就結束。
+func runHomeSet(name: String, on: Bool) -> Never {
+    let link = HomeLink.shared
+    link.start()
+    func pump(_ s: Double) { let end = Date().addingTimeInterval(s); while Date() < end { RunLoop.main.run(until: Date().addingTimeInterval(0.05)) } }
+    let deadline = Date().addingTimeInterval(45)
+    while Date() < deadline, !(link.snapshot.ready && !link.snapshot.accessories.isEmpty) { pump(0.1) }
+    pump(1.5)
+    guard let a = link.snapshot.accessories.first(where: { $0.name == name }) else { print("home-set: 找不到配件「\(name)」"); exit(1) }
+    guard let c = a.characteristic("power") else { print("home-set: 「\(name)」沒有開關"); exit(1) }
+    print("home-set: \(name) power 目前 \(c.value?.bool.map { $0 ? "on" : "off" } ?? "?") → \(on ? "on" : "off")")
+    var result: (Bool, String?)?
+    link.set(characteristic: c.id, value: on) { ok, err in result = (ok, err) }
+    let t0 = Date()
+    while result == nil, Date().timeIntervalSince(t0) < 10 { pump(0.05) }
+    let ms = Int(Date().timeIntervalSince(t0) * 1000)
+    guard let (ok, err) = result else { print("home-set: 10 秒內沒有回覆"); exit(1) }
+    pump(1.0)
+    let now = link.snapshot.accessories.first { $0.id == a.id }?.characteristic("power")?.value?.bool
+    print("home-set: 寫入 \(ok ? "成功" : "失敗") \(err ?? "")（\(ms) ms），重讀狀態 \(now.map { $0 ? "on" : "off" } ?? "?")")
+    exit(ok ? 0 : 1)
 }

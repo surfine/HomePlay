@@ -4,3 +4,4 @@
 "NSBluetoothAlwaysUsageDescription" = "用蓝牙和 iPhone 配对，建立无线 CarPlay 连接。";
 "NSLocalNetworkUsageDescription" = "在局域网上接收 iPhone 传来的 CarPlay 画面与声音。";
 "NSMicrophoneUsageDescription" = "只用于 CarPlay 的 Siri 和电话通话。";
+"NSPhotoLibraryUsageDescription" = "在桌宠主屏幕的「照片」小组件显示你「照片」图库里的精选照片。照片只留在这台 Mac 上。";

@@ -1,0 +1,48 @@
+/* 04 · 收回。一個虛構的小工具圖庫：淡藍玻璃窗格。示範區用警示色，但全是模擬。年代配色，不跟深色模式變。 */
+.rm{position:relative;display:flex;flex-direction:column;gap:12px;padding:14px;border-radius:18px;background:linear-gradient(#e6eef9,#d3deef);color:#16202e;font:500 13px/1.45 var(--font);min-height:420px}
+.rm button{font:inherit;color:inherit;cursor:pointer}
+.rm :focus-visible{outline:2px solid #1b6fe0;outline-offset:2px}
+.rm [hidden]{display:none!important}
+.rm-cap{font-size:12px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:#4a5670;margin-bottom:6px}
+.rm-gal{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+@container (max-width:560px){.rm-gal{grid-template-columns:repeat(2,1fr)}}
+.rm-card{display:flex;flex-direction:column;gap:4px;padding:10px;border-radius:12px;background:rgba(255,255,255,.7);border:1px solid #aab8d0;box-shadow:0 2px 6px rgba(30,50,90,.15)}
+.rm-ico{width:40px;height:40px;border-radius:10px;border:1px solid rgba(0,0,0,.2)}
+.rm-ico[data-k=g0]{background:linear-gradient(135deg,#8fd0ff,#3f86d8)}.rm-ico[data-k=g1]{background:linear-gradient(135deg,#b8e08a,#4f9a3c)}
+.rm-ico[data-k=g2]{background:radial-gradient(circle at 30% 30%,#fff 0 12%,transparent 13%),linear-gradient(135deg,#ffd36a,#e8863a)}.rm-ico[data-k=g3]{background:linear-gradient(135deg,#d7b6ff,#7a52d0)}
+.rm-nm{font-weight:700}.rm-ds{font-size:12px;color:#4a5670;flex:1}
+.rm-inst,.rm-yes,.rm-no,.rm-next{min-height:34px;padding:0 14px;border-radius:17px;border:1px solid #7b88a6;background:linear-gradient(#fff,#dbe2ef);font-weight:600}
+.rm-inst:disabled{opacity:.5;cursor:default}
+.rm-card.done{background:rgba(210,238,218,.8)}
+.rm-trayrow{display:flex;flex-direction:column}
+.rm-tray{display:flex;gap:6px;flex-wrap:wrap;min-height:30px;align-items:center}
+.rm-empty{color:#667}
+.rm-run{padding:4px 10px;border-radius:12px;background:#fff;border:1px solid #8fb09a;font-weight:600}
+.rm-run.off{background:#e4e6ec;border-color:#b3b8c4;color:#778;text-decoration:line-through}
+.rm-demo{padding:10px 12px;border-radius:12px;border:2px dashed #c0392b;background:#fff3f1;color:#4a1612}
+.rm-tag{display:inline-block;padding:1px 8px;border-radius:10px;background:#c0392b;color:#fff;font-size:11px;font-weight:700;letter-spacing:.04em}
+.rm-dh{font-weight:700;margin:4px 0}
+.rm-dl{margin:0;padding-left:18px;font-family:var(--mono);font-size:12px}
+.rm-send{margin-top:6px;font-weight:700}
+.rm-fix{padding:12px;border-radius:12px;background:rgba(255,255,255,.7);border:1px solid #aab8d0;display:flex;flex-direction:column;gap:8px;align-items:flex-start}
+.rm-sw{display:flex;align-items:center;gap:12px;min-height:44px;padding:4px 14px 4px 4px;border-radius:24px;border:1px solid #7b88a6;background:#fff;font-weight:700;font-size:15px}
+.rm-knob{position:relative;width:56px;height:34px;border-radius:17px;background:#aab3c4;transition:background .2s;flex:none}
+.rm-knob::after{content:"";position:absolute;left:3px;top:3px;width:28px;height:28px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.4);transition:transform .2s}
+.rm-sw[aria-checked=true] .rm-knob{background:#2e9b55}.rm-sw[aria-checked=true] .rm-knob::after{transform:translateX(22px)}
+.rm-fixmsg{margin:0}
+.rm-next{background:linear-gradient(#ffe69a,#f2b93b);border-color:#a5791a}
+.rm-gone{padding:28px 16px;text-align:center;border-radius:12px;background:#1d2538;color:#e8edf8}
+.rm-big{font-size:22px;font-weight:700;margin-bottom:6px}
+.rm-gone p{margin:0}
+.rm.gone{min-height:0}
+.rm.gone .rm-trayrow{display:none}
+.rm-contrast{margin:0;padding:8px 12px;border-radius:12px;background:rgba(255,255,255,.55);font-size:12px;color:#334}
+/* 權限表：蓋在圖庫上 */
+.rm-sheet{position:absolute;left:5%;right:5%;top:40px;z-index:3;padding:16px;border-radius:14px;background:#fff;border:1px solid #7b88a6;box-shadow:0 18px 40px rgba(10,20,50,.5)}
+.rm-st{margin:0 0 6px;font-size:16px}.rm-lead{margin:0 0 8px;font-weight:600}
+.rm-perms{margin:0 0 8px;padding-left:18px;display:grid;gap:4px}
+.rm-files{display:block;font:12px var(--mono);color:#556}
+.rm-same{margin:0 0 10px;font-size:12px;color:#556}
+.rm-act{display:flex;gap:8px}
+.rm-yes{background:linear-gradient(#a9c8f5,#6d9be0);border-color:#3b5fa8}
+@media (prefers-reduced-motion:reduce){.rm-knob,.rm-knob::after{transition:none}}

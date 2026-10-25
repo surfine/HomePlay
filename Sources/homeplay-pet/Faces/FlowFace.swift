@@ -10,12 +10,6 @@ nonisolated(unsafe) private var flowFaceLastTick = -1.0
 nonisolated(unsafe) private var flowAnimT = 0.0, flowAnimLast = -1.0, flowLastMinute = -1
 nonisolated(unsafe) private var flowDigitCache: (key: String, shapes: [GlyphShape])?
 
-extension SystemGlassParams {
-    /// Flow 的水珠：整顆都是透鏡、折射很強，亮邊收斂（不要白色描邊）
-    static let flowBlob = SystemGlassParams(refractionHeight: 1.0, refractionAmount: -11, blurRadius: 2, highlight: 0.7,
-                                            white: 1.0, black: 0.1, saturation: 1.5, fill: 0.0, rim: 0.3,
-                                            keyAmount: 0.8, fillAmount: 0.4, ringShadow: 0.25)
-}
 
 extension Face {
     /// 色團：中心、半徑、縱向壓扁、顏色、透明度、游標視差、自主漂動週期（秒）——繞著中間的藍旋轉
@@ -51,6 +45,15 @@ extension Face {
             g.drawRadialGradient(grad, startCenter: .zero, startRadius: 0, endCenter: .zero, endRadius: b.r, options: [])
             g.restoreGState()
         }
+    }
+
+    /// 畫面上的 Flow 底圖＝色團＋四週一圈很淡的白霧（隔著一層玻璃的樣子）。玻璃取樣用同一張，字裡字外才會一致
+    private func drawFlowBase(_ g: CGContext, _ now: Double) {
+        drawFlowField(g, now)
+        let cs = CGColorSpace(name: CGColorSpace.sRGB)!
+        let vig = CGGradient(colorsSpace: cs, colors: [NSColor(white: 1, alpha: 0).cgColor, NSColor(white: 1, alpha: 0.22).cgColor] as CFArray,
+                             locations: [0.55, 1])!
+        g.drawRadialGradient(vig, startCenter: CGPoint(x: 512, y: 512), startRadius: 0, endCenter: CGPoint(x: 512, y: 512), endRadius: 760, options: [])
     }
 
     /// 一個水珠數字（墨跡高 h、左上角在 at）：0 是圓潤的方圓、1 是膠囊，其他數字用 Soft 最粗的字形、把字腔填滿再鼓起來
@@ -131,17 +134,11 @@ extension Face {
     }
 
     func renderFlowFace(_ g: CGContext, _ now: Double) {
-        drawFlowField(g, now)
-        // 四周一圈很淡的白霧，讓畫面像隔著一層玻璃
-        let cs = CGColorSpace(name: CGColorSpace.sRGB)!
-        let vig = CGGradient(colorsSpace: cs, colors: [NSColor(white: 1, alpha: 0).cgColor, NSColor(white: 1, alpha: 0.22).cgColor] as CFArray,
-                             locations: [0.55, 1])!
-        g.drawRadialGradient(vig, startCenter: CGPoint(x: 512, y: 512), startRadius: 0, endCenter: CGPoint(x: 512, y: 512), endRadius: 760, options: [])
+        self.drawFlowBase(g, now)
 
         let date = Self.displayDate
-        let (hh, mm) = Self.hourMinute(date)
-        let hh2 = hh.count == 1 ? "0" + hh : hh   // 兩行對齊：小時補零
-        let key = "\(hh2)\(mm)"
+        let (hh, mm) = Self.hourMinute(date)   // 小時照時制、不補零（iOS 兩種時制的單位數小時都不帶零）
+        let key = "\(hh)\(mm)"
         let shapes: [GlyphShape]
         if let c = flowDigitCache, c.key == key { shapes = c.shapes } else {
             // 稿：上行（時）右靠、左上讓給島；下行（分）置中；字高 ≈ 386（226／600）
@@ -151,10 +148,10 @@ extension Face {
                 let r = Self.blobRow(s, height: h, x: 0, top: 0, gap: gap); return (r.last?.ink.maxX ?? 0) - (r.first?.ink.minX ?? 0)
             }
             // 上行放在島右邊（x ≥ 350）到 970 之間、中心偏右（稿 ≈ 610），太寬就縮
-            let topW = width(hh2, h)
+            let topW = width(hh, h)
             if topW > 620 { h *= 620 / topW }
-            let tw = width(hh2, h)
-            let top = Self.blobRow(hh2, height: h, x: max(350, min(970 - tw, 620 - tw / 2)), top: 109 + (386 - h), gap: gap)
+            let tw = width(hh, h)
+            let top = Self.blobRow(hh, height: h, x: max(350, min(970 - tw, 620 - tw / 2)), top: 109 + (386 - h), gap: gap)
             let botH: CGFloat = 400, bw = width(mm, botH), bk = min(1, 860 / bw)
             let bot = Self.blobRow(mm, height: botH * bk, x: 512 - bw * bk / 2, top: 524, gap: gap)
             var all = top + bot
@@ -193,14 +190,14 @@ extension Face {
             shapes = all
             flowDigitCache = (key, shapes)
         }
-        // 折射用的背景：同一片色彩畫到小圖再模糊（色團在漂，所以每次都取）
-        let small = snapshotBackdrop(px: 192) { c in self.drawFlowField(c, now) }
-        let backdrop = blurredBackdrop(small, sigma: 10, key: "flowface|\(Int(flowAnimT * 10))")
-        let clear = snapshotBackdrop(px: 384) { c in self.drawFlowField(c, now) }
+        // 折射用的背景：同一片色彩（含邊緣白霧）畫成 384² 的清楚版，霧版由它做局部模糊
+        // （192² 直接糊會變成整張的平均色，字裡透出的不是附近的色彩而是全畫面的平均，跟官方差很遠）
+        let clear = snapshotBackdrop(px: 384) { c in self.drawFlowBase(c, now) }
+        let backdrop = blurredBackdrop(clear, sigma: 9, key: "flowface|\(Int(flowAnimT * 10))")
         // 亮邊跟著人轉：人在左邊，光就從左邊打過來（像斜著看 iPhone 鎖定畫面的玻璃時間）
         let pt = Self.pointerOverride ?? pointer ?? .zero
         let turn = max(-0.9, min(0.9, -pt.x * 0.7 + pt.y * 0.35))
-        drawLiquidGlass(g, shapes, key: "flowblob|\(key)", clear: clear, frosted: backdrop, params: .bubble, system: .flowBlob,
+        drawLiquidGlass(g, shapes, key: "flowblob|\(key)", clear: clear, frosted: backdrop, params: .flowBlob,
                         lightTurn: turn, fallback: .bubble)
 
         // 島：左上角一顆小水珠膠囊（寬 ≈ 256，稿：face('Flow') 寬 150／600、中心 (120, 150)／600）
@@ -217,7 +214,7 @@ extension Face {
 
     /// 有人靠近時色團在漂（10fps）；沒人時停住，只在換分鐘時重畫
     func tickFlowFace(_ now: Double) -> Bool {
-        let active = flowActive || reveal > 0.05
+        let active = (flowActive || reveal > 0.05) && !Face.ambientPaused   // 2.0 depth：減少動態效果（與過熱、低電量）時色團不漂
         if flowAnimLast >= 0, active { flowAnimT += min(0.25, now - flowAnimLast) }
         flowAnimLast = now
         let minute = Int(Self.displayDate.timeIntervalSince1970 / 60)

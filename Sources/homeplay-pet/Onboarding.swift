@@ -31,7 +31,7 @@ extension Face {
 
     /// 每帧：到点出现、12 秒后自己收；有变化回 true
     func tickOnboarding(_ now: Double) -> Bool {
-        if Onboarding.armed, !sayingHello {
+        if Onboarding.armed, !sayingHello || helloReadyForSetup {   // 2.0 hello：第一次打開時 hello 停住當背景，卡片浮在上面
             Onboarding.armed = false; Onboarding.active = true; Onboarding.until = now + Onboarding.duration
             return true
         }

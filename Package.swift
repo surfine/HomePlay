@@ -15,7 +15,7 @@ let package = Package(
         .target(name: "IAP2", linkerSettings: [.linkedFramework("Security"), .linkedFramework("IOBluetooth")]),
         .target(name: "Session", dependencies: ["H264", "Wire"], swiftSettings: v5),
         // 可执行
-        .executableTarget(name: "homeplay-pet", resources: [.process("Resources")], swiftSettings: v5),
+        .executableTarget(name: "homeplay-pet", exclude: ["Design/README.md"], resources: [.process("Resources")], swiftSettings: v5),   // HPDS 規格書不進 bundle
         .executableTarget(name: "homeplay-receiver", dependencies: ["Wire", "H264", "IAP2", "Session"], swiftSettings: v5,
                           linkerSettings: [.linkedFramework("CoreWLAN")]),
         .executableTarget(name: "homeplay-verify", swiftSettings: v5),

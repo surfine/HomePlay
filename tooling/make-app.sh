@@ -34,7 +34,18 @@ cp .build/release/homeplay-receiver "$APP/Contents/Resources/homeplay-receiver"
 for b in .build/release/*.bundle(N); do cp -R "$b" "$APP/Contents/Resources/"; done
 for l in assets/info-plist/*.lproj(N); do cp -R "$l" "$APP/Contents/Resources/"; done   # 權限彈窗的英/簡/繁說明
 [[ -d identity ]] && cp -R identity "$APP/Contents/Resources/identity"   # 公開實驗身份隨包：別的 Mac 開箱即連
-[[ -f assets/icon/AppIcon.icns ]] && cp assets/icon/AppIcon.icns "$APP/Contents/Resources/AppIcon.icns"   # 圖示：晨昏漸層加一雙大眼
+# 圖示（P08）：分層的 AppIcon.icon 用 actool 編進 Assets.car（macOS 27 套系統光影與淺色／深色／透明／染色四種外觀），
+# 同時產出 AppIcon.icns 給舊系統；actool 不可用時退回預先烤好的 assets/icon/AppIcon.icns。
+ICONDIR=$(mktemp -d)
+if [[ -d assets/icon/AppIcon.icon ]] && xcrun actool assets/icon/AppIcon.icon --compile "$ICONDIR" --output-format human-readable-text --notices --warnings --errors \
+     --output-partial-info-plist "$ICONDIR/partial.plist" --app-icon AppIcon --include-all-app-icons --enable-on-demand-resources NO \
+     --development-region en --target-device mac --minimum-deployment-target 14.0 --platform macosx >"$ICONDIR/actool.log" 2>&1 \
+   && [[ -f "$ICONDIR/Assets.car" && -f "$ICONDIR/AppIcon.icns" ]]; then
+  cp "$ICONDIR/Assets.car" "$ICONDIR/AppIcon.icns" "$APP/Contents/Resources/"
+else
+  echo "· actool 編圖示失敗，退回 AppIcon.icns（看 $ICONDIR/actool.log）" >&2
+  [[ -f assets/icon/AppIcon.icns ]] && cp assets/icon/AppIcon.icns "$APP/Contents/Resources/AppIcon.icns"
+fi
 for i in assets/icon/CarPlayIcon-*.png(N); do cp "$i" "$APP/Contents/Resources/"; done   # CarPlay 主畫面上的 HomePlay 圖示（點它回到桌寵錶面）
 
 cat > "$APP/Contents/Info.plist" <<EOF
@@ -51,7 +62,8 @@ ${EXTRA_PLIST}
   <key>CFBundleExecutable</key><string>HomePlay</string>
   <key>CFBundlePackageType</key><string>APPL</string>
   <key>CFBundleIconFile</key><string>AppIcon</string>
-  <key>CFBundleShortVersionString</key><string>1.0.2</string>
+  <key>CFBundleIconName</key><string>AppIcon</string>
+  <key>CFBundleShortVersionString</key><string>2.0</string>
   <key>CFBundleVersion</key><string>${BUILD}</string>
   <key>CFBundleDevelopmentRegion</key><string>en</string>
   <key>CFBundleLocalizations</key><array><string>en</string><string>zh-Hans</string><string>zh-Hant</string></array>
@@ -63,10 +75,14 @@ ${EXTRA_PLIST}
   <key>NSHumanReadableCopyright</key><string>© 2026 HomePlay</string>
   <key>NSHighResolutionCapable</key><true/>
   <key>NSAppleEventsUsageDescription</key><string>Reads the current track and progress from Music or Spotify when you enable Mac Now Playing for the desk pet screen.</string>
-  <key>NSCalendarsFullAccessUsageDescription</key><string>Shows your next event on the Modular face.</string>
+  <key>NSContactsUsageDescription</key><string>Shows the names and photos of the people in your Messages conversations on the desk pet screen. Contacts stay on this Mac.</string>
+  <key>NSCalendarsFullAccessUsageDescription</key><string>Shows your next event on the Modular face, and lets ClioTalk read your calendar and add events you confirm.</string>
+  <key>NSPhotoLibraryUsageDescription</key><string>Shows featured photos from your Photos library in the Photos widget on the desk pet's Home Screen. Photos stay on this Mac.</string>
+  <key>NSRemindersFullAccessUsageDescription</key><string>Lets ClioTalk list your reminders and add the ones you confirm.</string>
   <key>NSCameraUsageDescription</key><string>Optionally turns the pet toward you and estimates room lighting. Frames are processed on this Mac and are never saved.</string>
   <key>NSBluetoothAlwaysUsageDescription</key><string>Pairs with your iPhone over Bluetooth to set up wireless CarPlay.</string>
-  <key>NSMicrophoneUsageDescription</key><string>Uses the Mac's microphone only for Siri and phone calls in CarPlay.</string>
+  <key>NSMicrophoneUsageDescription</key><string>Uses the Mac's microphone for Siri and phone calls in CarPlay, and for talking to ClioTalk. Audio is never recorded or saved.</string>
+  <key>NSSpeechRecognitionUsageDescription</key><string>Turns what you say to ClioTalk into text on this Mac. Only the text is sent to the AI provider you chose.</string>
   <key>NSLocalNetworkUsageDescription</key><string>Receives CarPlay video and audio from your iPhone over the local network.</string>
   <key>NSLocationUsageDescription</key><string>Reads the Wi-Fi network name so your iPhone can join wireless CarPlay on the same network, and uses your approximate location for the Weather face.</string>
   <key>NSLocationWhenInUseUsageDescription</key><string>Reads the Wi-Fi network name so your iPhone can join wireless CarPlay on the same network, and uses your approximate location for the Weather face.</string>

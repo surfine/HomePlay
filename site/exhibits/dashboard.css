@@ -1,0 +1,72 @@
+/* 02 · Dashboard。桌面和小工具都是自己畫的：水藍桌面、光澤的圓角卡片。年代配色不跟深色模式變。 */
+.db{position:relative;width:100%;height:452px;overflow:hidden;color:#16202e;outline-offset:-3px;
+  background:radial-gradient(120% 90% at 20% 0,#7fb6e8,transparent 60%),linear-gradient(160deg,#3b6fb0,#2a3f78 60%,#27305f);font:500 13px/1.4 var(--font)}
+@container (max-width:560px){.db{height:600px}}
+:where(.db) button,:where(.db) textarea,:where(.db) output{font:inherit;color:inherit}
+:where(.db) button{cursor:pointer}
+.db :focus-visible{outline:2px solid #fff;outline-offset:2px;box-shadow:0 0 0 4px #1b6fe0}
+.db-bar{position:absolute;inset:0 0 auto;height:34px;display:flex;align-items:center;gap:10px;padding:0 10px;background:linear-gradient(#f4f6fa,#d3d9e3);border-bottom:1px solid #8892a4;z-index:1}
+.db-brand{font-weight:700}
+.db-count{margin-left:auto;font-size:12px;color:#445;font-variant-numeric:tabular-nums}
+.db-sum{min-height:26px;padding:0 12px;border-radius:13px;border:1px solid #6a7690;background:linear-gradient(#fff,#d9dfea);font-weight:600}
+.db-sum[aria-pressed=true]{background:linear-gradient(#a9c8f5,#6d9be0);border-color:#3b5fa8}
+.db-doc{position:absolute;left:5%;right:5%;top:56px;bottom:22px;background:#fff;border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.35);display:flex;flex-direction:column;overflow:hidden}
+.db-dtitle{flex:none;text-align:center;padding:6px;font-size:12px;font-weight:600;background:linear-gradient(#eceff4,#d4d9e2);border-bottom:1px solid #aab}
+.db-doctext{flex:1;border:0;resize:none;padding:12px;background:#fff;line-height:1.6;user-select:text}
+/* 那一層 */
+.db-layer{position:absolute;inset:34px 0 0;z-index:2;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:12px;background:rgba(8,12,24,.72);opacity:0;visibility:hidden;transition:opacity .25s,visibility .25s}
+.db-layer.on{opacity:1;visibility:visible}
+.db-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;flex:1;align-content:start}
+@container (max-width:560px){.db-grid{grid-template-columns:repeat(2,1fr)}}
+.db-w{height:212px;perspective:700px;transform:translateY(14px) scale(.94);opacity:0;transition:transform .3s var(--ease-out,ease-out),opacity .25s}
+.db-layer.on .db-w{transform:none;opacity:1}
+.db-flip{position:relative;width:100%;height:100%;transform-style:preserve-3d;transition:transform .4s var(--ease-out,ease-out)}
+.db-w.flipped .db-flip{transform:rotateY(180deg)}
+.db-face{position:absolute;inset:0;backface-visibility:hidden;border-radius:18px;padding:10px;display:flex;flex-direction:column;gap:6px;overflow:hidden;
+  background:linear-gradient(160deg,#4a5670,#232b3d);color:#f2f5fb;border:1px solid rgba(255,255,255,.35);box-shadow:0 10px 22px rgba(0,0,0,.45),inset 0 1px 0 rgba(255,255,255,.45)}
+.db-face::before{content:"";position:absolute;left:0;right:0;top:0;height:42%;background:linear-gradient(rgba(255,255,255,.28),rgba(255,255,255,.03));pointer-events:none;border-radius:18px 18px 60% 60%/18px 18px 14px 14px}
+.db-back{transform:rotateY(180deg);background:linear-gradient(160deg,#2f3a52,#161c2b)}
+.db-face>*{position:relative}
+.db-hd{font-size:11px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;opacity:.85;padding-right:30px}
+.db-i{position:absolute!important;right:2px;top:2px;width:32px;height:32px;border:0;font-weight:700;font-style:italic;font-family:Georgia,serif;
+  background:radial-gradient(circle,rgba(255,255,255,.3) 0 10px,transparent 11px)}
+.db-cbody{flex:1;display:flex;flex-direction:column;gap:6px;min-height:0}
+.db-w[data-k=note] .db-front{background:linear-gradient(160deg,#ffe98a,#f2c94c);color:#4a3b00}
+.db-w[data-k=note][data-c=p] .db-front{background:linear-gradient(160deg,#ffc2d6,#f08db0);color:#4a1030}
+.db-w[data-k=note][data-c=g] .db-front{background:linear-gradient(160deg,#c6f0b0,#8fd36f);color:#12400a}
+.db-notetext{flex:1;min-height:0;resize:none;border:0;background:transparent;line-height:1.45;padding:2px}
+.db-clockface{flex:1;min-height:0;display:flex;justify-content:center}
+.db-clockface svg{height:100%;max-height:122px;aspect-ratio:1}
+.db-dial{fill:#f4f6fb;stroke:#9aa5bd;stroke-width:3}
+.db-tk{stroke:#3a4458;stroke-width:2}
+.db-hh,.db-mh,.db-sh{transform-origin:50px 50px;transform:rotate(var(--a,0deg))}
+.db-hh line,.db-mh line{stroke:#1c2433;stroke-width:4;stroke-linecap:round}
+.db-mh line{stroke-width:3}.db-sh line{stroke:#d6402f;stroke-width:1.6}.db-pin{fill:#d6402f}
+.db-digital{text-align:center;font:600 16px var(--mono);font-variant-numeric:tabular-nums}
+.db-disp{display:block;text-align:right;padding:3px 8px;border-radius:6px;background:#b9d3a4;color:#1a2a12;font:600 16px var(--mono);overflow:hidden}
+.db-keys{flex:1;display:grid;grid-template-columns:repeat(4,1fr);gap:4px}
+.db-key{min-height:32px;border:0;border-radius:8px;background:linear-gradient(#6b7790,#3d475c);box-shadow:inset 0 1px 0 rgba(255,255,255,.4);font-weight:600}
+.db-key.op{background:linear-gradient(#f3a44d,#d9741a)}
+.db-key:active{filter:brightness(.8)}
+.db-wbody{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;text-align:center}
+.db-ico{position:relative;width:46px;height:46px;border-radius:50%;margin-bottom:4px}
+.db-ico.sun{background:radial-gradient(circle,#ffe16a 0 55%,#ffb21c);box-shadow:0 0 18px 6px rgba(255,200,60,.55)}
+.db-ico.cloud{width:56px;height:26px;margin-top:10px;border-radius:14px;background:#e6ecf7;box-shadow:12px -10px 0 2px #e6ecf7,-10px -4px 0 -2px #e6ecf7}
+.db-ico.moon{background:#f6efc5;box-shadow:inset -12px 0 0 0 #232b3d,0 0 12px rgba(246,239,197,.5)}
+.db-city{font-weight:700}.db-temp{font-size:28px;font-weight:300;line-height:1}.db-cond{font-size:12px;opacity:.8}
+.db-die{width:72px;height:72px;margin:auto;border-radius:18px;background:linear-gradient(#fff,#cfd6e4);color:#1c2433;font-size:40px;font-weight:700;display:flex;align-items:center;justify-content:center;font-variant-numeric:tabular-nums;box-shadow:0 3px 8px rgba(0,0,0,.4)}
+.db-act,.db-opt,.db-done,.db-rm{min-height:32px;border-radius:16px;border:1px solid rgba(255,255,255,.4);background:rgba(255,255,255,.14);padding:0 12px;font-weight:600}
+.db-opt[aria-pressed=true]{background:#2f7be8;border-color:#9cc2ff}
+.db-opt:disabled{opacity:.4;cursor:default}
+.db-opts{display:flex;flex-direction:column;gap:6px;flex:1}
+.db-back .db-hint{flex:1;font-size:12px;opacity:.85}
+.db-rm{background:rgba(214,64,47,.4)}
+.db-done{background:#2f7be8;border-color:#9cc2ff}
+/* 底部：加號、托盤、收回 */
+.db-foot{display:flex;align-items:center;gap:10px;flex:none;position:sticky;bottom:-16px;margin:0 -16px -16px;padding:10px 16px;background:linear-gradient(transparent,rgba(8,12,24,.9) 40%)}
+.db-plus{width:40px;height:40px;border-radius:50%;border:1px solid rgba(255,255,255,.5);background:rgba(255,255,255,.18);color:#fff;font-size:24px;line-height:1}
+.db-tray{display:flex;gap:8px;padding:6px 8px;border-radius:20px;background:rgba(255,255,255,.14)}
+.db-tray[hidden]{display:none}
+.db-tray .db-opt{color:#fff}
+.db-close{margin-left:auto;min-height:36px;padding:0 16px;border-radius:18px;border:1px solid rgba(255,255,255,.5);background:rgba(255,255,255,.18);color:#fff;font-weight:600}
+@media (prefers-reduced-motion:reduce){.db-layer,.db-w,.db-flip{transition:none}.db-w{transform:none}}

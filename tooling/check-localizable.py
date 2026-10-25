@@ -48,6 +48,8 @@ def main():
     for path in swift_files():
         rel = os.path.relpath(path, ROOT)
         for n, line in enumerate(open(path, encoding="utf-8"), 1):
+            if "l10n-ignore" in line:   # 2.0：比對用詞（ClioTalk 的「好／取消」等），不是介面文字
+                continue
             code = line.split(" // ")[0]
             if code.lstrip().startswith("//"):
                 continue

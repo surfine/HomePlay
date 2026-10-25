@@ -68,21 +68,23 @@ struct GeneralPane: View {
                     Text("简体中文").tag(PetLanguage.zhHans.rawValue)
                     Text("繁體中文").tag(PetLanguage.zhHant.rawValue)
                 }
-                // 连续的值用滑杆：滑块的位置就是现在的大小；两端标「小／大」
-                Slider(value: Binding(get: { m.petWidth }, set: { m.app?.setPetWidth($0); m.petWidth = $0 }),
-                       in: Double(Pet.minWidth)...Double(Pet.maxWidth)) {
-                    RowLabel(title: L("settings.size", "大小"), subtitle: L("settings.size.sub", "也可以双指张合，或 ⌘+ ⌘−"))
-                } minimumValueLabel: {
-                    Text(L("settings.size.small", "小"))   // 照系统设置「轨迹速度」两端写「慢／快」的做法
-                } maximumValueLabel: {
-                    Text(L("settings.size.large", "大"))
+                // 连续的值用滑杆：滑块旁边显示现在的大小（占默认大小的百分比）；两端标「小／大」
+                ValueSlider(title: L("settings.size", "大小"), subtitle: L("settings.size.sub", "也可以双指张合，或 ⌘+ ⌘−"),
+                            value: Binding(get: { m.petWidth }, set: { m.app?.setPetWidth($0); m.petWidth = $0 }),
+                            range: Double(Pet.minWidth)...Double(Pet.maxWidth),
+                            minLabel: L("settings.size.small", "小"), maxLabel: L("settings.size.large", "大")) {
+                    "\(Int(($0 / Double(Pet.defaultWidth) * 100).rounded()))%"
                 }
             } header: {
                 IllustrationHeader(scene: .onTop, note: L("settings.general.heroBody", "陪你待在桌面上"))
             }
             Section {
                 Toggle(isOn: Binding(get: { m.nowPlayingOn }, set: { _ in m.perform("menuNowPlaying") })) {
-                    RowLabel(title: L("prefs.nowPlaying", "Mac 正在播放（Music/Spotify）"), subtitle: L("settings.nowPlaying.sub", "CarPlay 播放时优先显示 iPhone"))
+                    RowLabel(title: L("prefs.nowPlaying", "Mac 正在播放"), subtitle: L("settings.nowPlaying.sub", "CarPlay 播放时优先显示 iPhone"))
+                }
+                // 2.0 #8：歌词（LRCLIB）；默认开
+                Toggle(isOn: Binding(get: { LyricsStore.enabled }, set: { LyricsStore.enabled = $0; m.refresh() })) {
+                    RowLabel(title: L("settings.lyrics", "歌词"), subtitle: L("settings.lyrics.sub", "向 LRCLIB 查同步歌词：只送歌名、歌手和长度，存在这台 Mac 上"))
                 }
                 Toggle(isOn: Binding(get: { m.calendarOn && m.permissions[.calendar] == .granted }, set: { _ in m.perform("menuCalendarToggle") })) {
                     RowLabel(title: L("prefs.calendar.on", "读取日历"),
@@ -92,8 +94,12 @@ struct GeneralPane: View {
             } header: {
                 Text(L("settings.sources", "表盘上的数据"))
             } footer: {
-                FooterButtons { Button(L("prefs.hints", "再看一次操作提示")) { m.perform("menuShowHints") } }
+                FooterButtons {
+                    Button(L("menu.sayHello", "打个招呼")) { m.perform("menuSayHello") }   // 2.0 hello
+                    Button(L("prefs.hints", "再看一次操作提示")) { m.perform("menuShowHints") }
+                }
             }
+            LiveActivitySettingsSection()   // 2.0 P03：每個 App 的 Live Activity 開關、訊息「顯示預覽」（Shell/LiveActivityStack.swift）
         }
         .formStyle(.grouped)
     }
@@ -117,11 +123,16 @@ struct AppearancePane: View {
                         Button(L("menu.view.top", "俯视")) { m.perform("menuViewAbove") }
                     }.fixedSize()
                 }.disabled(m.viewMode == .wall)   // 挂墙贴在墙上，不换视角
+                // 2.0 P06：從右鍵選單搬來的視角控制
+                Toggle(L("settings.orbit", "自动环绕"), isOn: Binding(get: { m.touring }, set: { _ in m.perform("menuTour") }))
+                    .disabled(m.viewMode == .wall)
             } header: {
                 IllustrationHeader(scene: m.viewMode == .auto ? .facing : .facingFront,
                                    note: m.viewMode == .auto ? L("settings.facing.note", "自动朝向屏幕中央")
                                        : m.viewMode == .wall ? L("settings.facing.wallNote", "只有屏幕，贴墙正对前方")
                                        : L("settings.facing.frontNote", "始终正对前方"))
+            } footer: {
+                FooterButtons { Button(L("menu.resetAngle", "回正")) { m.perform("menuResetOrientation") }.disabled(m.viewMode == .wall) }
             }
             Section {
                 Picker(L("settings.finish", "配色"), selection: Binding(get: { m.finish }, set: { m.perform("menuFinish:", $0.rawValue) })) {
@@ -176,11 +187,14 @@ struct AppearancePane: View {
                 LabeledContent {
                     Button(L("clockLook.edit", "编辑…")) { m.perform("menuClockLook:") }.disabled(!m.clockLookApplies)
                 } label: {
-                    RowLabel(title: L("clockLook.title", "字体与颜色"),
+                    RowLabel(title: L("settings.clockLook", "字体与颜色"),
                              subtitle: m.clockLookApplies ? L("clockLook.subtitle", "岛表盘和照片表盘的大时间")
                                                           : L("clockLook.unavailable", "只用于岛（2026）和照片表盘"))
                 }
             }
+            HomeAppearanceSection()   // 2.0 P02：主畫面外觀（Settings/HomeAppearanceSection.swift）
+            SharedAlbumsSection()     // 2.0 P10：共享相簿當照片來源（Settings/SharedAlbumsSection.swift）
+            ScreenAccessibilitySection()   // 2.0 P05：畫面文字大小、用鍵盤操作畫面
         }
         .formStyle(.grouped)
     }
@@ -249,7 +263,7 @@ struct GesturesPane: View {
                     InfoRow(title: L("settings.gesture.apart", "两指轻点两下"), subtitle: L("settings.gesture.apart.sub", "拆开看看，再点两下组回来"))
                     InfoRow(title: L("settings.gesture.overview", "长按屏幕"), subtitle: L("settings.gesture.overview.sub", "打开表盘总览"))
                     InfoRow(title: L("settings.gesture.scroll", "滚轮或 ← →"), subtitle: L("settings.gesture.scroll.sub", "换表盘"))
-                    InfoRow(title: L("settings.gesture.keys", "键盘"), subtitle: L("settings.gesture.keys.sub", "空格暂停/继续 · F5 Siri · 1–4 视角"))
+                    InfoRow(title: L("settings.gesture.keys", "键盘"), subtitle: L("settings.gesture.keys.sub", "空格暂停/继续 · F5 ClioTalk · 1–4 视角"))
                 }
             }
         }
@@ -329,6 +343,7 @@ struct CarPlayPane: View {
                     Button(L("menu.wifiPassword", "Wi-Fi 设置…")) { m.perform("menuWiFiPassword") }
                 }
             }
+            PhoneHandoffSection()   // 2.0 promo：從 iPhone 傳網頁（Settings/PhoneHandoffSection.swift）
         }
         .formStyle(.grouped)
     }
@@ -342,13 +357,11 @@ struct CameraPane: View {
                 Toggle(isOn: Binding(get: { m.gazeFollow }, set: { _ in m.app?.toggleGazeFollow(); m.refresh() })) {
                     RowLabel(title: L("settings.follow.title", "跟随我"), subtitle: L("settings.follow.sub", "CarPlay 显示时也会转向你"))
                 }
-                Slider(value: Binding(get: { m.followDegrees }, set: { m.app?.setFollowDegrees($0); m.followDegrees = $0 }), in: 10...25, step: 5) {
-                    Text(L("settings.followRange", "转向幅度"))
-                } minimumValueLabel: { Text("10°") } maximumValueLabel: { Text("25°") }
+                ValueSlider(title: L("settings.followRange", "转向幅度"), value: Binding(get: { m.followDegrees }, set: { m.app?.setFollowDegrees($0); m.followDegrees = $0 }),
+                            range: 10...25, step: 5, minLabel: "10°", maxLabel: "25°") { "\(Int($0))°" }
                     .disabled(!m.gazeFollow)
-                Slider(value: Binding(get: { m.gazePitch }, set: { let v = ($0 * 2).rounded() / 2; m.app?.view.setGazePitch(CGFloat(v)); m.gazePitch = v }), in: 0...8) {
-                    Text(L("settings.followPitch", "俯仰幅度"))
-                } minimumValueLabel: { Text("0°") } maximumValueLabel: { Text("8°") }
+                ValueSlider(title: L("settings.followPitch", "俯仰幅度"), value: Binding(get: { m.gazePitch }, set: { let v = ($0 * 2).rounded() / 2; m.app?.view.setGazePitch(CGFloat(v)); m.gazePitch = v }),
+                            range: 0...8, step: 0.5, minLabel: "0°", maxLabel: "8°") { String(format: "%.1f°", $0) }
                     .disabled(!m.gazeFollow)
             } header: {
                 IllustrationHeader(scene: .follow, note: L("settings.follow.note", "只认人脸位置，不录制、不上传"))
@@ -372,17 +385,21 @@ struct PermissionsPane: View {
         case .inputMonitoring: return L("settings.perm.input", "输入监控")
         case .automation: return L("settings.perm.automation", "自动化（音乐）")
         case .calendar: return L("settings.perm.calendar", "日历")
+        case .photos: return L("settings.perm.photos", "照片")
         case .location: return L("settings.perm.location", "定位")
+        case .reminders: return L("settings.perm.reminders", "提醒事项")
         }
     }
     private func summary(_ k: PermissionKind) -> String {
         switch k {
         case .camera: return L("settings.perm.camera.sub", "跟随你转头、配合房间光线")
-        case .microphone: return L("settings.perm.mic.sub", "按住 F5 跟 Siri 说话、CarPlay 通话")
-        case .inputMonitoring: return L("settings.perm.input.sub", "在任何 App 里按 F5 都能叫 Siri")
+        case .microphone: return L("settings.perm.mic.sub", "按住 F5 跟 ClioTalk 说话、CarPlay 通话")
+        case .inputMonitoring: return L("settings.perm.input.sub", "在任何 App 里按 F5 都能叫 ClioTalk")
         case .automation: return L("settings.perm.automation.sub", "显示「音乐」或 Spotify 正在播放的歌")
         case .calendar: return L("settings.perm.calendar.sub", "在模块表盘上显示下一个行程")
-        case .location: return L("settings.perm.location.sub", "自动读取 Wi-Fi 名称给无线 CarPlay；天气表盘")
+        case .photos: return L("settings.perm.photos.sub", "在主屏幕的「照片」小组件显示精选照片")
+        case .location: return L("settings.perm.location.sub", "用大概位置显示天气；读出 Wi-Fi 名称给无线 CarPlay")
+        case .reminders: return L("settings.perm.reminders.sub", "在「提醒事项」App 里看清单、点圆圈完成")
         }
     }
     var body: some View {
@@ -407,6 +424,7 @@ struct PermissionsPane: View {
                 Text(L("settings.perm.footer", "系统询问前，桌宠会先说明用途")).foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
+            WebAppsSection()   // 2.0 Web App：每個 Web App 的權限與網站資料（Settings/WebAppsSection.swift）
         }
         .formStyle(.grouped)
     }

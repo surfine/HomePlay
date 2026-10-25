@@ -2,13 +2,54 @@
 // 左上「週 月」（週白、月深灰）＋超大的日；右上一隻帶 60 格刻度的指針鐘；左下正在播放（沒有就 CarPlay）；
 // 右下那格住著島（👀，純黑膠囊），上面一行 HomePlay、下面一行電量（原本「島的口袋」的電量資訊收到這裡）。
 // 座標照官方 tile_modular.png 量（600² 的圖去掉 14 px 邊框，×1024/572）。
+//
+// 2.0 P07：夜間（房間光暗／控制中心「夜間」）不再走 NightFace 的「亮度→紅」整面映射（灰藍底會變暗紅、
+// 深色字沉成黑，看不清），改自畫 vibrant 式的黑底：主要內容亮紅、次要暗紅（HPTokens.Night，層級跟白天互換——
+// 白天主要字最深、夜間最亮），小刻度與副標不透明（HIG-WID-179/184/185/186）。
 
 import AppKit
 
+/// Modular 的配色：白天＝官方量值（HPTokens.Modular）；夜間＝黑底紅（HPTokens.Night）
+struct ModularPalette {
+    let isNight: Bool
+    let bg: NSColor
+    let ink: NSColor            // 主要字：日、時鐘、歌名、電量
+    let soft: NSColor           // 次要字：月、演唱者、狀態
+    let white: NSColor          // 最亮的字：週、♫、HomePlay
+    let tickMinor: NSColor      // 小刻度（夜間不透明，白天半透明）
+    let accent: NSColor         // 計時器符號、行事曆小卡的紅
+    let pillFill: NSColor       // 播放膠囊的底
+    let pillDim: NSColor        // 空狀態播放膠囊的底（白天更淡）
+    let artEmpty: NSColor       // 沒在播放的灰色封面底
+    let artNote: NSColor        // 封面音符／空狀態符號
+    let eventCard: NSColor      // 行事曆小卡底（夜間改描邊，黑底上白卡會太亮）
+
+    static let day = ModularPalette(
+        isNight: false,
+        bg: HPTokens.Modular.bg, ink: HPTokens.Modular.ink, soft: HPTokens.Modular.soft, white: .white,
+        tickMinor: HPTokens.Modular.ink.withAlphaComponent(0.42), accent: srgb(0xff3b30),
+        pillFill: NSColor(white: 0, alpha: 0.12), pillDim: NSColor(white: 0, alpha: 0.07),
+        artEmpty: NSColor(white: 0, alpha: 0.10), artNote: NSColor(white: 1, alpha: 0.75), eventCard: .white)
+
+    static let night = ModularPalette(
+        isNight: true,
+        bg: .black, ink: HPTokens.Night.primary, soft: HPTokens.Night.secondary, white: HPTokens.Night.primary,
+        tickMinor: HPTokens.Night.secondary, accent: HPTokens.Night.primary,
+        pillFill: HPTokens.Night.fill, pillDim: HPTokens.Night.fill,
+        artEmpty: HPTokens.Night.fill, artNote: HPTokens.Night.secondary, eventCard: .black)
+
+    /// 空狀態播放膠囊裡灰掉的字：白天＝墨色 40%；夜間＝次要紅（不透明）
+    var dimmed: NSColor { isNight ? HPTokens.Night.secondary : HPTokens.Modular.ink.withAlphaComponent(0.4) }
+}
+
 extension Face {
     func renderModularV2(_ g: CGContext, _ now: Double) {
-        g.setFillColor(srgb(0x93abb1).cgColor); g.fill(CGRect(x: 0, y: 0, width: 1024, height: 1024))
-        let ink = srgb(0x0a0b0c), soft = srgb(0x3e4a4e), white = NSColor.white
+        renderModular(g, now, nightRed ? ModularPalette.night : ModularPalette.day)
+    }
+
+    private func renderModular(_ g: CGContext, _ now: Double, _ pal: ModularPalette) {
+        g.setFillColor(pal.bg.cgColor); g.fill(CGRect(x: 0, y: 0, width: 1024, height: 1024))
+        let ink = pal.ink, soft = pal.soft, white = pal.white
         let date = Self.displayDate
 
         // ── 左上：週（白）月（深灰）＋ 日（大、黑、置中在這一行下面）
@@ -29,12 +70,12 @@ extension Face {
         fillShape(g, dayShape, ink)
 
         // ── 右上：指針鐘
-        drawModularClock(g, center: CGPoint(x: 761, y: 263), radius: 205, date: date, ink: ink)
+        drawModularClock(g, center: CGPoint(x: 761, y: 263), radius: 205, date: date, pal: pal)
 
         // ── 左下：正在播放／CarPlay
         let art = CGRect(x: 51, y: 543, width: 230, height: 230)
         if let np = nowPlaying.shown {
-            artwork(g, art, seed: np.title)
+            artwork(g, art, seed: np.title, pal: pal)
             // 右邊一顆白色音符，標出這格是「音樂」
             drawLeft(g, "♫", font: FaceType.sf(64, .regular, mono: false), x: 428, y: 600, color: white)
             let tf = FaceType.sf(35, .bold, mono: false)
@@ -42,7 +83,7 @@ extension Face {
             let af = FaceType.sf(35, .regular, mono: false)
             drawLeft(g, Self.clipped(np.artist, af, 400), font: af, x: 53, y: 866, color: soft)
             let pill = CGRect(x: 51, y: 892, width: 228, height: 80)
-            g.setFillColor(NSColor(white: 0, alpha: 0.12).cgColor)
+            g.setFillColor(pal.pillFill.cgColor)
             g.addPath(CGPath(roundedRect: pill, cornerWidth: 40, cornerHeight: 40, transform: nil)); g.fillPath()
             let label = np.playing ? L("modular.pause", "暂停") : L("modular.play", "播放")
             let lf = FaceType.sf(38, .medium, mono: false)
@@ -50,18 +91,20 @@ extension Face {
             let gx = pill.midX - (30 + 14 + lw) / 2
             drawSymbol(g, np.playing ? "pause.fill" : "play.fill", in: CGRect(x: gx, y: pill.midY - 16, width: 30, height: 32), color: ink)
             drawLeft(g, label, font: lf, x: gx + 44, y: pill.midY + 13, color: ink)
-        } else if case .event(let e) = calendarTile {
+        } else if case .event(let e) = calendarTile, PersonalGate.allowed {   // 2.0 depth：行程是個人內容，沒認出主人時這格照「未在播放」
             // 沒在播、但有下一個行程（設定 › 讀取行事曆）：像「行事曆」App 圖示的日期方塊＋紅色小標、行程名、時間
             g.saveGState()
-            g.addPath(continuousRoundedRect(art, radius: art.width * 0.2237)); g.clip()
-            g.setFillColor(NSColor.white.cgColor); g.fill(art)
+            let cardPath = continuousRoundedRect(art, radius: art.width * 0.2237)
+            g.addPath(cardPath); g.clip()
+            g.setFillColor(pal.eventCard.cgColor); g.fill(art)
+            if pal.isNight { g.addPath(cardPath); g.setStrokeColor(HPTokens.Night.secondary.cgColor); g.setLineWidth(3); g.strokePath() }
             g.restoreGState()
             let wd = Self.formatter("EEE").string(from: e.start), day = Calendar.current.component(.day, from: e.start)
             let wf = FaceType.sf(30, .semibold, mono: false), df = FaceType.sfv(118, wght: 300, mono: false)
-            drawLeft(g, wd, font: wf, x: art.midX - Typo.width(wd, wf) / 2, y: art.minY + 54, color: srgb(0xff3b30))
+            drawLeft(g, wd, font: wf, x: art.midX - Typo.width(wd, wf) / 2, y: art.minY + 54, color: pal.accent)
             let ds = String(day)
-            drawLeft(g, ds, font: df, x: art.midX - Typo.width(ds, df) / 2, y: art.minY + 176, color: srgb(0x1c1c1e))
-            drawLeft(g, L("calendar.next", "下一个行程").uppercased(), font: FaceType.sf(30, .bold, mono: false), x: 53, y: 823, color: srgb(0xc6281f), kern: 0.4)
+            drawLeft(g, ds, font: df, x: art.midX - Typo.width(ds, df) / 2, y: art.minY + 176, color: ink)
+            drawLeft(g, L("calendar.next", "下一个行程").uppercased(), font: FaceType.sf(30, .bold, mono: false), x: 53, y: 823, color: pal.isNight ? HPTokens.Night.primary : HPTokens.Modular.alert, kern: 0.4)
             let tf = FaceType.sf(35, .bold, mono: false)
             drawLeft(g, Self.clipped(e.title.isEmpty ? L("calendar.untitled", "（无标题）") : e.title, tf, 420), font: tf, x: 53, y: 866, color: ink)
             let hf = FaceType.sf(35, .regular, mono: false)
@@ -71,9 +114,9 @@ extension Face {
             // 第二行放連線狀態（例如「重按連上 iPhone」），不再畫像 App 圖示的藍色 CarPlay 方塊
             g.saveGState()
             g.addPath(CGPath(roundedRect: art, cornerWidth: 18, cornerHeight: 18, transform: nil)); g.clip()
-            g.setFillColor(NSColor(white: 0, alpha: 0.10).cgColor); g.fill(art)
+            g.setFillColor(pal.artEmpty.cgColor); g.fill(art)
             g.restoreGState()
-            drawSymbol(g, "music.note", in: art.insetBy(dx: 70, dy: 66), color: NSColor(white: 1, alpha: 0.75), weight: .medium)
+            drawSymbol(g, "music.note", in: art.insetBy(dx: 70, dy: 66), color: pal.artNote, weight: .medium)
             drawLeft(g, "♫", font: FaceType.sf(64, .regular, mono: false), x: 428, y: 600, color: white)
             let tf = FaceType.sf(35, .bold, mono: false)
             drawLeft(g, Self.clipped(L("modular.notPlaying", "未在播放").uppercased(), tf, 400), font: tf, x: 53, y: 823, color: ink, kern: 0.4)
@@ -82,22 +125,32 @@ extension Face {
             let hf = FaceType.sf(hs, .regular, mono: false)
             drawLeft(g, Self.clipped(statusParts.title, hf, 420), font: hf, x: 53, y: 866, color: soft)
             let pill = CGRect(x: 51, y: 892, width: 228, height: 80)
-            g.setFillColor(NSColor(white: 0, alpha: 0.07).cgColor)
+            g.setFillColor(pal.pillDim.cgColor)
             g.addPath(CGPath(roundedRect: pill, cornerWidth: 40, cornerHeight: 40, transform: nil)); g.fillPath()
             let label = L("modular.play", "播放"), lf = FaceType.sf(38, .medium, mono: false)
-            let lw = Typo.width(label, lf), gx = pill.midX - (30 + 14 + lw) / 2, dim = ink.withAlphaComponent(0.4)
+            let lw = Typo.width(label, lf), gx = pill.midX - (30 + 14 + lw) / 2, dim = pal.dimmed
             drawSymbol(g, "play.fill", in: CGRect(x: gx, y: pill.midY - 16, width: 30, height: 32), color: dim)
             drawLeft(g, label, font: lf, x: gx + 44, y: pill.midY + 13, color: dim)
         }
 
         // ── 右下：島住的那一格——上面一行 HomePlay，中間純黑膠囊，下面一行電量
         let cx: CGFloat = 548
-        drawLeft(g, "HomePlay", font: FaceType.sf(40, .semibold, mono: false), x: cx, y: 576, color: white)
+        if let end = timerEnd {
+            // 2.0 P03：計時器在跑（Modular 的島不長開，計時器住在這一行）：橘色計時符號＋倒數＋名字
+            let tf = FaceType.sf(40, .semibold), left = timerClock(max(0, end - CACurrentMediaTime()))
+            let accent = pal.isNight ? HPTokens.Night.primary : Shell.nightTint(srgb(0xff9f0a), self)
+            drawSymbol(g, "timer", in: CGRect(x: cx, y: 576 - 33, width: 38, height: 38), color: accent)
+            drawLeft(g, left, font: tf, x: cx + 50, y: 576, color: white)
+            let lf = FaceType.sf(36, .medium, mono: false), lx = cx + 50 + Typo.width(left, tf) + 14
+            drawLeft(g, Self.clipped(timerLabel, lf, 980 - lx), font: lf, x: lx, y: 576, color: soft)
+        } else {
+            drawLeft(g, "HomePlay", font: FaceType.sf(40, .semibold, mono: false), x: cx, y: 576, color: white)
+        }
         let line: String, lineColor: NSColor
         if let b = battery {
             let state = Self.batteryState(b)
             line = en ? "\(state) · \(b.percent)%" : "\(state)・\(b.percent)%"
-            lineColor = b.percent <= 20 && !b.charging ? srgb(0xc6281f) : ink
+            lineColor = b.percent <= 20 && !b.charging ? (pal.isNight ? HPTokens.Night.primary : HPTokens.Modular.alert) : ink
         } else {
             line = L("battery.macPlugged", "这台 Mac 接着电源"); lineColor = ink
         }
@@ -108,12 +161,13 @@ extension Face {
 
     /// Modular 的指針鐘（照官方）：60 格刻度（整點黑、其餘灰）、1–12 數字、
     /// 黑色指針（細頸接粗桿、圓頭）、細白秒針（尾巴略過軸心）、軸心黑圈白環
-    private func drawModularClock(_ g: CGContext, center c: CGPoint, radius r: CGFloat, date: Date, ink: NSColor) {
+    private func drawModularClock(_ g: CGContext, center c: CGPoint, radius r: CGFloat, date: Date, pal: ModularPalette) {
+        let ink = pal.ink
         g.setLineCap(.round)
         for i in 0..<60 {
             let a = CGFloat(i) * .pi / 30, major = i % 5 == 0
             let r0 = r - (major ? 17 : 15), sx = sin(a), cy = -cos(a)
-            g.setStrokeColor(major ? ink.cgColor : ink.withAlphaComponent(0.42).cgColor); g.setLineWidth(major ? 4 : 2.6)
+            g.setStrokeColor(major ? ink.cgColor : pal.tickMinor.cgColor); g.setLineWidth(major ? 4 : 2.6)
             g.move(to: CGPoint(x: c.x + sx * r0, y: c.y + cy * r0)); g.addLine(to: CGPoint(x: c.x + sx * r, y: c.y + cy * r)); g.strokePath()
         }
         let nf = FaceType.sf(43, .semibold, mono: false)
@@ -140,13 +194,13 @@ extension Face {
             let sa = CGFloat(s * 6 * .pi / 180)
             g.saveGState()
             g.setShadow(offset: CGSize(width: 0, height: -1), blur: 3, color: NSColor(white: 0, alpha: 0.18).cgColor)
-            g.setStrokeColor(NSColor.white.cgColor); g.setLineWidth(2.2); g.setLineCap(.butt)
+            g.setStrokeColor(pal.white.cgColor); g.setLineWidth(2.2); g.setLineCap(.butt)
             g.move(to: CGPoint(x: c.x - sin(sa) * 32, y: c.y + cos(sa) * 32)); g.addLine(to: CGPoint(x: c.x + sin(sa) * r, y: c.y - cos(sa) * r)); g.strokePath()
             g.restoreGState()
         }
         g.setFillColor(ink.cgColor); g.fillEllipse(in: CGRect(x: c.x - 10.5, y: c.y - 10.5, width: 21, height: 21))
-        g.setFillColor(NSColor.white.cgColor); g.fillEllipse(in: CGRect(x: c.x - 7, y: c.y - 7, width: 14, height: 14))
-        g.setFillColor(srgb(0x93abb1).cgColor); g.fillEllipse(in: CGRect(x: c.x - 3.2, y: c.y - 3.2, width: 6.4, height: 6.4))
+        g.setFillColor(pal.white.cgColor); g.fillEllipse(in: CGRect(x: c.x - 7, y: c.y - 7, width: 14, height: 14))
+        g.setFillColor(pal.bg.cgColor); g.fillEllipse(in: CGRect(x: c.x - 3.2, y: c.y - 3.2, width: 6.4, height: 6.4))
     }
 
     /// 從軸心 c 沿 (ux, uy) 方向、r0 到 r1 的一段圓頭粗線（填色用的外框）
@@ -157,8 +211,17 @@ extension Face {
         return p.copy(strokingWithWidth: w, lineCap: .round, lineJoin: .round, miterLimit: 1)
     }
 
-    /// 沒有專輯封面時：用歌名決定一組漸層色，中間一個音符（每首歌顏色固定）
-    private func artwork(_ g: CGContext, _ r: CGRect, seed: String) {
+    /// 沒有專輯封面時：用歌名決定一組漸層色，中間一個音符（每首歌顏色固定）；夜間改紅調單色（HIG-WID-184：為 vibrant 準備的素材）
+    private func artwork(_ g: CGContext, _ r: CGRect, seed: String, pal: ModularPalette) {
+        if pal.isNight {   // 夜間版
+            let path = CGPath(roundedRect: r, cornerWidth: 18, cornerHeight: 18, transform: nil)
+            g.saveGState()
+            g.setShadow(offset: CGSize(width: 0, height: -6), blur: 18, color: NSColor(white: 0, alpha: 0.18).cgColor)
+            g.addPath(path); g.setFillColor(HPTokens.Night.fill.cgColor); g.fillPath()
+            g.restoreGState()
+            drawSymbol(g, "music.note", in: r.insetBy(dx: 70, dy: 62), color: HPTokens.Night.primary, weight: .medium)
+            return
+        }
         let palettes: [(UInt32, UInt32)] = [(0x5fa8ff, 0x2853c7), (0xff8a65, 0xd1426b), (0x7ad6a6, 0x2f8f74), (0xc69cff, 0x6b4bd8), (0xffcf5c, 0xf08a24)]
         var hsh: UInt32 = 5381
         for u in seed.unicodeScalars { hsh = (hsh &* 33) &+ u.value }

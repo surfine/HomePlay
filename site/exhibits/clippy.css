@@ -1,0 +1,34 @@
+/* 05 · 1997 Office 小幫手。字處理器視窗是灰色斜面；墨點助手是原創的。年代配色，不跟深色模式變。 */
+.cl{container-type:inline-size;background:#c3c3c3;padding:3px;font:13px/1.4 var(--font);color:#111;box-shadow:inset 1px 1px 0 #fff,inset -1px -1px 0 #6b6b6b}
+.cl button,.cl textarea{font:inherit;color:inherit}
+.cl :focus-visible{outline:2px solid #1a3fd0;outline-offset:2px}
+.cl-title{background:linear-gradient(90deg,#000080,#1084d0);color:#fff;font-weight:700;padding:3px 8px}
+.cl-tools{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:6px 12px;padding:6px 4px}
+.cl-segs{display:inline-flex;box-shadow:inset 0 0 0 1px #6b6b6b}
+.cl-seg{min-height:32px;padding:3px 12px;border:0;background:#c3c3c3;cursor:pointer;box-shadow:inset 1px 1px 0 #fff,inset -1px -1px 0 #6b6b6b}
+.cl-seg[aria-pressed=true]{background:#000080;color:#fff;font-weight:700;box-shadow:none}
+.cl-counts{display:flex;gap:14px;font-size:12px}
+.cl-n{font:700 14px var(--mono);margin-left:2px}
+.cl-paper{position:relative;background:#fff;box-shadow:inset 1px 1px 0 #6b6b6b,inset -1px -1px 0 #fff}
+.cl-text{display:block;width:100%;min-height:200px;resize:none;border:0;background:transparent;padding:12px 14px;font-family:Georgia,"Songti TC","Songti SC",serif;font-size:15px;line-height:1.7;color:#111;box-sizing:border-box}
+.cl-corner{display:flex;align-items:center;justify-content:flex-end;gap:10px;min-height:76px;padding:4px 6px}
+.cl-hint{flex:1;font-size:12px;color:#333}
+.cl-ask{min-height:32px;padding:3px 14px;border:0;background:#c3c3c3;cursor:pointer;box-shadow:inset 1px 1px 0 #fff,inset -1px -1px 0 #6b6b6b,1px 1px 0 #000}
+.cl-ask[hidden],.cl-dot[hidden],.cl-bubble[hidden]{display:none}
+.cl-blot{position:relative;flex:none;width:60px;height:60px;transition:transform .35s var(--spring)}
+.cl-blot svg{display:block;width:100%;height:100%}
+.cl-body{fill:#1d1f3a}.cl-sheen{fill:none;stroke:#5b6096;stroke-width:2;stroke-linecap:round}.cl-eye{fill:#fff}.cl-glint{fill:#1d1f3a}.cl-drip{fill:#1d1f3a}
+.cl-dot{position:absolute;top:-2px;right:-2px;width:14px;height:14px;border-radius:50%;background:#e8c300;box-shadow:0 0 0 2px #fff,0 0 0 3px #6a5a00}
+/* 模式 A：助手跳到字的上面，氣泡蓋住文字（焦點仍在文字欄） */
+.cl-pop .cl-blot{transform:translateY(-80px) scale(1.15);z-index:3;animation:cl-wob .5s var(--ease-out)}
+.cl-paper .cl-bubble{position:absolute;right:14px;top:8px;z-index:2;max-width:min(300px,86%);background:#ffffe1;border:1px solid #000;box-shadow:4px 4px 0 rgba(0,0,0,.35);padding:10px 12px}
+@keyframes cl-wob{0%{transform:translateY(-50px) scale(.6)}60%{transform:translateY(-88px) scale(1.25)}100%{transform:translateY(-80px) scale(1.15)}}
+/* 模式 B：氣泡在角落那一條裡，不蓋文字 */
+.cl-corner{flex-wrap:wrap}
+.cl-corner .cl-bubble{flex:1 1 200px;order:-1;background:#ffffe1;border:1px solid #000;padding:8px 10px}
+.cl-q{margin:0 0 8px}
+.cl-acts{display:flex;gap:8px;flex-wrap:wrap}
+.cl-btn{min-height:32px;padding:3px 12px;border:0;background:#c3c3c3;cursor:pointer;box-shadow:inset 1px 1px 0 #fff,inset -1px -1px 0 #6b6b6b,1px 1px 0 #000}
+.cl-btn[hidden]{display:none}
+@container (max-width:460px){.cl-text{font-size:14px}}
+@media (prefers-reduced-motion:reduce){.cl *{animation:none!important;transition:none!important}}

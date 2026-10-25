@@ -63,12 +63,8 @@ extension Face {
         era = islandSnapshotOverride.era ?? Era(rawValue: d.string(forKey: Era.defaultsKey) ?? "") ?? .y2026
     }
 
-    /// 直排用：两位小时 / 两位分钟
-    static func clockParts(_ d: Date) -> (h: String, m: String) {
-        let f = formatter("HH,mm", raw: true)
-        let p = f.string(from: d).split(separator: ",").map(String.init)
-        return (p.first ?? "00", p.last ?? "00")
-    }
+    /// 直排用：時／分各一行（照系統時制；12 小時制的小時不補零，置中的一行不影響對齊）
+    static func clockParts(_ d: Date) -> (h: String, m: String) { Self.hourMinute(d) }
 
     /// Flow 背景的光团在漂，限 10fps 重画
     func tickIslandOptions(_ now: Double) -> Bool {

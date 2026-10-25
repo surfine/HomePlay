@@ -22,10 +22,28 @@ struct LiquidGlassParams {
     var specular: Float = 0.9        // 鏡面高光強度
     var rimLight: Float = 0.55       // 最外緣一圈細亮線
     var shade: Float = 0.22          // 背光內緣的暗
-    var tint: SIMD4<Float> = .zero   // 額外染色（premultiplied）
+    var tint: SIMD4<Float> = .zero   // 染色：rgb 與強度（a）——面色往這個色混
     var saturation: Float = 1.25     // 透出背景的飽和度
+    var rimWidth: Float = 1.4        // 2.0 faceglass：最外緣亮線的寬（像素）
+    var lightTurn: Float = 0         // 2.0 faceglass：光的方向轉多少（弧度；Flow 跟著人轉）
 
     static let portrait = LiquidGlassParams()
+    // 2.0 faceglass：各款錶面的玻璃，照官方錶面圖校準（tooling/glyph-glass.py：面色轉移 ΔE、亮邊峰值／位置／寬、內陰影）
+    /// 島／照片的大時間（face-portrait-*、face-photos-summer）： 幾乎透明的厚玻璃——官方版面平均起來「無亮邊」、
+    /// 邊緣反而偏暗（+2.5 L* 內的細微方向光），面色只比背景亮一點（ΔE00 4.6）
+    static let faceTime = LiquidGlassParams(bezel: 0.12, refraction: 0.5, dispersion: 0.02, frost: 0.02, blurMix: 0.45,
+                                            specular: 0.12, rimLight: 0.04, shade: 0.55, saturation: 1.0)
+    /// 天氣的大溫度（face-weather）：奶白偏亮（官方 fill 比背景亮 13 L*）、邊緣乾淨無亮邊（ΔE00 2.8）
+    static let weatherTemp = LiquidGlassParams(bezel: 0.12, refraction: 0.5, frost: 0.5, blurMix: 0.55,
+                                               specular: 0.18, rimLight: 0.05, shade: 0.5, saturation: 1.0)
+    /// Flow 的水珠（face-flow）：奶白＋偏藍的染色玻璃（官方 fill 比周圍去飽和偏藍）；亮邊跟著人轉（lightTurn）
+    static let flowBlob = LiquidGlassParams(bezel: 0.1, refraction: 0.4, dispersion: 0.03, frost: 0.35, blurMix: 0.5,
+                                            specular: 0.15, rimLight: 0.05, shade: 0.5, tint: SIMD4(0.5, 0.6, 1.25, 0.5),
+                                            saturation: 0.8)
+    /// 家庭模塊的磚（face-home-modular-*、home-modular-teal-angled）：清玻璃＋桌布中間色的染色（tint 由錶面傳入）、
+    /// 磚緣一圈 6 px 的柔亮邊（ΔE00 2.9 全圖／4.7 純玻璃區）
+    static let platter = LiquidGlassParams(bezel: 0.1, refraction: 0.5, dispersion: 0.03, frost: 0.02, blurMix: 0.3,
+                                           specular: 0.35, rimLight: 0.25, shade: 0.3, rimWidth: 6)
     /// Flow 的泡泡字：更厚、更彎、更亮
     static let bubble = LiquidGlassParams(bezel: 0.24, refraction: 0.85, dispersion: 0.07, frost: 0.06, blurMix: 0.45,
                                           specular: 1.0, rimLight: 0.7, shade: 0.28, saturation: 1.45)
@@ -53,8 +71,8 @@ final class LiquidGlass {
     var available: Bool { pipeline != nil }
 
     /// 畫一組字形（同一個玻璃）：path 是 1024 邏輯座標（左上原點）；backdrop／frosted 是整張 1024² 背景（任意像素大小）。
-    /// 回傳透明底的圖與它在 1024 座標的位置；失敗回 nil（呼叫端退回 CG 版玻璃）。
-    func render(path: CGPath, key: String? = nil, scale sc: CGFloat, backdrop: CGImage, frosted: CGImage?, params p: LiquidGlassParams)
+    /// bezelHeight：斜面厚度的參考高度（單顆字形的高，不是整組聯集）；回傳透明底的圖與位置；失敗回 nil（退回 CG 版玻璃）。
+    func render(path: CGPath, key: String? = nil, scale sc: CGFloat, backdrop: CGImage, frosted: CGImage?, params p: LiquidGlassParams, bezelHeight: CGFloat? = nil)
         -> (image: CGImage, rect: CGRect)? {
         guard let device, let queue, let pipeline, let ci else { return nil }
         let ink = path.boundingBoxOfPath
@@ -114,8 +132,9 @@ final class LiquidGlass {
         guard let enc = cb.makeComputeCommandEncoder() else { return nil }
         enc.setComputePipelineState(pipeline)
         for (i, t) in [bgClear, bgFrost, din, dout, out].enumerated() { enc.setTexture(t, index: i) }
-        var u = Uniforms(bezel: max(2, p.bezel * Float(ink.height * sc)), refraction: p.refraction, dispersion: p.dispersion,
-                         frost: p.frost, blurMix: p.blurMix, specular: p.specular, rimLight: p.rimLight, shade: p.shade, tint: p.tint)
+        var u = Uniforms(bezel: max(2, p.bezel * Float((bezelHeight ?? ink.height) * sc)), refraction: p.refraction, dispersion: p.dispersion,
+                         frost: p.frost, blurMix: p.blurMix, specular: p.specular, rimLight: p.rimLight, shade: p.shade,
+                         rimWidth: p.rimWidth * Float(sc), lightTurn: p.lightTurn, tint: p.tint)
         enc.setBytes(&u, length: MemoryLayout<Uniforms>.stride, index: 0)
         let tg = MTLSize(width: 16, height: 16, depth: 1)
         enc.dispatchThreadgroups(MTLSize(width: (w + 15) / 16, height: (h + 15) / 16, depth: 1), threadsPerThreadgroup: tg)
@@ -135,14 +154,14 @@ final class LiquidGlass {
 
     private struct Uniforms {
         var bezel: Float, refraction: Float, dispersion: Float, frost: Float, blurMix: Float
-        var specular: Float, rimLight: Float, shade: Float
+        var specular: Float, rimLight: Float, shade: Float, rimWidth: Float, lightTurn: Float
         var tint: SIMD4<Float>
     }
 
     private static let source = """
     #include <metal_stdlib>
     using namespace metal;
-    struct U { float bezel; float refraction; float dispersion; float frost; float blurMix; float specular; float rimLight; float shade; float4 tint; };
+    struct U { float bezel; float refraction; float dispersion; float frost; float blurMix; float specular; float rimLight; float shade; float rimWidth; float lightTurn; float4 tint; };
     // 有號距離（像素）：字裡為正
     static float sd(texture2d<float, access::read> din, texture2d<float, access::read> dout, int2 p) {
         int2 q = clamp(p, int2(0), int2(din.get_width() - 1, din.get_height() - 1));
@@ -200,16 +219,17 @@ final class LiquidGlass {
         // 菲涅耳：越貼邊越亮（掠射角反射多）
         float fres = pow(1.0 - hgt, 3.0) * 0.35 * u.specular;
         // 方向性高光：法線在 2D 的方向和光的夾角，sin(2θ) 兩側對稱（左上強、右下弱）
-        float2 Ld = normalize(float2(-0.6, -0.8));
+        float ct = cos(u.lightTurn), st = sin(u.lightTurn);
+        float2 Ld = normalize(float2(-0.6 * ct + 0.8 * st, -0.6 * st - 0.8 * ct));
         float cosA = dot(-n2, Ld);
         float glare = pow(max(0.0, cosA), 6.0) * 1.0 + pow(max(0.0, -cosA), 6.0) * 0.45;
         float spec = glare * u.specular * (1.0 - hgt) * 1.4;
         // 背光內緣壓暗
         float shade = u.shade * max(0.0, -cosA) * (1.0 - hgt) * 0.8;
         // 最外緣半像素的亮邊
-        float rim = (1.0 - smoothstep(0.0, 1.4, d)) * u.rimLight * (0.35 + 0.65 * max(0.0, cosA));
+        float rim = (1.0 - smoothstep(0.0, max(0.5, u.rimWidth), d)) * u.rimLight * (0.35 + 0.65 * max(0.0, cosA));
         col = col * (1.0 - shade) + spec + fres + rim;
-        col = clamp(col + u.tint.rgb * u.tint.a, 0.0, 1.0);
+        col = clamp(mix(col, u.tint.rgb * max(max(col.r, col.g), col.b), u.tint.a), 0.0, 1.0);
         out.write(float4(col * cover, cover), gid);
     }
     """

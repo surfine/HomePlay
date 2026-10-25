@@ -250,7 +250,7 @@ footer .links{display:flex;gap:8px 20px;flex-wrap:wrap}
   nav{display:flex;order:5;flex-basis:100%;gap:8px;overflow-x:auto;padding:8px 0 12px;
     -webkit-overflow-scrolling:touch;scrollbar-width:none}
   /* 手機只留三個入口，避免第五個膠囊被硬切；其餘段落靠滾動到達 */
-  header nav:not(.langs) a:nth-child(5){display:none}   /* 手機上收起「轉一圈」 */
+  header nav:not(.langs) a:nth-child(6){display:none}   /* 手機上收起「轉一圈」（第一個膠囊是 2.0 Preview） */
   nav::-webkit-scrollbar{display:none}
   /* 右邊還有膠囊沒滑到時，邊緣漸隱，暗示可以橫滑；滑到底就不再漸隱 */
   nav.fade{-webkit-mask-image:linear-gradient(90deg,#000 calc(100% - 36px),transparent);
@@ -358,3 +358,7 @@ footer .links{display:flex;gap:8px 20px;flex-wrap:wrap}
 .film .lede{margin-top:14px}
 .film-video{display:block;width:100%;height:auto;margin-top:28px;border-radius:var(--r);background:#000}
 .film-alt{margin-top:12px;font-size:15px;color:var(--muted)}
+
+/* ── 頁首第一個入口：2.0 Preview 頁（膠囊前一顆小點，跟其他段落錨點分開）── */
+nav a.nav-new{display:inline-flex;align-items:center;gap:7px;color:var(--ink);font-weight:600}
+nav a.nav-new::before{content:"";width:6px;height:6px;border-radius:50%;background:linear-gradient(135deg,#ff9f6b,#e85d9b 55%,#7b6cf6)}

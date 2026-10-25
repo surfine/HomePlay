@@ -1,0 +1,55 @@
+/* 02 · 口袋裡的小工具。左：一直醒著的小工具；右：手機主畫面的時間軸小工具。用站上的色彩變數，深色模式自動跟著走。 */
+.pk{display:grid;gap:14px;padding:12px;background:var(--panel);color:var(--ink);font:14px/1.5 var(--font)}
+.pk-cols{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+@container (max-width:520px){.pk-cols{grid-template-columns:1fr}}
+.pk-card{background:var(--surface);border-radius:20px;padding:14px;display:grid;gap:10px;align-content:start;box-shadow:inset 0 0 0 1px var(--line)}
+.pk-h{margin:0;font-size:15px}
+.pk-sub{margin:-4px 0 0;font-size:13px;color:var(--muted)}
+.pk-gad{border-radius:14px;background:linear-gradient(#e6ebf3,#d3dbe8);color:#1b2433;padding:10px 12px;box-shadow:inset 0 0 0 1px rgba(0,0,0,.12),0 1px 0 rgba(255,255,255,.5)}
+.pk-gtitle{display:flex;justify-content:space-between;align-items:center;font:600 12px/1 var(--mono);letter-spacing:.04em;margin-bottom:8px}
+.pk-gdot{width:8px;height:8px;border-radius:50%;background:#e5484d}
+.pk-grow{display:flex;align-items:center;gap:10px}
+.pk-gtemp{font-size:28px;font-weight:600;font-variant-numeric:tabular-nums}
+.pk-gclock{margin-left:auto;font:600 13px/1 var(--mono)}
+.pk-ico{display:inline-grid;width:1.9em;height:1.9em}.pk-ico svg{width:100%;height:100%}
+.pk-meter{display:grid;gap:4px}
+.pk-mlabel{display:flex;justify-content:space-between;font-size:13px;color:var(--muted)}
+.pk-mval{font:600 13px/1.4 var(--mono);color:var(--ink)}
+.pk-mbar{height:8px;border-radius:var(--pill);background:var(--panel);overflow:hidden}
+.pk-mfill{display:block;height:100%;width:100%;border-radius:inherit;background:var(--accent);transform-origin:left;transform:scaleX(var(--v,0))}
+.pk-card:first-child .pk-mfill{background:#e5484d}
+/* 抽象的「一塊口袋螢幕」：細線框、不畫邊框與瀏海，和第 9、10 章同一種畫法 */
+.pk-phone{position:relative;justify-self:center;width:min(100%,190px);aspect-ratio:9/12;border-radius:20px;background:linear-gradient(160deg,#2c3d63,#6b5a82 60%,#b8826e);padding:14px 12px 10px;box-shadow:0 0 0 1px var(--line),0 14px 30px -18px rgba(0,0,0,.45);display:grid;grid-template-rows:auto 1fr;gap:10px;overflow:hidden}
+.pk-island{display:none}
+.pk-widget{border-radius:16px;padding:9px 11px;display:grid;gap:2px;color:#fff;background:linear-gradient(#4f86d8,#8fb6ee);transition:background .3s}
+.pk-k-moon,.pk-k-rain{background:linear-gradient(#2a3260,#4a4f86)}
+.pk-k-dawn{background:linear-gradient(#5a6aa8,#e0a27a)}
+.pk-k-cloud{background:linear-gradient(#6f7f98,#a5b2c6)}
+.pk-wtop{display:flex;justify-content:space-between;gap:6px;font-size:12px;font-weight:600}
+.pk-wmid{display:flex;justify-content:space-between;align-items:center}
+.pk-wtemp{font-size:30px;font-weight:300;line-height:1.1;font-variant-numeric:tabular-nums}
+.pk-wname{font-size:12px}.pk-wlast{font:11px/1.3 var(--mono);opacity:.8}
+.pk-wstale{font-size:10px;font-weight:700;padding:0 6px;border-radius:var(--pill);background:#e5484d}
+.pk-wstale[hidden]{display:none}
+.pk-apps{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;align-content:start}
+.pk-app{aspect-ratio:1;border-radius:22%;background:rgba(255,255,255,.28)}
+.pk-app.a1,.pk-app.a4{background:rgba(255,255,255,.45)}.pk-app.a2{background:rgba(120,200,160,.6)}.pk-app.a6{background:rgba(245,179,66,.6)}
+.pk-ctl{display:grid;gap:8px;background:var(--surface);border-radius:20px;padding:14px;box-shadow:inset 0 0 0 1px var(--line)}
+.pk-scrub{display:flex;align-items:center;gap:10px}
+.pk-range{flex:1;min-width:0;height:32px;accent-color:var(--accent)}
+.pk-time{font:600 14px/1 var(--mono);min-width:4.2em;text-align:right}
+.pk-btn{min-height:36px;padding:0 16px;border-radius:var(--pill);border:0;background:var(--accent);color:var(--accent-ink);font-weight:600;cursor:pointer;touch-action:manipulation}
+.pk-btn:disabled{opacity:.5}
+.pk-ask{justify-self:start;background:var(--ink);color:var(--bg)}
+.pk-cap{font-size:13px;color:var(--muted)}
+.pk-strip{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(7,1fr);gap:4px}
+.pk-ent{display:grid;justify-items:center;gap:2px;padding:6px 0;border-radius:12px;background:var(--panel);font-size:11px;opacity:.7}
+.pk-ent.on{opacity:1;background:var(--surface);box-shadow:0 0 0 2px var(--accent)}
+.pk-et{font:600 11px/1.2 var(--mono)}.pk-ed{font-weight:600}.pk-ent .pk-ico{width:22px;height:22px}
+.pk-brow{display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap}
+.pk-btext{font:600 13px/1.4 var(--mono)}
+.pk-budget.out .pk-mfill{background:#e5484d}
+.pk-fact{margin:0;font-size:13px;color:var(--muted)}
+.pk :focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+@media (prefers-reduced-motion:reduce){.pk-widget{transition:none}}
+.pk-cmp{margin:4px 0 0;padding:10px 12px;border-radius:12px;background:var(--panel);font-size:14px}

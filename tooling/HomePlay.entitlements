@@ -12,5 +12,8 @@
   <!-- 追人（摄像头）：Hardened Runtime 下没有它，AVCapture 会直接 denied、不弹授权框。 -->
   <key>com.apple.security.device.camera</key>
   <true/>
+  <!-- 2.0 第六輪：主畫面的「照片」小工具（PhotoKit）：Hardened Runtime 下沒有它，照片圖庫會直接 denied。 -->
+  <key>com.apple.security.personal-information.photos-library</key>
+  <true/>
 </dict>
 </plist>

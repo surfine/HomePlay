@@ -3,11 +3,17 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
 import { copy, LANGS } from './content.mjs';
+import { history, HISTORY_SLUG } from './history.mjs';
+import { PREVIEW_SLUG } from './preview.mjs';
 
 const root = fileURLToPath(new URL('../dist/', import.meta.url));
 const origin = process.env.SITE_ORIGIN || 'https://homeplay.aaronlau.me';
 const originHost = new URL(origin).host;
 const okHosts = new Set([originHost, 'github.com', 'www.bilibili.com']);   // B 站只是演示影片的外連，頁面不從那裡載入任何東西
+// 小工具往事的出處是外連（<a href>），不載入任何東西；只在那三頁、只對 href 放行這些主機。
+const sourceHosts = new Set(Object.values(history).flatMap((h) => [...h.sources.map((s) => s[2]), ...h.chapters.flatMap((c) => c.links.map((l) => l[1]))]).map((u) => new URL(u).host));
+const isHistory = (name) => name.endsWith(HISTORY_SLUG + 'index.html');
+const isPreview = (name) => name.endsWith(PREVIEW_SLUG + 'index.html');   // 2.0 Preview：WebPage 而不是 FAQPage
 const files = [];
 async function walk(dir) {
   for (const e of await readdir(dir, { withFileTypes: true })) {
@@ -68,7 +74,9 @@ for (const file of files) {
     // 3. 不載第三方：http(s) 只能是本站或 github.com
     if (/^(https?:)?\/\//.test(u)) {
       let host; try { host = new URL(u, origin).host; } catch { errors.push(`${name}: bad URL ${u}`); continue; }
-      if (!okHosts.has(host)) { errors.push(`${name}: third-party URL ${u}`); continue; }
+      const outbound = isHistory(name) && sourceHosts.has(host) && !html.includes(`src="${u}"`);
+      if (!okHosts.has(host) && !outbound) { errors.push(`${name}: third-party URL ${u}`); continue; }
+      if (outbound) continue;
     }
     const t = localTarget(u);
     if (t && !(await exists(t))) errors.push(`${name}: missing ${u}`);
@@ -83,7 +91,7 @@ for (const file of files) {
     if (!/<link rel="canonical" href="https?:\/\/[^"]+"/.test(html)) errors.push(`${name}: no canonical`);
     if (!/<meta name="robots" content="index,follow,max-image-preview:large"/.test(html)) errors.push(`${name}: no robots meta`);
     if (!/<img class="share-fallback" src="\/media\/share-square\.jpg[^"]*" width="512" height="512"/.test(html) || !/<body[^>]*>\s*<img class="share-fallback"/.test(html)) errors.push(`${name}: share-fallback img must be the first element in <body>`);
-    if (!/<link rel="preload" as="image"[^>]*fetchpriority="high"/.test(html)) errors.push(`${name}: no hero image preload`);
+    if (!isHistory(name) && !/<link rel="preload" as="image"[^>]*fetchpriority="high"/.test(html)) errors.push(`${name}: no hero image preload`);
     if ((html.match(/<h2[ >]/g) || []).length < 6) errors.push(`${name}: expected section h2s`);
     for (const k of ['og:title', 'og:description', 'og:image', 'og:url', 'twitter:card', 'twitter:image']) if (!html.includes(`"${k}"`)) errors.push(`${name}: no ${k}`);
     const alts = [...html.matchAll(/<link rel="alternate" hreflang="([^"]+)"/g)].map((m) => m[1]);
@@ -123,10 +131,24 @@ for (const file of files) {
       let j; try { j = JSON.parse(m[1]); } catch (e) { errors.push(`${name}: ld+json does not parse (${e.message})`); continue; }
       const g = j['@graph'] || [j];
       const faq = g.find((x) => x['@type'] === 'FAQPage');
+      if (isPreview(name)) {
+        const pg = g.find((x) => x['@type'] === 'WebPage');
+        if (!pg || !pg.name || !pg.about) errors.push(`${name}: ld+json has no WebPage with name and about`);
+        if (!g.some((x) => x['@type'] === 'WebSite')) errors.push(`${name}: ld+json has no WebSite`);
+        continue;
+      }
+      if (isHistory(name)) {
+        const art = g.find((x) => x['@type'] === 'Article');
+        if (!art || !art.headline || !art.citation?.length) errors.push(`${name}: ld+json has no Article with headline and citations`);
+        if (!g.some((x) => x['@type'] === 'WebSite')) errors.push(`${name}: ld+json has no WebSite`);
+        continue;
+      }
       if (!faq) errors.push(`${name}: ld+json has no FAQPage`);
       else if (lang && faq.mainEntity.length !== copy[lang.key].faq.length) errors.push(`${name}: FAQPage has ${faq.mainEntity.length} questions, want ${copy[lang.key].faq.length}`);
       for (const t of ['WebSite', 'SoftwareSourceCode']) if (!g.some((x) => x['@type'] === t)) errors.push(`${name}: ld+json has no ${t}`);
     }
+    for (const l of LANGS) if (name === l.path.slice(1) + PREVIEW_SLUG + 'index.html' && !html.includes(`<html lang="${copy[l.key].htmlLang}"`)) errors.push(`${name}: wrong html lang`);
+    for (const l of LANGS) if (name === l.path.slice(1) + HISTORY_SLUG + 'index.html' && !html.includes(`<html lang="${copy[l.key].htmlLang}"`)) errors.push(`${name}: wrong html lang`);
     for (const l of LANGS) if (name === (l.path === '/' ? 'index.html' : l.path.slice(1) + 'index.html')) {
       const c = copy[l.key];
       if (!html.includes(`<html lang="${c.htmlLang}"`)) errors.push(`${name}: wrong html lang`);
@@ -153,7 +175,7 @@ for (const file of files) {
   }
   for (let i = 0; i < 16; i++) if (!(await exists(path.join(root, 'media/renders/hello', String(i).padStart(2, '0') + '.webp')))) errors.push(`missing renders/hello/${String(i).padStart(2, '0')}.webp`);
 }
-for (const need of ['_headers', '_redirects', 'robots.txt', 'sitemap.xml', '404.html', 'style.css', 'app.js', 'index.html', 'en/index.html', 'zh-hans/index.html']) {
+for (const need of ['_headers', '_redirects', 'robots.txt', 'sitemap.xml', '404.html', 'style.css', 'app.js', 'history.css', 'history.js', 'preview.css', 'preview.js', ...LANGS.map((l) => l.path.slice(1) + PREVIEW_SLUG + 'index.html'), 'index.html', 'en/index.html', 'zh-hans/index.html', ...LANGS.map((l) => l.path.slice(1) + HISTORY_SLUG + 'index.html')]) {
   if (!files.some((f) => rel(f) === need)) errors.push(`missing ${need}`);
 }
 const headers = await readFile(path.join(root, '_headers'), 'utf8').catch(() => '');

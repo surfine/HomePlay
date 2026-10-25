@@ -17,6 +17,12 @@ final class PhoneNowPlayingBridge {
     private var artwork: MPMediaItemArtwork?
     private var artworkCache: [UInt8: MPMediaItemArtwork] = [:]
     private var configured = false
+    /// 2.0: 外殼的音樂／播客 App 畫面用：來源 App 名稱（iAP2 的 appName，例如「播客」）、目前曲目的封面圖
+    private(set) var appName: String?
+    private var artworkImages: [UInt8: NSImage] = [:]
+    var artworkImage: NSImage? { currentArtworkId.flatMap { artworkImages[$0] } }
+    /// 封面換了就加一（畫面用它判斷要不要重算底色）
+    private(set) var artworkSerial = 0
 
     /// 更新桌寵臉上的「正在播放」膠囊（傳 nil 表示清掉）
     var onUpdate: ((NowPlayingInfo?) -> Void)?
@@ -84,7 +90,8 @@ final class PhoneNowPlayingBridge {
         let track = json["trackId"] as? String
         let album = json["album"] as? String
         let artId = (json["artworkId"] as? NSNumber)?.uint8Value
-        if track != currentTrack || artId != currentArtworkId { artwork = nil }
+        if track != currentTrack || artId != currentArtworkId { artwork = nil; artworkSerial += 1 }
+        appName = (json["appName"] as? String) ?? appName   // 2.0
         currentTrack = track
         currentAlbum = album
         currentArtworkId = artId
@@ -118,6 +125,7 @@ final class PhoneNowPlayingBridge {
     func clear() {
         guard active || MPNowPlayingInfoCenter.default().nowPlayingInfo != nil else { return }
         active = false
+        appName = nil   // 2.0
         canSeek = false
         current = nil
         currentTrack = nil
@@ -133,6 +141,9 @@ final class PhoneNowPlayingBridge {
         let item = MPMediaItemArtwork(boundsSize: image.size) { _ in image }
         if artworkCache.count >= 8 { artworkCache.removeValue(forKey: artworkCache.keys.first!) }
         artworkCache[id] = item
+        if artworkImages.count >= 8 { artworkImages.removeValue(forKey: artworkImages.keys.first!) }
+        artworkImages[id] = image
+        if id == currentArtworkId { artworkSerial += 1 }   // 2.0
         guard active, id == currentArtworkId else { return }
         artwork = item
         if let current { publish(current, track: currentTrack, album: currentAlbum) }

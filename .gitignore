@@ -9,3 +9,7 @@ Helpers/HomeBridge/*.xcodeproj/
 Helpers/HomeBridge/build/
 Helpers/HomeBridge/Src/Info.plist
 Helpers/HomeBridge/Src/*.entitlements
+
+# 10-grid：網格稽核的前後對照圖（docs/plans/grid.md）
+png/
+ZCODE-REPORT.md

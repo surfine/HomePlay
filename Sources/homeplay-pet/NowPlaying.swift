@@ -12,10 +12,11 @@ struct NowPlayingInfo: Equatable {
     var playing: Bool
     var stamp: Double         // 读取时的 CACurrentMediaTime
     var fixed = false         // 快照测试用：进度不往前走
+    var rate: Double = 1      // 2.0 #11：倍速（MediaRemote 读得到；AppleScript 来源一律 1）
     /// 比较时不看 stamp：暂停中每 3 秒轮询读到的内容一样，就不该重画
     static func == (a: Self, b: Self) -> Bool {
         a.title == b.title && a.artist == b.artist && a.duration == b.duration && a.position == b.position
-            && a.playing == b.playing && a.fixed == b.fixed
+            && a.playing == b.playing && a.fixed == b.fixed && a.rate == b.rate
     }
 }
 
@@ -38,7 +39,7 @@ enum NowPlayingLogic {
     /// 0…1 进度；时长未知回 nil
     static func progress(_ i: NowPlayingInfo, now: Double) -> Double? {
         guard i.duration > 0 else { return nil }
-        let p = i.position + (i.playing && !i.fixed ? max(0, now - i.stamp) : 0)
+        let p = i.position + (i.playing && !i.fixed ? max(0, now - i.stamp) * max(0.25, i.rate) : 0)
         return max(0, min(1, p / i.duration))
     }
     /// 解析脚本输出「状态\t歌名\t演出者\t时长\t位置」；停止/空/格式不对＝nil
@@ -80,13 +81,14 @@ extension Face {
     /// 胶囊里的音乐内容（计时器没开时）：歌名粗体、演出者淡、底下细进度条；眼睛由 drawIsland 画
     func drawMusicCapsule(_ g: CGContext, rect: CGRect, c: CGPoint, lt: CGFloat, now: Double, red: Bool) {
         guard let i = nowPlaying.info ?? nowPlaying.shown else { return }
-        let fg = red ? srgb(0xb3261e) : NSColor.white
+        // 2.0 P07：床頭夜灯的暗红版之外，自畫夜間紅的 Modular 直接用夜間紅（不走整面映射）
+        let fg = red ? srgb(0xb3261e) : nightOwnPalette ? HPTokens.Night.primary : NSColor.white
         let x = rect.minX + 300, w = rect.maxX - 70 - x
         g.saveGState(); g.setAlpha(min(1, (lt - 0.3) / 0.7))
         let tf = Self.rounded(46, weight: .bold), af = Self.rounded(32, weight: .semibold)
         drawLeft(g, Self.fit(i.title, tf, w), font: tf, x: x, y: c.y - 14, color: fg)
         drawLeft(g, Self.fit(i.artist.isEmpty ? (i.playing ? L("nowplaying.playing", "正在播放") : L("nowplaying.paused", "已暂停")) : i.artist, af, w), font: af, x: x, y: c.y + 36,
-                 color: fg.withAlphaComponent(0.6))
+                 color: nightOwnPalette && !red ? HPTokens.Night.secondary : fg.withAlphaComponent(0.6))
         if let p = NowPlayingLogic.progress(i, now: now) {
             let bar = CGRect(x: x, y: c.y + 66, width: w, height: 10)
             g.setFillColor(fg.withAlphaComponent(0.2).cgColor)
@@ -163,6 +165,9 @@ final class NowPlayingPoller {
     func start(face: Face) {
         guard !Self.disabled, timer == nil else { return }
         self.face = face
+        // 2.0 #11：MediaRemote 读得到任何 App 的正在播放（播客、浏览器…），内容一变就发布
+        MediaRemoteReader.shared.onChange = { [weak self] in self?.publish() }
+        MediaRemoteReader.shared.start()
         let t = Timer(timeInterval: 3, repeats: true) { [weak self] _ in self?.poll() }
         t.tolerance = 0.5
         RunLoop.main.add(t, forMode: .common); timer = t
@@ -172,6 +177,7 @@ final class NowPlayingPoller {
     /// 关掉：不再问 Music / Spotify，屏幕上的「正在播放」也一并清掉
     func stop() {
         timer?.invalidate(); timer = nil; results = [:]
+        MediaRemoteReader.shared.stop()
         face?.nowPlaying = NowPlayingState(); face?.forceDirty = true
     }
 
@@ -206,6 +212,11 @@ final class NowPlayingPoller {
     private func publish() {
         guard timer != nil else { return }   // 已关掉：在途的结果丢弃
         if PhoneNowPlayingBridge.shared.active { return }   // 手機來源優先
+        // 2.0 #11：MediaRemote 有資料就用它（進度、倍速更準，也涵蓋播客等沒有 AppleScript 的 App）
+        if let m = MediaRemoteReader.shared.latest {
+            activeBundle = m.bundle.isEmpty ? activeBundle : m.bundle
+            face?.setNowPlaying(m.info()); return
+        }
         let playing = Self.players.first { results[$0.bundle]?.playing == true }
         let chosen = playing ?? Self.players.first { results[$0.bundle] != nil }
         if let c = chosen { activeBundle = c.bundle; face?.setNowPlaying(results[c.bundle]) }
@@ -218,6 +229,11 @@ final class NowPlayingPoller {
     func control(_ c: MediaCommand) {
         // 手機正在播放時，媒體鍵先交給 CarPlay HID；沒有手機來源才控本機 Music/Spotify。
         if PhoneNowPlayingBridge.shared.send(c) { return }
+        // 2.0 #11：MediaRemote 送得到就直接送給系統的正在播放（任何 App 都吃）
+        if MediaRemoteReader.shared.latest != nil, MediaRemote.shared.canSend {
+            let m: MRCommand = [.play: .play, .pause: .pause, .playPause: .togglePlayPause, .next: .nextTrack, .previous: .previousTrack][c] ?? .togglePlayPause
+            if MediaRemote.shared.command(m) { return }
+        }
         guard let b = activeBundle else { return }
         let verb: String
         switch c {

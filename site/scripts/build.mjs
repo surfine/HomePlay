@@ -4,6 +4,9 @@ import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import { copy, origin, github, notice, releaseDownload, FACES, FINISHES, LANGS } from './content.mjs';
+import { history, HISTORY_SLUG } from './history.mjs';
+import { preview, PREVIEW_SLUG } from './preview.mjs';
+import { previewPage } from './preview-page.mjs';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const dist = path.join(root, 'dist');
@@ -48,6 +51,18 @@ const bust = (html) => html.replace(/\/media\/[^"'?\s)]+/g, (m) => (version(m) ?
 const assetVersion = (name) => createHash('sha256').update(readFileSync(path.join(root, name))).digest('hex').slice(0, 10);
 const CSS_V = assetVersion('style.css');
 const JS_V = assetVersion('app.js');
+// 小工具往事的展品：每個年代一組 exhibits/<id>.{js,css,strings.json}，建置時和 history.css / history.js 串成一份。
+const EXHIBITS = path.join(root, 'exhibits');
+const exFiles = (ext) => (existsSync(EXHIBITS) ? readdirSync(EXHIBITS).filter((f) => f.endsWith(ext)).sort().map((f) => path.join(EXHIBITS, f)) : []);
+// 2.0 的設計系統（preview.css）排在最前面：同一套膠囊導覽、標記與夕照漸層，少一個阻擋渲染的請求
+const HIST_CSS = [path.join(root, 'preview.css'), path.join(root, 'history.css'), ...exFiles('.css')].map((f) => readFileSync(f, 'utf8')).join('\n');
+const HIST_JS = [path.join(root, 'history.js'), ...exFiles('.js')].map((f) => readFileSync(f, 'utf8')).join('\n;\n');
+const EX_STRINGS = Object.fromEntries(exFiles('.strings.json').map((f) => [path.basename(f, '.strings.json'), JSON.parse(readFileSync(f, 'utf8'))]));
+const hashOf = (t) => createHash('sha256').update(t).digest('hex').slice(0, 10);
+const HCSS_V = hashOf(HIST_CSS);
+const HJS_V = hashOf(HIST_JS);
+const PCSS_V = assetVersion('preview.css');   // 2.0 Preview 頁自己的樣式與互動（preview-page.mjs）
+const PJS_V = assetVersion('preview.js');
 // app.js 動態載入的渲染圖：把這一頁那套圖的版本號交給它
 // 鍵是相對於這套渲染圖目錄的檔名（含 spin/NN.webp）。
 const webpsIn = (dir, sub = '') => (existsSync(path.join(mediaRoot, dir, sub)) ? readdirSync(path.join(mediaRoot, dir, sub)).filter((f) => f.endsWith('.webp')).map((f) => sub + f) : []);
@@ -62,7 +77,7 @@ const alternates = LANGS.map((l) => ({ hreflang: l.code, href: origin + l.path }
 const stripTags = (h) => h.replace(/<[^>]+>/g, '');
 const otherLangs = (c) => LANGS.filter((l) => l.key !== c.lang);
 
-function head(c, { title, description, canonicalPath, image, imageAlt }) {
+function head(c, { title, description, canonicalPath, image, imageAlt, ld: ldOverride, preload = true, suffix = '', ogTitle = c.ogTitle, keywords = c.keywords, ogType = 'website' }) {
   const url = origin + canonicalPath;
   const img = origin + image;
   const others = otherLangs(c);
@@ -81,27 +96,27 @@ function head(c, { title, description, canonicalPath, image, imageAlt }) {
       },
     ],
   };
+  const alts = LANGS.map((l) => ({ hreflang: l.code, href: origin + l.path + suffix }));
   return `<meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${esc(title)}</title>
 <meta name="description" content="${attr(description)}">
-<meta name="keywords" content="${attr(c.keywords)}">
+<meta name="keywords" content="${attr(keywords)}">
 <meta name="robots" content="index,follow,max-image-preview:large">
 <meta name="color-scheme" content="light dark">
 <meta name="theme-color" content="#eceef1" media="(prefers-color-scheme: light)">
 <meta name="theme-color" content="#0f1114" media="(prefers-color-scheme: dark)">
 <link rel="canonical" href="${url}">
-${alternates.map((a) => `<link rel="alternate" hreflang="${a.hreflang}" href="${a.href}">`).join('\n')}
-<link rel="alternate" hreflang="x-default" href="${origin}/">
+${alts.map((a) => `<link rel="alternate" hreflang="${a.hreflang}" href="${a.href}">`).join('\n')}
+<link rel="alternate" hreflang="x-default" href="${origin}/${suffix}">
 <link rel="icon" href="/media/favicon.ico" sizes="any">
 <link rel="icon" type="image/png" sizes="32x32" href="/media/favicon-32.png">
 <link rel="icon" type="image/png" sizes="16x16" href="/media/favicon-16.png">
 <link rel="icon" type="image/png" sizes="192x192" href="/media/icon-192.png">
 <link rel="apple-touch-icon" sizes="180x180" href="/media/apple-touch-icon.png">
-<link rel="preload" as="image" href="${R}face-idle.webp" fetchpriority="high">
-<meta property="og:type" content="website">
+${preload ? `<link rel="preload" as="image" href="${R}face-idle.webp" fetchpriority="high">\n` : ''}<meta property="og:type" content="${ogType}">
 <meta property="og:site_name" content="${c.siteName}">
-<meta property="og:title" content="${attr(c.ogTitle)}">
+<meta property="og:title" content="${attr(ogTitle)}">
 <meta property="og:description" content="${attr(description)}">
 <meta property="og:url" content="${url}">
 <meta property="og:locale" content="${c.locale}">
@@ -112,11 +127,11 @@ ${others.map((o) => `<meta property="og:locale:alternate" content="${o.locale}">
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="${attr(imageAlt)}">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="twitter:title" content="${attr(c.ogTitle)}">
+<meta name="twitter:title" content="${attr(ogTitle)}">
 <meta name="twitter:description" content="${attr(description)}">
 <meta name="twitter:image" content="${img}">
 <meta name="twitter:image:alt" content="${attr(imageAlt)}">
-<script type="application/ld+json">${json(ld)}</script>
+<script type="application/ld+json">${json(ldOverride || ld)}</script>
 <link rel="stylesheet" href="/style.css?v=${CSS_V}">`;
 }
 
@@ -161,7 +176,7 @@ ${head(c, { title: c.title, description: c.description, canonicalPath: c.path, i
 <a class="skip" href="#main">${c.skip}</a>
 <header><div class="wrap">
   ${brand}
-  <nav aria-label="${attr(c.navLabel)}">${c.nav.map(([id, t]) => `<a href="#${id}">${t}</a>`).join('')}</nav>
+  <nav aria-label="${attr(c.navLabel)}"><a class="nav-new" href="${c.path}${PREVIEW_SLUG}">${preview[c.lang].homeNav}</a>${c.nav.map(([id, t]) => `<a href="#${id}">${t}</a>`).join('')}</nav>
   <div class="end"><nav class="langs" aria-label="${attr(c.langLabel)}">${langLinks}</nav><a class="btn btn-ghost" href="${github}">${c.githubLabel}</a></div>
 </div></header>
 <main id="main">
@@ -300,9 +315,128 @@ ${c.rows.map(([f, t, r], i) => `      <button type="button" class="row${i ? '' :
 </div></section>
 
 </main>
-<footer><div class="wrap"><span>${c.footer}</span><span class="links"><a href="${github}">${c.footerLinks.github}</a><a href="${notice}">${c.footerLinks.notice}</a>${langLinks}</span></div></footer>
+<footer><div class="wrap"><span>${c.footer}</span><span class="links"><a href="${c.path}${HISTORY_SLUG}">${history[c.lang].navLink}</a><a href="${github}">${c.footerLinks.github}</a><a href="${notice}">${c.footerLinks.notice}</a>${langLinks}</span></div></footer>
 <script type="application/json" id="i18n">${json(i18n)}</script>
 <script src="/app.js?v=${JS_V}" defer></script>
+</body>
+</html>
+`;
+}
+
+// ── 小工具往事：一篇有出處的長文。三種語言同一個形狀，文案在 history.mjs。──
+// 版面照首頁的頁首、頁尾與配色；正文放慢：窄欄、大行距，每章一個年代標、一句標題、短段落、緊接出處。
+// 插圖還沒定稿，先用「插圖草案」框寫清楚要畫什麼；不放任何第三方截圖。
+const ext = (u) => `<a href="${attr(u)}">`;
+// 展品外框：標題、任務、舞台、螢幕報讀說明、即時狀態、操作說明。舞台內容由 exhibits/<id>.js 畫；
+// 不開 JavaScript 時，舞台裡的 <noscript> 讀到同一段說明。
+function exhibit(id, i, lang, h) {
+  const all = EX_STRINGS[id]; if (!all) return '';
+  const s = all[lang] || all.en;
+  const no = String(i + 1).padStart(2, '0');
+  return `<figure class="ex ex-${id}" id="ex-${id}" data-ex="${id}" aria-labelledby="ex-${id}-t">
+    <div class="ex-head"><span class="ex-no">${no}</span><h3 id="ex-${id}-t">${s.title}</h3><button type="button" class="ex-reset" hidden>${h.reset}</button></div>
+    <p class="ex-task">${s.task}</p>
+    <div class="ex-stage" role="group" aria-labelledby="ex-${id}-t" aria-describedby="ex-${id}-sr"><noscript><p class="ex-noscript">${s.sr}</p></noscript></div>
+    <p class="ex-sr" id="ex-${id}-sr">${s.sr}</p>
+    <p class="ex-status" aria-live="polite">${s.idle || ''}</p>
+    <figcaption class="ex-how">${s.how}</figcaption>
+  </figure>`;
+}
+function historyPage(c, h) {
+  R = rendersFor(c);
+  const suffix = HISTORY_SLUG;
+  const canonicalPath = c.path + suffix;
+  const brand = `<a class="brand" href="${c.path}"><img src="/media/icon-192.png" width="26" height="26" alt="">HomePlay</a>`;
+  const langLinks = otherLangs(c).map((l) => `<a href="${l.path}${suffix}" hreflang="${l.code}" lang="${l.code}">${l.label}</a>`).join('');
+  const url = origin + canonicalPath;
+  const ld = {
+    '@context': 'https://schema.org',
+    '@graph': [
+      { '@type': 'WebSite', '@id': `${origin}/#website`, name: c.siteName, url: origin + c.path, inLanguage: c.htmlLang },
+      {
+        '@type': 'Article', headline: stripTags(h.h1), description: h.description, inLanguage: c.htmlLang, url,
+        image: origin + c.og, dateModified: h.checked, author: { '@type': 'Organization', name: 'HomePlay', url: github },
+        isPartOf: { '@id': `${origin}/#website` }, citation: h.sources.map(([, t, u]) => ({ '@type': 'CreativeWork', name: stripTags(t), url: u })),
+      },
+    ],
+  };
+  const chapter = (ch, i) => `<section class="ch" id="${ch.id}">
+  <p class="ch-era"><span class="ch-no">${String(i + 1).padStart(2, '0')}</span>${ch.era}</p>
+  <h2>${ch.title}</h2>
+  ${ch.body.map((t) => `<p>${t}</p>`).join('\n  ')}
+  ${ch.links.length ? `<p class="ch-src">${ch.links.map(([t, u]) => `${ext(u)}${t} ↗</a>`).join('')}</p>` : ''}
+  ${ch.lesson ? `<aside class="lesson"><b>${h.lessonLabel}</b><p>${ch.lesson}</p></aside>` : ''}
+  ${exhibit(ch.id, i, c.lang, h)}
+</section>`;
+  return `<!doctype html>
+<html lang="${c.htmlLang}">
+<head>
+${head(c, { title: h.title, description: h.description, canonicalPath, image: `/media/og-history-${c.lang}.jpg`, imageAlt: h.ogAlt, ld, preload: false, suffix, ogTitle: h.ogTitle, keywords: h.keywords, ogType: 'article' })}
+<link rel="stylesheet" href="/history.css?v=${HCSS_V}">
+</head>
+<body class="hist pv">
+<img class="share-fallback" src="/media/share-square.jpg" width="512" height="512" alt="" hidden loading="lazy">
+<div class="read-bar" aria-hidden="true"><i></i></div>
+<a class="skip" href="#main">${c.skip}</a>
+<header class="pv-bar"><div class="wrap">
+  ${brand}
+  <nav class="pv-nav" aria-label="${attr(h.tocLabel)}"><span class="pv-nav-eyes" aria-hidden="true">👀</span><i class="pv-nav-thumb" aria-hidden="true"></i><a href="#contents">${h.tocLabel}</a><a href="#timeline">${h.timelineTitle}</a><a href="#sources">${h.sourcesTitle}</a><a class="pv-nav-out" href="${c.path}${PREVIEW_SLUG}">${preview[c.lang].homeNav}</a></nav>
+  <div class="end"><nav class="langs" aria-label="${attr(c.langLabel)}">${langLinks}</nav></div>
+</div></header>
+<main id="main">
+<article class="essay">
+
+<section class="h-hero">
+  <p class="pv-kicker"><span class="pv-badge">${h.kicker.split(' · ')[0].replace('HomePlay ', '')}</span>${h.kicker.split(' · ').slice(1).join(' · ')}</p>
+  <h1>${h.h1}</h1>
+  <p class="lede">${h.lede}</p>
+  <p class="h-meta">${h.meta}</p>
+  <ol class="era-strip" aria-label="${attr(h.stripLabel)}">
+    ${h.chapters.map((ch) => `<li><a href="#${ch.id}"><b>${ch.year}</b><span>${ch.short}</span></a></li>`).join('\n    ')}
+  </ol>
+</section>
+
+<nav class="h-toc" id="contents" aria-label="${attr(h.tocLabel)}">
+  <h2>${h.tocLabel}</h2>
+  <ol>${h.chapters.map((ch, i) => `<li><a href="#${ch.id}"><span>${String(i + 1).padStart(2, '0')}</span>${ch.title}</a></li>`).join('')}</ol>
+</nav>
+
+${h.chapters.map(chapter).join('\n\n')}
+
+<section class="ch h-timeline" id="timeline">
+  <h2>${h.timelineTitle}</h2>
+  <p class="lede">${h.timelineLede}</p>
+  <div class="tl-scroll"><table>
+    <thead><tr>${h.timelineHead.map((t) => `<th scope="col">${t}</th>`).join('')}</tr></thead>
+    <tbody>${h.timeline.map(([y, e, l]) => `<tr><th scope="row">${y}</th><td>${e}</td><td>${l}</td></tr>`).join('')}</tbody>
+  </table></div>
+</section>
+
+<section class="ch h-unsure" id="unsure">
+  <h2>${h.unsureTitle}</h2>
+  <p class="lede">${h.unsureLede}</p>
+  <ul>${h.unsure.map((t) => `<li>${t}</li>`).join('')}</ul>
+</section>
+
+<section class="ch h-sources" id="sources">
+  <h2>${h.sourcesTitle}</h2>
+  <p class="lede">${h.sourcesLede}</p>
+  <ol class="source-list">
+    ${h.sources.map(([k, t, u, n]) => `<li><span class="src-kind">${k}</span>${ext(u)}${t} ↗</a><span class="src-note">${n}</span></li>`).join('\n    ')}
+  </ol>
+  <p class="h-notice">${h.notice}</p>
+</section>
+
+<aside class="pv-cta h-next" aria-label="${attr(preview[c.lang].historyCta.label)}">
+  <div><p class="pv-eyebrow">${preview[c.lang].historyCta.eyebrow}</p><h2>${preview[c.lang].historyCta.title}</h2><p>${preview[c.lang].historyCta.body}</p></div>
+  <div class="pv-ctas"><a class="btn btn-primary" href="${c.path}${PREVIEW_SLUG}">${preview[c.lang].historyCta.link}</a></div>
+</aside>
+
+</article>
+</main>
+<footer><div class="wrap"><span>${c.footer}</span><span class="links"><a href="${c.path}">${h.home}</a><a href="${github}">${c.footerLinks.github}</a><a href="${notice}">${c.footerLinks.notice}</a>${langLinks}</span></div></footer>
+<script type="application/json" id="hx-i18n">${json({ lang: c.lang, ui: h.exUi, ex: Object.fromEntries(Object.entries(EX_STRINGS).map(([k, v]) => [k, v[c.lang] || v.en])) })}</script>
+<script src="/history.js?v=${HJS_V}" defer></script>
 </body>
 </html>
 `;
@@ -341,16 +475,32 @@ function notFound() {
 await rm(dist, { recursive: true, force: true });
 await mkdir(dist, { recursive: true });
 await cp(path.join(root, 'public'), dist, { recursive: true });
-for (const name of ['style.css', 'app.js']) await cp(path.join(root, name), path.join(dist, name));
+await writeFile(path.join(dist, 'history.css'), HIST_CSS);
+await writeFile(path.join(dist, 'history.js'), HIST_JS);
+for (const name of ['style.css', 'app.js', 'preview.css', 'preview.js']) await cp(path.join(root, name), path.join(dist, name));
 for (const c of Object.values(copy)) {
   const target = path.join(dist, c.path.replace(/^\/|\/$/g, ''));
   await mkdir(target, { recursive: true });
   await writeFile(path.join(target, 'index.html'), bust(page(c)));
 }
+for (const c of Object.values(copy)) {
+  const target = path.join(dist, c.path.replace(/^\/|\/$/g, ''), HISTORY_SLUG);
+  await mkdir(target, { recursive: true });
+  await writeFile(path.join(target, 'index.html'), bust(historyPage(c, history[c.lang])));
+}
+// 2.0 Preview：/2.0/、/zh-hans/2.0/、/en/2.0/
+const fillN = (tpl, n, total) => tpl.replace('{n}', n).replace('{t}', total);
+for (const c of Object.values(copy)) {
+  const target = path.join(dist, c.path.replace(/^\/|\/$/g, ''), PREVIEW_SLUG);
+  await mkdir(target, { recursive: true });
+  await writeFile(path.join(target, 'index.html'), bust(previewPage(c, preview[c.lang], { head, attr, json, origin, github, notice, releaseDownload, LANGS, otherLangs, fill: fillN, PCSS_V, PJS_V, HISTORY_SLUG })));
+}
 await writeFile(path.join(dist, '404.html'), bust(notFound()));
 await writeFile(path.join(dist, 'robots.txt'), `User-agent: *\nAllow: /\nSitemap: ${origin}/sitemap.xml\n`);
+const plinks = LANGS.map((l) => `<xhtml:link rel="alternate" hreflang="${l.code}" href="${origin}${l.path}${PREVIEW_SLUG}"/>`).join('') + `<xhtml:link rel="alternate" hreflang="x-default" href="${origin}/${PREVIEW_SLUG}"/>`;
 const xlinks = alternates.map((a) => `<xhtml:link rel="alternate" hreflang="${a.hreflang}" href="${a.href}"/>`).join('') + `<xhtml:link rel="alternate" hreflang="x-default" href="${origin}/"/>`;
-await writeFile(path.join(dist, 'sitemap.xml'), `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:xhtml="http://www.w3.org/1999/xhtml">${LANGS.map((l) => `<url><loc>${origin}${l.path}</loc>${xlinks}</url>`).join('')}</urlset>\n`);
+const hlinks = LANGS.map((l) => `<xhtml:link rel="alternate" hreflang="${l.code}" href="${origin}${l.path}${HISTORY_SLUG}"/>`).join('') + `<xhtml:link rel="alternate" hreflang="x-default" href="${origin}/${HISTORY_SLUG}"/>`;
+await writeFile(path.join(dist, 'sitemap.xml'), `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:xhtml="http://www.w3.org/1999/xhtml">${LANGS.map((l) => `<url><loc>${origin}${l.path}</loc>${xlinks}</url>`).join('')}${LANGS.map((l) => `<url><loc>${origin}${l.path}${HISTORY_SLUG}</loc>${hlinks}</url>`).join('')}${LANGS.map((l) => `<url><loc>${origin}${l.path}${PREVIEW_SLUG}</loc>${plinks}</url>`).join('')}</urlset>\n`);
 await writeFile(path.join(dist, '_headers'), `/*
   X-Content-Type-Options: nosniff
   Referrer-Policy: strict-origin-when-cross-origin

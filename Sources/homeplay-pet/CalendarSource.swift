@@ -28,14 +28,17 @@ enum CalendarLogic {
         return timed.first ?? live.filter(\.allDay).sorted { $0.start < $1.start }.first
     }
 
-    /// "10:30–11:00"（24 小时制，和时钟一致）；全天写「全天」
+    /// "10:30–11:00"（時制照系統，跟時鐘一致；12 小時制帶上午／下午，跨上下午兩邊都帶）；全天寫「全天」
     static func range(_ e: NextEvent, calendar: Calendar = .current) -> String {
         if e.allDay { return L("calendar.allDay", "全天") }
-        func t(_ d: Date) -> String {
+        func t(_ d: Date) -> (String, String?, Bool) {
             let c = calendar.dateComponents([.hour, .minute], from: d)
-            return String(format: "%02d:%02d", c.hour ?? 0, c.minute ?? 0)
+            return Face.timeParts(hour: c.hour ?? 0, minute: c.minute ?? 0)
         }
-        return "\(t(e.start))–\(t(e.end))"
+        let (ts, ps, first) = t(e.start), (te, pe, _) = t(e.end)
+        if let ps, let pe, ps != pe { return first ? "\(ps)\(ts)–\(pe)\(te)" : "\(ts) \(ps)–\(te) \(pe)" }
+        guard let ps else { return "\(ts)–\(te)" }
+        return first ? "\(ps)\(ts)–\(te)" : "\(ts)–\(te) \(ps)"
     }
 
     static func tile(auth: EKAuthorizationStatus, on: Bool, event: NextEvent?) -> CalendarTile {

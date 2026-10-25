@@ -1,0 +1,47 @@
+{
+  "fill": "none",
+  "groups": [
+    {
+      "name": "eyes",
+      "layers": [
+        {
+          "name": "eyes",
+          "image-name": "eyes.png",
+          "glass": true
+        }
+      ],
+      "shadow": {
+        "kind": "neutral",
+        "opacity": 0.5
+      },
+      "translucency": {
+        "enabled": false,
+        "value": 0.5
+      },
+      "specular": true
+    },
+    {
+      "name": "background",
+      "layers": [
+        {
+          "name": "background",
+          "image-name": "background.png",
+          "image-name-specializations": [
+            {
+              "appearance": "dark",
+              "value": "background-dark.png"
+            }
+          ]
+        }
+      ],
+      "shadow": {
+        "kind": "none",
+        "opacity": 0
+      },
+      "specular": false
+    }
+  ],
+  "supported-platforms": {
+    "squares": "shared"
+  }
+}

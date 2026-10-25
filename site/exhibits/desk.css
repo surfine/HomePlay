@@ -1,0 +1,57 @@
+/* 01 · 1984 桌面附件。1 位元：只有黑和白，灰是 2 × 2 的網點。尺寸全用邏輯像素 × --u（桌面寬 512，窄螢幕 360）。
+   黑白不跟深色模式變：那是年代的樣子，不是主題色。字用系統字，不用原廠點陣字。 */
+.dk{--W:512;--H:342;--u:calc(100cqw / var(--W));position:relative;width:100%;aspect-ratio:var(--W)/var(--H);overflow:hidden;
+  background:repeating-conic-gradient(#000 0 25%,#fff 0 50%) 0 0/calc(var(--u)*2) calc(var(--u)*2);
+  color:#000;font:600 calc(var(--u)*12)/1.25 -apple-system,BlinkMacSystemFont,"Helvetica Neue","PingFang TC","PingFang SC",sans-serif;
+  -webkit-font-smoothing:none;user-select:none;touch-action:manipulation}
+@container (max-width:480px){.dk{--W:360;--H:620}}
+.dk button{color:#000;background:#fff;border:0;padding:0;margin:0;font:inherit;cursor:default;border-radius:0}
+.dk :focus-visible{outline:calc(var(--u)*2) solid #000;outline-offset:calc(var(--u)*1)}
+.dk-bar{position:absolute;inset:0 0 auto;height:calc(var(--u)*20);background:#fff;border-bottom:max(1px,var(--u)) solid #000;display:flex;align-items:center;gap:calc(var(--u)*4);padding:0 calc(var(--u)*8);z-index:999}
+.dk-mtitle{padding:calc(var(--u)*2) calc(var(--u)*8);line-height:calc(var(--u)*16)}
+.dk-mark{font-size:calc(var(--u)*15)}
+.dk-mtitle.on{background:#000!important;color:#fff!important}
+.dk-menu{position:absolute;left:calc(var(--u)*8);top:calc(var(--u)*19);min-width:calc(var(--u)*150);background:#fff;border:max(1px,var(--u)) solid #000;box-shadow:calc(var(--u)*1) calc(var(--u)*1) 0 #000;display:flex;flex-direction:column;padding:calc(var(--u)*2) 0}
+.dk-menu[hidden]{display:none}
+.dk-mitem{text-align:left;padding:calc(var(--u)*3) calc(var(--u)*16)!important;min-height:calc(var(--u)*20)}
+.dk-mitem:hover,.dk-mitem:focus-visible{background:#000!important;color:#fff!important;outline:0}
+.dk-win{position:absolute;left:calc(var(--x,0)*var(--u));top:calc(var(--y,0)*var(--u));z-index:var(--z,1);background:#fff;
+  border:max(1px,var(--u)) solid #000;box-shadow:calc(var(--u)*1) calc(var(--u)*1) 0 #000;display:flex;flex-direction:column}
+.dk-win[hidden]{display:none}
+.dk-title{position:relative;flex:none;height:calc(var(--u)*19);border-bottom:max(1px,var(--u)) solid #000;display:flex;align-items:center;justify-content:center;touch-action:none;cursor:grab;
+  background:linear-gradient(#fff,#fff) 0 0/100% calc(var(--u)*3) no-repeat,linear-gradient(#fff,#fff) 0 100%/100% calc(var(--u)*3) no-repeat,
+    repeating-linear-gradient(#000 0 max(1px,var(--u)),#fff 0 calc(var(--u)*2))}
+.dk-win:not(.front) .dk-title{background:#fff}
+.dk-win:not(.front) .dk-close{visibility:hidden}
+.dk-tname{background:#fff;padding:0 calc(var(--u)*6);white-space:nowrap}
+.dk-close{position:absolute!important;left:calc(var(--u)*8);top:50%;width:calc(var(--u)*13);height:calc(var(--u)*13);transform:translateY(-50%);border:max(1px,var(--u)) solid #000!important;box-shadow:0 0 0 calc(var(--u)*1) #fff}
+.dk-close:active{background:#000!important}
+.dk-body{flex:1;min-height:0}
+.dk-doc{--x:20;--y:30;width:calc(var(--u)*330);height:calc(var(--u)*220)}
+@container (max-width:480px){.dk-doc{--x:12;--y:32;width:calc(var(--u)*336);height:calc(var(--u)*200)}}
+.dk textarea{display:block;width:100%;height:100%;resize:none;border:0;padding:calc(var(--u)*8);font:500 calc(var(--u)*13)/1.45 inherit;font-family:inherit;color:#000;background:#fff;-webkit-font-smoothing:none;user-select:text}
+.dk-doc textarea{height:calc(100% - var(--u)*19)}
+/* 計算機 */
+.dk-calc{width:calc(var(--u)*124)}
+.dk-calc .dk-body{padding:calc(var(--u)*6)}
+.dk-disp{display:block;height:calc(var(--u)*20);border:max(1px,var(--u)) solid #000;text-align:right;padding:0 calc(var(--u)*4);line-height:calc(var(--u)*18);overflow:hidden;font-variant-numeric:tabular-nums}
+.dk-keys{display:grid;grid-template-columns:repeat(4,1fr);gap:calc(var(--u)*4);margin-top:calc(var(--u)*6)}
+.dk-key{height:calc(var(--u)*20);border:max(1px,var(--u)) solid #000!important;border-radius:calc(var(--u)*3)!important;box-shadow:0 calc(var(--u)*1) 0 #000}
+.dk-key:active{background:#000!important;color:#fff!important;box-shadow:none}
+.dk-key.wide{grid-column:span 2}
+/* 鬧鐘 */
+.dk-clock{width:calc(var(--u)*140)}
+.dk-time{padding:calc(var(--u)*6) 0;text-align:center;font-size:calc(var(--u)*16);font-variant-numeric:tabular-nums}
+/* 記事本：右下角折起來的一頁 */
+.dk-note{width:calc(var(--u)*172);height:calc(var(--u)*132)}
+.dk-note .dk-body{position:relative}
+.dk-dog{position:absolute;right:0;bottom:0;width:calc(var(--u)*14);height:calc(var(--u)*14);background:linear-gradient(135deg,#fff 0 50%,#000 50% calc(50% + var(--u)),#fff 0);border-left:max(1px,var(--u)) solid #000;border-top:max(1px,var(--u)) solid #000}
+/* 拼圖 */
+.dk-puzzle{width:calc(var(--u)*134)}
+.dk-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:0;padding:calc(var(--u)*4)}
+.dk-tile{height:calc(var(--u)*31);border:max(1px,var(--u)) solid #000!important;margin:calc(var(--u)*-0.5)!important;font-size:calc(var(--u)*13)}
+.dk-tile.blank{background:repeating-conic-gradient(#000 0 25%,#fff 0 50%) 0 0/calc(var(--u)*2) calc(var(--u)*2)!important}
+.dk-tile:active{background:#000!important;color:#fff!important}
+/* 窄螢幕：按鍵與拼圖塊放大到手指點得到（放在最後，蓋過上面的預設尺寸） */
+@container (max-width:480px){.dk-calc{width:calc(var(--u)*150)}.dk-key{height:calc(var(--u)*30)}.dk-disp{height:calc(var(--u)*26);line-height:calc(var(--u)*24)}
+.dk-puzzle{width:calc(var(--u)*152)}.dk-tile{height:calc(var(--u)*35)!important}.dk-close{width:calc(var(--u)*18);height:calc(var(--u)*18)}.dk-title{height:calc(var(--u)*24)}}

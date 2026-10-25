@@ -91,13 +91,16 @@ final class Bit1 {
         let wd = width(s, font)
         let x0 = align < 0 ? x : (align == 0 ? x - wd / 2 : x - wd)
         ctx.saveGState(); ctx.translateBy(x: CGFloat(x0), y: CGFloat(y)); ctx.scaleBy(x: 1, y: -1)
+        // 第六輪：文字位置不在 gstate 裡（saveGState 不會存）：CTLine（中文走這條）畫完會把它留在行尾，
+        // 下一段走字形的英文就整段往右移。每段都從原點開始
+        ctx.textPosition = .zero
         if let g = glyphs(s, font) {
             ctx.setFillColor(CGColor(gray: white ? 1 : 0, alpha: 1))
             CTFontDrawGlyphs(font as CTFont, g.glyphs, g.x.map { CGPoint(x: $0, y: 0) }, g.glyphs.count, ctx)
         } else {
             let line = CTLineCreateWithAttributedString(NSAttributedString(string: s, attributes: [
                 .font: font, .foregroundColor: white ? NSColor.white : NSColor.black]))
-            ctx.textPosition = .zero; CTLineDraw(line, ctx)
+            CTLineDraw(line, ctx)
         }
         ctx.restoreGState()
         return wd

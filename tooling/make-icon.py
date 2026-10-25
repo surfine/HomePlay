@@ -3,6 +3,7 @@
 
   python3 tooling/make-icon.py            # 三個方向的設計稿 → .build/icon/sheet.png
   python3 tooling/make-icon.py --final A  # 定稿：assets/icon/AppIcon.icns + 官網圖示
+  python3 tooling/make-icon.py --layers   # 分層圖示（Icon Composer）：assets/icon/AppIcon.icon（背景＋眼睛兩層，不預先遮罩、不帶陰影）
 
 全部用 4 倍超取樣畫，再縮回 1024，邊緣才乾淨。macOS 圖示格線：1024 畫布、824 主體、四周留 100。
 """
@@ -141,11 +142,56 @@ def option_c():
     c.alpha_composite(cap, ((N - cap.width) // 2, s(456) - cap.height // 2))
     return c
 
+def layers_b():
+    """B 的分層版（P08）：背景＝滿版不透明的晨昏（方的，圓角、陰影、光澤交給系統）；
+    前景＝透明底的一雙眼睛（不帶光暈、不帶陰影，系統自己加）。回傳 (淺色背景, 深色背景, 眼睛)，皆 1024×1024。"""
+    full = 1024 * SS
+    light = dusk(full, full)
+    # 深色外觀：同一幅晨昏壓暗、偏夜（深藍到暗藕紫），光暈收斂；系統的 Dark 渲染會再依這張圖調整
+    dark = gradient(full, full, [(0, (22, 30, 58)), (0.45, (70, 60, 96)), (1, (122, 88, 92))]).convert("RGBA")
+    glow = Image.new("L", (full, full), 0)
+    ImageDraw.Draw(glow).ellipse((full * 0.48, full * 0.02, full * 1.02, full * 0.52), fill=60)
+    glow = glow.filter(ImageFilter.GaussianBlur(full * 0.06))
+    dark = Image.composite(Image.new("RGBA", (full, full), (170, 150, 170, 255)), dark, glow)
+    arcs = Image.new("RGBA", (full, full), (0, 0, 0, 0))
+    d = ImageDraw.Draw(arcs)
+    for k, a in ((0, 50), (1, 28)):
+        off = k * full * 0.035
+        d.arc((-full * 0.35, full * 0.40 + off, full * 1.35, full * 1.6 + off), 200, 340, fill=(255, 255, 255, a), width=max(2, int(full * 0.012)))
+    dark = Image.alpha_composite(dark, arcs.filter(ImageFilter.GaussianBlur(full * 0.004)))
+    e = eyes(s(520), s(300), look=(0.32, -0.26))
+    fg = Image.new("RGBA", (N, N), (0, 0, 0, 0))
+    fg.alpha_composite(e, ((N - e.width) // 2, s(540) - e.height // 2))
+    return finish(light).convert("RGB"), finish(dark).convert("RGB"), finish(fg)
+
+def write_icon_document(dst):
+    """寫出 AppIcon.icon（資料夾：icon.json＋Assets）。背景與眼睛各一層，眼睛開 glass 讓系統加光澤與陰影。"""
+    import json
+    bg, bg_dark, fg = layers_b()
+    assets = os.path.join(dst, "Assets"); shutil.rmtree(dst, ignore_errors=True); os.makedirs(assets)
+    bg.save(os.path.join(assets, "background.png")); bg_dark.save(os.path.join(assets, "background-dark.png")); fg.save(os.path.join(assets, "eyes.png"))
+    doc = {
+        "fill": "none",
+        "groups": [
+            {"name": "eyes", "layers": [{"name": "eyes", "image-name": "eyes.png", "glass": True}],
+             "shadow": {"kind": "neutral", "opacity": 0.5}, "translucency": {"enabled": False, "value": 0.5}, "specular": True},
+            {"name": "background", "layers": [{
+                "name": "background", "image-name": "background.png",
+                "image-name-specializations": [{"appearance": "dark", "value": "background-dark.png"}]}],
+             "shadow": {"kind": "none", "opacity": 0}, "specular": False},
+        ],
+        "supported-platforms": {"squares": "shared"},
+    }
+    with open(os.path.join(dst, "icon.json"), "w") as f: json.dump(doc, f, indent=2)
+    print("分層圖示：", dst)
+
 def finish(img):
     return img.resize((1024, 1024), Image.LANCZOS)
 
 def main():
     out = os.path.join(ROOT, ".build", "icon"); os.makedirs(out, exist_ok=True)
+    if "--layers" in sys.argv:
+        write_icon_document(os.path.join(ROOT, "assets", "icon", "AppIcon.icon")); return
     opts = {"A": option_a, "B": option_b, "C": option_c}
     if "--final" in sys.argv:
         k = sys.argv[sys.argv.index("--final") + 1]

@@ -4,3 +4,4 @@
 "NSBluetoothAlwaysUsageDescription" = "Pairs with your iPhone over Bluetooth to set up wireless CarPlay.";
 "NSLocalNetworkUsageDescription" = "Receives CarPlay video and audio from your iPhone over the local network.";
 "NSMicrophoneUsageDescription" = "Uses the Mac's microphone only for Siri and phone calls in CarPlay.";
+"NSPhotoLibraryUsageDescription" = "Shows featured photos from your Photos library in the Photos widget on the desk pet's Home Screen. Photos stay on this Mac.";

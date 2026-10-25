@@ -23,6 +23,8 @@ final class GazeTracker: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate 
     var onSample: ((Sample) -> Void)?
     /// 同一台摄像头顺带喂给房间光估计：不另开 AVCaptureSession。
     var onLightFrame: ((CVPixelBuffer, Double) -> Void)?
+    /// 2.0: 「谁在看」（People/WhoIsLooking.swift）借同一路相机：只在 trackFaces 开着时才有帧，不另开采集。
+    var onFaceFrame: ((CVPixelBuffer, Double) -> Void)?
 
     private let session = AVCaptureSession()
     private let queue = DispatchQueue(label: "homeplay.gaze")
@@ -370,6 +372,7 @@ final class GazeTracker: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate 
         let now = CACurrentMediaTime()
         onLightFrame?(buf, now)
         guard trackFaces else { return }
+        onFaceFrame?(buf, now)   // 2.0: 认人（自己节流，不在这里做重活）
         let request = VNDetectFaceRectanglesRequest()
         request.revision = VNDetectFaceRectanglesRequestRevision3
         let handler = VNImageRequestHandler(cvPixelBuffer: buf, orientation: .up, options: [:])

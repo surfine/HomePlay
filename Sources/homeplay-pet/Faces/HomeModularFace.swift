@@ -1,7 +1,9 @@
-// 錶面「家庭模組」：照 HomeView 的 Home Modular——紫色底上幾條大的 3D 玻璃緞帶，
+// 錶面「家庭模組」：照 HomeView 的 Home Modular——硬邊幾何桌布（第四輪，綠／紫／藍／琥珀）上，
 // 六塊霜面玻璃磚：左上大溫控、右上指針鐘、場景、燈／對講、門鎖、最後一塊放膠囊（👀）。
 // 資料來自「HomePlay Home」幫手（HomeLink）；只顯示，不送任何控制。
 // 背景＋緞帶＋玻璃磚＋文字按資料與解析度快取成一張圖；指針每秒重畫（只有指針與膠囊在動）。
+// 第三輪：磚的版面與玻璃照官方 face-home-modular-*（3×3 格、外距 24、間距 20、圓角 50；玻璃清、折射後面的圖樣、亮邊細），
+// 數字都在 HPTokens.HomeModular。錶面陣容不變（這款仍只是 modular 的舊選項，快照用 --style homeModular --style-raw）。
 
 import AppKit
 
@@ -27,12 +29,7 @@ private struct HomeTiles: Equatable {
 
 extension Face {
     private static let hk: CGFloat = 1024 / 600
-    /// 整組磚往內收到外距 40：同心半徑＝螢幕圓角 138 − 40＝98，大小磚都放得下同一個連續圓角；四周也多一圈空氣
-    static let tileT: CGAffineTransform = {
-        let m: CGFloat = 40, m0: CGFloat = 12 * hk, s = (1024 - 2 * m) / (1024 - 2 * m0)
-        return CGAffineTransform(translationX: m - m0 * s, y: m - m0 * s).scaledBy(x: s, y: s)
-    }()
-    static let tileRadius = Screen.concentric(inset: 40)
+    private static var M: HPTokens.HomeModular.Type { HPTokens.HomeModular.self }
 
     // MARK: 資料
 
@@ -40,6 +37,15 @@ extension Face {
     nonisolated(unsafe) static var demoData = false
     private func homeTiles() -> HomeTiles {
         var t = HomeTiles()
+        if OfficialDemo.on {
+            // 第三輪：官方圖的那一組（68°F、晚安場景、對講、門鎖）
+            t.number = "68"
+            t.thermoLabel = L("homemod.thermostat", "温控"); t.thermoSub = L("homemod.demo.livingRoom", "客厅")
+            t.sceneName = L("homemod.demo.goodNight", "晚安"); t.sceneSub = L("homemod.scene", "场景")
+            t.lightSymbol = "waveform"; t.lightLabel = L("homemod.intercom", "对讲"); t.lightSub = L("homemod.demo.everywhere", "所有房间")
+            t.lockSymbol = "lock.fill"; t.lockLabel = L("homemod.lock", "门锁"); t.lockSub = L("homemod.demo.frontDoor", "大门")
+            return t
+        }
         if Face.demoData {
             t.number = Locale.current.measurementSystem == .us ? "72" : "22"
             t.thermoLabel = L("homemod.thermostat", "温控"); t.thermoSub = L("homemod.demo.livingRoom", "客厅")
@@ -112,7 +118,7 @@ extension Face {
         startHomeLinkIfNeeded()
         let tiles = homeTiles()
         let sc = renderPixelScale, px = Int((1024 * sc).rounded())
-        let key = "\(tiles)|\(Int(sc * 100))|\(L10n.language.rawValue)"
+        let key = "\(tiles)|\(Int(sc * 100))|\(L10n.language.rawValue)|\(HomeModularWallpaper.current.rawValue)|\(nightRedActive)"   // 2.0 P07：夜間副標改不透明灰階，要進快取 key
         let full = CGRect(x: 0, y: 0, width: 1024, height: 1024)
         if let c = homeModCache, c.key == key {
             drawUpright(g, c.image, in: full); Face.cacheHits += 1
@@ -124,11 +130,11 @@ extension Face {
             homeModCache = (key, img)
             drawUpright(g, img, in: full); Face.cacheMisses += 1
         }
-        g.saveGState(); g.concatenate(Self.tileT); drawHomeModularClockHands(g); g.restoreGState()
-        // 最後一塊磚：膠囊（👀）
-        let k = Self.hk
-        let c = CGPoint(x: 494 * k, y: 452 * k).applying(Self.tileT)
-        drawIsland(g, at: c, scale: 222 / 588 * Self.tileT.a, liveAt: c, now: now)
+        drawHomeModularClockHands(g)
+        // 最後一塊磚：膠囊（👀），放在其他磚放符號的位置
+        let last = Self.M.tile(2, 2)
+        let c = CGPoint(x: last.midX, y: last.minY + Self.M.iconCenterFromTop)
+        drawIsland(g, at: c, scale: 0.36, liveAt: c, now: now)
     }
 
     func tickHomeModularFace(_ now: Double) -> Bool {
@@ -137,124 +143,74 @@ extension Face {
         return false
     }
 
-    private func homeGradient(_ g: CGContext) {
-        let cs = CGColorSpace(name: CGColorSpace.sRGB)!
-        // 底：偏飽和的靛紫，邊緣深一點；再疊幾團明暗讓玻璃有東西可折射
-        let base = CGGradient(colorsSpace: cs, colors: [srgb(0x4a40d6).cgColor, srgb(0x3228b8).cgColor, srgb(0x231b94).cgColor] as CFArray, locations: [0, 0.55, 1])!
-        g.drawLinearGradient(base, start: CGPoint(x: 0, y: 0), end: CGPoint(x: 1024, y: 1024), options: [])
-        let blobs: [(CGFloat, CGFloat, CGFloat, UInt32, CGFloat)] = [
-            (300, 260, 420, 0x9a8dff, 0.55), (860, 700, 380, 0x8d7dff, 0.45), (120, 900, 320, 0x1f1888, 0.7),
-            (900, 120, 300, 0x1f1888, 0.55), (560, 560, 300, 0xb5a8ff, 0.30)]
-        for (x, y, r, hex, a) in blobs {
-            let rg = CGGradient(colorsSpace: cs, colors: [srgb(hex, a).cgColor, srgb(hex, 0).cgColor] as CFArray, locations: [0, 1])!
-            g.drawRadialGradient(rg, startCenter: CGPoint(x: x, y: y), startRadius: 0, endCenter: CGPoint(x: x, y: y), endRadius: r, options: [])
-        }
-    }
-
-    /// 底＋緞帶落在底上的柔影（玻璃透出來的背景，也是玻璃磚後面的背景）
+    /// 第四輪：玻璃磚後面的背景＝程式生成的硬邊幾何桌布（Faces/HomeModularWallpaper.swift；綠、紫、藍、琥珀）
     private func homeBackdrop(_ g: CGContext) {
-        homeGradient(g)
-        g.saveGState()
-        let rp = CGMutablePath()
-        for r in homeRibbons() { rp.addPath(r.path) }
-        g.addRect(CGRect(x: -400, y: -400, width: 1824, height: 1824)); g.addPath(rp); g.clip(using: .evenOdd)
-        g.setShadow(offset: CGSize(width: 14, height: -26), blur: 46, color: srgb(0x0e0850, 0.8).cgColor)
-        g.addPath(rp); g.setFillColor(srgb(0x0e0850).cgColor); g.fillPath()
-        g.restoreGState()
-    }
-
-    /// 兩個方向的緞帶各一片玻璃：-38° 的偏亮，52° 的偏深，才看得出轉折的立體感
-    private func drawHomeRibbonGlass(_ g: CGContext, _ ribbons: [GlyphShape], base: CGImage) {
-        var a = SystemGlassParams.portrait
-        a.refractionAmount = -5.5; a.blurRadius = 5; a.fill = 0.34; a.white = 0.9; a.saturation = 1.25; a.rim = 0.7
-        a.tint = srgb(0xc4bcff, 0.40).cgColor
-        var b = a
-        b.fill = 0.12; b.tint = srgb(0x7a6cff, 0.30).cgColor; b.rim = 0.5
-        drawLiquidGlass(g, Array(ribbons[0..<3]), key: "homemod-ribbons-a", clear: base, frosted: base, system: a)
-        drawLiquidGlass(g, Array(ribbons[3...]), key: "homemod-ribbons-b", clear: base, frosted: base, system: b)
-    }
-
-    private func homeRibbons() -> [GlyphShape] {
-        let k = Self.hk
-        func bar(_ x: CGFloat, _ y: CGFloat, _ w: CGFloat, _ h: CGFloat, _ rot: CGFloat) -> GlyphShape {
-            var t = CGAffineTransform(translationX: 300, y: 300).rotated(by: rot * .pi / 180).translatedBy(x: -300, y: -300)
-            let p = CGPath(roundedRect: CGRect(x: x, y: y, width: w, height: h), cornerWidth: min(w, h) / 2, cornerHeight: min(w, h) / 2, transform: &t)
-            var s = CGAffineTransform(scaleX: k, y: k)
-            return GlyphShape(path: p.copy(using: &s) ?? p)
-        }
-        return [bar(-120, 40, 900, 120, -38), bar(-60, 250, 820, 150, -38), bar(-200, 470, 900, 110, -38),
-                bar(80, -120, 110, 420, 52), bar(380, 320, 120, 420, 52)]
+        HomeModularWallpaper.draw(g, HomeModularWallpaper.current)
     }
 
     private func homePlatters() -> [GlyphShape] {
-        let k = Self.hk
-        func rr(_ x: CGFloat, _ y: CGFloat, _ w: CGFloat, _ h: CGFloat, _ r: CGFloat) -> GlyphShape {
-            GlyphShape(path: continuousRoundedRect(CGRect(x: x * k, y: y * k, width: w * k, height: h * k).applying(Self.tileT), radius: Self.tileRadius))
-        }
-        return [rr(12, 12, 374, 374, 34),
-                GlyphShape(path: CGPath(ellipseIn: CGRect(x: (487 - 88) * k, y: (99 - 88) * k, width: 176 * k, height: 176 * k).applying(Self.tileT), transform: nil)),
-                rr(398, 200, 190, 186, 30), rr(12, 398, 182, 190, 30), rr(206, 398, 182, 190, 30), rr(400, 398, 188, 190, 30)]
+        let M = Self.M
+        func rr(_ r: CGRect) -> GlyphShape { GlyphShape(path: continuousRoundedRect(r, radius: M.radius)) }
+        return [rr(M.tile(0, 0, w: 2, h: 2)), GlyphShape(path: CGPath(ellipseIn: M.tile(2, 0), transform: nil)),
+                rr(M.tile(2, 1)), rr(M.tile(0, 2)), rr(M.tile(1, 2)), rr(M.tile(2, 2))]
     }
 
     private func drawHomeModularStatic(_ g: CGContext, _ t: HomeTiles) {
-        let k = Self.hk, white = NSColor.white
-        let base = snapshotBackdrop { self.homeBackdrop($0) }
-        // 1. 底＋大緞帶（玻璃）
+        let white = NSColor.white, M = Self.M
+        // 1. 硬邊幾何桌布（第四輪：取代原本的漸層＋玻璃緞帶）
         homeBackdrop(g)
-        let ribbons = homeRibbons()
-        drawHomeRibbonGlass(g, ribbons, base: base)
-        // 2. 玻璃磚（霜面、低折射）：背景＝底＋緞帶
-        let sc = renderPixelScale, px = 512
+        // 2. 玻璃磚：背景＝桌布。第三輪照官方：清玻璃（幾乎不霜）、看得出後面圖樣被折射，亮邊細、面色只亮一點
+        let px = 1024   // 第三輪：磚裡看得清背景，背景要全解析度
+        let tint = HomeModularWallpaper.current
         let behind = makeImage(px, px) { c in
             c.scaleBy(x: CGFloat(px) / 1024, y: CGFloat(px) / 1024)
             self.homeBackdrop(c)
-            self.drawHomeRibbonGlass(c, ribbons, base: base)
         }
-        _ = sc
-        let frost = blurredBackdrop(behind, sigma: 4, key: "homemod-frost|\(Int(renderPixelScale * 100))")
-        var plat = SystemGlassParams.portrait
-        plat.refractionAmount = -1.0; plat.blurRadius = 8; plat.fill = 0.06; plat.white = 0.92; plat.black = 0.1
-        plat.highlight = 0.3; plat.rim = 0.32; plat.ringShadow = 0.14; plat.saturation = 1.1   // 官方磚的亮邊很細
-        plat.tint = srgb(0xd8d4ff, 0.06).cgColor
-        drawLiquidGlass(g, homePlatters(), key: "homemod-platters", clear: frost, frosted: frost, system: plat)
+        let frost = blurredBackdrop(behind, sigma: 1.2, key: "homemod-frost4|\(tint.rawValue)|\(Int(renderPixelScale * 100))")
+        // 2.0 faceglass：磚跟著桌布色系染色（官方：桌布什麼色系、磚就偏什麼色）——染五階的中間色（purple 對官方校準 ΔE00 4.7）
+        let glassTint = srgb(HomeModularWallpaper.palette(tint)[2]).withAlphaComponent(0.55)
+        drawLiquidGlass(g, homePlatters(), key: "homemod-platters|\(tint.rawValue)", clear: frost, frosted: frost, params: .platter, tint: glassTint)
 
-        // 3. 內容（跟磚一起往內收）
-        g.saveGState(); g.concatenate(Self.tileT); defer { g.restoreGState() }
+        // 3. 內容（1024 座標，位置量自官方：見 HPTokens.HomeModular）
+        let big = M.tile(0, 0, w: 2, h: 2)
         if let hint = t.hint {
             // 沒資料：不畫大數字，中間放一句小字提示
             let f = FaceType.sf(46, .semibold, mono: false)
-            let lines = Self.wrap(hint, f, 480, maxLines: 3)
-            let y0 = 190 * k - CGFloat(lines.count - 1) * 30
-            for (i, l) in lines.enumerated() { centeredText(g, l, f, x: 199 * k, y: y0 + CGFloat(i) * 60, color: white.withAlphaComponent(0.78)) }
+            let lines = Self.wrap(hint, f, big.width - 120, maxLines: 3)
+            let y0 = big.minY + 320 - CGFloat(lines.count - 1) * 30
+            let hintC = nightRedActive ? NSColor(white: 0.78, alpha: 1) : white.withAlphaComponent(0.78)   // 2.0 P07：夜間不透明（HIG-WID-185）
+            for (i, l) in lines.enumerated() { centeredText(g, l, f, x: big.midX, y: y0 + CGFloat(i) * 60, color: hintC) }
         } else {
-            let numShape = GlyphShape(t.number, font: FaceType.sfv(293, wght: 520, mono: false), kern: -6)   // 官方溫控大數字約 Medium
+            let numShape = GlyphShape(t.number, font: FaceType.sfv(M.numberSize, wght: 500, mono: false), kern: -4)
             let nb = numShape.ink
-            // 大數字：底邊（基線）在 y=228，水平置中於 x=199
-            fillShape(g, numShape.moved(199 * k - nb.midX, 228 * k - nb.maxY), white)
+            // 大數字：基線離磚頂 375、水平置中
+            fillShape(g, numShape.moved(big.midX - nb.midX, big.minY + M.numberBaseline - nb.maxY), white)
         }
-        for (cx, dir) in [(64.0, "chevron.down"), (334.0, "chevron.up")] {
-            drawSymbol(g, dir, in: CGRect(x: cx * k - 30, y: 333 * k - 18, width: 60, height: 36), color: white, weight: .semibold)
+        for (cx, dir) in [(big.minX + M.chevronInset, "chevron.down"), (big.maxX - M.chevronInset, "chevron.up")] {
+            drawSymbol(g, dir, in: CGRect(x: cx - 30, y: big.minY + M.chevronY - 18, width: 60, height: 36), color: white, weight: .semibold)
         }
-        label(g, t.thermoLabel, t.thermoSub, cx: 199, y1: 325, y2: 350, maxW: 560)
-        // 鐘面刻度
-        let cc = CGPoint(x: 487 * k, y: 99 * k)
+        label(g, t.thermoLabel, t.thermoSub, in: big)
+        // 玻璃鐘的刻度：12 根一樣長
+        let clock = M.tile(2, 0), cc = CGPoint(x: clock.midX, y: clock.midY), R = clock.width / 2
+        g.setStrokeColor(white.cgColor); g.setLineWidth(R * M.tickWidth); g.setLineCap(.round)
         for i in 0..<12 {
             let a = CGFloat(i) * .pi / 6
-            g.setStrokeColor(white.cgColor); g.setLineWidth(4.5 * k); g.setLineCap(.round)
-            g.move(to: CGPoint(x: cc.x + sin(a) * 60 * k, y: cc.y - cos(a) * 60 * k))
-            g.addLine(to: CGPoint(x: cc.x + sin(a) * 74 * k, y: cc.y - cos(a) * 74 * k)); g.strokePath()
+            g.move(to: CGPoint(x: cc.x + sin(a) * R * M.tickInner, y: cc.y - cos(a) * R * M.tickInner))
+            g.addLine(to: CGPoint(x: cc.x + sin(a) * R * M.tickOuter, y: cc.y - cos(a) * R * M.tickOuter)); g.strokePath()
         }
-        // 場景
-        drawSymbol(g, "moon.stars.fill", in: CGRect(x: 493 * k - 46, y: 257 * k - 46, width: 92, height: 92), color: white, weight: .regular)
-        label(g, t.sceneName, t.sceneSub, cx: 493, y1: 330, y2: 355, maxW: 290)
-        // 燈／對講
-        drawSymbol(g, t.lightSymbol, in: CGRect(x: 103 * k - 48, y: 459 * k - 48, width: 96, height: 96), color: white, weight: .regular)
-        label(g, t.lightLabel, t.lightSub, cx: 103, y1: 528, y2: 553, maxW: 290)
-        // 門鎖
-        drawSymbol(g, t.lockSymbol, in: CGRect(x: 297 * k - 44, y: 459 * k - 44, width: 88, height: 88), color: white, weight: .semibold)
-        label(g, t.lockLabel, t.lockSub, cx: 297, y1: 528, y2: 553, maxW: 290)
+        // 小磚：符號在上、兩行標籤在下
+        func icon(_ r: CGRect, _ sym: String, _ h: CGFloat, weight: NSFont.Weight) {
+            drawSymbol(g, sym, in: CGRect(x: r.midX - h / 2, y: r.minY + M.iconCenterFromTop - h / 2, width: h, height: h), color: white, weight: weight)
+        }
+        let scene = M.tile(2, 1), light = M.tile(0, 2), lock = M.tile(1, 2), mine = M.tile(2, 2)
+        icon(scene, "moon.stars.fill", 78, weight: .regular)
+        label(g, t.sceneName, t.sceneSub, in: scene)
+        icon(light, t.lightSymbol, 92, weight: .regular)
+        label(g, t.lightLabel, t.lightSub, in: light)
+        icon(lock, t.lockSymbol, 92, weight: .semibold)
+        label(g, t.lockLabel, t.lockSub, in: lock)
         // 膠囊那一塊
-        label(g, "HomePlay", L("homemod.watching", "看着你"), cx: 494, y1: 528, y2: 553, maxW: 300)
+        label(g, "HomePlay", L("homemod.watching", "看着你"), in: mine)
     }
 
     private func centeredText(_ g: CGContext, _ s: String, _ f: NSFont, x: CGFloat, y: CGFloat, color: NSColor) {
@@ -262,35 +218,39 @@ extension Face {
         drawLeft(g, s, font: f, x: x - w / 2, y: y, color: color)
     }
 
-    private func label(_ g: CGContext, _ title: String, _ sub: String, cx: CGFloat, y1: CGFloat, y2: CGFloat, maxW: CGFloat) {
-        let k = Self.hk
-        let tf = FaceType.sf(21 * k, .bold, mono: false), sf = FaceType.sf(19 * k, .semibold, mono: false)
-        centeredText(g, Self.clipped(title, tf, maxW), tf, x: cx * k, y: y1 * k, color: .white)
-        centeredText(g, Self.clipped(sub, sf, maxW), sf, x: cx * k, y: y2 * k, color: NSColor.white.withAlphaComponent(0.62))
+    /// 磚底部的兩行標籤：名稱 semibold 白、狀態 semibold 白 60%（官方兩行同字級）
+    private func label(_ g: CGContext, _ title: String, _ sub: String, in r: CGRect) {
+        let M = Self.M, maxW = min(r.width - 40, 560)
+        let f = FaceType.sf(M.labelSize, .semibold, mono: false)
+        centeredText(g, Self.clipped(title, f, maxW), f, x: r.midX, y: r.maxY - M.titleFromBottom, color: .white)
+        // 2.0 P07：夜間（整面轉紅）副標改不透明灰階——半透明的紅會在紅底上糊掉層級（HIG-WID-185）
+        let subC = nightRedActive ? NSColor(white: CGFloat(M.subAlpha), alpha: 1) : NSColor.white.withAlphaComponent(M.subAlpha)
+        centeredText(g, Self.clipped(sub, f, maxW), f, x: r.midX, y: r.maxY - M.subFromBottom, color: subC)
     }
 
     // MARK: 指針
 
     private func drawHomeModularClockHands(_ g: CGContext) {
-        let k = Self.hk, c = CGPoint(x: 487 * k, y: 99 * k)
+        let clock = Self.M.tile(2, 0), c = CGPoint(x: clock.midX, y: clock.midY), R = clock.width / 2
         let comp = Calendar.current.dateComponents([.hour, .minute, .second], from: Self.displayDate)
         let s = Double(comp.second ?? 0), m = Double(comp.minute ?? 0) + s / 60, h = Double((comp.hour ?? 0) % 12) + m / 60
+        // 長度、粗細是半徑的比例（官方：時針到 0.5 R、分針到 0.82 R、白色圓頭，靠圓心一小段細頸）
         func hand(_ deg: Double, neck: CGFloat, len: CGFloat, w: CGFloat) {
             let a = CGFloat(deg * .pi / 180), ux = sin(a), uy = -cos(a)
             g.setStrokeColor(NSColor.white.cgColor); g.setLineCap(.round)
-            g.setLineWidth(3 * k); g.move(to: c); g.addLine(to: CGPoint(x: c.x + ux * neck * k, y: c.y + uy * neck * k)); g.strokePath()
-            g.setLineWidth(w * k)
-            g.move(to: CGPoint(x: c.x + ux * neck * k, y: c.y + uy * neck * k))
-            g.addLine(to: CGPoint(x: c.x + ux * (neck + len) * k, y: c.y + uy * (neck + len) * k)); g.strokePath()
+            g.setLineWidth(0.03 * R); g.move(to: c); g.addLine(to: CGPoint(x: c.x + ux * neck * R, y: c.y + uy * neck * R)); g.strokePath()
+            g.setLineWidth(w * R)
+            g.move(to: CGPoint(x: c.x + ux * neck * R, y: c.y + uy * neck * R))
+            g.addLine(to: CGPoint(x: c.x + ux * len * R, y: c.y + uy * len * R)); g.strokePath()
         }
-        hand(h * 30, neck: 10, len: 38, w: 7)
-        hand(m * 6, neck: 10, len: 62, w: 6)
+        hand(h * 30, neck: 0.1, len: 0.52, w: 0.065)
+        hand(m * 6, neck: 0.1, len: 0.84, w: 0.055)
         if secondsVisible {   // 沒人在看時收起秒針
             let sa = CGFloat(s * 6 * .pi / 180)
-            g.setStrokeColor(NSColor.white.cgColor); g.setLineWidth(1.4 * k); g.setLineCap(.round)
-            g.move(to: CGPoint(x: c.x - sin(sa) * 12 * k, y: c.y + cos(sa) * 12 * k))
-            g.addLine(to: CGPoint(x: c.x + sin(sa) * 70 * k, y: c.y - cos(sa) * 70 * k)); g.strokePath()
-            g.setFillColor(NSColor.white.cgColor); g.fillEllipse(in: CGRect(x: c.x - 4.5 * k, y: c.y - 4.5 * k, width: 9 * k, height: 9 * k))
+            g.setStrokeColor(NSColor.white.cgColor); g.setLineWidth(0.014 * R); g.setLineCap(.round)
+            g.move(to: CGPoint(x: c.x - sin(sa) * 0.12 * R, y: c.y + cos(sa) * 0.12 * R))
+            g.addLine(to: CGPoint(x: c.x + sin(sa) * 0.9 * R, y: c.y - cos(sa) * 0.9 * R)); g.strokePath()
+            g.setFillColor(NSColor.white.cgColor); g.fillEllipse(in: CGRect(x: c.x - 0.045 * R, y: c.y - 0.045 * R, width: 0.09 * R, height: 0.09 * R))
         }
     }
 }

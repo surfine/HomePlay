@@ -1,0 +1,46 @@
+/* 06 · 1997 → 2009 Microsoft Agent。舞台是淡色的一塊，機器人是原創的；位置用 --p（0 左、1 中、2 右）乘上容器寬度，減少動態時直接跳過去。 */
+.ag{--p:1;container-type:inline-size;background:#eef0f4;color:#1b1d24;padding:10px;display:grid;gap:10px;font:13px/1.4 var(--font);border-radius:14px}
+.ag-p0{--p:0}.ag-p1{--p:1}.ag-p2{--p:2}
+.ag button,.ag input{font:inherit;color:inherit}
+.ag :focus-visible{outline:2px solid #2f5de0;outline-offset:2px}
+.ag-stage{position:relative;height:230px;overflow:hidden;border-radius:10px;background:linear-gradient(#cfe0f6,#e8eef8 62%,#b9c7da 62%,#9fb0c8);box-shadow:inset 0 0 0 1px #aab6c8}
+.ag-actor{position:absolute;bottom:10px;left:50%;width:64px;margin-left:-32px;transform:translateX(calc((var(--p) - 1)*34cqw));transition:transform .35s var(--ease-out)}
+.ag-actor[hidden]{display:none}
+.ag-robot svg{display:block;width:64px;height:80px;overflow:visible}
+.ag-fig{transform-origin:32px 70px;transform-box:view-box}
+.ag-head{fill:#e9eef7;stroke:#4a5a78;stroke-width:2}.ag-torso{fill:#7f95bd;stroke:#4a5a78;stroke-width:2}.ag-arm{fill:#7f95bd;stroke:#4a5a78;stroke-width:1.5}
+.ag-eye{fill:#1b2a4a}.ag-mouth{fill:none;stroke:#1b2a4a;stroke-width:2;stroke-linecap:round}.ag-ant{stroke:#4a5a78;stroke-width:2}.ag-ball{fill:#ef6a4c}
+.ag-armR{transform-origin:51px 50px}.ag-ant,.ag-ball{transform-origin:32px 14px}
+.wave .ag-armR{animation:ag-wave .2s ease-in-out 2 alternate}
+.think .ag-ant,.think .ag-ball{animation:ag-sway .2s ease-in-out 2 alternate}
+.bow .ag-fig{animation:ag-bow .4s ease-in-out 1 alternate both;animation-iteration-count:2}
+@keyframes ag-wave{from{transform:rotate(0)}to{transform:rotate(-150deg)}}
+@keyframes ag-sway{from{transform:rotate(-14deg)}to{transform:rotate(14deg)}}
+@keyframes ag-bow{from{transform:rotate(0)}to{transform:rotate(18deg)}}
+.ag-bub{position:absolute;left:50%;bottom:calc(100% + var(--by,4px));width:max-content;max-width:42cqw;padding:5px 9px;border-radius:12px;background:#fff;border:1px solid #6b7894;box-shadow:0 2px 4px rgba(0,0,0,.15);transform:translateX(calc(-50% + var(--sh,0px) + var(--bx,0px)));font-size:12px;line-height:1.35}
+.ag-bub[hidden]{display:none}
+.ag-b0{--by:8px}.ag-b1{--by:4px;--bx:-12px;background:#fff6d6}.ag-b2{--by:30px;--bx:14px;background:#e1f3e4}.ag-b3{--by:56px;--bx:-4px;background:#f9e0e6}
+.ag-p0 .ag-bub{--sh:46px}.ag-p2 .ag-bub{--sh:-46px}
+.ag-cap{position:absolute;left:8px;top:6px;font:12px var(--mono);color:#34405a}
+.ag-edit{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.ag-h{font-weight:700;font-size:12px;margin-bottom:4px;color:#34405a}
+.ag-palette{display:flex;flex-wrap:wrap;gap:5px}
+.ag-pal,.ag-mini,.ag-go{min-height:32px;padding:3px 9px;border:0;border-radius:8px;background:#fff;cursor:pointer;box-shadow:inset 0 0 0 1px #aab6c8}
+.ag-pal{font:12px var(--mono)}
+.ag-pal:hover,.ag-mini:hover,.ag-go:hover{background:#dfe7f7}
+.ag-speak{display:flex;gap:5px;flex:1 1 100%}
+.ag-in{flex:1;min-width:0;min-height:32px;padding:3px 8px;border:0;border-radius:8px;box-shadow:inset 0 0 0 1px #aab6c8;background:#fff}
+.ag-list{list-style:none;margin:0;padding:0;display:grid;gap:4px;max-height:210px;overflow:auto}
+.ag-item{display:flex;align-items:center;gap:4px;padding:2px 4px 2px 8px;border-radius:8px;background:#fff;box-shadow:inset 0 0 0 1px #d2d9e6}
+.ag-item.on{background:#ffe9a8;box-shadow:inset 0 0 0 2px #c58a00}
+.ag-item code{flex:1;min-width:0;font:12px var(--mono);overflow-wrap:anywhere}
+.ag-mini{min-width:32px;padding:3px 6px}
+.ag-mini:disabled,.ag-go:disabled{opacity:.45;cursor:default}
+.ag-ctrl{display:flex;flex-wrap:wrap;align-items:center;gap:8px}
+.ag-go{font-weight:700;padding:3px 14px}
+.ag-three{background:#2f5de0;color:#fff}.ag-three:hover{background:#2449b8}
+.ag-three:disabled{background:#2f5de0}
+.ag-loud{display:inline-flex;align-items:center;gap:4px;min-height:32px;font-size:12px}
+.ag-loud[hidden]{display:none}
+@container (max-width:460px){.ag-edit{grid-template-columns:1fr}.ag-stage{height:250px}}
+@media (prefers-reduced-motion:reduce){.ag *{animation:none!important;transition:none!important}}

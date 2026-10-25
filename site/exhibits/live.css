@@ -1,0 +1,52 @@
+/* 04 · 即時動態與待機模式。「手機」只是一塊抽象的直式螢幕（9:16、細線框、不畫邊框與按鍵），藥丸是一顆黑色圓角條。裝置本身固定深色（不是主題）。 */
+.lv{display:grid;gap:12px;padding:14px;background:var(--panel);color:var(--ink);font:14px/1.5 var(--font)}
+.lv-room{display:grid;place-items:center;min-height:min(112cqw,470px)}
+.lv-phone{--w:min(58cqw,250px);position:relative;width:var(--w);aspect-ratio:9/16;font-size:calc(var(--w)/20);border-radius:1.6em;background:#000;padding:0;box-shadow:0 0 0 1px var(--line),0 .8em 2em -1em rgba(0,0,0,.45);color:#fff;container-type:normal}
+.lv-phone.land{--w:min(92cqw,480px);aspect-ratio:16/9;font-size:calc(var(--w)/36);border-radius:1.4em}
+.lv-screen{position:relative;width:100%;height:100%;border-radius:inherit;overflow:hidden;background:linear-gradient(170deg,#24355f,#5e4f7d 58%,#b07f78)}
+.land .lv-screen{background:#000}
+.lv-lock{display:grid;justify-items:center;padding-top:4.4em;gap:.4em}
+.lv-lclock{font:200 4.6em/1 var(--font);letter-spacing:-.02em}
+.lv-ltag{font-size:.8em;opacity:.7}
+.land .lv-lock,.land .lv-isl{display:none}
+.lv-sb{display:none}
+.land .lv-sb{display:block;height:100%}
+.lv-sbidle{height:100%;display:grid;grid-template-columns:1fr 1.5fr 1fr;align-items:center;gap:1em;padding:1.6em}
+.lv-sbw{display:grid;gap:.2em;justify-items:center;padding:1em .4em;border-radius:1.2em;background:#16181d}
+.lv-sbw b{font:300 2.2em/1 var(--font)}.lv-sbw span{font-size:.8em;color:rgba(255,255,255,.65)}
+.lv-sbclock{font:200 5.2em/1 var(--font);text-align:center;letter-spacing:-.03em;color:#ffb4a8}
+.lv-sbact{display:none;height:100%;place-items:center;align-content:center;gap:.6em}
+[data-s=act] .lv-sbidle{display:none}[data-s=act] .lv-sbact{display:grid}
+.lv-sbname{font-size:1.1em;color:rgba(255,255,255,.7)}
+.lv-sbring{width:9em;aspect-ratio:1;border-radius:50%;display:grid;place-items:center;background:conic-gradient(#ff9f43 calc(var(--p)*360deg),#262932 0)}
+.lv-sbtime{width:80%;aspect-ratio:1;border-radius:50%;background:#000;display:grid;place-items:center;font:300 2.4em/1 var(--font);font-variant-numeric:tabular-nums}
+.lv-sbtag{font-size:.8em;color:rgba(255,255,255,.55)}
+/* 藥丸：三種大小；內容淡入，不動畫尺寸 */
+.lv-isl{position:absolute;z-index:3;top:1.3em;left:50%;transform:translateX(-50%);width:28%;height:1.5em;border-radius:1.5em;background:#000;color:#fff;overflow:hidden;box-shadow:0 0 0 1px rgba(255,255,255,.06)}
+.lv-isl[data-s=compact],.lv-isl[data-s=done]{width:60%;height:2.1em}
+.lv-isl[data-s=expanded]{width:90%;height:auto;border-radius:1.8em}
+.lv-isl .lv-cbtn,.lv-isl .lv-card{display:none}
+.lv-isl[data-s=compact] .lv-cbtn,.lv-isl[data-s=done] .lv-cbtn{display:flex}
+.lv-isl[data-s=expanded] .lv-card{display:grid}
+.lv-cbtn{width:100%;height:100%;align-items:center;justify-content:space-between;padding:0 .9em;border:0;background:transparent;color:#fff;font:inherit;font-weight:600;font-variant-numeric:tabular-nums;cursor:pointer;animation:lv-in .25s ease-out}
+.lv-cbtn:disabled{color:#7ee0a0;cursor:default}
+.lv-ico{display:inline-grid;width:1.3em;height:1.3em;color:#ff9f43}.lv-ico svg{width:100%;height:100%}
+.lv-card{gap:.7em;padding:.9em 1em 1em;animation:lv-in .25s ease-out}
+.lv-etop{display:flex;align-items:center;gap:.6em;font-size:.9em;color:rgba(255,255,255,.75)}
+.lv-ename{flex:1}
+.lv-fold{min-width:32px;min-height:32px;border:0;border-radius:50%;background:#22252c;color:#fff;font-size:1em;cursor:pointer}
+.lv-etime{font:300 2.8em/1 var(--font);font-variant-numeric:tabular-nums}
+.lv-ebar{height:.35em;border-radius:1em;background:#2a2d35;overflow:hidden}
+.lv-ebar i{display:block;height:100%;width:100%;background:#ff9f43;transform-origin:left;transform:scaleX(var(--p))}
+.lv-erow{display:grid;grid-template-columns:1fr 1fr;gap:.6em}
+.lv-eb{min-height:36px;border:0;border-radius:2em;background:#2a2d35;color:#fff;font:inherit;font-size:.95em;font-weight:600;cursor:pointer}
+.lv-cancel{background:#5a2328;color:#ffb4b4}
+.lv-ctl{display:flex;flex-wrap:wrap;gap:8px}
+.lv-btn{min-height:40px;padding:0 18px;border-radius:var(--pill);border:0;background:var(--accent);color:var(--accent-ink);font-weight:600;cursor:pointer;touch-action:manipulation}
+.lv-btn:disabled{opacity:.45;cursor:default}
+.lv-tog{background:var(--surface);color:var(--ink);box-shadow:inset 0 0 0 1px var(--line)}
+.lv-tog[aria-pressed=true]{background:var(--ink);color:var(--bg)}
+.lv-fact{margin:0;font-size:13px;color:var(--muted)}
+.lv :focus-visible{outline:2px solid #6ea8ff;outline-offset:2px}
+@keyframes lv-in{from{opacity:0}to{opacity:1}}
+@media (prefers-reduced-motion:reduce){.lv-cbtn,.lv-card{animation:none}}

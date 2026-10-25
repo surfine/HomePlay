@@ -1,0 +1,79 @@
+/* 12 · 2026 HomePlay · ClioTalk。深色的圓角螢幕用首頁眼睛卡（.eyes-card）同一組色相，壓暗一點當夜裡的桌面。
+   膠囊是黑色玻璃，裡面是首頁那雙 👀（不改樣子）；玻璃感只給面板與按鈕。螢幕本身不跟深色模式變，下方的說明列用網站色票。 */
+.hp{display:grid;gap:14px;font-family:var(--font)}
+.hp button{font:inherit;color:inherit;border:0;margin:0;cursor:pointer;-webkit-tap-highlight-color:transparent}
+.hp :focus-visible{outline:2px solid #fff;outline-offset:3px}
+.hp-screen{position:relative;display:grid;justify-items:center;gap:6px;padding:18px 16px 18px;border-radius:24px;overflow:hidden;color:#fff;outline:0;
+  background:radial-gradient(120% 80% at 80% 110%,rgba(216,168,124,.55),transparent 60%),linear-gradient(160deg,#1a2036,#33416c 48%,#6e5f80 82%,#9c7e74);
+  box-shadow:inset 0 0 0 1px rgba(255,255,255,.08)}
+@container (min-width:560px){.hp-screen{padding:22px 28px 26px}}
+
+/* 膠囊與 👀 */
+.hp-capsule{--c:0;width:clamp(132px,34cqw,188px);aspect-ratio:2.7;border-radius:999px;display:grid;place-items:center;
+  background:linear-gradient(180deg,rgba(14,16,22,.86),rgba(4,5,8,.92));box-shadow:inset 0 1px 0 rgba(255,255,255,.18),inset 0 0 0 1px rgba(255,255,255,.08),0 8px 18px -10px rgba(0,0,0,.7)}
+.hp-capsule svg{display:block;height:66%;width:auto}
+.hp-capsule .pupil{opacity:calc(1 - var(--c))}
+.hp-capsule .lid{opacity:var(--c)}
+
+/* ClioTalk 的紫色小珠：聽的時候從膠囊落下來 */
+.hp-bead{position:absolute;left:50%;top:calc(18px + clamp(132px,34cqw,188px) / 2.7 - 6px);width:11px;height:11px;margin-left:-5.5px;border-radius:50%;
+  background:radial-gradient(circle at 35% 30%,#e6d8ff,#9a72ff 45%,#6a3fe0);box-shadow:0 0 12px rgba(154,114,255,.8);opacity:0;transform:translateY(-6px) scale(.4);
+  transition:transform .36s var(--spring),opacity .2s var(--ease-out)}
+@container (min-width:560px){.hp-bead{top:calc(22px + clamp(132px,34cqw,188px) / 2.7 - 6px)}}
+.hp:is([data-state="listen"],[data-state="answer"],[data-state="confirm"]) .hp-bead{opacity:1;transform:translateY(14px) scale(1)}
+
+.hp-time{margin:16px 0 4px;font-size:clamp(46px,15cqw,84px);font-weight:250;line-height:1;letter-spacing:-.02em;font-variant-numeric:tabular-nums;color:rgba(255,255,255,.9);text-shadow:0 2px 20px rgba(0,0,0,.25)}
+
+/* 面板：玻璃 */
+.hp-panel{width:min(100%,440px);display:grid;gap:10px;padding:10px;border-radius:22px;background:rgba(255,255,255,.13);
+  box-shadow:inset 0 0 0 1px rgba(255,255,255,.2),0 10px 30px -18px rgba(0,0,0,.6);-webkit-backdrop-filter:blur(20px) saturate(1.6);backdrop-filter:blur(20px) saturate(1.6)}
+.hp-ask{display:flex;align-items:center;gap:10px;width:100%;min-height:46px;padding:6px 6px 6px 14px;border-radius:999px;background:rgba(255,255,255,.08);text-align:left;transition:background .2s}
+.hp-ask:hover{background:rgba(255,255,255,.16)}
+.hp:is([data-state="listen"],[data-state="answer"],[data-state="confirm"]) .hp-ask{display:none}
+.hp-dot{flex:none;width:9px;height:9px;border-radius:50%;background:#a98bff;box-shadow:0 0 8px rgba(169,139,255,.8)}
+.hp-hint{flex:1;font-size:15px;color:rgba(255,255,255,.88)}
+.hp .hp-askl{flex:none;padding:7px 16px;border-radius:999px;background:#fff;color:#15181c;font-size:14px;font-weight:600}
+.hp-body{display:grid;gap:8px}
+.hp[data-state="done"] .hp-ask{order:2}
+.hp-body:empty{display:none}
+.hp-pickrow{display:flex;align-items:center;gap:8px;padding-left:6px}
+.hp-pick{flex:1;margin:0;font-size:13px;color:rgba(255,255,255,.75)}
+.hp-x{flex:none;width:34px;height:34px;border-radius:50%;background:rgba(255,255,255,.12);font-size:18px;line-height:1}
+.hp-sugs{display:grid;gap:6px}
+.hp-sug{min-height:42px;padding:9px 14px;border-radius:16px;background:rgba(255,255,255,.12);box-shadow:inset 0 0 0 1px rgba(255,255,255,.14);text-align:left;font-size:15px;transition:background .2s,transform .2s var(--ease-out)}
+.hp-sug:hover{background:rgba(255,255,255,.2)}
+.hp-sug:active{transform:scale(.985)}
+.hp-you{justify-self:end;margin:0;max-width:85%;padding:7px 13px;border-radius:16px 16px 4px 16px;background:rgba(255,255,255,.2);font-size:14px}
+
+/* 卡片：暫時的是虛線框，留下的是實線框；要你確認的是一張讀給你聽的資料卡 */
+.hp-card{display:grid;gap:6px;padding:12px 14px;border-radius:16px;background:#fbfbfd;color:#15181c;outline:0;animation:hp-in .3s var(--ease-out) both}
+.hp-card:focus-visible{outline:2px solid #fff;outline-offset:2px}
+.hp-temp{border:1.5px dashed #9aa1aa}
+.hp-kept{border:1.5px solid #15181c;box-shadow:3px 3px 0 #15181c}
+.hp-ctitle{margin:0;font-size:13px;font-weight:600;color:#5b626b}
+.hp-lines{margin:0;padding:0;list-style:none;display:grid;gap:2px;font-size:16px;font-weight:600;font-variant-numeric:tabular-nums}
+.hp-to{margin:0;font-size:13px;color:#5b626b}
+.hp-draft{margin:0;font-size:19px;font-weight:600;line-height:1.35}
+.hp-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:4px}
+.hp-end{justify-content:flex-end}
+.hp-tag{flex:1;font-size:12.5px;color:#5b626b}
+.hp-yes{color:#1f7a4d;font-weight:600}
+.hp .hp-btn{min-height:36px;padding:7px 16px;border-radius:999px;background:#e8eaee;color:#15181c;font-size:14px;font-weight:600}
+.hp .hp-ok{background:#2a63d4;color:#fff}
+.hp .hp-keep{background:#15181c;color:#fff}
+.hp-card .hp-btn:focus-visible{outline-color:#2a63d4}
+.hp-not{opacity:.72}
+.hp-foot{margin:0;padding:0 6px;font-size:12.5px;color:rgba(255,255,255,.72)}
+.hp-foot:empty{display:none}
+@keyframes hp-in{from{opacity:0;transform:translateY(6px)}}
+
+/* 下方的說明列：網站色票 */
+.hp-meta{display:grid;gap:4px;padding:0 4px}
+.hp-counter{display:flex;align-items:center;gap:10px;margin:0;font-size:14px;color:var(--ink)}
+.hp-count{min-width:34px;padding:2px 10px;border-radius:var(--pill);background:var(--panel);font:600 16px/1.5 var(--mono);text-align:center}
+.hp-compare{margin:0;font-size:13.5px;line-height:1.55;color:var(--muted)}
+@media (prefers-reduced-motion:reduce){
+  .hp-bead{transition:none;transform:translateY(14px) scale(1)}
+  .hp-card{animation:none}
+  .hp-sug,.hp-ask{transition:none}
+}
