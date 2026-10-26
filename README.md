@@ -32,7 +32,7 @@
 
 | 10 款表盘 | 十种表情 |
 |:---:|:---:|
-| <img src="assets/github/styles-v2.webp" alt="HomePlay 的表盘：岛、Flow、模块、Typograph、天气、日历、陪伴的痕迹与 System 6" width="100%"> | <img src="assets/github/faces-v2.webp" alt="同一双眼睛做出的十种表情" width="100%"> |
+| <img src="assets/github/styles-v3.webp" alt="HomePlay 的十款表盘：岛、照片、模块、Typograph、Flow、天气、日历、陪伴的痕迹、黑色与 System 6" width="100%"> | <img src="assets/github/faces-v2.webp" alt="同一双眼睛做出的十种表情" width="100%"> |
 
 ## 第一次用，三步
 
