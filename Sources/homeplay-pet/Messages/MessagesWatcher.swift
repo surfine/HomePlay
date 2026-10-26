@@ -37,7 +37,9 @@ final class MessagesWatcher: @unchecked Sendable {
             store = s; cursor = s.maxRowID(); ok = true
             armSources()
             let t = DispatchSource.makeTimerSource(queue: queue)
-            t.schedule(deadline: .now() + Self.pollInterval, repeating: Self.pollInterval)
+            // leeway 1 秒：輪詢只是檔案事件的補漏（睡眠喚醒後事件會掉），
+            // 給系統合併喚醒的空間，週期語意不變（效能／能效整理，2026-10-26）
+            t.schedule(deadline: .now() + Self.pollInterval, repeating: Self.pollInterval, leeway: .seconds(1))
             t.setEventHandler { [weak self] in self?.check() }
             t.resume(); timer = t
         }

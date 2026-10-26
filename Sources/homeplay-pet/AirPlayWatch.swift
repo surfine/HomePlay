@@ -9,14 +9,31 @@ enum AirPlayWatch {
     nonisolated(unsafe) private(set) static var videoCenter: CGPoint?
     nonisolated(unsafe) private static var timer: Timer?
     nonisolated(unsafe) static var onChange: ((Bool) -> Void)?
+    /// 沒有影片時放慢到 5 秒（CGWindowList 每趟都是一次 WindowServer 往返），看到了才回 2 秒追位置；
+    /// 桌寵被遮住／螢幕休眠時整個停掉（畫面看不到，眼神目標沒有意義），恢復可見先補看一次。
+    nonisolated(unsafe) private static var fast = false
+    nonisolated(unsafe) private static var paused = false
 
-    /// 每 2 秒看一次（便宜：只讀視窗清單）
-    static func start() {
-        guard timer == nil else { return }
-        let t = Timer(timeInterval: 2, repeats: true) { _ in poll() }
-        t.tolerance = 0.5
+    private static func arm() {
+        timer?.invalidate(); timer = nil
+        guard !paused else { return }
+        let interval: Double = fast ? 2 : 5
+        let t = Timer(timeInterval: interval, repeats: true) { _ in poll() }
+        t.tolerance = interval == 2 ? 0.5 : 1.5
         RunLoop.main.add(t, forMode: .common); timer = t
+    }
+
+    static func start() {
+        guard timer == nil, !paused else { return }
+        arm()
         poll()
+    }
+
+    /// 桌寵遮住／螢幕休眠時叫 true，恢復可見叫 false（setOccluded 轉發）
+    static func setPaused(_ p: Bool) {
+        guard p != paused else { return }
+        paused = p
+        if p { timer?.invalidate(); timer = nil } else { arm(); poll() }
     }
 
     private static func poll() {
@@ -32,6 +49,7 @@ enum AirPlayWatch {
         let c = found.map { CGPoint(x: $0.midX, y: mainH - $0.midY) }
         let was = videoCenter != nil
         videoCenter = c
+        if fast != (c != nil) { fast = c != nil; arm() }   // 出現／消失：切換 2 秒／5 秒節奏
         if was != (c != nil) { onChange?(c != nil) }
     }
 

@@ -391,6 +391,7 @@ enum MediaAccess {
 /// 被打斷就先停、結束後接著播（iOS 的音訊中斷：來電、Siri；這裡是 FaceTime 通話、ClioTalk 開著麥克風、鬧鐘在響）。
 /// 只管 Mac 上的播放（iPhone 經 CarPlay 的由 iPhone 自己處理）；使用者在中斷期間自己按了播放／暫停，就不再替他接著播。
 /// 每 0.5 秒看一次各自的狀態（不必在別的 App 的檔案裡加呼叫）。
+/// 沒在播也沒被我們暫停時 decide() 必然回 nil：這時放慢到 2.5 秒（能效），一回到「在播」立刻轉回 0.5 秒。
 final class MediaInterruption {
     static let shared = MediaInterruption()
     enum Reason: String { case call, assistant, alarm }
@@ -398,6 +399,7 @@ final class MediaInterruption {
     private(set) var pausedByUs = false
     private var pausedAt = -1e9
     private var timer: Timer?
+    private var fast = true
 
     /// 純邏輯（自檢用）：這一刻要不要停／接著播。回傳 .pause／.resume／nil
     enum Step: Equatable { case pause, resume }
@@ -409,8 +411,13 @@ final class MediaInterruption {
 
     func start() {
         guard timer == nil, !SnapshotPrivacy.active, !CommandLine.arguments.contains("--selftest") else { return }
-        let t = Timer(timeInterval: 0.5, repeats: true) { [weak self] _ in self?.poll() }
-        t.tolerance = 0.2
+        arm()
+    }
+
+    private func arm() {
+        timer?.invalidate()
+        let t = Timer(timeInterval: fast ? 0.5 : 2.5, repeats: true) { [weak self] _ in self?.poll() }
+        t.tolerance = fast ? 0.2 : 1
         RunLoop.main.add(t, forMode: .common); timer = t
     }
 
@@ -432,5 +439,6 @@ final class MediaInterruption {
             if pausedByUs, playing, since > 4 { pausedByUs = false }
         }
         active = r
+        if fast != (playing || pausedByUs) { fast = !fast; arm() }
     }
 }

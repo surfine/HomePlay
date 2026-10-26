@@ -206,31 +206,54 @@
   };
   rows.forEach(r => { r.addEventListener('pointerenter', () => pick(r)); r.addEventListener('focus', () => pick(r)); r.addEventListener('click', () => pick(r)); });
 
-  // ── 手機頂欄的區塊膠囊：畫面走到哪一段就亮哪一個（IntersectionObserver，不聽 scroll）──
+  // ── 膠囊導覽：畫面走到哪一段，亮片就滑到哪一格，眼睛也朝那邊瞄一下（與 2.0／往事頁同一套）──
   (() => {
-    const chips = $$('header nav a'); if (chips.length < 2 || !hasIO) return;
-    const nav = chips[0].closest('nav');
-    const byId = new Map(chips.map(a => [a.getAttribute('href').slice(1), a]));
+    const nav = $('.pv-nav'); if (!nav) return;
+    const thumb = $('.pv-nav-thumb', nav), eyes = $('.pv-nav-eyes', nav);
+    const links = $$('a', nav);
+    let cur = null;
+    const place = a => { if (!thumb || !a) return; thumb.style.setProperty('--x', a.offsetLeft + 'px'); thumb.style.setProperty('--w', a.offsetWidth + 'px'); thumb.style.setProperty('--o', '1'); };
+    const setCurrent = a => {
+      if (!a || a === cur) return;
+      const prev = cur ? links.indexOf(cur) : -1, next = links.indexOf(a);
+      links.forEach(l => l.toggleAttribute('aria-current', l !== a));
+      a.setAttribute('aria-current', 'true');
+      cur = a; place(a);
+      if (!reduce && eyes && prev >= 0) {
+        eyes.style.setProperty('--glance', `${next > prev ? 4 : -4}px`);
+        clearTimeout(setCurrent.t); setCurrent.t = setTimeout(() => { eyes.style.setProperty('--glance', '0px'); }, 650);
+      }
+      // 窄螢幕上膠囊會橫捲：把亮的那一格捲進來（只捲膠囊本身）
+      if (nav.scrollWidth > nav.clientWidth) nav.scrollTo({ left: a.offsetLeft - nav.clientWidth / 2 + a.offsetWidth / 2, behavior: reduce ? 'auto' : 'smooth' });
+    };
+    if (!hasIO) return;
+    const byId = new Map(links.map(a => [a.getAttribute('href').slice(1), a]));
     const io = new IntersectionObserver(es => es.forEach(e => {
       if (!e.isIntersecting) return;
-      const a = byId.get(e.target.id); if (!a) return;
-      chips.forEach(c => c.removeAttribute('aria-current'));
-      a.setAttribute('aria-current', 'true');
+      const a = byId.get(e.target.id); if (a) setCurrent(a);
     }), { rootMargin: '-35% 0px -55% 0px' });
-    byId.forEach((_, id) => { const s = document.getElementById(id); if (s) io.observe(s); });
-    if (!nav) return;
+    byId.forEach((_, id) => { const sec = document.getElementById(id); if (sec) io.observe(sec); });
+    // 回到首屏：全部收起，亮片退場
+    const hero = $('#top');
+    if (hero) new IntersectionObserver(es => es.forEach(e => {
+      if (!e.isIntersecting) return;
+      links.forEach(l => l.removeAttribute('aria-current'));
+      cur = null; if (thumb) thumb.style.setProperty('--o', '0');
+    }), { rootMargin: '-35% 0px -55% 0px' }).observe(hero);
     // 右緣漸隱只在還沒滑到底時開（聽的是膠囊列自己的 scroll，不是頁面的）
-    const fade = () => nav.classList.toggle('fade', nav.scrollLeft + nav.clientWidth < nav.scrollWidth - 4);
-    nav.addEventListener('scroll', fade, { passive: true });
-    fade();
+    const edge = () => nav.classList.toggle('end-reached', nav.scrollLeft + nav.clientWidth >= nav.scrollWidth - 4);
+    nav.addEventListener('scroll', edge, { passive: true }); edge();
+    addEventListener('resize', () => { if (cur) place(cur); }, { passive: true });
   })();
 
-  // ── 進場 ──
-  const rises = $$('.rise');
-  if (reduce || !('IntersectionObserver' in window)) rises.forEach(el => el.classList.add('in'));
+  // ── 進場：捲到才浮上來；同一組裡依序晚一點（--i 給 CSS）──
+  const rvs = $$('.rv');
+  if (reduce || !hasIO) rvs.forEach(el => el.classList.add('in'));
   else {
-    const io = new IntersectionObserver(es => es.forEach(e => { if (e.isIntersecting) { e.target.classList.add('in'); io.unobserve(e.target); } }), { threshold: .15 });
-    rises.forEach(el => io.observe(el));
+    const groups = new Map();
+    rvs.forEach(el => { const n = groups.get(el.parentElement) || 0; el.style.setProperty('--i', String(Math.min(n, 6))); groups.set(el.parentElement, n + 1); });
+    const io = new IntersectionObserver(es => es.forEach(e => { if (e.isIntersecting) { e.target.classList.add('in'); io.unobserve(e.target); } }), { threshold: .12, rootMargin: '0px 0px -6% 0px' });
+    rvs.forEach(el => io.observe(el));
   }
 
   // ── 為什麼是眼睛：品牌的那雙眼睛，跟著指標看、眨眼、閒置就闔上 ──
@@ -463,30 +486,6 @@
   })();
 
   // ── 複製指令 ──
-  // ── 天光：整個頁面只有這一個持續動畫。滾動進度只寫一個 CSS 變數 --day。──
-  (() => {
-    const sky = document.querySelector('.sky');
-    const rail = document.querySelector('.day-rail');
-    const root = document.documentElement;
-    if (reduce) { if (sky) sky.style.setProperty('--day', '0.32'); return; }
-    const setRail = () => { if (rail) rail.style.setProperty('--rail-travel', rail.clientHeight + 'px'); };
-    let queued = false;
-    const update = () => {
-      queued = false;
-      const max = root.scrollHeight - innerHeight;
-      const p = max > 0 ? Math.min(1, Math.max(0, scrollY / max)) : 0;
-      // 只寫兩個會用到的元素，避免在 root 上改變數造成整頁樣式重算
-      if (sky) sky.style.setProperty('--day', p.toFixed(4));
-      if (rail) rail.style.setProperty('--day', p.toFixed(4));
-    };
-    const queue = () => { if (queued) return; queued = true; requestAnimationFrame(update); };
-    addEventListener('scroll', queue, { passive: true });
-    addEventListener('resize', () => { setRail(); queue(); }, { passive: true });
-    addEventListener('load', () => { setRail(); queue(); });
-    setRail();
-    update();
-  })();
-
   (() => {
     const btn = $('#copy'); if (!btn || !navigator.clipboard || !navigator.clipboard.writeText) return;
     btn.hidden = false;

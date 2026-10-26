@@ -1657,15 +1657,18 @@ enum Wireless {
             if Thread.isMainThread { applyCorner(why) } else { DispatchQueue.main.async { applyCorner(why) } }
         }
         Wireless.reopenNow = { _ in DispatchQueue.main.async { feed(.displayChanged) } }
-        // 設定 › CarPlay › 圓角：桌寵寫 carplay-display.json；每秒看一次修改時間，改了就立刻套用
+        // 設定 › CarPlay › 圓角：桌寵寫 carplay-display.json；看修改時間，改了就套用。
+        // 純裝飾的設定檔：5 秒看一次就夠（套用慢個幾秒無感），別讓接收器為它每秒醒來——
+        // 閒置輪詢的整理（2026-10-26 能效任務）；連線狀態機與首配流程一行都不動
         let displayFile = HomePlayState.directory.appendingPathComponent("carplay-display.json")
         var displayStamp = (try? displayFile.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate
-        Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { _ in
+        let displayT = Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { _ in
             let now = (try? displayFile.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate
             guard now != displayStamp else { return }
             displayStamp = now
             applyCorner("圓角策略改成 \(PetDisplay.style.rawValue)")
         }
+        displayT.tolerance = 1
         s.onControlConnected = { host in
             if Self.isSelfAddress(host, iface: o.iface) {
                 note("控制连接来自本机（\(host)），忽略，不影响 0x4301 重试")

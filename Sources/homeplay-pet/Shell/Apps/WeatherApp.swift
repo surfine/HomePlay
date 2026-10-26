@@ -254,7 +254,7 @@ final class WeatherApp: PetApp {
         g.setAlpha(1 - collapse)
         shadowed {
             AppUI.center(face, g, city, AppUI.font(64, .medium), cx: 512, y: 262 + o, white)
-            AppUI.center(face, g, d.map { "\(temp($0.temp))°" } ?? dash, FaceType.sf(240, .thin), cx: 530, y: 490 + o, white)
+            AppUI.center(face, g, d.map { "\(temp($0.temp))°" } ?? dash, FaceType.sf(240, .thin), cx: 512, y: 490 + o, white)
             AppUI.center(face, g, cond, AppUI.fitted(cond, size: 44, weight: .semibold, maxWidth: 860), cx: 512, y: 556 + o, white)
             if d != nil { AppUI.center(face, g, hiLo, AppUI.font(44, .semibold), cx: 512, y: 612 + o, white) }
         }

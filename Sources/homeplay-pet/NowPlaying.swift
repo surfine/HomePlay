@@ -115,8 +115,22 @@ enum MediaCommand { case play, pause, playPause, next, previous }
 
 final class NowPlayingPoller {
     static let shared = NowPlayingPoller()
-    /// 視窗被遮住／螢幕休眠時不必輪詢（AppleScript 不便宜）
-    var paused = false
+    /// 視窗被遮住／螢幕休眠時不必輪詢（AppleScript 不便宜）：真的把計時器和 perl 停掉，
+    /// 恢復可見再叫醒（而不是每 3 秒白醒一次什麼都不做）
+    var paused = false {
+        didSet {
+            guard paused != oldValue, started else { return }
+            if paused {
+                timer?.invalidate(); timer = nil
+                MediaRemoteReader.shared.pause()
+            } else {
+                MediaRemoteReader.shared.resume()
+                arm()
+                poll()
+            }
+        }
+    }
+    private var started = false
     static var disabled = false       // 快照用 --music 时关掉，免得真数据盖掉测试状态
     /// 偏好设定「显示正在播放」；默认开
     static let defaultsKey = "HomePlayNowPlayingOn"
@@ -163,19 +177,24 @@ final class NowPlayingPoller {
     }
 
     func start(face: Face) {
-        guard !Self.disabled, timer == nil else { return }
+        guard !Self.disabled, timer == nil, !started else { return }
+        started = true
         self.face = face
         // 2.0 #11：MediaRemote 读得到任何 App 的正在播放（播客、浏览器…），内容一变就发布
         MediaRemoteReader.shared.onChange = { [weak self] in self?.publish() }
         MediaRemoteReader.shared.start()
+        if paused { MediaRemoteReader.shared.pause() } else { arm(); poll() }   // 啟動時就被遮住：維持暫停
+    }
+
+    private func arm() {
         let t = Timer(timeInterval: 3, repeats: true) { [weak self] _ in self?.poll() }
         t.tolerance = 0.5
         RunLoop.main.add(t, forMode: .common); timer = t
-        poll()
     }
 
     /// 关掉：不再问 Music / Spotify，屏幕上的「正在播放」也一并清掉
     func stop() {
+        started = false
         timer?.invalidate(); timer = nil; results = [:]
         MediaRemoteReader.shared.stop()
         face?.nowPlaying = NowPlayingState(); face?.forceDirty = true
@@ -183,6 +202,9 @@ final class NowPlayingPoller {
 
     private func poll() {
         guard !paused, !busy else { return }
+        // MediaRemote 的 perl 活著就不跑 AppleScript：資料更準（進度、倍速、任何 App），
+        // publish() 本來就優先用它；perl 掛掉（重開三次失敗）自動退回 AppleScript
+        if MediaRemoteReader.shared.running { publish(); return }
         let running = Set(NSWorkspace.shared.runningApplications.compactMap(\.bundleIdentifier))
         let todo = Self.players.filter { running.contains($0.bundle) && !denied.contains($0.bundle) }
         results = results.filter { k, _ in todo.contains { $0.bundle == k } }

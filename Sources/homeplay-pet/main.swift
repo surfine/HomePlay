@@ -2629,7 +2629,8 @@ final class LoopClock: NSObject {
             link = l
         } else {
             let t = Timer(timeInterval: 1.0 / Double(max(1, hz)), repeats: true) { [weak self] _ in self?.tick() }
-            if hz <= 30 { t.tolerance = min(0.05, 0.25 / Double(max(1, hz))) }
+            // 快節奏也給 1/4 間隔的容忍（沒上螢幕的快照路徑）；慢節奏本來就大
+            t.tolerance = hz <= 30 ? min(0.05, 0.25 / Double(max(1, hz))) : 0.25 / Double(hz)
             RunLoop.main.add(t, forMode: .common)
             timer = t
         }
@@ -2852,6 +2853,8 @@ final class PetView: NSView {
     private let posterIdle = ProcessInfo.processInfo.environment["HOMEPLAY_POSTER_AFTER"].flatMap(Double.init) ?? 90
     /// 診斷用：HOMEPLAY_IDLE_HZ 可改閒置幀率（能效量測）。每幀都去讀一次環境字典太浪費，啟動時讀一次。
     private let idleHzOverride = ProcessInfo.processInfo.environment["HOMEPLAY_IDLE_HZ"].flatMap { Int($0) }
+    /// 診斷用：HOMEPLAY_BATTERY=1 假裝在用電池（量「電池自動降幀」；接電源量測時用）
+    private let onBatteryOverride = ProcessInfo.processInfo.environment["HOMEPLAY_BATTERY"].flatMap { $0 == "1" ? true : nil }
     /// 每幀都會用到的「慢狀態」（整點小時、系統減弱動態）每秒才更新一次。
     private var slowStateAt: Double = -1
     private var cachedHour = 12
@@ -3017,12 +3020,13 @@ final class PetView: NSView {
         model.setScreen(face.render())
         face.onHour = { [weak self] in self?.mood.show(.wink, for: 0.6, now: CACurrentMediaTime()) }
         // 每 0.25 s 看一次游标：靠近、摸头、好奇时眼珠的方向。用轮询，不要辅助功能权限。
-        let envT = Timer(timeInterval: 5, repeats: true) { [weak self] _ in
-            guard let self else { return }
-            self.thermal = ProcessInfo.processInfo.thermalState
-            self.lowPower = ProcessInfo.processInfo.isLowPowerModeEnabled
+        // 热状态／低电量（省电模式）改听系统通知，不再每 5 秒醒来问一次
+        envObserver = NotificationCenter.default.addObserver(forName: ProcessInfo.thermalStateDidChangeNotification, object: nil, queue: .main) { [weak self] _ in
+            self?.thermal = ProcessInfo.processInfo.thermalState
         }
-        RunLoop.main.add(envT, forMode: .common)
+        envObserver2 = NotificationCenter.default.addObserver(forName: Notification.Name("NSProcessInfoPowerStateDidChange"), object: nil, queue: .main) { [weak self] _ in
+            self?.lowPower = ProcessInfo.processInfo.isLowPowerModeEnabled
+        }
         startHoverTimer()
         decoder.onImage = { [weak self] img in
             guard let self, self.showingVideo, !self.carVideo.active else { return }
@@ -3386,6 +3390,7 @@ final class PetView: NSView {
         timer?.invalidate(); timer = nil; loopHz = 0
         if roomLightEnabled || gazeEnabled { GazeTracker.shared.setPaused(true) }
         startPosterTimer()
+        startHoverTimer(interval: 1.0, tolerance: 0.25)   // 深度閒置：靠近喚醒慢 0.75 s 無感，省 3/4 的喚醒
         log("poster: idle, 5 s cadence")
     }
 
@@ -3407,6 +3412,7 @@ final class PetView: NSView {
         guard posterActive else { return }
         posterActive = false
         posterTimer?.invalidate(); posterTimer = nil
+        startHoverTimer()   // 回到平常的 0.25 s 節奏
         if (roomLightEnabled || gazeEnabled), !occluded, !screenLocked {
             GazeTracker.shared.setPaused(false)
         }
@@ -3433,6 +3439,7 @@ final class PetView: NSView {
             posterTimer?.invalidate(); posterTimer = nil
             hoverTimer?.invalidate(); hoverTimer = nil
             NowPlayingPoller.shared.paused = true
+            AirPlayWatch.setPaused(true)   // 畫面看不到：視窗清單掃描也停
             onVideoState?(false)          // 健康檢查/統計也停
         } else {
             if posterActive { endPoster() }
@@ -3440,19 +3447,25 @@ final class PetView: NSView {
             sceneDirty = true
             lastStep = CACurrentMediaTime(); face.forceDirty = true
             NowPlayingPoller.shared.paused = false
+            AirPlayWatch.setPaused(false)
             startHoverTimer()
             if showingVideo { onVideoState?(true) }
             step()   // 立刻補一幀並恢復幀率
         }
         log("occluded \(o)")
     }
-    private func startHoverTimer() {
-        guard hoverTimer == nil else { return }
-        let t = Timer(timeInterval: 0.25, repeats: true) { [weak self] _ in self?.watchPointer() }
-        t.tolerance = 0.05
+    /// 懸停輪詢：平常 0.25 s（靠近、摸頭、眼珠跟游標）；深度閒置（海報模式）放慢到 1 s——
+    /// 靠近喚醒慢 0.75 s 無感，整夜不再每 0.25 s 醒一次
+    private func startHoverTimer(interval: Double = 0.25, tolerance: Double = 0.05) {
+        guard hoverTimer == nil || hoverInterval != interval else { return }
+        hoverTimer?.invalidate()
+        hoverInterval = interval
+        let t = Timer(timeInterval: interval, repeats: true) { [weak self] _ in self?.watchPointer() }
+        t.tolerance = tolerance
         RunLoop.main.add(t, forMode: .common)
         hoverTimer = t
     }
+    private var hoverInterval: Double = 0.25
     private func step() {
         if occluded { return }
         stepFrames += 1
@@ -3579,19 +3592,22 @@ final class PetView: NSView {
     }
 
     /// 現在該用幾 fps：直播有進幀 60（畫面靜止半秒沒進幀就 12，進幀立刻回 60）；
-    /// 有彈簧／手勢／過場／剛動過 60；否則 6；睡著 1
+    /// 有彈簧／手勢／過場／剛動過 60；否則 6；睡著 1。
+    /// 用電池（未接電源）自動降幀：動畫與直播上限 60→30（使用者拍板 2026-10-26「為 Apple 晶片優化能效」）。
     private func targetHz(_ now: Double, asleep: Bool, moving: Bool) -> Int {
         // 無風扇機器：過熱或低電量時主動降載（WWDC25「Turbocharge your app for CarPlay」的建議）
         if thermal == .critical { return asleep ? 1 : 6 }
         let throttled = thermal == .serious || lowPower
+        // HOMEPLAY_BATTERY=1 量測用：機器接著電源時模擬電池路徑（同 HOMEPLAY_IDLE_HZ 的診斷開關做法）
+        let onBattery = onBatteryOverride ?? (face.battery.map { !$0.onAC } ?? false)
         if showingVideo {
-            if moving || now - lastVideoFrame < 0.5 { return throttled ? 30 : 60 }
+            if moving || now - lastVideoFrame < 0.5 { return (throttled || onBattery) ? 30 : 60 }
             return 12
         }
         if asleep { return 1 }
-        if throttled { return moving ? 30 : 8 }
-        if moving { return 60 }
-        if let h = ClockKit.hz(now) { return h }   // 2.0: 時鐘 App 的秒針閒著時 30 fps（Shell/Apps/ClockKit.swift）
+        if moving { return (throttled || onBattery) ? 30 : 60 }
+        if throttled { return 8 }
+        if let h = ClockKit.hz(now) { return onBattery ? min(h, 30) : h }   // 2.0: 時鐘 App 的秒針（Shell/Apps/ClockKit.swift）
         // 沒人靠近超過一分鐘：降到 6fps（眨眼仍走 30fps 窗口，看不出差別）
         let far = now - lastNear > 60
         let idle = idleHzOverride ?? (far ? 4 : 6)
@@ -3623,6 +3639,8 @@ final class PetView: NSView {
     private var loopHz = 60
     private var thermal: ProcessInfo.ThermalState = ProcessInfo.processInfo.thermalState
     private var lowPower = ProcessInfo.processInfo.isLowPowerModeEnabled
+    private var envObserver: (any NSObjectProtocol)?
+    private var envObserver2: (any NSObjectProtocol)?
     private var pendingWink: Double?
     private var nodStart: Double?, shakeStart: Double?
     private var rotateMoved = false
@@ -3890,7 +3908,7 @@ final class PetView: NSView {
 
     private func watchPointer() {
         guard !occluded, let win = window, win.isVisible else { return }
-        let now = CACurrentMediaTime(), hour = Calendar.current.component(.hour, from: Date())
+        let now = CACurrentMediaTime()
         let m = NSEvent.mouseLocation, f = win.frame
         let dx = max(f.minX - m.x, 0, m.x - f.maxX), dy = max(f.minY - m.y, 0, m.y - f.maxY)
         let dist = hypot(dx, dy)
@@ -3912,7 +3930,7 @@ final class PetView: NSView {
             : (gazeRecent ? max(face.revealTarget, 0.65)
                : (forceNear ? 1 : max(0, min(1, 1 - (dist - 20) / 220))))
         face.flowActive = mood.near && face.expression != .asleep
-        if mood.near { mood.activity(now: now, hour: hour) }
+        if mood.near { mood.activity(now: now, hour: Calendar.current.component(.hour, from: Date())) }
         if gazeHere {
             face.pointer = CGPoint(x: max(-1, min(1, gazeX)), y: max(-1, min(1, gazeY)))
         } else if dist > 120, let v = AirPlayWatch.videoCenter {
@@ -6409,7 +6427,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             exit(ok ? 0 : 1)
         }
         // 基准/截图不碰真实 LaunchAgent、配置和麦克风权限：它们是诊断进程，不能改用户的常驻接收器。
-        let diagnosticRun = benchSeconds > 0 || snapshotPath != nil || Self.isDiagnosticRun
+        let diagnosticRun = benchSeconds > 0 || snapshotPath != nil || Self.isDiagnosticRun || Self.perfProbe
         if !diagnosticRun {
             ReceiverAgent.migrateIfNeeded()   // 升级：把 LaunchAgent 指到新布局的接收器路径
             ReceiverLauncher.ensureConfigFile()   // 后台接收器先起时也要有配置
@@ -6673,7 +6691,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // 过手机（ignoredPhones 非空）也不自动进场，避免每次启动都弹配对。
         let cfg = ReceiverLauncher.loadConfig()
         let freshInstall = !FileManager.default.fileExists(atPath: ReceiverLauncher.configURL().path)
-        if snapshotPath == nil, benchSeconds == 0, endpoint == nil,
+        if snapshotPath == nil, benchSeconds == 0, endpoint == nil, !Self.perfProbe,
            freshInstall || (cfg.phone.isEmpty && cfg.ignoredPhones.isEmpty) {
             DispatchQueue.main.asyncAfter(deadline: .now() + 6.5) { [weak self] in
                 guard let self, !self.view.showingVideo, self.client == nil else { return }
@@ -6683,7 +6701,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         // 已经配过手机：安静地挂到后台 receiver 上。没画面就不弹「连接中」，
         // iPhone 一旦连上就自动出画面——打开桌宠即可用，不用再重按。
-        if snapshotPath == nil, benchSeconds == 0, endpoint == nil, !cfg.phone.isEmpty, Onboarding.done {
+        if snapshotPath == nil, benchSeconds == 0, endpoint == nil, !Self.perfProbe, !cfg.phone.isEmpty, Onboarding.done {
             DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in
                 guard let self, !self.view.showingVideo, self.client == nil, !self.userStopped else { return }
                 let target = "ws://127.0.0.1:\(ReceiverLauncher.port())"
@@ -7128,8 +7146,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let a = CommandLine.arguments
         return ["--snapshot", "--screen-png", "--bench", "--open-settings", "--show-menu", "--clock-look-panel", "--remote-test", "--hello-product"].contains { a.contains($0) }   // 2.0 idle: 串流測試也不碰接收器
     }
+    /// 效能量測（tooling/perf-probe.sh）專用：接收器相關的一切全部隔離（不連線、不裝／不踢 LaunchAgent、
+    /// 不自動進場）。跟 isDiagnosticRun 不同：狀態列、遮蔽監看、全域監看、AirPlayWatch 照正式版跑，
+    /// 量的才是真的待機行為。2026-10-26 實測教訓：量測寵物一旦被使用者點到「使用 iPhone」，
+    /// 會連上真接收器收真 CarPlay 影片、把量測弄髒，還會安裝 rehearsal 代理。
+    static var perfProbe: Bool { ProcessInfo.processInfo.environment["HOMEPLAY_PERF_PROBE"] == "1" }
     private func connect(_ endpoint: String, quiet: Bool = false) {
         guard !Self.isDiagnosticRun else { log("diagnostic run: not attaching to receiver"); return }
+        guard !Self.perfProbe else { log("perf probe: not attaching to receiver"); return }
         guard let c = ReceiverClient(endpoint: endpoint, decoder: view.decoder) else {
             log("无效 endpoint：\(endpoint)"); return
         }
@@ -7525,6 +7549,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     /// receiver 不在（8788 没人听）就拉起一个；在的话直接用，不重复起。
     private func ensureReceiver(_ then: @escaping () -> Void) {
+        guard !Self.perfProbe else { log("perf probe: not touching the receiver agent"); then(); return }
         // 想做到「一次配好、以后自动」：第一次进 CarPlay 就把 receiver 交给 launchd 常驻。
         // 这样桌宠退出/重启后手机仍有东西可回连；用户明确关过「后台自动连接」则尊重选择。
         if !ReceiverAgent.isInstalled, ReceiverAgent.autoEnableIfNeeded(reason: "receiver needed") {

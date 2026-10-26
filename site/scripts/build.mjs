@@ -3,7 +3,7 @@ import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
-import { copy, origin, github, notice, releaseDownload, FACES, FINISHES, LANGS } from './content.mjs';
+import { copy, origin, github, notice, releaseDownload, betaDownload, FACES, FINISHES, LANGS } from './content.mjs';
 import { history, HISTORY_SLUG } from './history.mjs';
 import { preview, PREVIEW_SLUG } from './preview.mjs';
 import { previewPage } from './preview-page.mjs';
@@ -62,6 +62,7 @@ const hashOf = (t) => createHash('sha256').update(t).digest('hex').slice(0, 10);
 const HCSS_V = hashOf(HIST_CSS);
 const HJS_V = hashOf(HIST_JS);
 const PCSS_V = assetVersion('preview.css');   // 2.0 Preview 頁自己的樣式與互動（preview-page.mjs）
+const HOME_CSS_V = assetVersion('home.css');    // 首頁自己的樣式（在 pv 設計系統上）
 const PJS_V = assetVersion('preview.js');
 // app.js 動態載入的渲染圖：把這一頁那套圖的版本號交給它
 // 鍵是相對於這套渲染圖目錄的檔名（含 spin/NN.webp）。
@@ -164,132 +165,120 @@ function page(c) {
     faceNames: c.faceNames, heroLabel: c.heroLabel, facesLabel: c.facesLabel,
     apart: c.apart, together: c.together, apartAlt: c.apartAlt, spinLabel: c.spinLabel, copyCode: c.copyCode, copied: c.copied,
   };
+  // 段落開頭：小標（eyebrow）＋大標＋導言，與 2.0／往事頁同一個節奏
+  const head2 = (eyebrow, title, lede, id) => `<div class="pv-head rv">${eyebrow ? `<p class="pv-eyebrow">${eyebrow}</p>` : ''}<h2${id ? ` id="${id}"` : ''}>${title}</h2>${lede ? `<p class="pv-lede">${lede}</p>` : ''}</div>`;
+  const dir20 = `/media/2.0/${c.lang}/`;
   return `<!doctype html>
 <html lang="${c.htmlLang}">
 <head>
 ${head(c, { title: c.title, description: c.description, canonicalPath: c.path, image: c.og, imageAlt: c.ogAlt })}
+<link rel="stylesheet" href="/preview.css?v=${PCSS_V}">
+<link rel="stylesheet" href="/home.css?v=${HOME_CSS_V}">
 </head>
-<body data-renders="${R}" data-renders-v='${rendersVersions(R)}' data-hello="${HELLO}" data-hello-v='${helloVersions()}'>
+<body class="pv home" data-renders="${R}" data-renders-v='${rendersVersions(R)}' data-hello="${HELLO}" data-hello-v='${helloVersions()}'>
 <img class="share-fallback" src="/media/share-square.jpg" width="512" height="512" alt="" hidden loading="lazy">
-<div class="sky" aria-hidden="true"><i class="dawn"></i><i class="day"></i><i class="dusk"></i><i class="night"></i></div>
-<div class="day-rail" aria-hidden="true"><span class="t t0">07:17</span><span class="t t1">23:59</span><i class="sun orb"></i><i class="moon orb"></i></div>
 <a class="skip" href="#main">${c.skip}</a>
-<header><div class="wrap">
+<header class="pv-bar"><div class="wrap">
   ${brand}
-  <nav aria-label="${attr(c.navLabel)}"><a class="nav-new" href="${c.path}${PREVIEW_SLUG}">${preview[c.lang].homeNav}</a>${c.nav.map(([id, t]) => `<a href="#${id}">${t}</a>`).join('')}</nav>
-  <div class="end"><nav class="langs" aria-label="${attr(c.langLabel)}">${langLinks}</nav><a class="btn btn-ghost" href="${github}">${c.githubLabel}</a></div>
+  <nav class="pv-nav" aria-label="${attr(c.navLabel)}"><span class="pv-nav-eyes" aria-hidden="true">👀</span><i class="pv-nav-thumb" aria-hidden="true"></i><a class="home-nav-new" href="${c.path}${PREVIEW_SLUG}">${preview[c.lang].homeNav}</a>${c.nav.map(([id, t]) => `<a href="#${id}">${t}</a>`).join('')}<a class="pv-nav-out" href="${c.path}${HISTORY_SLUG}">${history[c.lang].navLink}</a></nav>
+  <div class="end"><nav class="langs" aria-label="${attr(c.langLabel)}">${langLinks}</nav></div>
 </div></header>
 <main id="main">
 
-<section class="hero" id="top"><div class="wrap">
-  <div class="hero-copy">
-    <h1>${c.h1}</h1>
-    <p class="lede">${c.lede}</p>
-    <div class="ctas"><a class="btn btn-primary" href="${releaseDownload}">${c.download}</a><a class="btn btn-ghost" href="${github}">${c.viewSource}</a></div>
-    <p class="hero-note">${c.heroNote}</p>
+<section class="home-hero" id="top" aria-labelledby="home-h1"><div class="wrap home-hero-grid">
+  <div class="pv-hero-copy home-hero-copy">
+    <a class="home-new" href="${c.path}${PREVIEW_SLUG}"><span class="pv-badge">${c.heroNew.badge}</span><span class="home-new-t">${c.heroNew.text}</span></a>
+    <h1 id="home-h1">${c.h1}</h1>
+    <p class="pv-hero-lede">${c.lede}</p>
+    <div class="pv-ctas"><a class="btn btn-primary" href="${releaseDownload}">${c.download}</a><a class="btn btn-ghost" href="${github}">${c.viewSource}</a></div>
+    <p class="home-hero-note">${c.heroNote}</p>
   </div>
-  <div class="hero-bob">
+  <div class="home-hero-pet">
     <div class="pet hero-pet" id="hero-pet" role="img" aria-label="${attr(fill(c.heroLabel, 'face', c.faceNames[first]))}" data-prefix="face-" data-names="${FACES.join(' ')}" data-first="idle" data-w="${SIZE.face[0]}" data-h="${SIZE.face[1]}" data-blink="auto" data-glance="auto">
       ${petImg('idle', 'face-', SIZE.face, { on: true, priority: true })}
     </div>
   </div>
 </div></section>
 
-<section class="highlights" id="highlights"><div class="wrap">
-  <div class="rise">
-    <h2>${c.highlightsTitle}</h2>
-    <p class="lede">${c.highlightsLede}</p>
-  </div>
-  <div class="hl-grid rise">
-    ${c.highlights.map(([k, t, sub, body]) => `<article class="hl hl-${k}"><div class="hl-motif">${MOTIF[k]}</div><h3>${t}</h3><p class="hl-sub">${sub}</p><p>${body}</p></article>`).join('\n    ')}
-  </div>
+<section class="pv-sec home-highlights" id="highlights"><div class="wrap">
+  ${head2(c.secEyebrow.highlights, c.highlightsTitle, c.highlightsLede)}
+  <ul class="home-cards" role="list">
+    ${c.highlights.map(([k, t, sub, body]) => `<li class="pv-card home-card rv"><div class="home-card-media" aria-hidden="true">${MOTIF[k]}</div><div class="home-card-text"><h3>${t}</h3><p class="home-card-sub">${sub}</p><p>${body}</p></div></li>`).join('\n    ')}
+  </ul>
 </div></section>
 
-<section class="film" id="film"><div class="wrap">
-  <div class="rise">
-    <h2>${c.filmTitle}</h2>
-    <p class="lede">${c.filmLede}</p>
-  </div>
-  <video class="film-video" controls playsinline preload="none" poster="/media/film/poster.webp" width="1920" height="1080" aria-label="${attr(c.filmLabel)}"><source src="/media/film/homeplay-44s.mp4" type="video/mp4"></video>
-  <p class="film-alt"><a href="https://www.bilibili.com/video/BV1rTnz6YEmM/">${c.filmBili}</a></p>
+<section class="pv-sec home-film" id="film"><div class="wrap">
+  ${head2(c.secEyebrow.film, c.filmTitle, c.filmLede)}
+  <figure class="home-film-fig rv">
+    <video class="home-film-video" controls playsinline preload="none" poster="/media/film/poster.webp" width="1920" height="1080" aria-label="${attr(c.filmLabel)}"><source src="/media/film/homeplay-44s.mp4" type="video/mp4"></video>
+    <figcaption><a href="https://www.bilibili.com/video/BV1rTnz6YEmM/">${c.filmBili}</a></figcaption>
+  </figure>
 </div></section>
 
-<section class="why" id="why"><div class="wrap why-grid">
-  <div class="why-text">
-    <h2 class="rise">${c.essayTitle}</h2>
-    <p class="lede">${c.essayLede}</p>
-    <p class="essay-close">${c.essayClose}</p>
+<section class="pv-sec home-why" id="why"><div class="wrap home-why-grid">
+  <div class="home-why-text">
+    ${head2(c.secEyebrow.why, c.essayTitle, c.essayLede)}
+    <p class="home-essay-close rv">${c.essayClose}</p>
   </div>
-  <div class="why-eyes">
+  <div class="home-why-eyes rv">
     <div class="eyes-card" id="eyes" role="img" aria-label="${attr(c.eyesLabel)}">
       <svg viewBox="0 0 300 300" aria-hidden="true" focusable="false"><defs><radialGradient id="eye-sclera" cx="50%" cy="50%" r="50%"><stop offset="0" stop-color="#fff"/><stop offset=".8" stop-color="#fdfdfd"/><stop offset=".89" stop-color="#e6e6e6"/><stop offset=".955" stop-color="#c2c2c2"/><stop offset="1" stop-color="#949494"/></radialGradient><linearGradient id="eye-iris" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#5a2a00"/><stop offset=".42" stop-color="#683900"/><stop offset=".62" stop-color="#7a4800"/><stop offset=".8" stop-color="#b78600"/><stop offset=".92" stop-color="#e2ab00"/><stop offset="1" stop-color="#d9a400"/></linearGradient></defs>${eye(98, 142)}${eye(202, 142)}</svg>
     </div>
-    <p class="eyes-hint">${c.eyesHint}</p>
+    <p class="home-eyes-hint">${c.eyesHint}</p>
   </div>
 </div></section>
 
-<section class="faces" id="faces"><div class="wrap">
-  <div class="stick"><div class="pet still" id="face-pet" role="img" aria-label="${attr(fill(c.facesLabel, 'face', c.faceNames[rowFace]))}" data-prefix="face-" data-names="${FACES.join(' ')}" data-first="${rowFace}" data-w="${SIZE.face[0]}" data-h="${SIZE.face[1]}" data-blink="auto" data-glance="auto">
+<section class="pv-sec pv-dark home-faces" id="faces" aria-labelledby="faces-t"><div class="wrap home-faces-grid">
+  <div class="home-faces-stick"><div class="pet still" id="face-pet" role="img" aria-label="${attr(fill(c.facesLabel, 'face', c.faceNames[rowFace]))}" data-prefix="face-" data-names="${FACES.join(' ')}" data-first="${rowFace}" data-w="${SIZE.face[0]}" data-h="${SIZE.face[1]}" data-blink="auto" data-glance="auto">
     ${petImg(rowFace, 'face-', SIZE.face, { on: true, lazy: true })}
   </div></div>
-  <div class="rise">
-    <h2>${c.facesTitle}</h2>
-    <p class="lede">${c.facesLede}</p>
+  <div class="home-faces-list">
+    ${head2(c.secEyebrow.faces, c.facesTitle, c.facesLede, 'faces-t')}
     <div class="rows" id="rows">
-${c.rows.map(([f, t, r], i) => `      <button type="button" class="row${i ? '' : ' on'}" aria-pressed="${i === 0}" data-face="${f}"><span class="t">${t}</span><span class="r">${r}</span></button>`).join('\n')}
+${c.rows.map(([f, t, r], i) => `      <button type="button" class="row rv${i ? '' : ' on'}" aria-pressed="${i === 0}" data-face="${f}"><span class="t">${t}</span><span class="r">${r}</span></button>`).join('\n')}
     </div>
   </div>
 </div></section>
 
-<section class="styles" id="styles"><div class="wrap">
-  <div class="rise">
-    <h2>${c.stylesTitle}</h2>
-    <p class="lede">${c.stylesLede}</p>
-  </div>
-  <div class="style-grid rise">
-    ${c.styles.map(([k, name]) => `<figure class="style"><img src="${R}style-${k}.webp" width="${SIZE.style[0]}" height="${SIZE.style[1]}" alt="${attr(name)}" loading="lazy" decoding="async"><figcaption>${name}</figcaption></figure>`).join('\n    ')}
-  </div>
+<section class="pv-sec home-styles" id="styles"><div class="wrap">
+  ${head2(c.secEyebrow.styles, c.stylesTitle, c.stylesLede)}
+  <ul class="home-style-grid" role="list">
+    ${c.styles.map(([k, name]) => `<li class="rv"><figure><img src="${R}style-${k}.webp" width="${SIZE.style[0]}" height="${SIZE.style[1]}" alt="${attr(name)}" loading="lazy" decoding="async"><figcaption>${name}</figcaption></figure></li>`).join('\n    ')}
+  </ul>
 </div></section>
 
-<section class="carplay" id="carplay"><div class="wrap"><div class="panel">
-  <h2>${c.carplayTitle}</h2>
-  <p class="lede">${c.carplayLede}</p>
-  <div class="path" role="group" aria-label="${attr(c.pathLabel)}">
-    ${c.flow.map(([b, s], i) => `${i ? '<div class="link" aria-hidden="true"><i class="dot"></i><i class="dot d2"></i><i class="dot back"></i></div>' : ''}<div class="node"><b>${b}</b><span>${s}</span></div>`).join('\n    ')}
+<section class="pv-sec pv-dark home-carplay" id="carplay"><div class="wrap">
+  ${head2(c.secEyebrow.carplay, c.carplayTitle, c.carplayLede)}
+  <div class="path rv" role="group" aria-label="${attr(c.pathLabel)}">
+    ${c.flow.map(([b, s2], i) => `${i ? '<div class="link" aria-hidden="true"><i class="dot"></i><i class="dot d2"></i><i class="dot back"></i></div>' : ''}<div class="node"><b>${b}</b><span>${s2}</span></div>`).join('\n    ')}
   </div>
-  <div class="first-use">
+  <div class="first-use rv">
     <h3>${c.firstStepsTitle}</h3>
     <ol>
       ${c.firstSteps.map((t) => `<li>${t}</li>`).join('\n      ')}
     </ol>
   </div>
-</div></div></section>
+</div></section>
 
-<section class="spin" id="spin"><div class="wrap">
-  <div class="spin-head rise">
-    <h2>${c.spinTitle}</h2>
-    <p class="lede">${c.spinLede}</p>
-  </div>
-  <div class="spin-stage" id="spin-stage" tabindex="0" role="img" aria-label="${attr(c.spinLabel)}" data-frames="${SPIN_FRAMES}">
+<section class="pv-sec home-spin" id="spin"><div class="wrap">
+  ${head2(c.secEyebrow.spin, c.spinTitle, c.spinLede)}
+  <div class="spin-stage rv" id="spin-stage" tabindex="0" role="img" aria-label="${attr(c.spinLabel)}" data-frames="${SPIN_FRAMES}">
     <img class="spin-still" src="${R}spin/00.webp" width="${SIZE.spin[0]}" height="${SIZE.spin[1]}" alt="" loading="lazy" decoding="async">
     <canvas class="spin-canvas" aria-hidden="true"></canvas>
     <img class="spin-apart" src="${R}view-apart.webp" width="${SIZE.apart[0]}" height="${SIZE.apart[1]}" alt="" loading="lazy" decoding="async">
   </div>
   <p class="spin-hint" id="spin-hint">${c.spinHint}</p>
-  <div class="spin-actions"><button type="button" class="btn btn-ghost" id="apart-btn" aria-pressed="false">${c.apart}</button></div>
+  <div class="spin-actions"><button type="button" class="pv-pill" id="apart-btn" aria-pressed="false">${c.apart}</button></div>
   <div class="apart-parts">
     <p class="apart-note">${c.apartNote}</p>
-    <ol>${c.apartParts.map((p, i) => `<li><span>${i + 1}</span>${p}</li>`).join('')}</ol>
+    <ol>${c.apartParts.map((p2, i) => `<li><span>${i + 1}</span>${p2}</li>`).join('')}</ol>
   </div>
 </div></section>
 
-<section class="run" id="run"><div class="wrap">
-  <div class="rise">
-    <h2>${c.runTitle}</h2>
-    <p class="lede">${c.runLede}</p>
-    <div class="dl"><a class="btn btn-primary" href="${releaseDownload}">${c.download}</a><p class="dl-note">${c.downloadNote}</p></div>
-  </div>
-  <details class="build">
+<section class="pv-sec home-run" id="run"><div class="wrap home-run-wrap">
+  ${head2(c.secEyebrow.run, c.runTitle, c.runLede)}
+  <div class="dl rv"><a class="btn btn-primary" href="${releaseDownload}">${c.download}</a><p class="dl-note">${c.downloadNote}</p></div>
+  <details class="build rv">
     <summary>${c.buildTitle}</summary>
     <ul>
       ${c.runList.map((t) => `<li>${t}</li>`).join('\n      ')}
@@ -298,15 +287,15 @@ ${c.rows.map(([f, t, r], i) => `      <button type="button" class="row${i ? '' :
   </details>
 </div></section>
 
-<section id="faq"><div class="wrap faq">
-  <h2 class="rise">${c.faqTitle}</h2>
+<section class="pv-sec home-faq" id="faq"><div class="wrap home-faq-wrap">
+  <h2 class="rv">${c.faqTitle}</h2>
   <div class="faq-list">
-    ${c.faq.map(([q, a], i) => `<details${i ? '' : ' open'}><summary>${q}</summary><p>${a}</p></details>`).join('\n    ')}
+    ${c.faq.map(([q, a], i) => `<details class="rv"${i ? '' : ' open'}><summary>${q}</summary><p>${a}</p></details>`).join('\n    ')}
   </div>
 </div></section>
 
-<section class="dev" id="dev"><div class="wrap">
-  <figure class="dev-card rise">
+<section class="pv-sec home-dev" id="dev"><div class="wrap">
+  <figure class="dev-card rv">
     <div class="dev-eyes" aria-hidden="true">👀</div>
     <h2>${c.devTitle}</h2>
     <blockquote>${c.dev.map((t) => `<p>${t}</p>`).join('')}</blockquote>
@@ -314,8 +303,32 @@ ${c.rows.map(([f, t, r], i) => `      <button type="button" class="row${i ? '' :
   </figure>
 </div></section>
 
+<section class="pv-sec pv-dark home-more" id="more" aria-labelledby="more-t"><div class="wrap">
+  ${head2(c.secEyebrow.more, c.moreTitle, '', 'more-t')}
+  <div class="home-more-grid">
+    <article class="home-more-card rv">
+      <div class="home-more-media"><picture class="home-more-shot"><source type="image/avif" srcset="${dir20}home-light-480.avif 480w, ${dir20}home-light-960.avif 960w" sizes="(max-width: 820px) 70vw, 380px"><img src="${dir20}home-light-480.webp" srcset="${dir20}home-light-480.webp 480w, ${dir20}home-light-960.webp 960w" sizes="(max-width: 820px) 70vw, 380px" width="960" height="960" alt="${attr(preview[c.lang].heroAlt.home)}" loading="lazy" decoding="async"></picture></div>
+      <div class="home-more-text">
+        <p class="pv-eyebrow">${c.more20Eyebrow}</p>
+        <h3>${c.more20Title}</h3>
+        <p>${c.more20Body}</p>
+        <div class="pv-ctas"><a class="btn btn-primary" href="${c.path}${PREVIEW_SLUG}">${c.more20Link}</a><a class="btn btn-ghost" href="${betaDownload}">${c.more20Beta}</a></div>
+      </div>
+    </article>
+    <article class="home-more-card home-more-hist rv">
+      <div class="home-more-media home-more-years"><ol class="pv-years" aria-hidden="true">${['1984', '1997', '2003', '2009', '2012', '2022', '2026'].map((y) => `<li>${y}</li>`).join('')}</ol></div>
+      <div class="home-more-text">
+        <p class="pv-eyebrow">${c.moreHistEyebrow}</p>
+        <h3>${c.moreHistTitle}</h3>
+        <p>${c.moreHistBody}</p>
+        <div class="pv-ctas"><a class="btn btn-ghost" href="${c.path}${HISTORY_SLUG}">${c.moreHistLink}</a></div>
+      </div>
+    </article>
+  </div>
+</div></section>
+
 </main>
-<footer><div class="wrap"><span>${c.footer}</span><span class="links"><a href="${c.path}${HISTORY_SLUG}">${history[c.lang].navLink}</a><a href="${github}">${c.footerLinks.github}</a><a href="${notice}">${c.footerLinks.notice}</a>${langLinks}</span></div></footer>
+<footer><div class="wrap"><span>${c.footer}</span><span class="links"><a href="${c.path}${HISTORY_SLUG}">${history[c.lang].navLink}</a><a href="${c.path}${PREVIEW_SLUG}">${preview[c.lang].homeNav}</a><a href="${github}">${c.footerLinks.github}</a><a href="${notice}">${c.footerLinks.notice}</a>${langLinks}</span></div></footer>
 <script type="application/json" id="i18n">${json(i18n)}</script>
 <script src="/app.js?v=${JS_V}" defer></script>
 </body>
@@ -477,6 +490,7 @@ await mkdir(dist, { recursive: true });
 await cp(path.join(root, 'public'), dist, { recursive: true });
 await writeFile(path.join(dist, 'history.css'), HIST_CSS);
 await writeFile(path.join(dist, 'history.js'), HIST_JS);
+await cp(path.join(root, 'home.css'), path.join(dist, 'home.css'));
 for (const name of ['style.css', 'app.js', 'preview.css', 'preview.js']) await cp(path.join(root, name), path.join(dist, name));
 for (const c of Object.values(copy)) {
   const target = path.join(dist, c.path.replace(/^\/|\/$/g, ''));
@@ -493,7 +507,7 @@ const fillN = (tpl, n, total) => tpl.replace('{n}', n).replace('{t}', total);
 for (const c of Object.values(copy)) {
   const target = path.join(dist, c.path.replace(/^\/|\/$/g, ''), PREVIEW_SLUG);
   await mkdir(target, { recursive: true });
-  await writeFile(path.join(target, 'index.html'), bust(previewPage(c, preview[c.lang], { head, attr, json, origin, github, notice, releaseDownload, LANGS, otherLangs, fill: fillN, PCSS_V, PJS_V, HISTORY_SLUG })));
+  await writeFile(path.join(target, 'index.html'), bust(previewPage(c, preview[c.lang], { head, attr, json, origin, github, notice, releaseDownload, betaDownload, LANGS, otherLangs, fill: fillN, PCSS_V, PJS_V, HISTORY_SLUG })));
 }
 await writeFile(path.join(dist, '404.html'), bust(notFound()));
 await writeFile(path.join(dist, 'robots.txt'), `User-agent: *\nAllow: /\nSitemap: ${origin}/sitemap.xml\n`);

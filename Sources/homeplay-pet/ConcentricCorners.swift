@@ -1,4 +1,4 @@
-// 設定 › CarPlay › 圓角：寫 Application Support/HomePlay/carplay-display.json 的 cornerStyle，接收器每秒看一次、改了立刻重開會話套用。
+// 設定 › CarPlay › 圓角：寫 Application Support/HomePlay/carplay-display.json 的 cornerStyle，接收器每 5 秒看一次、改了就重開會話套用。
 // 同心：安全區照這台 iPhone 的圓角算到與機身同心，桌布鋪滿、圖示和 Dock 往內收；最大畫面：只躲開機身圓角；折衷在中間。
 // 每台手機（iOS 版本）的圓角由接收器量、記在 carplay-corner.json；桌寵這邊只讀它算好的內收量來顯示。
 import Foundation

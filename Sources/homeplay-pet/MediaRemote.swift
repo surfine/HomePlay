@@ -136,6 +136,7 @@ final class MediaRemoteReader {
     private(set) var art: CGImage?
     private(set) var artID = ""
     private(set) var running = false
+    private var wanted = false      // 功能開著（start 過、還沒 stop）：pause 只是停 perl
     /// 內容變了（主執行緒）
     var onChange: (() -> Void)?
     private var process: Process?
@@ -171,12 +172,15 @@ final class MediaRemoteReader {
         if (ok($art) && $id ne $lastArt) { $lastArt = $id; print "ART\t", $id, "\t", $art->base64EncodedStringWithOptions_(0)->UTF8String, "\n"; }
       }
       if ($line ne $last) { print $line, "\n"; $last = $line; }
-      sleep 1;
+      # 在播才需要每秒對進度；暫停 3 秒、完全沒在播 5 秒（進度不動，內容一變照樣立刻印出來）
+      sleep 1 if $line =~ /^NP\t1\t/;
+      sleep 3 if $line =~ /^NP\t0\t/;
+      sleep 5 if $line eq "NONE" || $line !~ /^NP\t[01]\t/;
     }
     """#
 
     func start() {
-        guard !running, FileManager.default.isExecutableFile(atPath: "/usr/bin/perl") else { return }
+        guard !running, FileManager.default.isExecutableFile(atPath: "/usr/bin/perl") else { wanted = true; return }
         let p = Process()
         p.executableURL = URL(fileURLWithPath: "/usr/bin/perl")
         p.arguments = ["-e", Self.script]
@@ -199,10 +203,24 @@ final class MediaRemoteReader {
     }
 
     func stop() {
+        wanted = false
         running = false
         process?.standardOutput.flatMap { $0 as? Pipe }?.fileHandleForReading.readabilityHandler = nil
         process?.terminate(); process = nil
         if latest != nil { latest = nil; art = nil; artID = ""; onChange?() }
+    }
+
+    /// 桌寵被遮住／螢幕休眠時暫停（畫面看不到，不必留一支每秒醒的 perl；latest 留著，回來第一秒畫面就是對的）。
+    /// 恢復可見時恢復。功能本身關掉（stop()）之後 resume() 不會把 perl 叫回來。
+    func pause() {
+        guard running else { return }
+        running = false
+        process?.standardOutput.flatMap { $0 as? Pipe }?.fileHandleForReading.readabilityHandler = nil
+        process?.terminate(); process = nil
+    }
+    func resume() {
+        guard wanted, !running else { return }
+        start()
     }
 
     private func receive(_ d: Data) {

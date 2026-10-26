@@ -13,7 +13,7 @@ const WIDE = new Set(['app-messages-confirm', 'app-recipe-step', 'app-home']);
 const FACE_ORDER = ['photos', 'modular', 'analog', 'flow', 'weather', 'calendar', 'growth', 'black', 'island', 'system6'];
 
 export function previewPage(c, p, h) {
-  const { head, attr, json, origin, github, notice, releaseDownload, LANGS, otherLangs } = h;
+  const { head, attr, json, origin, github, notice, releaseDownload, betaDownload, LANGS, otherLangs } = h;
   const dir = `${PV}${c.lang}/`;
   const set = (n, ws, ext) => ws.map((w) => `${dir}${n}-${w}.${ext} ${w}w`).join(', ');
   // 一張螢幕圖：AVIF 優先、WebP 退路；正方形，圓角在 CSS（螢幕圓角 138/1024）
@@ -68,7 +68,7 @@ ${preloadHero}
         <p class="pv-kicker"><span class="pv-badge">Preview</span>${p.kicker.replace('Preview', '').trim()}</p>
         <h1 id="pv-h1">${p.h1}</h1>
         <p class="pv-hero-lede">${p.lede}</p>
-        <div class="pv-ctas"><a class="btn btn-primary" href="${releaseDownload}">${p.ctaDownload}</a><a class="btn btn-ghost" href="${github}">${p.ctaSource}</a></div>
+        <div class="pv-ctas"><a class="btn btn-primary" href="${betaDownload}">${p.ctaBeta}</a><a class="btn btn-ghost" href="${releaseDownload}">${p.ctaDownload}</a></div>
       </div>
       <div class="pv-stage" id="pv-stage" data-state="face">
         ${prod('prod-island', p.heroAlt.face, { priority: true, cls: 'is-face' })}
@@ -190,7 +190,7 @@ ${preloadHero}
   <ol class="pv-limit-list" role="list">${p.preview.limits.map((t) => `<li class="rv">${t}</li>`).join('')}</ol>
   <div class="pv-cta rv">
     <div><h3>${p.preview.ctaTitle}</h3><p>${p.preview.ctaBody}</p></div>
-    <div class="pv-ctas"><a class="btn btn-primary" href="${releaseDownload}">${p.ctaDownload}</a><a class="btn btn-ghost" href="${github}">${p.ctaSource}</a></div>
+    <div class="pv-ctas"><a class="btn btn-primary" href="${betaDownload}">${p.ctaBeta}</a><a class="btn btn-ghost" href="${releaseDownload}">${p.ctaDownload}</a></div>
   </div>
   <aside class="pv-fn" aria-label="${attr(p.preview.footnotesLabel)}">
     <ol>${p.preview.footnotes.map((t, i) => `<li id="fn-${i + 1}">${t}</li>`).join('')}</ol>

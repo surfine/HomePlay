@@ -15,19 +15,26 @@ final class MenuBarTimer {
     private weak var item: NSStatusItem?
     private let remaining: () -> Double?
     private var ticker: Timer?
+    /// 沒有計時時放慢到 5 秒（只剩「有沒有新計時」一件事要看），有倒數才回 0.5 秒走字
+    private var fast = true
 
     /// remaining：還剩幾秒；沒有計時回 nil
     init(item: NSStatusItem, remaining: @escaping () -> Double?) {
         self.item = item
         self.remaining = remaining
         // common 模式：選單開著、拖動視窗時也照樣走字
-        let t = Timer(timeInterval: 0.5, repeats: true) { [weak self] _ in self?.tick() }
-        t.tolerance = 0.1
-        RunLoop.main.add(t, forMode: .common)
-        ticker = t
+        arm()
         tick()
     }
     deinit { ticker?.invalidate() }
+
+    private func arm() {
+        ticker?.invalidate()
+        let t = Timer(timeInterval: fast ? 0.5 : 5, repeats: true) { [weak self] _ in self?.tick() }
+        t.tolerance = fast ? 0.1 : 2
+        RunLoop.main.add(t, forMode: .common)
+        ticker = t
+    }
 
     func tick() {
         guard let item, let b = item.button else { return }
@@ -42,11 +49,15 @@ final class MenuBarTimer {
                 b.font = NSFont.monospacedDigitSystemFont(ofSize: NSFont.menuBarFont(ofSize: 0).pointSize, weight: .medium)
                 item.length = NSStatusItem.variableLength
             }
-        } else if !b.title.isEmpty {
-            b.title = ""
-            b.imagePosition = .imageOnly
-            b.setAccessibilityLabel(nil)
-            item.length = NSStatusItem.squareLength
+            if !fast { fast = true; arm() }
+        } else {
+            if !b.title.isEmpty {
+                b.title = ""
+                b.imagePosition = .imageOnly
+                b.setAccessibilityLabel(nil)
+                item.length = NSStatusItem.squareLength
+            }
+            if fast { fast = false; arm() }
         }
     }
 }

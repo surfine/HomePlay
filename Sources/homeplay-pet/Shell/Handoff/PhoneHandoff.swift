@@ -215,6 +215,7 @@ final class UniversalClipboardWatch {
         guard timer == nil, !SnapshotPrivacy.active else { return }
         lastCount = NSPasteboard.general.changeCount   // 開的時候已經在剪貼板上的不算
         let t = Timer(timeInterval: 0.6, repeats: true) { [weak self] _ in self?.poll() }
+        t.tolerance = 0.3   // 只看 changeCount：晚半秒無感，讓系統合併喚醒
         RunLoop.main.add(t, forMode: .common)
         timer = t
         log("handoff: universal clipboard watch on")

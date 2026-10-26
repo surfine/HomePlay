@@ -123,8 +123,10 @@ final class CarVideoPlayer: NSObject {
         controlsUntil = CACurrentMediaTime() + 3
         onStarted?()
         let t = Timer(timeInterval: 1.0 / 60, repeats: true) { [weak self] _ in self?.pullFrame() }
+        t.tolerance = 1.0 / 240   // 給一點合併喚醒的空間（1/4 幀以內，畫面看不出來）
         RunLoop.main.add(t, forMode: .common); frameTimer = t
         let s = Timer(timeInterval: 0.5, repeats: true) { [weak self] _ in self?.reportState(force: false) }
+        s.tolerance = 0.2
         RunLoop.main.add(s, forMode: .common); stateTimer = s
     }
 
