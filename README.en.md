@@ -32,7 +32,7 @@ A HomeView that lives on your Mac’s desktop. It has a pair of eyes that watch 
 
 | 10 faces | Ten expressions |
 |:---:|:---:|
-| <img src="assets/github/styles-v2.webp" alt="HomePlay faces: Island, Flow, Modular, Typograph, Weather, Calendar, Days Together and System 6" width="100%"> | <img src="assets/github/faces-v2.webp" alt="Ten expressions made from the same pair of eyes" width="100%"> |
+| <img src="assets/github/styles-v3.webp" alt="HomePlay faces, ten of them: Island, Photos, Modular, Typograph, Flow, Weather, Calendar, Days Together, Black and System 6" width="100%"> | <img src="assets/github/faces-v2.webp" alt="Ten expressions made from the same pair of eyes" width="100%"> |
 
 ## First time: three steps
 
