@@ -641,6 +641,7 @@ if sourceKind == "wireless" || sourceKind == "usb" || sourceKind == "auto" {
         o.iface = w
     }
     if let p = flag("--control-port"), let n = UInt16(p) { o.controlPort = n }  // --port 是 WS 口（WSServer），別混
+    o.background = CommandLine.arguments.contains("--background")   // 登录项常驻：桌宠不在就停广播、闲置退出
     if let sz = flag("--size") {
         let wh = sz.split(separator: "x").compactMap { Int($0) }
         if wh.count == 2 { o.width = wh[0]; o.height = wh[1] }

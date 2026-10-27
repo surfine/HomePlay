@@ -95,6 +95,8 @@ enum Wireless {
         /// 用户显式指定了 --security：发送时不再被自动探测覆盖（真 WPA3-only 网络要发 4）
         var securityExplicit = false
         var iface = "en0"
+        /// 登录项常驻（agent 拉起）：桌宠不在时停广播，闲置一段时间就退出，避免一直以车机身份出现
+        var background = false
         var controlPort: UInt16 = 17000
         // 真机分辨率：1088×1088 @220ppi（apple-homeview/specs）。
         // HOMEPLAY_DISPLAY_W/H 可覆盖（含比例实验，如 900×1200 直屏）——接收器由桌寵拉起，環境變量會傳下去
@@ -1235,6 +1237,7 @@ enum Wireless {
         }
         startBeaconIfNeeded = {
             guard beacon == nil else { return }
+            if o.background, server.clientCount == 0 { return }   // 后台没人看时不广播
             let b = BluetoothBeacon(advertiseClass: true, log: { note("蓝牙广播：" + $0) })
             b.onIncoming = { device, channel in handleBeaconIncoming?(device, channel) }
             beacon = b
@@ -1244,6 +1247,35 @@ enum Wireless {
         // 那一刻看不到 CarPlay 服务，就只会把 Mac 当普通电脑，之后也不再提示 CarPlay。
         // （MacPlay 的蓝牙桥就是启动即发布；这里不再等"配对成功后"才发。）
         startBeaconIfNeeded?()
+        if o.background {
+            // 登录项常驻：桌宠（唯一的 WS 客户端）不在时，不该继续把自己广播成一台 CarPlay 车机，
+            // 否则附近的 iPhone 会反复发起蓝牙配对。15 秒宽限后撤掉广播；再 2 分钟没人用就退出。
+            // KeepAlive 只拉起异常退出，这里用 exit(0)，launchd 不会重启。
+            var idleSince: TimeInterval?
+            let watch = Timer(timeInterval: 5, repeats: true) { _ in
+                if server.clientCount > 0 {
+                    idleSince = nil
+                    if beacon == nil {   // 桌宠回来了：恢复广播
+                        startBeaconIfNeeded?()
+                        note("桌宠已连接：恢复蓝牙广播")
+                    }
+                    return
+                }
+                if idleSince == nil { idleSince = Date().timeIntervalSince1970 }
+                let idle = Date().timeIntervalSince1970 - (idleSince ?? 0)
+                if idle >= 15, let b = beacon {
+                    b.stop()
+                    beacon = nil
+                    Wireless.beacon = nil
+                    note("后台空闲：已停止蓝牙广播（iPhone 不再把 Mac 看成车机）")
+                }
+                if idle >= 120 {
+                    note("后台空闲 2 分钟：接收器退出，等桌宠下次打开再拉起")
+                    exit(0)
+                }
+            }
+            RunLoop.main.add(watch, forMode: .common)
+        }
         startBluetooth()
         note("等 iPhone：蓝牙认证 → Wi-Fi 交接 → 回连控制口（断了自动重连）")
         RunLoop.main.run()
@@ -2234,6 +2266,8 @@ enum Wireless {
         }
         func startBeaconIfNeeded() {
             guard beacon == nil else { return }
+            // 登录项常驻：桌宠没连（没人在看）时不广播，避免开机就弹配对
+            if o.background, server.clientCount == 0 { return }
             let b = BluetoothBeacon(advertiseClass: true, log: { note("蓝牙广播：" + $0) })
             b.onIncoming = { device, channel in
                 // IOBluetooth 回调线程 → 主队列
@@ -2925,6 +2959,34 @@ enum Wireless {
         try? Data().write(to: Wireless.runningMarker)
         // 车机类 + iAP2/CarPlay SDP 必须在配对前就广播：iPhone 在配对时做 SDP 发现，
         // 那一刻看不到 CarPlay 服务，就只会把 Mac 当普通电脑，之后也不再提示 CarPlay。
+        if o.background {
+            // 登录项常驻：等桌宠（WS 客户端）连上再广播；没人时就撤掉广播并退出。
+            // 这样「退出 app 后 iPhone 一直弹配对请求」不会发生。
+            var idleSince: TimeInterval?
+            let watch = Timer(timeInterval: 5, repeats: true) { _ in
+                if server.clientCount > 0 {
+                    idleSince = nil
+                    if beacon == nil {
+                        startBeaconIfNeeded()
+                        note("桌宠已连接：开始/恢复蓝牙广播")
+                    }
+                    return
+                }
+                if idleSince == nil { idleSince = Date().timeIntervalSince1970 }
+                let idle = Date().timeIntervalSince1970 - (idleSince ?? 0)
+                if idle >= 15, let b = beacon {
+                    b.stop()
+                    beacon = nil
+                    Wireless.beacon = nil
+                    note("后台空闲：已停止蓝牙广播（iPhone 不再把 Mac 看成车机）")
+                }
+                if idle >= 120 {
+                    note("后台空闲 2 分钟：接收器退出，等桌宠下次打开再拉起")
+                    exit(0)
+                }
+            }
+            RunLoop.main.add(watch, forMode: .common)
+        }
         startBeaconIfNeeded()
         publishPhones(force: true)
         // 先看一次 USB（线可能本来就插着），再开始连：状态机据此决定先走藍牙还是 USB
@@ -2938,7 +3000,7 @@ enum Wireless {
         }
         note("双模：一个连线状态机统一决定连谁、怎么连；已配对手机插线只充电，会话走蓝牙→Wi-Fi")
         // 第一次設定（還沒記住任何 iPhone）：一開就讓 Mac 可被發現、開配對引導，使用者不必自己去開藍牙設定
-        if o.phoneAddress == nil {
+        if o.phoneAddress == nil, !o.background {
             DispatchQueue.main.asyncAfter(deadline: .now() + 1) { startPairingGuide("第一次设定：让 iPhone 在蓝牙「其他装置」找得到这台 Mac") }
         }
         // Mac 睡眠／喚醒：像車機熄火再發動——睡前把會話乾淨收掉（手機立刻回到自己的畫面），

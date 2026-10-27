@@ -5435,11 +5435,14 @@ enum ReceiverAgent {
         guard isInstalled,
               let text = try? String(contentsOf: plistURL, encoding: .utf8),
               let bin = ReceiverLauncher.receiverBinary() else { return }
-        guard !text.contains("<string>\(bin.path)</string>") else { return }
+        let wrongPath = !text.contains("<string>\(bin.path)</string>")
+        let missingBackground = !text.contains("<string>--background</string>")   // 1.0.3：旧 plist 会一直广播
+        guard wrongPath || missingBackground else { return }
         let cfg = (try? JSONDecoder().decode(ReceiverLauncher.Config.self, from: Data(contentsOf: ReceiverLauncher.configURL()))) ?? .init()
         do { try plistText(cfg: cfg, bin: bin).data(using: .utf8)?.write(to: plistURL, options: .atomic) }
         catch { log("LaunchAgent 迁移失败：\(error.localizedDescription)"); return }
-        log("LaunchAgent 迁移：接收器改到 \(bin.path)，重载让新布局生效")
+        log(wrongPath ? "LaunchAgent 迁移：接收器改到 \(bin.path)，重载让新布局生效"
+                      : "LaunchAgent 迁移：加入 --background（桌宠不在时停广播）")
         _ = launchctl(["bootout", "gui/\(getuid())/\(label)"])
         for attempt in 0..<5 {
             if launchctl(["bootstrap", "gui/\(getuid())", plistURL.path]) { return }
@@ -5462,7 +5465,8 @@ enum ReceiverAgent {
         // 不把 SSID/手机地址写进 launchd 参数：这两个值会随用户操作变化，而 launchd 只在
         // bootstrap 时读一次参数——写死就会出现「配置已改、重启后仍用旧 SSID/旧手机」的故障
         // （曾导致 0x5703 发出 <redacted>）。receiver 启动时会自己读 wireless.json。
-        let args = ["--source", "auto", "--port", String(cfg.port), "--size", cfg.size]
+        // --background：登录项拉起的接收器在桌宠没连时停广播、闲置退出，避免 iPhone 反复发起配对
+        let args = ["--source", "auto", "--port", String(cfg.port), "--size", cfg.size, "--background"]
         let logPath = ReceiverLauncher.configURL().deletingLastPathComponent().appendingPathComponent("receiver.log")
         return """
 <?xml version="1.0" encoding="UTF-8"?>

@@ -75,6 +75,12 @@ package final class WSServer {
     package var onConnect: ((NWConnection) -> Void)?
     package var onText: ((String) -> Void)?
 
+    /// 目前就绪的客户端数量（桌宠是否还连着）。后台常驻用它判断「还有没有人在看」。
+    package var clientCount: Int {
+        countLock.lock(); defer { countLock.unlock() }
+        return readyIDs.count
+    }
+
     package init(port: UInt16) throws {
         let params = NWParameters.tcp
         let ws = NWProtocolWebSocket.Options()
@@ -122,7 +128,15 @@ package final class WSServer {
                md.opcode == .text, let s = String(data: data, encoding: .utf8) {
                 self.onText?(s)
             }
-            if error == nil, conn.state == .ready { self.receive(conn) }
+            if let error {
+                // 对端走了（桌宠退出／被杀）：把连接摘掉，clientCount 才不会一直算着它。
+                // 否则后台常驻会以为「还有人看」，一直以车机身份广播。
+                _ = error
+                self.drop(conn)
+                conn.cancel()
+                return
+            }
+            if conn.state == .ready { self.receive(conn) }
         }
     }
 

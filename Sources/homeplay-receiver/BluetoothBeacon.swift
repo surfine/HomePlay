@@ -46,6 +46,23 @@ final class BluetoothBeacon: NSObject {
     private var lastClassResult: IOReturn?
     private var lastPower: UInt32 = 0xFF
     private var servicesLost = false
+    private(set) var stopped = false
+
+    /// 停止广播：撤掉 SDP、停掉续期。车机类只维持 120 秒，不再续期后系统自己恢复。
+    /// 用于「桌宠没在跑」的后台常驻：不再让 iPhone 把 Mac 认成一台可配对的 CarPlay 车机。
+    func stop() {
+        guard !stopped else { return }
+        stopped = true
+        classTimer?.invalidate(); classTimer = nil
+        serviceTimer?.invalidate(); serviceTimer = nil
+        for note in notifications { note.unregister() }
+        notifications.removeAll()
+        for record in records { _ = record.remove() }
+        records.removeAll()
+        hasIAP2 = false
+        hasCarPlay = false
+        log?("广播已停止（SDP 已移除，车机类 120 秒内自动恢复）")
+    }
 
     private func start() {
         if advertiseClass {
@@ -74,6 +91,7 @@ final class BluetoothBeacon: NSObject {
     }
 
     private func tick() {
+        guard !stopped else { return }
         let power = IOBluetoothHostController.default()?.powerState.rawValue ?? 0xFF
         if lastPower != 0xFF, power != lastPower, power == 0 {
             servicesLost = true   // 蓝牙被关掉：之前的 SDP 记录可能没了
