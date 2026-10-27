@@ -66,6 +66,8 @@ package final class WSServer {
     private var conns: [NWConnection] = []
     /// 每条连接还有多少帧没被底层收掉。只在 queue 上读写。
     private var inflight: [ObjectIdentifier: Int] = [:]
+    /// 每条就绪连接的保活 ping 计时器（drop 时取消）。只在 queue 上读写。
+    private var pingers: [ObjectIdentifier: DispatchSourceTimer] = [:]
     /// 一条连接压在路上的帧数上限。接收端卡死时 NWConnection 会无限长发送缓冲，
     /// 到这里就认定这条路已经没救：断掉，让桌宠重连重新拿关键帧。
     private let maxInflight = 60
@@ -101,6 +103,7 @@ package final class WSServer {
                     self.countLock.unlock()
                     self.onConnect?(conn)
                     self.receive(conn)
+                    self.startPinger(conn)
                 case .failed, .cancelled:
                     self.drop(conn)
                 default:
@@ -112,8 +115,29 @@ package final class WSServer {
         listener.start(queue: queue)
     }
 
+    /// 每 5 秒对就绪连接发一个 WS ping。对端已经走了的连接（FIN 后 NetworkFramework
+    /// 有时不报错、只静默）会在发送或接收上暴露并被摘掉——不然 clientCount 会把
+    /// 半开连接一直算成「还有人看」，后台常驻的空闲计时就永远不会开始。
+    private func startPinger(_ conn: NWConnection) {
+        let id = ObjectIdentifier(conn)
+        let timer = DispatchSource.makeTimerSource(queue: queue)
+        timer.schedule(deadline: .now() + 5, repeating: 5)
+        timer.setEventHandler { [weak self] in
+            guard let self, self.readyIDs.contains(id) else { timer.cancel(); return }
+            let md = NWProtocolWebSocket.Metadata(opcode: .ping)
+            let ctx = NWConnection.ContentContext(identifier: "ping", metadata: [md])
+            conn.send(content: nil, contentContext: ctx, isComplete: true, completion: .contentProcessed { error in
+                if error != nil { self.drop(conn); conn.cancel() }
+            })
+        }
+        timer.resume()
+        pingers[id] = timer
+    }
+
     private func drop(_ conn: NWConnection) {
         conns.removeAll { $0 === conn }
+        pingers[ObjectIdentifier(conn)]?.cancel()
+        pingers[ObjectIdentifier(conn)] = nil
         inflight[ObjectIdentifier(conn)] = nil
         countLock.lock()
         readyIDs.remove(ObjectIdentifier(conn))
@@ -131,7 +155,13 @@ package final class WSServer {
             if let error {
                 // 对端走了（桌宠退出／被杀）：把连接摘掉，clientCount 才不会一直算着它。
                 // 否则后台常驻会以为「还有人看」，一直以车机身份广播。
-                _ = error
+                self.drop(conn)
+                conn.cancel()
+                return
+            }
+            // 干净关闭（FIN）有时不带 error、只给一次无数据的完成：同样当对端走了处理，
+            // 否则这条连接永远留在 readyIDs 里，空闲计时根本不会开始（真机 2026-10-27 复现）。
+            if data == nil, ctx == nil {
                 self.drop(conn)
                 conn.cancel()
                 return

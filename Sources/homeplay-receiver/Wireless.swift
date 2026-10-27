@@ -674,12 +674,18 @@ enum Wireless {
     /// 停止/退出时把两条 iAP2 链路干净关掉。手机会收到正常的 RFCOMM/流关闭；
     /// 否则它会以为配件还在会话里，下一次 Bluetooth iAP2 直接"开了就关"。
     /// 这些状态都归主執行緒管，从 WebSocket / 蓝牙回调线程调进来时先派回去再关。
-    static func shutdown() {
+    /// 退出前的额外清理（runDual 装的：停配对引导、恢复蓝牙可发现性）。
+  /// shutdown 会被 SIGTERM、父进程看门狗、自愈 reexec、后台空闲退出调用——
+  /// 引导期间打开的可发现性必须在每一条退出路径上都恢复，不能只在引导正常结束时。
+  nonisolated(unsafe) static var onShutdown: (() -> Void)?
+
+  static func shutdown() {
         guard Thread.isMainThread else {
             DispatchQueue.main.async { shutdown() }
             return
         }
-        try? FileManager.default.removeItem(at: runningMarker)
+        onShutdown?()
+try? FileManager.default.removeItem(at: runningMarker)
         accessory?.close()
         accessory = nil
         accessoryUsb?.close()
@@ -1252,6 +1258,7 @@ enum Wireless {
             // 否则附近的 iPhone 会反复发起蓝牙配对。15 秒宽限后撤掉广播；再 2 分钟没人用就退出。
             // KeepAlive 只拉起异常退出，这里用 exit(0)，launchd 不会重启。
             var idleSince: TimeInterval?
+            var idleExitScheduled = false
             let watch = Timer(timeInterval: 5, repeats: true) { _ in
                 if server.clientCount > 0 {
                     idleSince = nil
@@ -1269,9 +1276,11 @@ enum Wireless {
                     Wireless.beacon = nil
                     note("后台空闲：已停止蓝牙广播（iPhone 不再把 Mac 看成车机）")
                 }
-                if idle >= 120 {
-                    note("后台空闲 2 分钟：接收器退出，等桌宠下次打开再拉起")
-                    exit(0)
+                if idle >= 120, !idleExitScheduled {
+                    idleExitScheduled = true
+                    note("后台空闲 2 分钟：结束会话并退出，等桌宠下次打开再拉起")
+                    Wireless.shutdown()   // 先干净收掉手机会话，再照 SIGTERM 的规矩退出
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { exit(0) }
                 }
             }
             RunLoop.main.add(watch, forMode: .common)
@@ -1954,6 +1963,7 @@ enum Wireless {
             }
         }
         /// 新配对出现的手机 → 停引导、刷新 SDP、交给状态机连它。
+        Wireless.onShutdown = { stopPairingGuide() }   // 任何退出路径都停引导、恢复可发现性
         func finishPairingGuide(_ phone: (address: String, name: String)) {
             stopPairingGuide()
             cancelCableFirst("蓝牙配对完成")
@@ -2963,12 +2973,20 @@ enum Wireless {
             // 登录项常驻：等桌宠（WS 客户端）连上再广播；没人时就撤掉广播并退出。
             // 这样「退出 app 后 iPhone 一直弹配对请求」不会发生。
             var idleSince: TimeInterval?
+            var idleExitScheduled = false
+            var firstPairGuideStarted = false
             let watch = Timer(timeInterval: 5, repeats: true) { _ in
                 if server.clientCount > 0 {
                     idleSince = nil
                     if beacon == nil {
                         startBeaconIfNeeded()
                         note("桌宠已连接：开始/恢复蓝牙广播")
+                    }
+                    // 首次设定的配对引导后台模式不随启动跑（那时没人看）；桌宠连上再补。
+                    // 不补的话，「第一次点连接就装了常驻」的新用户等不到「让 Mac 可被发现」，首配卡死。
+                    if o.phoneAddress == nil, !firstPairGuideStarted {
+                        firstPairGuideStarted = true
+                        startPairingGuide("第一次设定：让 iPhone 在蓝牙「其他装置」找得到这台 Mac")
                     }
                     return
                 }
@@ -2980,9 +2998,11 @@ enum Wireless {
                     Wireless.beacon = nil
                     note("后台空闲：已停止蓝牙广播（iPhone 不再把 Mac 看成车机）")
                 }
-                if idle >= 120 {
-                    note("后台空闲 2 分钟：接收器退出，等桌宠下次打开再拉起")
-                    exit(0)
+                if idle >= 120, !idleExitScheduled {
+                    idleExitScheduled = true
+                    note("后台空闲 2 分钟：结束会话并退出，等桌宠下次打开再拉起")
+                    Wireless.shutdown()   // 先干净收掉手机会话，再照 SIGTERM 的规矩退出
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { exit(0) }
                 }
             }
             RunLoop.main.add(watch, forMode: .common)
