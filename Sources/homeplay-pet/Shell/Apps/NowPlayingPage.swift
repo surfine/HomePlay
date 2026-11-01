@@ -161,9 +161,9 @@ final class NowPlayingPage {
     }
     /// 左上：App 的玻璃圓鈕（同外殼返回鈕的位置）
     static var appButton: CGRect { HPTokens.backButton }
-    /// 右上：來源膠囊（186×88，右端半圓與螢幕圓角同心）
+    /// 右上：來源膠囊（186×88）。2.0 align：中心 y 對返回鈕（105）、右緣對內容邊線（960）
     static let sourceBadge: CGRect = {
-        let c = Screen.cornerCapsuleCenter(.topRight, width: 186, height: 88); return CGRect(x: c.x - 93, y: c.y - 44, width: 186, height: 88)
+        CGRect(x: HPGrid.App.trailing - 186, y: HPTokens.cornerControlCenter - 44, width: 186, height: 88)
     }()
     static let open = CGRect(x: 512 - HPTokens.Size.pairedButton.width / 2, y: 640, width: HPTokens.Size.pairedButton.width, height: HPTokens.Size.pairedButton.height)
     /// 資料庫頁底下的迷你播放器要的：目前這首的封面（還沒同步過就是 nil）

@@ -2,8 +2,9 @@
 # 打包 HomePlay.app（發佈到 GitHub Releases 用）：
 #   Contents/MacOS/HomePlay             桌寵（homeplay-pet）
 #   Contents/Resources/homeplay-receiver 接收器（登录自启的 LaunchAgent／桌宠重压时拉起）
+#   Contents/Resources/homeplay-glance   iPhone 即時動態的 helper（桌寵拉起、跟著桌寵結束）
 #   Contents/Resources/                 SwiftPM 資源包（本地化字串）等
-# 接收器刻意不放 Contents/MacOS：LaunchServices 會把 MacOS 裡的進程登記成整個 App（同一 bundle id），
+# 接收器與 glance 刻意不放 Contents/MacOS：LaunchServices 會把 MacOS 裡的進程登記成整個 App（同一 bundle id），
 # 接收器常駐時 `open HomePlay.app` 會被判「已在執行」而失敗（-600），桌寵就開不起來。
 # Resources 裡的執行檔不參與 App 登記（lsappinfo 實測對照）。
 # Info.plist 寫明各權限的用途說明：沒有這些，系統不會跳行事曆、自動化、藍牙、區域網路的授權。
@@ -17,6 +18,7 @@ cd "$(dirname "$0")/.."
 
 swift build -c release --product homeplay-pet
 swift build -c release --product homeplay-receiver
+swift build -c release --product homeplay-glance
 
 VARIANT=${HOMEPLAY_VARIANT:-}
 if [[ "$VARIANT" == rehearsal ]]; then
@@ -31,6 +33,7 @@ rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp .build/release/homeplay-pet "$APP/Contents/MacOS/HomePlay"
 cp .build/release/homeplay-receiver "$APP/Contents/Resources/homeplay-receiver"
+cp .build/release/homeplay-glance "$APP/Contents/Resources/homeplay-glance"   # iPhone 即時動態的 helper（私有 API 隔離在獨立進程；常駐，所以跟接收器一樣不放 MacOS）
 for b in .build/release/*.bundle(N); do cp -R "$b" "$APP/Contents/Resources/"; done
 for l in assets/info-plist/*.lproj(N); do cp -R "$l" "$APP/Contents/Resources/"; done   # 權限彈窗的英/簡/繁說明
 [[ -d identity ]] && cp -R identity "$APP/Contents/Resources/identity"   # 公開實驗身份隨包：別的 Mac 開箱即連
@@ -104,6 +107,8 @@ sign() { local i; for i in 1 2 3 4 5; do codesign "$@" && return 0; echo "· 簽
 for b in "$APP/Contents/Resources"/*.bundle(N); do sign "${SIGN[@]}" "$b"; done
 # 接收器单独签名也要带麦克风 entitlement（launchd 拉起的是它，不是 App 主进程）
 sign "${SIGN[@]}" --entitlements tooling/HomePlay.entitlements "$APP/Contents/Resources/homeplay-receiver"
+# 即時動態 helper 也要簽：它常駐、由桌寵拉起；沒簽會被公證擋（2026-11-01 beta 3：Invalid，缺 Developer ID／時間戳／hardened runtime）
+sign "${SIGN[@]}" "$APP/Contents/Resources/homeplay-glance"
 sign "${SIGN[@]}" --entitlements tooling/HomePlay.entitlements "$APP"
 codesign --verify --strict --verbose=1 "$APP"
 spctl -a -vv "$APP" 2>&1 || true

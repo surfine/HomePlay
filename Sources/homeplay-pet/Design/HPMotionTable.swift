@@ -92,6 +92,9 @@ extension HPMotion {
         /// 展開／收回：臨界阻尼（點按沒有動量，不回彈）；影片沒拍到，照 Dynamic Island 的 0.3 s 級
         static let liveActivity = HPTransition(name: "la.expand", spring: .settling(0.32), source: "推斷：Chan 規則 damping 1；長度照 island 0.3 s")   // l10n-ignore：依據／自檢說明，不是介面文字
 
+        /// 藥丸融成兩顆「HomeView／CarPlay」（2.0 align D）：長按 0.5 s 後同一顆藥丸被拉成兩顆，中間 HPDrip 頸子拉斷；跟展開大卡同一長度
+        static let sourceSplit = HPTransition(name: "source.split", spring: .settling(0.32), source: "推斷：跟 la.expand 同長，臨界阻尼")   // l10n-ignore：依據／自檢說明，不是介面文字
+
         // MARK: 數字
         /// v1 2:57.76→2:58.26：換分鐘——舊的往上模糊淡出（0.17 s）、新的從下浮入（0.3 s），十位數早 80 ms，整段 ≈ 0.5 s
         static let digitOut = HPTransition(name: "digits", spring: .settling(0.17), stagger: 0.08, measured: 0.5, source: "v1 2:57.76→2:58.26（#76）", reduce: .instant)
@@ -115,7 +118,7 @@ extension HPMotion {
         static let listDelete = HPTransition(name: "list", spring: .settling(0.08), source: "Mark View P3：離場加速、比進場短")   // l10n-ignore：依據／自檢說明，不是介面文字
 
         static let all: [HPTransition] = [appOpen, appContent, appClose, appCloseContent, tileExpand, pageSlide, blurFade, keyboard, facePage, homeFace, toFace, pill,
-                                          controlCenter, sheet, takeoverZoom, takeoverFade, clioDrip, clioLine, clioThink, liveActivity, digitOut, digitIn, numeric, widgetUpdate,
+                                          controlCenter, sheet, takeoverZoom, takeoverFade, clioDrip, clioLine, clioThink, liveActivity, sourceSplit, digitOut, digitIn, numeric, widgetUpdate,
                                           materialize, press, listMove, listInsert, listDelete]
     }
 

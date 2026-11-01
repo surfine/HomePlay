@@ -5,6 +5,8 @@ import Foundation
 enum AppsSelfTest {
     static func run(_ check: (Bool, String) -> Void) {
         LyricsSelfTest.run(check)
+        FarGlanceSelfTest.run(check)   // 2.0 home-3：遠看什麼時候換
+        WorldClockSelfTest.run(check)   // 世界時鐘：城市比對、清單增刪排序、上限
         P10AppsSelfTest.run(check)   // 2.0 P10：尋找、對講、Safari（含食譜併進 Safari）
         FaceTimeSelfTest.run(check)
         ClockKitSelfTest.run(check)   // 2.0 時鐘：太陽、晨昏線、日出日落、計時器暫停、系統地圖退回自繪

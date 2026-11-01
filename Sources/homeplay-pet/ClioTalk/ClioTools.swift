@@ -52,8 +52,8 @@ enum ClioToolCatalog {
                      needsConfirmation: true),
         ClioToolSpec(name: "reminders_list", description: "List the user's incomplete reminders (title and due date).",
                      schema: #"{"type":"object","properties":{"limit":{"type":"integer","minimum":1,"maximum":50}}}"#),
-        ClioToolSpec(name: "reminders_add", description: "Add a reminder to the user's default Reminders list. The user is asked to confirm first; only report success after the result says it was added. Due time is local, format YYYY-MM-DDTHH:MM.",
-                     schema: #"{"type":"object","properties":{"title":{"type":"string"},"due":{"type":"string"}},"required":["title"]}"#,
+        ClioToolSpec(name: "reminders_add", description: "Add a reminder. The user is asked to confirm first; only report success after the result says it was added. Due time is local, format YYYY-MM-DDTHH:MM. Set list to the Reminders list name when the user names one (for example a shopping or grocery list); omit it for the default list.",
+                     schema: #"{"type":"object","properties":{"title":{"type":"string"},"due":{"type":"string"},"list":{"type":"string"}},"required":["title"]}"#,
                      needsConfirmation: true),
         ClioToolSpec(name: "music_now_playing", description: "What is playing in Music or Spotify on this Mac (or on the iPhone over CarPlay).",
                      schema: #"{"type":"object","properties":{}}"#),
@@ -105,6 +105,23 @@ enum ClioToolCatalog {
     static func needsConfirmation(name: String, input: [String: Any]) -> Bool {
         if name == "home_control" { return ClioHomeControl.needsConfirmation(input: input) }
         return spec(name)?.needsConfirmation == true
+    }
+
+    /// 2.0 home-2：清單名 → 提醒事項清單。先比完整名稱（不分大小寫），再比包含；說「購物」類的字時退到家人共用清單
+    static func reminderList(named raw: String, in cals: [EKCalendar]) -> EKCalendar? {
+        guard let i = reminderListIndex(named: raw, titles: cals.map(\.title), sharedIndex: RemindersApp.sharedListID.flatMap { id in cals.firstIndex { $0.calendarIdentifier == id } }) else { return nil }
+        return cals[i]
+    }
+    /// 純函數（selftest 驗）：清單名 → 第幾份
+    static func reminderListIndex(named raw: String, titles: [String], sharedIndex: Int?) -> Int? {
+        let q = raw.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !q.isEmpty else { return nil }
+        let t = titles.map { $0.lowercased() }
+        if let i = t.firstIndex(of: q) { return i }
+        if let i = t.firstIndex(where: { !$0.isEmpty && ($0.contains(q) || q.contains($0)) }) { return i }
+        let shopping = ["购物", "購物", "买菜", "買菜", "采买", "採買", "shopping", "grocery", "groceries"]   // l10n-ignore：比對用詞
+        if shopping.contains(where: { q.contains($0) }) { return sharedIndex }
+        return nil
     }
 
     /// 要你確認的那句（畫面顯示＋朗讀）：第一行問句，第二行「時間：內容」（卡片畫成資料卡）。不需要確認的工具回 nil。
@@ -256,7 +273,9 @@ final class ClioSystemTools: ClioToolRunner {
             guard let title = input["title"] as? String, !title.isEmpty else { return fail("title is required") }
             let r = EKReminder(eventStore: store)
             r.title = title
-            guard let cal = store.defaultCalendarForNewReminders() else { return fail("No default Reminders list.") }
+            // 2.0 home-2：說了清單名就放那一份（名字比對；「購物／shopping／grocery」也對得到家人共用清單）
+            let named = (input["list"] as? String).flatMap { ClioToolCatalog.reminderList(named: $0, in: store.calendars(for: .reminder)) }
+            guard let cal = named ?? store.defaultCalendarForNewReminders() else { return fail("No default Reminders list.") }
             r.calendar = cal
             if let due = (input["due"] as? String).flatMap({ ClioDates.parse($0) }) {
                 r.dueDateComponents = Calendar.current.dateComponents([.year, .month, .day, .hour, .minute], from: due)

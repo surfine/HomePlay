@@ -268,11 +268,11 @@ extension PetView {
             return .libraryEmpty
         }
         if let f = SB.folder, !f.closing, case .folder(let fo)? = SB.layout.item("f:\(f.id)") {
-            let apps = Array(fo.apps.dropFirst(f.page * SBFolder.pageSize).prefix(SBFolder.pageSize))
+            let apps = Array(fo.apps.prefix(SBFolder.pageSize))
             for (id, cell) in zip(apps, SBUI.folderCells()) where SB.iconRect(in: cell).insetBy(dx: -12, dy: -12).contains(p) { return .folderApp(id) }
             return .empty
         }
-        for pl in SB.placements(page: SB.pageIndex) where SB.hitRect(pl).contains(p) || (SB.editing && SBUI.badge(SB.frame(pl), icon: pl.item.isIcon).insetBy(dx: -16, dy: -16).contains(p)) {
+        for pl in SB.placements(page: SB.pageIndex) where SB.hitRect(pl).contains(p) || (SB.editing && SBUI.badgeHit(SB.frame(pl), icon: pl.item.isIcon).contains(p)) {
             if let k = pl.item.key { return .item(k) }
         }
         return .empty
@@ -448,6 +448,7 @@ extension PetView {
         d.samples.append((now, off)); if d.samples.count > 5 { d.samples.removeFirst() }
         SB.stackDrag = d
         SB.stackShown[d.key] = now
+        SB.manualAt[d.key] = now
     }
     private func sbStackRelease(now: Double) {
         guard let d = SB.stackDrag, case .stack(let s)? = SB.layout.item(d.key),
@@ -468,6 +469,7 @@ extension PetView {
             SB.stackAnim[d.key] = MotionValue("sbstack", spring: SBMotion.stack, from: d.offset, to: 0, velocity: v, now: now)
         }
         SB.stackShown[d.key] = now
+        SB.manualAt[d.key] = now
     }
 
     func sbMouseUp(_ e: NSEvent, uv: CGPoint?) -> Bool {
@@ -507,7 +509,7 @@ extension PetView {
             if SB.editing, SBUI.folderTitle.contains(p) { SB.folder?.renaming = true; return true }
             if case .folderApp(let id) = sbHit(p) {
                 if SB.editing {
-                    if SBUI.folderCells().contains(where: { SBUI.badge($0, icon: true).insetBy(dx: -16, dy: -16).contains(p) }) { SB.sheet = .removeConfirm("a:\(id)") }
+                    if SBUI.folderCells().contains(where: { SBUI.badgeHit($0, icon: true).contains(p) }) { SB.sheet = .removeConfirm("a:\(id)") }
                     return true
                 }
                 let idx = SB.layout.item("f:\(f.id)").flatMap { if case .folder(let fo) = $0 { return fo.apps.firstIndex(of: id) }; return nil } ?? 0
@@ -525,7 +527,7 @@ extension PetView {
             if SBUI.dotsCapsule(SB.visiblePages.count).insetBy(dx: -10, dy: -14).contains(p) { SB.sheet = .editPages; return true }
             for pl in SB.placements(page: SB.pageIndex) {
                 guard let k = pl.item.key else { continue }
-                if SBUI.badge(SB.frame(pl), icon: pl.item.isIcon).insetBy(dx: -16, dy: -16).contains(p) { SB.sheet = .removeConfirm(k); return true }
+                if SBUI.badgeHit(SB.frame(pl), icon: pl.item.isIcon).contains(p) { SB.sheet = .removeConfirm(k); return true }
             }
             if case .item(let k) = sbHit(p), let it = SB.layout.item(k) {
                 switch it {
@@ -610,20 +612,19 @@ extension PetView {
         case .config(let key):
             if SBUI.configDone.contains(p) || !SBUI.configCard.contains(p) { SB.sheet = nil; return }
             guard case .widget(let w)? = SB.layout.item(key), let o = SBWidgetData.options(w.kind).first else { return }
-            for (c, r) in zip(o.choices.prefix(5), SBUI.configRows(top: SBUI.configCard.minY + 376, count: min(5, o.choices.count), rowH: 66)) where r.contains(p) {
+            for (c, r) in zip(o.choices.prefix(5), SBUI.configOptionRows(min(5, o.choices.count))) where r.contains(p) {
                 SB.setConfig(key, o.key, c.id)
             }
         case .stackEdit(let key):
             if SBUI.configDone.contains(p) || !SBUI.configCard.contains(p) { SB.sheet = nil; return }
             guard case .stack(let st)? = SB.layout.item(key) else { SB.sheet = nil; return }
-            let rows = SBUI.configRows(top: SBUI.configCard.minY + 124, count: min(4, st.widgets.count), rowH: 92)
+            let rows = SBUI.stackRows(min(4, st.widgets.count))
             for (w, r) in zip(st.widgets, rows) where CGRect(x: r.maxX - 110, y: r.minY, width: 110, height: r.height).contains(p) {
                 SB.updateStack(key) { $0.widgets.removeAll { $0.id == w.id } }
                 if SB.layout.item(key) == nil { SB.sheet = nil }
                 return
             }
-            let t0 = (rows.last?.maxY ?? SBUI.configCard.minY + 124) + 20
-            let tr = SBUI.configRows(top: t0, count: 2, rowH: 92)
+            let tr = SBUI.stackToggleRows(rows)
             if tr[0].contains(p) { SB.updateStack(key) { $0.smartRotate.toggle() } }
             if tr[1].contains(p) { SB.updateStack(key) { $0.suggestions.toggle() } }
         case .customize:
@@ -635,7 +636,7 @@ extension PetView {
             if SBUI.doneButton.insetBy(dx: -8, dy: -8).contains(p) { SB.sheet = nil; return }
             let thumbs = SBUI.pageThumbs(SB.layout.pages.count)
             for (i, r) in thumbs.enumerated() {
-                if SB.layout.pages[i].hidden, SBUI.badge(r, icon: false).insetBy(dx: -16, dy: -16).contains(p) { SB.deletePage(i); return }
+                if SB.layout.pages[i].hidden, SBUI.badgeHit(r, icon: false).contains(p) { SB.deletePage(i); return }
                 if SBUI.pageCheck(r).insetBy(dx: -16, dy: -16).contains(p) || r.contains(p) { SB.togglePageHidden(i); return }
             }
         case .removeConfirm(let key):
@@ -755,15 +756,34 @@ extension PetView {
 
     // MARK: 鍵盤（ShellInput.shellKeyDown 在焦點處理之前先問）
 
+    /// 主畫面／App 資料庫上「回上一層」的前置順序（Esc 與頂端藥丸＝Home 鍵共用）：選單 → sheet → 資料夾 → 編輯模式；
+    /// App 資料庫：選單 → 搜尋。收掉了一層回 true，都沒有回 false（交給 ShellNav 的 .back）
+    func sbDismissTop(now: Double) -> Bool {
+        guard Shell.nav.overlay == .none else { return false }
+        if Shell.nav.screen == .library {
+            if SB.menu != nil { SB.menu = nil; return true }
+            if SB.librarySearching || !SB.libraryQuery.isEmpty { SB.libraryQuery = ""; SB.librarySearching = false; return true }
+            return false
+        }
+        guard Shell.nav.screen == .home else { return false }
+        if SB.menu != nil { SB.menu = nil; return true }
+        if let s = SB.sheet {
+            if case .gallery(let k, let st, _) = s, k != nil || st { SB.sheet = .gallery(kind: nil, stack: false, page: 0) } else { SB.sheet = nil }
+            return true
+        }
+        if SB.folder != nil { SB.closeFolder(now: now); return true }
+        if SB.editing { SB.exitEdit(); return true }
+        return false
+    }
+
     func sbKeyDown(_ e: NSEvent) -> Bool {
         let now = CACurrentMediaTime()
         defer { face.forceDirty = true }
         let chars = e.characters ?? ""
         let printable = !chars.isEmpty && chars.unicodeScalars.allSatisfy { !CharacterSet.controlCharacters.contains($0) && $0.value < 0xF700 }
         if Shell.nav.screen == .library, Shell.nav.overlay == .none {
-            if SB.menu != nil, e.keyCode == 53 { SB.menu = nil; return true }
+            if e.keyCode == 53, sbDismissTop(now: now) { return true }
             if e.keyCode == 51 { if !SB.libraryQuery.isEmpty { SB.libraryQuery.removeLast() }; SB.librarySearching = true; return true }
-            if e.keyCode == 53, SB.librarySearching || !SB.libraryQuery.isEmpty { SB.libraryQuery = ""; SB.librarySearching = false; return true }
             if e.keyCode == 36 || e.keyCode == 76, SB.librarySearching, let first = SBUI.libraryApps().first {
                 SB.librarySearching = false; shellOpenApp(first.id, from: SBUI.libraryCells(1)[0].offsetBy(dx: 0, dy: -SB.libraryScrollNow)); return true
             }
@@ -781,16 +801,7 @@ extension PetView {
             }
             return true
         }
-        if e.keyCode == 53 {
-            if SB.menu != nil { SB.menu = nil; return true }
-            if let s = SB.sheet {
-                if case .gallery(let k, let st, _) = s, k != nil || st { SB.sheet = .gallery(kind: nil, stack: false, page: 0) } else { SB.sheet = nil }
-                return true
-            }
-            if SB.folder != nil { SB.closeFolder(now: now); return true }
-            if SB.editing { SB.exitEdit(); return true }
-            return false
-        }
+        if e.keyCode == 53 { return sbDismissTop(now: now) }
         if case .gallery(let kind, let stack, let page)? = SB.sheet, kind != nil || stack {
             let n = SBUI.gallerySizes(kind: kind).count
             switch e.keyCode {
@@ -934,7 +945,7 @@ enum SBAX {
         if let s = SB.sheet { return sheetItems(s) }
         if let f = SB.folder, case .folder(let fo)? = SB.layout.item("f:\(f.id)") {
             out.append(ShellAXItem(id: "sb.folder.title", kind: .text, role: .heading, label: fo.name, rect: SBUI.folderTitle))
-            for (id, cell) in zip(fo.apps.dropFirst(f.page * SBFolder.pageSize).prefix(SBFolder.pageSize), SBUI.folderCells()) {
+            for (id, cell) in zip(fo.apps.prefix(SBFolder.pageSize), SBUI.folderCells()) {
                 guard let app = AppRegistry.app(id) else { continue }
                 let ir = SB.iconRect(in: cell)
                 out.append(ShellAXItem(id: "home.app.\(id)", kind: .homeItem, role: .button, label: app.title, rect: ir, shape: .rounded(ir.width * 0.2237), press: .tap(center(ir))))
@@ -1014,17 +1025,16 @@ enum SBAX {
         case .config(let key):
             if case .widget(let w)? = SB.layout.item(key), let o = SBWidgetData.options(w.kind).first {
                 let cur = SBWidgetData.value(w, o.key)
-                for (c, r) in zip(o.choices.prefix(5), SBUI.configRows(top: SBUI.configCard.minY + 376, count: min(5, o.choices.count), rowH: 66)) {
+                for (c, r) in zip(o.choices.prefix(5), SBUI.configOptionRows(min(5, o.choices.count))) {
                     out.append(ShellAXItem(id: "sb.config.\(c.id)", kind: .control, role: .radio(c.id == cur), label: c.title, rect: r, shape: .capsule, press: .tap(center(r))))
                 }
             }
             btn("sb.sheet.done", L("home.done", "完成"), SBUI.configDone)
         case .stackEdit(let key):
             if case .stack(let st)? = SB.layout.item(key) {
-                let rows = SBUI.configRows(top: SBUI.configCard.minY + 124, count: min(4, st.widgets.count), rowH: 92)
+                let rows = SBUI.stackRows(min(4, st.widgets.count))
                 for (w, r) in zip(st.widgets, rows) { btn("sb.stack.remove.\(w.id)", String(format: L("sb.ax.removeFromStack", "从叠放移除「%@」"), w.kind.title), CGRect(x: r.maxX - 110, y: r.minY, width: 110, height: r.height), .circle) }
-                let t0 = (rows.last?.maxY ?? SBUI.configCard.minY + 124) + 20
-                let tr = SBUI.configRows(top: t0, count: 2, rowH: 92)
+                let tr = SBUI.stackToggleRows(rows)
                 out.append(ShellAXItem(id: "sb.stack.rotate", kind: .control, role: .toggle(st.smartRotate), label: L("sb.smartRotate", "智能旋转"), rect: tr[0], shape: .capsule, press: .tap(center(tr[0]))))
                 out.append(ShellAXItem(id: "sb.stack.suggest", kind: .control, role: .toggle(st.suggestions), label: L("sb.suggestions", "小组件建议"), rect: tr[1], shape: .capsule, press: .tap(center(tr[1]))))
             }

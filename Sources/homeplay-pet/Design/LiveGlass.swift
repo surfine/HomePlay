@@ -23,7 +23,10 @@ final class LiveGlass {
 
     /// 這個形狀交給活的玻璃嗎：容器、融合組或互動的形狀；完整出現（presence 1）、圓角矩形、沒開減少透明度
     static func claims(container: String?, union: String?, interactive: Bool, presence: CGFloat, path: CGPath) -> Bool {
-        enabled && (container != nil || union != nil || interactive) && presence > 0.999 && !HPGlass.reduceTransparency
+        // 2026-10-28：`interactive` 單獨不再進常駐樹。實測（鬧鐘頁 `HOMEPLAY_SKIP=live` 由 941→0 個橘色像素）
+        // 單顆互動膠囊走常駐樹時，會把整張畫布的背景壓進形狀裡——返回鈕左下半出現 180° 的橘色重影。
+        // 常駐樹只留給容器與融合組（它們才真的需要逐幀重繪）；單顆膠囊走 NativeGlass，那條路是正確的。
+        enabled && (container != nil || union != nil) && presence > 0.999 && !HPGlass.reduceTransparency
             && NativeGlass.shared.available && Thread.isMainThread && NativeGlass.roundedRect(of: path) != nil
     }
 

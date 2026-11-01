@@ -205,8 +205,56 @@ final class RemindersApp: PetApp {
     private var src: ReminderSource { ReminderSource.shared }
     private var today: Date { Face.displayDate }
 
+    // MARK: 2.0 home-2：家人共用清單、用說的新增
+    /// 主人在設定裡指定的「家人共用清單」（例如購物）：不是主人在看時，提醒事項只開放這一份（看得到、勾得掉）
+    static let sharedKey = "reminders.sharedList"
+    static var sharedListID: String? {
+        get {
+            if ReminderSource.shared.demo { return AppUI.flag("--reminders-shared") ? "l3" : nil }   // 快照：示範的「购物」
+            return UserDefaults.standard.string(forKey: sharedKey)
+        }
+        set { if let v = newValue { UserDefaults.standard.set(v, forKey: sharedKey) } else { UserDefaults.standard.removeObject(forKey: sharedKey) } }
+    }
+    /// 不是主人在看，但有共用清單：只畫那一份
+    private var sharedMode: Bool { !PersonalGate.allowed && src.authorized && Self.sharedListID.map { id in src.lists.contains { $0.id == id } || src.demo } == true }
+    /// 「＋ 新增提醒」：交給 ClioTalk 聽（它會念出來等「好」）；回來後新出現的那一項亮 3 秒、跳到它的清單
+    private var addArmedAt: Double?
+    private var addBefore: Set<String> = []
+    private var highlight: [String: Double] = [:]
+    /// 提醒事項、行事曆共用的「＋ 新增」位置：寬 pairedButton、高 pill，離底 Inset.app
+    static var addButtonRect: CGRect { addButton }
+    private static var addButton: CGRect {
+        let w = HPTokens.Size.pairedButton.width, h = HPTokens.Size.pill
+        return CGRect(x: 512 - w / 2, y: 1024 - HPGrid.Inset.app - h, width: w, height: h)
+    }
+    /// 底部的捲動邊緣（iOS 26 scroll edge effect）：y0 起 70 px 由透明漸到底色，之後實心到底
+    static func bottomEdge(_ g: CGContext, from y0: CGFloat) {
+        let bg = AppUI.bg
+        if let grad = CGGradient(colorsSpace: CGColorSpace(name: CGColorSpace.sRGB), colors: [bg.withAlphaComponent(0).cgColor, bg.cgColor] as CFArray, locations: [0, 1]) {
+            g.saveGState(); g.clip(to: CGRect(x: 0, y: y0, width: 1024, height: 70))
+            g.drawLinearGradient(grad, start: CGPoint(x: 0, y: y0), end: CGPoint(x: 0, y: y0 + 70), options: [])
+            g.restoreGState()
+        }
+        g.setFillColor(bg.cgColor); g.fill(CGRect(x: 0, y: y0 + 70, width: 1024, height: 1024 - y0 - 70))
+    }
+    private func startAdding() {
+        addBefore = Set(src.items.map(\.id)); addArmedAt = CACurrentMediaTime()
+        (NSApp.delegate as? AppDelegate)?.view?.shellSwipeListen()
+    }
+    /// 資料一更新就找剛加的（兩分鐘內）
+    private func catchNewItems(now: Double) {
+        guard let t0 = addArmedAt else { return }
+        if now - t0 > 120 { addArmedAt = nil; return }
+        let fresh = src.items.filter { !addBefore.contains($0.id) && !$0.completed }
+        guard let first = fresh.first else { return }
+        for r in fresh { highlight[r.id] = now + 3 }
+        if dest == nil { dest = .list(first.listID); scroll = AppScroll() }
+        addArmedAt = nil
+    }
+
     func didOpen(now: Double) {
         dest = nil; scroll = AppScroll()
+        if let id = Self.sharedListID, HomeThisRoom.isKitchen { dest = .list(id) }   // 2.0 home-2：擺在廚房＝直接開共用清單（購物）
         // 快照：--demo-reminders-list [today|all]——帶 all 開「全部」（比較長，捲得動）；--demo-reminders-completed 開「已完成」
         if let i = AppUI.args.firstIndex(of: "--demo-reminders-list") {
             dest = i + 1 < AppUI.args.count && AppUI.args[i + 1] == "all" ? .smart(.all) : .smart(.today)
@@ -221,7 +269,8 @@ final class RemindersApp: PetApp {
     func tick(_ now: Double) -> Bool {
         if HPComponents.needsFrame(now) { return true }
         var dirty = src.expireChanges(now: CACurrentMediaTime())
-        if src.version != lastVersion { lastVersion = src.version; dirty = true }
+        if src.version != lastVersion { lastVersion = src.version; dirty = true; catchNewItems(now: CACurrentMediaTime()) }
+        if !highlight.isEmpty { dirty = true; let t = CACurrentMediaTime(); highlight = highlight.filter { $0.value > t } }
         let m = Int(Date().timeIntervalSince1970 / 60)
         if m != lastMinute { lastMinute = m; dirty = true }
         if !src.justChanged.isEmpty { dirty = true }
@@ -276,7 +325,15 @@ final class RemindersApp: PetApp {
         frameNow = now   // 動效包：清單動畫照這一幀的時鐘（--frames 逐格時是虛擬時鐘）
         g.setFillColor(AppUI.bg.cgColor); g.fill(rect)
         permissionButton = .zero
-        if AppUI.personalLocked { AppUI.title(g, face, title); AppUI.drawLock(g, face, title: title); return }
+        if sharedMode, let id = Self.sharedListID {   // 2.0 home-2：家人和訪客只看得到共用清單
+            src.refreshIfNeeded()
+            renderList(g, face, .list(id))
+            let (name, color) = destTitle(.list(id)); HPComponents.bigTitle(g, face, name, color: color)
+            let note = L("reminders.shared.note", "家人共用的清单：大家都看得到、都能勾")
+            AppUI.center(face, g, note, AppUI.font(28), cx: 512, y: 1024 - HPGrid.Inset.app, AppUI.secondary)
+            return
+        }
+        if !PersonalGate.allowed { AppUI.title(g, face, title); AppUI.drawLock(g, face, title: title); return }
         guard src.authorized else {
             AppUI.title(g, face, title)
             permissionButton = AppUI.drawPermission(g, face, appTitle: title, symbol: "checklist", tint: Self.accent,
@@ -295,6 +352,10 @@ final class RemindersApp: PetApp {
         if let d = dest { renderList(g, face, d) } else { renderHome(g, face) }
         if let d = dest { let (name, color) = destTitle(d); HPComponents.bigTitle(g, face, name, color: color) }
         else { AppUI.title(g, face, title) }
+        if dest != .smart(.completed), !OfficialDemo.on {   // 2.0 home-2：浮在底部的「＋ 新增提醒」（用說的）；後面墊捲動邊緣，清單從底下過去、不跟按鈕疊字
+            Self.bottomEdge(g, from: Self.addButton.minY - HPGrid.Rhythm.sectionGap)
+            HPComponents.glassButton(g, face, Self.addButton, L("reminders.add", "新增提醒"), symbol: "plus")
+        }
     }
 
     private func renderHome(_ g: CGContext, _ face: Face) {
@@ -339,7 +400,9 @@ final class RemindersApp: PetApp {
         AppUI.sectionTitle(g, face, L("reminders.myLists", "我的列表"), y: Self.listsHead)
     }
 
-    private var homeContentHeight: CGFloat { Self.listsHead + 28 + CGFloat(src.lists.count) * (Self.listRow + Self.listGap) + 40 }
+    private var homeContentHeight: CGFloat { Self.listsHead + 28 + CGFloat(src.lists.count) * (Self.listRow + Self.listGap) + 40 + Self.addRoom }
+    /// 底部浮著「＋ 新增提醒」：清單最後幾列要能捲到它上面
+    private static var addRoom: CGFloat { HPTokens.Size.pill + HPGrid.Inset.app }
 
     private func dueText(_ r: ReminderItem) -> String? {
         guard let d = r.due else { return nil }
@@ -359,7 +422,7 @@ final class RemindersApp: PetApp {
     private func renderList(_ g: CGContext, _ face: Face, _ d: Dest) {
         // iOS 提醒事項：清單名是清單色的大標題（render 裡畫在左上返回鈕旁）
         let list = items(for: d)
-        scroll.clamp(contentHeight: Self.itemTop + CGFloat(list.count) * Self.itemH + 40 + Self.captionExtra(d), viewport: 960)
+        scroll.clamp(contentHeight: Self.itemTop + CGFloat(list.count) * Self.itemH + 40 + Self.captionExtra(d) + Self.addRoom, viewport: 960)
         if list.isEmpty {
             AppUI.center(face, g, L("reminders.none", "没有提醒"), AppUI.font(44, .semibold), cx: 512, y: 520, AppUI.secondary)
             HPAX.note(g, CGRect(x: 112, y: 470, width: 800, height: 70), .text, L("reminders.none", "没有提醒"), shape: .rounded(16))   // 2.0 depth：VoiceOver
@@ -382,6 +445,11 @@ final class RemindersApp: PetApp {
             guard row.maxY > Self.fadeSolid, row.minY < 960 else { continue }
             g.saveGState(); defer { g.restoreGState() }
             if pr.alpha < 0.999 { g.setAlpha(pr.alpha) }
+            if let until = highlight[r.id] {   // 2.0 home-2：剛用說的加進來的：清單色淡底，3 秒內淡掉
+                let k = CGFloat(max(0, min(1, (until - frameNow) / 1.2)))
+                let lc = src.lists.first { $0.id == r.listID }.map { srgb($0.color) } ?? Self.accent
+                AppUI.fillRound(g, row.insetBy(dx: 8, dy: 6), radius: 24, color: lc.withAlphaComponent(0.16 * k))
+            }
             let done = r.completed
             let cy = row.midY, ring = CGRect(x: row.minX + 32, y: cy - 24, width: 48, height: 48)
             var lc: UInt32 = 0xff9500
@@ -428,18 +496,24 @@ final class RemindersApp: PetApp {
 
     // MARK: 點與滾
     func handleScroll(_ dy: CGFloat, now: Double) -> Bool {
-        guard src.authorized, !AppUI.personalLocked else { return false }
-        if let d = dest { return scroll.scroll(dy, contentHeight: Self.itemTop + CGFloat(items(for: d).count) * Self.itemH + 40 + Self.captionExtra(d), viewport: 960) }
+        if sharedMode, let id = Self.sharedListID { return scroll.scroll(dy, contentHeight: Self.itemTop + CGFloat(items(for: .list(id)).count) * Self.itemH + 40 + Self.addRoom, viewport: 960) }
+        guard src.authorized, PersonalGate.allowed else { return false }
+        if let d = dest { return scroll.scroll(dy, contentHeight: Self.itemTop + CGFloat(items(for: d).count) * Self.itemH + 40 + Self.captionExtra(d) + Self.addRoom, viewport: 960) }
         return scroll.scroll(dy, contentHeight: homeContentHeight, viewport: 960)
     }
 
     func handleTap(_ p: CGPoint, face: Face, now: Double) -> Bool {
-        if AppUI.personalLocked { return false }
+        if sharedMode, let id = Self.sharedListID {   // 共用清單：只能勾
+            for (i, r) in items(for: .list(id)).enumerated() where rowRect(i).contains(p) && p.x < rowRect(i).minX + 170 { return src.toggle(r.id, now: CACurrentMediaTime()) }
+            return false
+        }
+        if !PersonalGate.allowed { return false }
         guard src.authorized else {
             guard AppUI.hit(permissionButton, p) else { return false }
             src.requestAccess { face.forceDirty = true }
             return true
         }
+        if dest != .smart(.completed), !OfficialDemo.on, Self.addButton.insetBy(dx: -8, dy: -8).contains(p) { startAdding(); return true }
         if let d = dest {
             guard p.y > Self.itemTop - 12, p.y < 960 else { return false }
             for (i, r) in items(for: d).enumerated() {
@@ -453,5 +527,25 @@ final class RemindersApp: PetApp {
             for (i, l) in src.lists.enumerated() where listRowRect(i).contains(p) { dest = .list(l.id); scroll = AppScroll(); return true }
         }
         return false
+    }
+}
+
+// MARK: - 2.0 home-3：遠看（Shell/FarGlance.swift）
+extension RemindersApp {
+    /// 主人：今天幾件（逾期的另外算）；家人／訪客看共用清單：那份還剩幾項。其他人看不到就沒有遠看
+    func farGlance(face: Face, now: Double) -> FarGlance? {
+        guard src.authorized else { return nil }
+        if sharedMode, let id = Self.sharedListID {
+            let left = src.items.filter { $0.listID == id && !$0.completed }
+            let name = src.lists.first { $0.id == id }?.title ?? title
+            return FarGlance(title: name, headline: left.isEmpty ? L("reminders.far.allDone", "都买齐了") : String(format: L("reminders.far.left", "还有 %d 项"), left.count),
+                             details: Array(left.prefix(2).map(\.title)))
+        }
+        guard PersonalGate.allowed else { return nil }
+        let n = ReminderLogic.count(src.items, .today, now: today)
+        let overdue = src.items.filter { ReminderLogic.isOverdue($0, now: today) }.count
+        return FarGlance(title: title, headline: n == 0 ? L("reminders.far.none", "今天没有提醒") : String(format: L("reminders.far.today", "今天 %d 件"), n),
+                         details: Array(ReminderLogic.sorted(src.items.filter { ReminderLogic.inToday($0, now: today) }).prefix(1).map(\.title)),
+                         alert: overdue > 0 ? String(format: L("reminders.far.overdue", "%d 件已逾期"), overdue) : nil)
     }
 }

@@ -19,6 +19,17 @@ enum HPFrames {
             _ = face.render(t0)
             Shell.nav.screen = .face; Shell.nav.overlay = .none; Face.toFaceDeblur = true; face.beginFaceTransition()
         }
+        // HOMEPLAY_FROMFACE=<App id>：從錶面直接進 App（沒有圖示可長；👀 膠囊縮成頂端藥丸，跟 ShellInput 的 .face → .app 同一段），不加 --app/--home
+        if let id = ProcessInfo.processInfo.environment["HOMEPLAY_FROMFACE"], AppRegistry.app(id) != nil {
+            _ = face.render(t0)
+            Shell.captureHomeBackdrop(face.lastFrame)
+            if let ir = face.islandRect {
+                let ch = ir.height / 1.9, cw = max(ch, ir.width - 1.2 * ch)
+                Shell.pillFrom = (CGRect(x: ir.midX - cw / 2, y: ir.midY - ch / 2, width: cw, height: ch), t0)
+            }
+            Shell.nav.screen = .app(id); Shell.nav.overlay = .none
+            AppRegistry.app(id)?.didOpen(now: t0); face.beginFaceTransition()
+        }
         // HOMEPLAY_LIST_DELETE=1：提醒事項清單（--app reminders --demo-reminders-list）完成第一條，0.9 s 後拿掉——下面的列讓位上來
         if ProcessInfo.processInfo.environment["HOMEPLAY_LIST_DELETE"] != nil {
             _ = face.render(t0)

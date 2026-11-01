@@ -34,6 +34,29 @@ enum HPGrid {
     /// 最小點按範圍（44 pt × 2）
     static let tap = HPTokens.Size.tap                       // 88
 
+    /// 內縮合約（2026-10-28）：一個容器只有**一條**左緣、一條右緣。
+    /// 以前圖庫是 32/40/48/54/56 五種、控制中心展開是 24/40 兩種，所以看起來邏輯錯亂。
+    enum Inset {
+        /// 卡片／Sheet 的內容邊線（標題、清單、預覽、主按鈕全部對這條）
+        static let card: CGFloat = 40
+        /// 卡片內「行」的內距（行本身仍然貼 card 邊線；行裡的字與圖示再縮 nested）
+        static let nested: CGFloat = 24
+        /// 長按選單內唯一的邊線（清單列、分隔線、尺寸塊都對它）
+        static let menu: CGFloat = 12
+        /// App 內容左右邊距（沿用）
+        static var app: CGFloat { App.margin }
+    }
+
+    /// 卡片內部的節奏：只用這三個
+    enum Rhythm {
+        /// 同一組的相鄰行
+        static let rowGap: CGFloat = 8
+        /// 兩組之間
+        static let groupGap: CGFloat = 24
+        /// 兩個區段之間（例如預覽與選項）
+        static let sectionGap: CGFloat = 32
+    }
+
     /// 同心圓角：內層＝外層 − 內縮
     static func concentric(outer: CGFloat, inset: CGFloat) -> CGFloat { max(0, outer - inset) }
 }

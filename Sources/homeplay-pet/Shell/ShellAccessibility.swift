@@ -70,10 +70,12 @@ enum ShellAccessibility {
             return out
         case .home, .library:
             if Shell.peopleSheet { return peopleSheetItems() }
-            if let p = pillItem(face: face, now: now) { out.append(p); out += liveActivityItems(face: face) }
+            if let p = pillItem(face: face, now: now) { out.append(p) }
+            out += liveActivityItems(face: face)
             out += SBAX.items(face: face)   // 2.0 SpringBoard：多頁、資料夾、選單、sheet、App 資料庫（Shell/SpringBoard/SBInput.swift）
         case .app(let id):
-            if let p = pillItem(face: face, now: now) { out.append(p); out += liveActivityItems(face: face) }
+            if let p = pillItem(face: face, now: now) { out.append(p) }
+            out += liveActivityItems(face: face)
             guard let a = AppRegistry.app(id) else { return out }
             if Shell.appMorph != nil { return out }   // 開到一半：等長好再列（App 那一格還畫在離屏畫布上）
             let locked = PersonalGate.locks(a.id)
@@ -122,13 +124,20 @@ enum ShellAccessibility {
         }
     }
 
+    /// 2.0 align C：藥丸＝Home 鍵，一條按鈕，標籤跟著層級（App 裡「返回上一層」、資料庫「回到主畫面」、主畫面「回到錶面」）；
+    /// 有活動時把它念成值（長按展開它）
     private static func pillItem(face: Face, now: Double) -> ShellAXItem? {
-        guard let act = face.shellActivity(now) else { return nil }
+        let label: String
+        switch Shell.nav.screen {
+        case .app: label = L("a11y.pill.back", "返回上一层")
+        case .library: label = L("a11y.pill.home", "回到主屏幕")
+        case .home: label = L("a11y.pill.face", "回到表盘")
+        case .face: return nil
+        }
         let r = Shell.pillRect(Shell.pillT)
-        let label = act.detail.isEmpty ? act.title : String(format: L("a11y.pair", "%1$@，%2$@"), act.title, act.detail)
-        return ShellAXItem(id: "pill", kind: .chrome, role: .button, label: label,
-                           value: act.progress.map { "\(Int(($0 * 100).rounded()))%" }, rect: r, shape: .capsule,
-                           press: .tap(center(r)), roleDescription: L("a11y.liveActivity", "实时活动"))
+        let value = face.shellActivity(now).map { act in act.detail.isEmpty ? act.title : String(format: L("a11y.pair", "%1$@，%2$@"), act.title, act.detail) }
+        return ShellAXItem(id: "pill", kind: .chrome, role: .button, label: label, value: value, rect: r, shape: .capsule,
+                           press: .tap(center(r)))
     }
 
     /// 2.0 depth：Live Activity 展開後的動作鈕（計時器 +1:00／取消、音樂上一首／播放／下一首、掛斷、回覆），和分出去的第二、三顆小藥丸。
@@ -142,6 +151,8 @@ enum ShellAccessibility {
             case .button(let b) where expanded:
                 let label: String
                 switch b {
+                case .alarmStop: label = L("la.alarm.stop", "停止")
+                case .alarmSnooze: label = L("la.alarm.snooze", "稍后")
                 case .timerAdd: label = L("a11y.la.timerAdd", "增加 1 分钟")
                 case .timerStop: label = L("timer.cancel", "取消计时器")
                 case .musicPrev: label = L("cc.np.previous", "上一首")
@@ -149,6 +160,7 @@ enum ShellAccessibility {
                 case .musicNext: label = L("cc.np.next", "下一首")
                 case .callEnd: label = L("call.hangUp", "挂断")
                 case .messageReply: label = L("la.message.reply", "回复")
+                case .activityHide, .weatherHide: label = L("la.iphone.hide", "收起")
                 }
                 out.append(ShellAXItem(id: "la.\(b)", kind: .chrome, role: .button, label: label, rect: r, shape: .capsule, press: .tap(center(r))))
             case .minimal(let i) where !expanded && i < S.shown.count:

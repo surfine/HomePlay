@@ -3,7 +3,7 @@
 // 一幀的順序：霧化壓暗的底（iOS 的 platter）→ 所有模組的形狀進同一個 HPGlass.container（Regular 玻璃，flush 一次；
 // 玻璃上的符號、字、滑桿水位、開著的白圓都是填色，不再疊玻璃）→ 拖著的滑桿旋鈕變玻璃（HPDS 4）。
 // 截圖量到的（128 格）：膠囊左邊 28 放 72 的圓；標題基線離頂 44、副標 24 一行；2×2 圖示 80 在 (28, 28)、標題基線 171、
-// 控制列中心 221；寬滑桿標題基線 48、軌道高 8 在中線 +20（83.5）、左右 73／77；AirPlay 圓鈕 49、右 30；
+// 控制列中心 221；（2.0 align B 起模組滑桿照 iOS 26：整塊即滑桿，見 drawModuleSlider；大卡裡的大滑桿仍是軌道）；
 // 模組底色在黑底上 (31,31,31)、緣 (48–52)；關著的圓 (90,90,90)＝白 30%；軌道沒滿的部分 (52,52,52)。
 
 import AppKit
@@ -107,7 +107,7 @@ extension ControlCenter {
         }
         if !shown.isEmpty { lastShown = shown }
         drawPageDots(g, pagePos: pagePos, alpha: max(0, 1 - max(min(1, ek), gk)))
-        HPGlass.flush(g, face: face, backdrop: dimmedCache?.image, now: now)   // Regular（底下暗，小模組自己翻成深版）
+        HPGlass.flush(g, face: face, backdrop: dimmedCache?.image, now: now, shadows: false, thicken: true)   // Regular（底下暗，小模組自己翻成深版）；iOS 26：模組沒有外陰影、面更實
         g.restoreGState()
     }
     nonisolated(unsafe) static var lastExpanded: Tile?
@@ -129,7 +129,7 @@ extension ControlCenter {
             }
             if editK > 0.001 { drawEditBadges(c, t, r, s, face: face, k: editK) }
         }
-        if t.isSlider, presence > 0.99 { addSliderKnob(t, r, s, big: false) }
+
         guard live else { return }
         hits += moduleHits(t, r, s, face: face, now: now, editing: editK > 0.5)
     }
@@ -237,7 +237,7 @@ extension ControlCenter {
 
     // MARK: 滑桿
 
-    static func airplayRect(_ r: CGRect) -> CGRect { CGRect(x: r.maxX - 30 - 52, y: r.minY + 84 - 26, width: 52, height: 52) }
+    static func airplayRect(_ r: CGRect) -> CGRect { CGRect(x: r.maxX - HPGrid.Inset.card - 64, y: r.midY - 32, width: 64, height: 64) }
     /// 軌道（寬滑桿：截圖左 73、右 77，聲音右邊讓給喇叭符號與 AirPlay；2×1：沒有標題，軌道在中線）
     static func track(_ t: Tile, _ r: CGRect, _ s: CCSize, big: Bool) -> CGRect {
         if big { return CGRect(x: r.minX + 96, y: r.minY + 150, width: r.width - 192, height: 14) }
@@ -247,7 +247,31 @@ extension ControlCenter {
     }
     static func level(_ t: Tile) -> CGFloat { t == .volume ? CGFloat(volume) : Shell.brightness }
 
+    /// iOS 26：模組本身就是滑桿——沒有細軌道、沒有標題、沒有旋鈕；白色沿長邊從左長到目前的值，符號在左緣（內縮 40，128 高時就在左下那一格的中線），
+    /// 按住模組任何地方拖都行（CCInput：相對位移，按下不跳值）
+    static func sliderSymbol(_ t: Tile, _ lv: CGFloat) -> String {
+        if t == .brightness { return lv < 0.5 ? "sun.min.fill" : "sun.max.fill" }
+        return lv < 0.005 ? "speaker.slash.fill" : (lv < 0.34 ? "speaker.wave.1.fill" : (lv < 0.67 ? "speaker.wave.2.fill" : "speaker.wave.3.fill"))
+    }
+    private static func drawModuleSlider(_ c: CGContext, _ t: Tile, _ r: CGRect, _ s: CCSize, face: Face) {
+        let ink = HPGlass.ink, lightGlass = !HPGlass.inkIsLight
+        let lv = max(0, min(1, level(t)))
+        c.saveGState(); c.addPath(shape(r, s)); c.clip()
+        c.setFillColor(ink.withAlphaComponent(lightGlass ? 0.08 : 0.10).cgColor); c.fill(r)   // 沒長到的部分：玻璃上一層淡填色（不疊玻璃）
+        if lv > 0.001 { c.setFillColor(NSColor.white.withAlphaComponent(0.96).cgColor); c.fill(CGRect(x: r.minX, y: r.minY, width: r.width * lv, height: r.height)) }
+        c.restoreGState()
+        let ih: CGFloat = 44, inset = HPGrid.Inset.card
+        let ir = CGRect(x: r.minX + inset, y: r.maxY - inset - ih, width: ih, height: ih)
+        let onWhite = r.width * lv >= ir.midX - r.minX   // 白色蓋到符號：符號換深灰（iOS 白底上的灰符號）
+        face.drawSymbol(c, sliderSymbol(t, lv), in: ir, color: onWhite ? NSColor(white: 0.2, alpha: 0.85) : ink.withAlphaComponent(0.9))
+        if t == .volume, s == .s4x1, !outputsLocked {
+            let ar = airplayRect(r), onW = r.width * lv >= ar.midX - r.minX
+            face.drawSymbol(c, "airplayaudio", in: ar.insetBy(dx: 10, dy: 10), color: onW ? NSColor(white: 0.2, alpha: 0.85) : ink)
+        }
+    }
+
     private static func drawSlider(_ c: CGContext, _ t: Tile, _ r: CGRect, _ s: CCSize, face: Face, big: Bool) {
+        if !big { drawModuleSlider(c, t, r, s, face: face); return }
         let ink = HPGlass.ink, lightGlass = !HPGlass.inkIsLight
         let tr = track(t, r, s, big: big)
         if s == .s4x1 || big {
@@ -263,11 +287,6 @@ extension ControlCenter {
         face.drawSymbol(c, lo, in: CGRect(x: tr.minX - (big ? 64 : 46), y: tr.midY - ih / 2, width: ih, height: ih), color: ink.withAlphaComponent(0.9))
         if s != .s2x1 || big {
             face.drawSymbol(c, hi, in: CGRect(x: tr.maxX + (big ? 20 : 12), y: tr.midY - ih / 2, width: ih * 1.2, height: ih), color: ink.withAlphaComponent(0.9))
-        }
-        if t == .volume, s == .s4x1, !big, !outputsLocked {
-            let ar = airplayRect(r)
-            c.setFillColor(ink.withAlphaComponent(lightGlass ? 0.10 : 0.30).cgColor); c.fillEllipse(in: ar)
-            face.drawSymbol(c, "airplayaudio", in: ar.insetBy(dx: 13, dy: 13), color: ink)
         }
     }
     /// 拖著：旋鈕變成玻璃、略放大（Adopting Liquid Glass）；放開就收回成實心的水位。
@@ -360,9 +379,10 @@ extension ControlCenter {
     private static func drawEditBadges(_ c: CGContext, _ t: Tile, _ r: CGRect, _ s: CCSize, face: Face, k: CGFloat) {
         c.saveGState(); c.setAlpha(k)
         // 「−」：左上，iOS 是灰圓白槓（填色，不是另一塊玻璃）
-        let b = CGRect(x: r.minX - 6, y: r.minY - 6, width: 40, height: 40)
+        let d = HPTokens.Size.badge   // 2.0 align F：40 → badge 48（跟主畫面同一個徽標）
+        let b = CGRect(x: r.minX - 10, y: r.minY - 10, width: d, height: d)
         c.setFillColor(NSColor(white: HPGlass.inkIsLight ? 0.42 : 0.62, alpha: 1).cgColor); c.fillEllipse(in: b)
-        face.drawSymbol(c, "minus", in: b.insetBy(dx: 11, dy: 11), color: .white, weight: .bold)
+        face.drawSymbol(c, "minus", in: b.insetBy(dx: 13, dy: 13), color: .white, weight: .bold)
         // 換大小：右下角一段跟角同心的弧（iOS 18 的把手）
         if t.sizes.count > 1 {
             let rad: CGFloat = s == .s4x1 ? wideRadius : (s == .s2x2 || s == .s4x2 ? squareRadius : r.height / 2)
@@ -408,11 +428,12 @@ extension ControlCenter {
     private static func drawPageDots(_ g: CGContext, pagePos: CGFloat, alpha: CGFloat) {
         let n = layout.pages.count + (editing ? 1 : 0)
         guard n > 1, alpha > 0.01 else { return }
-        let gapY: CGFloat = 26, x: CGFloat = 1024 - 30
+        // 2.0 align：頁點對齊格子的右緣（956），直徑與其它頁點一致（14）
+        let gapY: CGFloat = 26, x: CGFloat = gridX + 6 * cell + 5 * gap - HPTokens.Size.dot / 2
         let y0 = gridY + gridH / 2 - CGFloat(n - 1) * gapY / 2
         for i in 0..<n {
             let cur = max(0, 1 - abs(CGFloat(i) - pagePos))
-            let d: CGFloat = 12
+            let d = HPTokens.Size.dot
             let col = (HPTokens.dark ? NSColor.white : NSColor.black).withAlphaComponent((0.3 + 0.6 * cur) * alpha)
             g.setFillColor(col.cgColor)
             g.fillEllipse(in: CGRect(x: x - d / 2, y: y0 + CGFloat(i) * gapY - d / 2, width: d, height: d))

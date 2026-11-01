@@ -164,6 +164,11 @@ struct AppearancePane: View {
                         ForEach(System6Layout.allCases, id: \.self) { Text($0.title).tag($0) }
                     }
                 }
+                if m.faceStyle == .cluster {   // 儀表的版式
+                    Picker(L("cluster.layout", "仪表版式"), selection: Binding(get: { m.clusterLayout }, set: { m.perform("menuClusterLayout:", $0.rawValue) })) {
+                        ForEach(ClusterLayout.allCases, id: \.self) { Text($0.title).tag($0) }
+                    }
+                }
                 if m.faceStyle == .photos || (m.faceStyle == .island && m.islandBackground == .photo) {
                     LabeledContent(L("settings.photos", "照片")) {
                         Button(L("prefs.photoFolder", "照片文件夹…")) { m.perform("menuPhotoFolder") }
@@ -370,6 +375,49 @@ struct CameraPane: View {
                 Toggle(isOn: Binding(get: { m.roomLight }, set: { _ in m.app?.toggleRoomLight(); m.refresh() })) {
                     RowLabel(title: L("settings.roomLight.title", "房间光线"), subtitle: L("settings.roomLight.note", "机身反光跟着房间变"))
                 }
+            }
+        }
+        .formStyle(.grouped)
+    }
+}
+
+/// 家庭（B 方案，2026-10-26）：沒有小幫手時用 macOS 捷徑的家庭動作。
+/// HomeKit 的權利只跟著 App Store 的 provisioning profile，Developer ID 版拿不到，
+/// 所以這裡只管理「捷徑名稱」與執行；配件清單、即時狀態都不會有。
+struct HomePane: View {
+    @EnvironmentObject var m: SettingsModel
+    @State private var name = HomeShortcut.name
+
+    var body: some View {
+        Form {
+            Section {
+                TextField(L("settings.home.name", "捷径名称"), text: $name,
+                          prompt: Text(L("settings.home.name.prompt", "例：回家")))
+                    .onChange(of: name) { _, v in HomeShortcut.name = v; m.refresh() }
+                LabeledContent {
+                    HStack(spacing: 8) {
+                        Button(L("settings.home.openApp", "打开捷径 App")) { HomeShortcut.openApp() }
+                        Button(L("settings.home.test", "测试执行")) { HomeShortcut.run() }
+                            .disabled(!HomeShortcut.isSet)
+                    }
+                } label: { EmptyView() }
+            } header: {
+                Text(L("settings.home.title", "家庭捷径"))
+            } footer: {
+                Text(L("settings.home.note", "HomePlay 不能直接读 HomeKit，所以用捷径代替。执行时会切到捷径 App；这里没有配件清单，也没有即时状态。"))
+            }
+            Section {
+                Text(L("settings.home.step1", "打开「捷径」App，新增一个捷径。"))
+                Text(L("settings.home.step2", "加入「控制家庭」动作，选好配件或场景。"))
+                Text(L("settings.home.step3", "替捷径取个名字，填到上面的栏位。"))
+            } header: {
+                Text(L("settings.home.howTitle", "怎么建"))
+            }
+            Section {
+                InfoRow(title: L("settings.home.helper.title", "HomePlay Home 小帮手"),
+                        subtitle: HomeLink.helperInstalled
+                            ? L("settings.home.helper.on", "已安装：会优先使用小帮手，配件直接出现在家庭 App。")
+                            : L("settings.home.helper.off", "未安装：公开版没有小帮手（HomeKit 只给 App Store 版）。"))
             }
         }
         .formStyle(.grouped)

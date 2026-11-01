@@ -39,12 +39,12 @@ enum LiveActivityStack {
 
     /// 要顯示哪些：關掉的 App 拿掉、超過 8 小時的拿掉、最多三個（順序照 AppRegistry）
     static func visible(_ acts: [LiveActivity], wall: Double, seen: inout [String: Double], enabled: (String) -> Bool) -> [LiveActivity] {
-        let live = Set(acts.map(\.appID))
+        let live = Set(acts.map(\.uid))
         for k in Array(seen.keys) where !live.contains(k) { seen[k] = nil }   // 結束了：下次重新算
         var out: [LiveActivity] = []
         for a in acts {
-            let t0 = seen[a.appID] ?? wall
-            seen[a.appID] = t0
+            let t0 = seen[a.uid] ?? wall
+            seen[a.uid] = t0
             guard enabled(a.appID), wall - t0 <= maxAge else { continue }
             out.append(a)
         }
@@ -55,7 +55,7 @@ enum LiveActivityStack {
 
     static func offKey(_ id: String) -> String { "liveActivity.off.\(id)" }
     static let noPreviewKey = "liveActivity.messages.noPreview"
-    static let settingApps = ["timers", "music", "messages", "facetime", "cliotalk"]
+    static let settingApps = ["timers", "alarms", "music", "messages", "facetime", "cliotalk", "weather"]
     static func enabledSetting(_ id: String) -> Bool { !UserDefaults.standard.bool(forKey: offKey(id)) }
     static func setEnabled(_ on: Bool, _ id: String) { UserDefaults.standard.set(!on, forKey: offKey(id)) }
     /// 快照／示範一律全開（不照這台 Mac 的偏好）
@@ -105,7 +105,7 @@ enum LiveActivityStack {
 
     // MARK: 狀態
 
-    /// 展開的是哪個 App 的活動
+    /// 展開的是哪一則活動（LiveActivity.uid）
     nonisolated(unsafe) static var expandedApp: String?
     static let spring = HPMotion.T.liveActivity.spring   // 動效包：點按沒有動量 → 臨界阻尼、不回彈（Design/HPMotionTable.swift）
     nonisolated(unsafe) static var expandAnim = MotionValue("la.expand", spring: spring, from: 0, to: 0, now: 0)
@@ -132,7 +132,7 @@ enum LiveActivityStack {
         return p
     }
 
-    enum Button: Equatable { case timerAdd, timerStop, musicPrev, musicPlay, musicNext, callEnd, messageReply }
+    enum Button: Equatable { case alarmStop, alarmSnooze, timerAdd, timerStop, musicPrev, musicPlay, musicNext, callEnd, messageReply, activityHide, weatherHide }
     enum Hit: Equatable { case pill, minimal(Int), button(Button), card }
     /// 這一幀畫出來的點擊區（index 對 shown）
     nonisolated(unsafe) static var hits: [(Hit, CGRect)] = []
@@ -141,11 +141,11 @@ enum LiveActivityStack {
 
     /// 每幀（tickShell）：展開的彈簧、音量條在動就要重畫
     static func tick(_ face: Face, _ now: Double) -> Bool {
-        var dirty = false
+        var dirty = ActivityBridge.shared.consumeDirty()   // iPhone 那邊的活動有增減
         if expandedApp != nil {
             if !expandAnim.done(now) { dirty = true }
             else if expandAnim.to == 0 { expandedApp = nil; dirty = true }
-            if let id = expandedApp, !shown.contains(where: { $0.appID == id }), !shown.isEmpty || Shell.pillT < 0.02 { expandedApp = nil; dirty = true }
+            if let id = expandedApp, !shown.contains(where: { $0.uid == id }), !shown.isEmpty || Shell.pillT < 0.02 { expandedApp = nil; dirty = true }
         }
         if shown.contains(where: { $0.kind == .music || $0.kind == .assistant }), !HPMotion.reduceMotion {
             let t = Int(now * 12)
@@ -157,10 +157,11 @@ enum LiveActivityStack {
     // MARK: 點
 
     /// 主畫面／App 上的點按先問這裡；吃掉回 true。open：打開 App（外殼的 shellOpenApp）
-    static func tap(_ p: CGPoint, long: Bool, now: Double, face: Face, open: (LiveActivity) -> Void) -> Bool {
+    /// home：外殼的藥丸是 Home 鍵（點＝回上一層，2.0 align C）；nil＝錶面上的膠囊（遠端觸控），點照舊打開活動
+    static func tap(_ p: CGPoint, long: Bool, now: Double, face: Face, open: (LiveActivity) -> Void, home: (() -> Void)? = nil) -> Bool {
         let hit = hits.last(where: { $0.1.contains(p) })?.0
         if let id = expandedApp, expandAnim.to != 0 {
-            guard let a = shown.first(where: { $0.appID == id }) else { collapse(now); return true }
+            guard let a = shown.first(where: { $0.uid == id }) else { collapse(now); return true }
             switch hit {
             case .button(let b)?: perform(b, a, face: face, now: now)
             case .card?, .pill?: collapse(now); open(a)
@@ -170,18 +171,24 @@ enum LiveActivityStack {
         }
         switch hit {
         case .pill?:
-            guard let a = shown.first else { return true }
-            if long { expand(a.appID, now: now) } else { open(a) }
+            if long { if let a = shown.first { expand(a.uid, now: now) }; return true }
+            if let home { home(); return true }
+            if let a = shown.first { open(a) }
             return true
         case .minimal(let i)?:
             guard i < shown.count else { return true }
-            if long { expand(shown[i].appID, now: now) } else { open(shown[i]) }
+            if long { expand(shown[i].uid, now: now) } else { open(shown[i]) }
             return true
         default:
-            // 沒有活動時膠囊照舊吃掉點按（不穿到底下的圖示）
-            return Shell.pillRect(Shell.pillT).insetBy(dx: -10, dy: min(0, (height - 88) / 2)).contains(p)
+            // 沒有活動時膠囊照舊吃掉點按（不穿到底下的圖示）；外殼上它就是 Home 鍵。命中：整顆，上下補到 88
+            guard pillHit.contains(p) else { return false }
+            if !long { home?() }
+            return true
         }
     }
+
+    /// 藥丸的命中區：整顆膠囊，上下補到 HPTokens.Size.tap（88）
+    static var pillHit: CGRect { Shell.pillRect(Shell.pillT).insetBy(dx: -10, dy: min(0, (height - HPTokens.Size.tap) / 2)) }
 
     /// 打開 App 之後再帶到那件事（深連結）
     static func follow(_ a: LiveActivity) {
@@ -189,17 +196,20 @@ enum LiveActivityStack {
         case .message where a.appID == "messages": MessagesApp.shared.openFromActivity(a.link)   // 2.0 Web App 的通知也是 .message
         case .timer:
             if let s = a.link, let id = Int(s), Shell.timers.timer(id) != nil { TimersApp.shared.selected = id; TimersApp.shared.adding = false }
-        default: break
+        default: break   // 鬧鐘：打開 App 就是響鈴畫面（貪睡中是清單，上面有「稍后提醒」）
         }
     }
     /// 外殼開 App＋深連結（selftest 用 navigate 換掉真的開 App）
     static func open(_ a: LiveActivity, navigate: (String) -> Void) {
+        if a.appID == ActivityBridge.mirroringAppID { ActivityBridge.openMirroring(); return }   // 不是我們的 App：交給 iPhone Mirroring
         navigate(a.appID)
         follow(a)
     }
 
     private static func perform(_ b: Button, _ a: LiveActivity, face: Face, now: Double) {
         switch b {
+        case .alarmStop: AlarmCenter.shared.stop(face); collapse(now)
+        case .alarmSnooze: AlarmCenter.shared.snooze(face); collapse(now)   // 貪睡後 LA 變成倒數版，維持藥丸、收回大卡
         case .timerAdd:
             if let s = a.link, let id = Int(s) { Shell.timers.addTime(id, seconds: 60); Shell.reconcileTimers(face, now: now) }
         case .timerStop:
@@ -211,15 +221,20 @@ enum LiveActivityStack {
             if b == .musicNext { NowPlayingPoller.shared.control(.next) }
         case .callEnd: FaceTimeCall.shared.end(); collapse(now)
         case .messageReply: collapse(now); if let v = (NSApp.delegate as? AppDelegate)?.view { v.shellOpenApp(a.appID) }; follow(a); MessagesApp.shared.replyByVoice()   // 2.0 imsg：回覆＝開到對話直接聽
+        case .weatherHide:   // 本地收起：這一場降雨不再出現（下一場照常提醒）
+            if let s = a.link, let t = Double(s) { WeatherAlert.dismiss(start: Date(timeIntervalSince1970: t)) }
+            collapse(now)
+        case .activityHide: ActivityBridge.shared.hide(a.link ?? ""); collapse(now)   // iPhone 活動只能在本地收起：結束要 ACActivity 物件，我們只有 descriptor
         }
         face.forceDirty = true
     }
 
     // MARK: 快照
 
-    static let demoKinds = ["timer", "music", "call", "message", "cliotalk"]
+    static let demoKinds = ["timer", "music", "call", "message", "cliotalk", "iphone", "alarm", "weather"]
     static func appID(forDemo k: String) -> String? {
-        ["timer": "timers", "music": "music", "call": "facetime", "message": "messages", "cliotalk": "cliotalk"][k]
+        ["timer": "timers", "alarm": "alarms", "weather": "weather", "music": "music", "call": "facetime", "message": "messages", "cliotalk": "cliotalk",
+         "iphone": ActivityBridge.mirroringAppID][k]   // 截圖：--iphone-activity 也餵一則假活動
     }
     /// --live-activity 的音樂、通話（計時器、訊息、ClioTalk 由外殼照舊放）
     static func applyDemo(_ kinds: Set<String>, face: Face) {
@@ -234,7 +249,7 @@ enum LiveActivityStack {
     /// --live-activity-expanded <kind>：直接停在展開好的大卡
     static func applyExpandedDemo(_ kind: String) {
         guard let id = appID(forDemo: kind) else { return }
-        expandedApp = id
+        expandedApp = kind == "iphone" ? "\(id)#demo-iphone" : id   // 身分＝LiveActivity.uid
         expandAnim = MotionValue("la.expand", spring: spring, from: HPMotion.frozen("la.expand") == nil ? 1 : 0, to: 1, now: CACurrentMediaTime())
     }
 }
@@ -244,8 +259,9 @@ enum LiveActivityStack {
 extension Face {
     /// 頂端膠囊要顯示的全部活動（已套用設定、8 小時、最多三個）
     func shellActivities(_ now: Double) -> [LiveActivity] {
-        let all = (AppRegistry.all + AppProviders.activityApps).compactMap { $0.liveActivity(face: self, now: now) }   // 2.0 Web App：開著的、背景在播的也問
-        return LiveActivityStack.visible(all, wall: Date().timeIntervalSince1970, seen: &LiveActivityStack.firstSeen,
+        let own = (AppRegistry.all + AppProviders.activityApps).compactMap { $0.liveActivity(face: self, now: now) }   // 2.0 Web App：開著的、背景在播的也問
+        let remote = ActivityBridge.shared.liveActivities(now: now)   // iPhone 轉來的排前面：像系統的一部分
+        return LiveActivityStack.visible(remote + own, wall: Date().timeIntervalSince1970, seen: &LiveActivityStack.firstSeen,
                                          enabled: LiveActivityStack.enabled)
     }
 
@@ -259,10 +275,11 @@ extension Face {
     /// compact 的內容寬
     private func laWidths(_ a: LiveActivity) -> (lead: CGFloat, trail: CGFloat, mini: CGFloat) {
         switch a.kind {
-        case .timer: return (40, Typo.width(a.detail, Self.laValueFont), 38)
+        case .timer, .alarm, .weather: return (40, Typo.width(a.detail, Self.laValueFont), 38)
         case .music, .assistant: return (40, 40, 34)
         case .call: return (40, min(140, Typo.width(a.detail, Self.laValueFont)), min(110, Typo.width(a.detail, Self.laMiniFont)))
         case .message: return (40, min(150, Typo.width(a.title, Self.laNameFont)), 34)
+        case .iphone: return (40, min(150, Typo.width(a.detail, Self.laValueFont)), 34)
         }
     }
 
@@ -284,7 +301,7 @@ extension Face {
             laBody(g, r, radius: r.height / 2, key: .white, backdrop: g.makeImage()); return
         }
         let lay = laLayout(acts)
-        let expandedAct = S.expandedApp.flatMap { id in acts.first { $0.appID == id } }
+        let expandedAct = S.expandedApp.flatMap { id in acts.first { $0.uid == id } }
         let e = expandedAct == nil ? 0 : S.expandT(now)
         let main = expandedAct ?? acts[0]
         let backdrop = g.makeImage()
@@ -383,7 +400,10 @@ extension Face {
             else { g.setFillColor(a.accent.cgColor); g.fill(box); drawSymbol(g, "music.note", in: box.insetBy(dx: s * 0.24, dy: s * 0.22), color: .white) }
             g.restoreGState()
         case .call: drawSymbol(g, a.symbol ?? "phone.fill", in: box.insetBy(dx: 0, dy: s * 0.14), color: a.accent)
+        case .alarm: drawSymbol(g, a.symbol ?? "alarm.fill", in: box.insetBy(dx: s * 0.04, dy: s * 0.04), color: a.accent)
+        case .weather: drawSymbol(g, a.symbol ?? "umbrella.fill", in: box.insetBy(dx: s * 0.04, dy: s * 0.06), color: a.accent)
         case .message: drawSymbol(g, a.symbol ?? "message.fill", in: box.insetBy(dx: s * 0.04, dy: s * 0.08), color: a.accent)
+        case .iphone: laPhone(g, in: box.insetBy(dx: s * 0.12, dy: s * 0.04), color: a.accent)
         case .assistant:
             let grad = CGGradient(colorsSpace: CGColorSpace(name: CGColorSpace.sRGB),
                                   colors: [NSColor.white.cgColor, a.accent.cgColor, a.accent.withAlphaComponent(0.6).cgColor] as CFArray,
@@ -392,6 +412,22 @@ extension Face {
             g.drawRadialGradient(grad, startCenter: CGPoint(x: c.x - s * 0.15, y: c.y - s * 0.15), startRadius: 0, endCenter: c, endRadius: s / 2, options: [.drawsAfterEndLocation])
             g.restoreGState()
         }
+    }
+
+    /// iPhone 的小圖示：描邊手機（實心的 SF Symbol 在這個尺寸會變成一塊色塊）
+    private func laPhone(_ g: CGContext, in r: CGRect, color: NSColor) {
+        let w = r.width, h = r.height
+        let body = CGRect(x: r.midX - w * 0.34, y: r.minY, width: w * 0.68, height: h)
+        let lw = max(2.5, w * 0.09)
+        g.saveGState()
+        g.setStrokeColor(color.cgColor); g.setLineWidth(lw); g.setLineJoin(.round)
+        g.addPath(CGPath(roundedRect: body.insetBy(dx: lw / 2, dy: lw / 2), cornerWidth: w * 0.16, cornerHeight: w * 0.16, transform: nil))
+        g.strokePath()
+        let sp = CGRect(x: body.midX - w * 0.07, y: body.minY + h * 0.12, width: w * 0.14, height: max(2, h * 0.035))
+        g.setFillColor(color.cgColor)
+        g.addPath(CGPath(roundedRect: sp, cornerWidth: sp.height / 2, cornerHeight: sp.height / 2, transform: nil))
+        g.fillPath()
+        g.restoreGState()
     }
 
     private func laRing(_ g: CGContext, _ a: LiveActivity, center c: CGPoint, radius rr: CGFloat, width w: CGFloat) {
@@ -421,9 +457,9 @@ extension Face {
     /// trailing：要看的那個值（倒數、通話秒數、寄件人）或音量條
     private func laTrailing(_ g: CGContext, _ a: LiveActivity, in slot: CGRect, now: Double) {
         switch a.kind {
-        case .timer, .call:
+        case .timer, .call, .iphone, .alarm, .weather:
             let s = Face.clipped(a.detail, Self.laValueFont, 140), w = Typo.width(s, Self.laValueFont)
-            HPNumeric.draw(g, self, key: "la.\(a.appID)", s, font: Self.laValueFont, x: slot.midX - w / 2, y: slot.midY + 11.5, color: a.accent, now: now)   // 動效包：數字轉場（HIG-LA-105）
+            HPNumeric.draw(g, self, key: "la.\(a.uid)", s, font: Self.laValueFont, x: slot.midX - w / 2, y: slot.midY + 11.5, color: a.accent, now: now)   // 動效包：數字轉場（HIG-LA-105）
         case .message:
             let s = Face.clipped(a.title, Self.laNameFont, 150), w = Typo.width(s, Self.laNameFont)
             drawLeft(g, s, font: Self.laNameFont, x: slot.midX - w / 2, y: slot.midY + 10, color: .white)
@@ -439,6 +475,9 @@ extension Face {
         case .timer: laRing(g, a, center: c, radius: 15, width: 6)
         case .music, .assistant: laBars(g, in: CGRect(x: c.x - 17, y: c.y - 14, width: 34, height: 28), color: a.accent, now: now)
         case .message: drawSymbol(g, a.symbol ?? "message.fill", in: CGRect(x: c.x - 17, y: c.y - 15, width: 34, height: 30), color: a.accent)
+        case .iphone: laPhone(g, in: CGRect(x: c.x - 11, y: c.y - 17, width: 22, height: 34), color: a.accent)
+        case .alarm: drawSymbol(g, a.symbol ?? "alarm.fill", in: CGRect(x: c.x - 17, y: c.y - 16, width: 34, height: 32), color: a.accent)
+        case .weather: drawSymbol(g, a.symbol ?? "umbrella.fill", in: CGRect(x: c.x - 17, y: c.y - 16, width: 34, height: 32), color: a.accent)
         case .call:
             let s = Face.clipped(a.detail, Self.laMiniFont, 110), w = Typo.width(s, Self.laMiniFont)
             drawLeft(g, s, font: Self.laMiniFont, x: c.x - w / 2, y: c.y + 9.5, color: a.accent)
@@ -454,20 +493,24 @@ extension Face {
         let lead = CGPoint(x: R.minX + side + 26, y: cy)
         laLeading(g, a, center: lead, size: 52, now: now)
         let small = Face.rounded(28, weight: .semibold)
-        if let name = AppRegistry.app(a.appID)?.title {
+        if let name = AppRegistry.app(a.appID)?.title ?? (a.kind == .iphone ? a.title : nil) {
             let x = lead.x + 26 + 16
             drawLeft(g, Face.clipped(name, small, eyesL - x), font: small, x: x, y: cy + 10, color: NSColor.white.withAlphaComponent(0.6))
         }
         // 右上：trailing 放大
         let right = R.maxX - side
         switch a.kind {
-        case .timer, .call:
-            let f = Face.rounded(a.kind == .timer ? 52 : 44, weight: .bold)
+        case .timer, .call, .alarm, .weather:
+            let f = Face.rounded(a.kind == .call ? 44 : 52, weight: .bold)
             let s = Face.clipped(a.detail, f, 300), w = Typo.width(s, f)
-            HPNumeric.draw(g, self, key: "la.big.\(a.appID)", s, font: f, x: right - w, y: cy + (a.kind == .timer ? 19 : 16), color: a.accent, now: now)   // 動效包
+            HPNumeric.draw(g, self, key: "la.big.\(a.uid)", s, font: f, x: right - w, y: cy + (a.kind == .call ? 16 : 19), color: a.accent, now: now)   // 動效包
         case .message:
             let f = Face.rounded(30, weight: .semibold), s = Face.clipped(a.title, f, right - 512 - laEyesHalf - S.gap), w = Typo.width(s, f)
             drawLeft(g, s, font: f, x: right - w, y: cy + 11, color: .white)
+        case .iphone:
+            let f = Face.rounded(44, weight: .bold)
+            let s = Face.clipped(a.detail, f, 300), w = Typo.width(s, f)
+            HPNumeric.draw(g, self, key: "la.big.\(a.uid)", s, font: f, x: right - w, y: cy + 16, color: a.accent, now: now)
         case .music, .assistant:
             laBars(g, in: CGRect(x: right - 52, y: cy - 20, width: 52, height: 40), color: a.accent, now: now)
         }
@@ -487,7 +530,12 @@ extension Face {
             buttons = [(.musicPrev, "backward.fill", nil, fill, .white), (.musicPlay, playing ? "pause.fill" : "play.fill", nil, fill, .white),
                        (.musicNext, "forward.fill", nil, fill, .white)]
         case .call: buttons = [(.callEnd, "phone.down.fill", nil, srgb(0xff3b30), .white)]
+        case .alarm:   // 響鈴：稍后＋停止；貪睡中：只有停止（取消貪睡）
+            let stop = (S.Button.alarmStop, String?.none, Optional(L("la.alarm.stop", "停止")), a.accent.withAlphaComponent(0.3), a.accent)
+            buttons = a.link == "snooze" ? [stop] : [(.alarmSnooze, nil, L("la.alarm.snooze", "稍后"), fill, .white), stop]
         case .message: buttons = [(.messageReply, nil, L("la.message.reply", "回复"), fill, .white)]
+        case .iphone: buttons = [(.activityHide, nil, L("la.iphone.hide", "收起"), fill, .white)]
+        case .weather: buttons = [(.weatherHide, nil, L("la.iphone.hide", "收起"), fill, .white)]   // 同一個「收起」，本地收起這一場雨
         case .assistant: break
         }
         var x = right
@@ -505,11 +553,12 @@ extension Face {
         let tf = Face.rounded(34, weight: .semibold), sf = Face.rounded(30, weight: .medium)
         let (title, sub): (String, String?) = {
             switch a.kind {
-            case .timer: return (a.title, nil)
+            case .timer, .alarm, .weather: return (a.title, nil)
             case .music: return (a.title, a.detail)
             case .call: return (a.title, nil)
             case .message: return (a.detail, nil)
             case .assistant: return (a.detail, nil)
+            case .iphone: return (a.title, L("la.iphone.from", "来自 iPhone"))
             }
         }()
         let tx = R.minX + side
@@ -531,7 +580,7 @@ extension Face {
 
     /// 錶面大膠囊除了計時器與音樂，還有沒有別的活動要它長大
     func faceHasOtherActivity(_ now: Double) -> Bool {
-        shellActivities(now).contains { a in a.kind == .call || a.kind == .message || a.kind == .assistant || (a.kind == .music && !musicActive(now)) }
+        shellActivities(now).contains { a in a.kind == .call || a.kind == .message || a.kind == .assistant || a.kind == .iphone || a.kind == .alarm || a.kind == .weather || (a.kind == .music && !musicActive(now)) }
     }
 
     /// 錶面的大膠囊（rect，眼睛在 ex、大小 ke）長開時：主活動不是計時器／正在播放就由這裡畫；其他活動畫成膠囊下方的 minimal；
@@ -569,6 +618,14 @@ extension Face {
             case .music, .assistant: laBars(g, in: CGRect(x: rc.x - 52, y: rc.y - 40, width: 104, height: 80), color: a.accent, now: now)
             case .message: drawSymbol(g, a.symbol ?? "message.fill", in: CGRect(x: rc.x - 52, y: rc.y - 46, width: 104, height: 92), color: a.accent)
             case .timer: laRing(g, a, center: rc, radius: 52, width: 15)
+            case .alarm, .weather:
+                let f = Self.rounded(64, weight: .semibold), w = Typo.width(a.detail, f)
+                drawLeft(g, a.detail, font: f, x: rc.x - 52 - 24 - w, y: c.y + 23, color: a.accent)
+                drawSymbol(g, a.symbol ?? (a.kind == .weather ? "umbrella.fill" : "alarm.fill"), in: CGRect(x: rc.x - 46, y: rc.y - 42, width: 92, height: 84), color: a.accent)
+            case .iphone:
+                let f = Self.rounded(56, weight: .bold), w = Typo.width(a.detail, f)
+                drawLeft(g, a.detail, font: f, x: rc.x - 52 - 24 - w, y: c.y + 20, color: a.accent)
+                laPhone(g, in: CGRect(x: rc.x - 32, y: rc.y - 40, width: 64, height: 80), color: a.accent)
             }
             g.restoreGState()
             acts.removeFirst(); drew = true
@@ -592,6 +649,8 @@ extension Face {
             case .call:
                 let f = Self.rounded(40, weight: .bold), w2 = Typo.width(a.detail, f)
                 drawLeft(g, a.detail, font: f, x: c.x - w2 / 2, y: c.y + 14, color: a.accent)
+            case .iphone: laPhone(g, in: CGRect(x: c.x - 18, y: c.y - 26, width: 36, height: 52), color: a.accent)
+            case .alarm, .weather: drawSymbol(g, a.symbol ?? (a.kind == .weather ? "umbrella.fill" : "alarm.fill"), in: CGRect(x: c.x - 26, y: c.y - 24, width: 52, height: 48), color: a.accent)
             }
             g.restoreGState()
             x += w + 18

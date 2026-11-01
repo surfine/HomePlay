@@ -19,6 +19,7 @@ let package = Package(
         .executableTarget(name: "homeplay-receiver", dependencies: ["Wire", "H264", "IAP2", "Session"], swiftSettings: v5,
                           linkerSettings: [.linkedFramework("CoreWLAN")]),
         .executableTarget(name: "homeplay-verify", swiftSettings: v5),
+        .executableTarget(name: "homeplay-glance", swiftSettings: v5),   // iPhone 即時動態 → JSON（私有 API 隔離在這裡）
         .executableTarget(name: "iap2-probe", dependencies: ["IAP2"],
                           linkerSettings: [.linkedFramework("IOBluetooth")]),
         .executableTarget(name: "iap2-offline-tests", dependencies: ["IAP2"]),

@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="zh-Hant"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><title>高度階梯</title><meta name="claude:viewport-fit-sides" content="cover">
+<style>
+:root{--bg:#f2f1ec;--paper:#faf9f6;--fg:#16181b;--muted:#5c6168;--line:#cfccc3;--grid:#e3e1da;
+  --acc:#c0145a;--acc-soft:rgba(192,20,90,.10);--frozen:#55728f;--frozen-soft:rgba(85,114,143,.12);
+  --ok:#23704f;--canvas:#e9e8e3;--shape:#ffffff;--shape-line:#8d9096;--dim:#b9bcc1;
+  --f-body:"SF Pro Text","PingFang TC",system-ui,sans-serif;
+  --f-mono:ui-monospace,"SF Mono",Menlo,monospace}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--bg:#111214;--paper:#18191c;--fg:#e9e7e2;--muted:#9da1a7;--line:#33363b;--grid:#212328;
+  --acc:#ff5a94;--acc-soft:rgba(255,90,148,.14);--frozen:#93b2d1;--frozen-soft:rgba(147,178,209,.14);
+  --ok:#6cc79c;--canvas:#1c1d21;--shape:#2c2e33;--shape-line:#7c8087;--dim:#4a4d53;color-scheme:dark}}
+:root[data-theme="dark"]{--bg:#111214;--paper:#18191c;--fg:#e9e7e2;--muted:#9da1a7;--line:#33363b;--grid:#212328;
+  --acc:#ff5a94;--acc-soft:rgba(255,90,148,.14);--frozen:#93b2d1;--frozen-soft:rgba(147,178,209,.14);
+  --ok:#6cc79c;--canvas:#1c1d21;--shape:#2c2e33;--shape-line:#7c8087;--dim:#4a4d53;color-scheme:dark}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font-family:var(--f-body);font-size:15px;line-height:1.65;
+  padding-block:32px 64px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));
+  background-image:linear-gradient(var(--grid) 1px,transparent 1px),linear-gradient(90deg,var(--grid) 1px,transparent 1px);
+  background-size:32px 32px}
+.wrap{max-width:1080px;margin:0 auto;display:flex;flex-direction:column;gap:56px}
+h1,h2,h3{margin:0;line-height:1.25;text-wrap:balance;font-weight:650}
+h1{font-size:clamp(30px,5.5vw,46px);letter-spacing:-.01em}
+h2{font-size:22px} h3{font-size:16px}
+p{margin:0}
+.eyebrow,.mono,code{font-family:var(--f-mono);font-variant-numeric:tabular-nums}
+.eyebrow{font-size:12px;letter-spacing:.08em;color:var(--acc);text-transform:uppercase}
+code{font-size:.86em;overflow-wrap:anywhere}
+.lede{color:var(--muted);max-width:66ch}
+header{display:flex;flex-direction:column;gap:10px;border-bottom:2px solid var(--acc);padding-bottom:20px}
+.three{display:grid;gap:0;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));border:1px solid var(--line);background:var(--paper)}
+.three>div{padding:18px 20px;border-right:1px solid var(--line);border-bottom:1px solid var(--line);display:flex;flex-direction:column;gap:8px}
+.three h2{font-size:15px;font-family:var(--f-mono);letter-spacing:.04em;color:var(--acc)}
+.three ul{margin:0;padding-left:1.1em} .three li{margin:.25em 0}
+section{display:flex;flex-direction:column;gap:16px}
+.sec-head{display:flex;flex-direction:column;gap:4px;max-width:70ch}
+.sec-head p{color:var(--muted)}
+.pair{display:grid;gap:16px;grid-template-columns:repeat(auto-fit,minmax(min(300px,100%),1fr))}
+.quad{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(min(220px,100%),1fr))}
+figure{margin:0;display:flex;flex-direction:column;gap:6px;min-width:0}
+figure img,figure svg{display:block;max-width:100%;width:100%;height:auto}
+figure img{border:1px solid var(--line)}
+figcaption{font-family:var(--f-mono);font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums}
+.tag{font-family:var(--f-mono);font-size:11px;letter-spacing:.06em;text-transform:uppercase;padding:1px 6px;border:1px solid currentColor;align-self:flex-start}
+.tag.now{color:var(--muted)} .tag.goal{color:var(--acc)} .tag.frz{color:var(--frozen)}
+.ov{position:relative}
+.ov svg{position:absolute;inset:0;width:100%;height:100%}
+.diagram{background:var(--canvas);border:1px solid var(--line)}
+.scroll{overflow-x:auto;border:1px solid var(--line);background:var(--paper)}
+table{border-collapse:collapse;width:100%;min-width:620px;font-size:14px}
+th,td{text-align:left;vertical-align:top;padding:9px 12px;border-bottom:1px solid var(--line)}
+th{font-family:var(--f-mono);font-size:11.5px;letter-spacing:.05em;color:var(--muted);font-weight:500;text-transform:uppercase}
+td.num,th.num{text-align:right;font-variant-numeric:tabular-nums;font-family:var(--f-mono)}
+tr:last-child td{border-bottom:0}
+tr.frz td{color:var(--frozen)}
+.note{color:var(--muted);font-size:13.5px}
+.callout{border-left:3px solid var(--frozen);padding:8px 14px;background:var(--frozen-soft);font-size:14px}
+.callout.acc{border-color:var(--acc);background:var(--acc-soft)}
+footer{border-top:1px solid var(--line);padding-top:14px;font-family:var(--f-mono);font-size:13px}
+a{color:var(--acc)}
+/* SVG 圖元：只用 token */
+.g-grid{stroke:var(--grid);stroke-width:1}
+.g-shape{fill:var(--shape);stroke:var(--shape-line);stroke-width:2}
+.g-dim{fill:var(--dim)}
+.g-ink{fill:var(--fg)}
+.g-muted{fill:var(--muted)}
+.g-acc{stroke:var(--acc);stroke-width:3;fill:none}
+.g-accf{fill:var(--acc)}
+.g-frz{stroke:var(--frozen);stroke-width:3;fill:none}
+.g-frzf{fill:var(--frozen)}
+.g-ok{stroke:var(--ok);stroke-width:3;fill:none}
+.g-okf{fill:var(--ok)}
+.g-dash{stroke-dasharray:10 8}
+.g-hit{fill:none;stroke:var(--muted);stroke-width:2;stroke-dasharray:6 6}
+.g-band{fill:var(--acc-soft)}
+.g-fbandf{fill:var(--frozen-soft)}
+.t{font-family:var(--f-mono);font-variant-numeric:tabular-nums}
+.cards{display:grid;gap:20px;grid-template-columns:repeat(auto-fit,minmax(min(300px,100%),1fr))}
+.card{display:flex;flex-direction:column;gap:8px;text-decoration:none;color:inherit;border-top:2px solid var(--fg);padding-top:10px}
+.card:hover h2{color:var(--acc)}
+.card .thumb{aspect-ratio:1/1;overflow:hidden;border:1px solid var(--line);background:var(--canvas)}
+.card .thumb img,.card .thumb svg{width:100%;height:100%;object-fit:cover;display:block;border:0}
+</style></head>
+<body><div class="wrap">
+<header><span class="eyebrow">05 · acbf458</span><h1>高度階梯與內縮契約</h1><p class="lede">稽核前列表行有 6 種高度、主按鈕 6 種、玻璃膠囊 5 種；同一面板最多 3 條左緣、5 種內縮。這張稿是收斂後的唯一來源。</p></header>
+<div class="three">
+<div><h2>要解決什麼</h2><ul><li>同一角色有多種高度（列表行 66–116 共 6 種、CTA 60–125 共 6 種），並排時高低錯落。</li><li>同一容器多條左緣（例：小工具圖庫 32／40／48／54／56）。</li></ul></div>
+<div><h2>改法（引用 token）</h2><ul><li>高度只從 <code>HPTokens.Size</code> 取：tap 88、topBar 90、row 88、rowCompact 72、cta 96、pill 104、round 150、roundLarge 240、chip 68、switchTrack 66、badge 48、dot 14。</li><li>內縮 <code>HPGrid.Inset</code>：card 40、nested 24、menu 12、app 64。</li><li>節奏 <code>HPGrid.Rhythm</code>：8／24／32。</li></ul></div>
+<div><h2>怎麼驗收</h2><ul><li>每個容器取出控件矩形：左緣、右緣各只有一個值。</li><li>控件高度都在階梯表裡；不在表裡的只能是 frozen 豁免。</li><li>比 88 矮的可點元件命中補到 88（頁點例外，有 AX 替代）。</li></ul></div>
+</div>
+
+<section><div class="sec-head"><h2>高度階梯</h2><p>一個角色一個高度。條高按 1024 單位等比；紅虛線是 <code>Size.tap</code> 88，比它矮的視覺元件命中仍要補到 88（頁點除外，見下）。</p></div>
+<figure class="diagram"><svg viewBox="0 0 1024 400" role="img" aria-label="高度階梯等比條" xmlns="http://www.w3.org/2000/svg"><defs><pattern id="g05a" width="64" height="64" patternUnits="userSpaceOnUse"><path d="M 64 0 L 0 0 0 64" class="g-grid" fill="none"/></pattern></defs><rect x="0" y="0" width="1024" height="400" fill="url(#g05a)"/><rect x="20" y="266" width="52" height="14" class="g-ink" opacity="0.85"/><text x="46" y="300" font-size="16" class="t g-ink" text-anchor="middle" font-weight="400">14</text><text x="46" y="316" font-size="13" class="t g-muted" text-anchor="end" transform="rotate(-50 46 316)">dot</text><rect x="90" y="256" width="52" height="24" class="g-ink" opacity="0.85"/><text x="116" y="300" font-size="16" class="t g-ink" text-anchor="middle" font-weight="400">24</text><text x="116" y="316" font-size="13" class="t g-muted" text-anchor="end" transform="rotate(-50 116 316)">sourceBadge</text><rect x="160" y="232" width="52" height="48" class="g-ink" opacity="0.85"/><text x="186" y="300" font-size="16" class="t g-ink" text-anchor="middle" font-weight="400">48</text><text x="186" y="316" font-size="13" class="t g-muted" text-anchor="end" transform="rotate(-50 186 316)">badge</text><rect x="230" y="218" width="52" height="62" class="g-frzf" opacity="0.55"/><text x="256" y="300" font-size="16" class="t g-ink" text-anchor="middle" font-weight="400">62</text><text x="256" y="316" font-size="13" class="t g-muted" text-anchor="end" transform="rotate(-50 256 316)">liveActivity</text><rect x="300" y="214" width="52" height="66" class="g-ink" opacity="0.85"/><text x="326" y="300" font-size="16" class="t g-ink" text-anchor="middle" font-weight="400">66</text><text x="326" y="316" font-size="13" class="t g-muted" text-anchor="end" transform="rotate(-50 326 316)">switchTrack</text><rect x="370" y="212" width="52" height="68" class="g-ink" opacity="0.85"/><text x="396" y="300" font-size="16" class="t g-ink" text-anchor="middle" font-weight="400">68</text><text x="396" y="316" font-size="13" class="t g-muted" text-anchor="end" transform="rotate(-50 396 316)">chip</text><rect x="440" y="208" width="52" height="72" class="g-ink" opacity="0.85"/><text x="466" y="300" font-size="16" class="t g-ink" text-anchor="middle" font-weight="400">72</text><text x="466" y="316" font-size="13" class="t g-muted" text-anchor="end" transform="rotate(-50 466 316)">rowCompact</text><rect x="510" y="192" width="52" height="88" class="g-accf" opacity="0.85"/><text x="536" y="300" font-size="16" class="t g-ink" text-anchor="middle" font-weight="400">88</text><text x="536" y="316" font-size="13" class="t g-muted" text-anchor="end" transform="rotate(-50 536 316)">tap</text><rect x="580" y="192" width="52" height="88" class="g-ink" opacity="0.85"/><text x="606" y="300" font-size="16" class="t g-ink" text-anchor="middle" font-weight="400">88</text><text x="606" y="316" font-size="13" class="t g-muted" text-anchor="end" transform="rotate(-50 606 316)">row</text><rect x="650" y="190" width="52" height="90" class="g-ink" opacity="0.85"/><text x="676" y="300" font-size="16" class="t g-ink" text-anchor="middle" font-weight="400">90</text><text x="676" y="316" font-size="13" class="t g-muted" text-anchor="end" transform="rotate(-50 676 316)">topBar</text><rect x="720" y="184" width="52" height="96" class="g-ink" opacity="0.85"/><text x="746" y="300" font-size="16" class="t g-ink" text-anchor="middle" font-weight="400">96</text><text x="746" y="316" font-size="13" class="t g-muted" text-anchor="end" transform="rotate(-50 746 316)">cta</text><rect x="790" y="176" width="52" height="104" class="g-ink" opacity="0.85"/><text x="816" y="300" font-size="16" class="t g-ink" text-anchor="middle" font-weight="400">104</text><text x="816" y="316" font-size="13" class="t g-muted" text-anchor="end" transform="rotate(-50 816 316)">pill</text><rect x="860" y="130" width="52" height="150" class="g-ink" opacity="0.85"/><text x="886" y="300" font-size="16" class="t g-ink" text-anchor="middle" font-weight="400">150</text><text x="886" y="316" font-size="13" class="t g-muted" text-anchor="end" transform="rotate(-50 886 316)">round</text><rect x="930" y="40" width="52" height="240" class="g-ink" opacity="0.85"/><text x="956" y="300" font-size="16" class="t g-ink" text-anchor="middle" font-weight="400">240</text><text x="956" y="316" font-size="13" class="t g-muted" text-anchor="end" transform="rotate(-50 956 316)">roundLarge</text><line x1="10" y1="192" x2="1000" y2="192" class="g-acc g-dash"/><text x="1000" y="186" font-size="16" class="t g-accf" text-anchor="end" font-weight="400">88 命中下限</text></svg><figcaption>灰藍＝frozen（liveActivity 62，系統尺寸）</figcaption></figure>
+<div class="scroll"><table><tr><th>令牌</th><th class="num">值</th><th>誰在用</th></tr><tr><td><code>HPTokens.Size.tap</code></td><td class="num">88</td><td>最小點按範圍（44 pt）。視覺可以比它小，命中不行</td></tr><tr><td><code>HPTokens.Size.topBar</code></td><td class="num">90</td><td>頂欄圓鈕：返回、關閉、‹/✕、編輯欄兩顆膠囊</td></tr><tr><td><code>HPTokens.Size.row</code></td><td class="num">88</td><td>列表行：控制中心展開、Sheet 清單、資料夾</td></tr><tr><td><code>HPTokens.Size.rowCompact</code></td><td class="num">72</td><td>選項行：兩張設定卡共用（命中補到 88）</td></tr><tr><td><code>HPTokens.Size.cta</code></td><td class="num">96</td><td>卡片底部主按鈕、彈窗按鈕、控制中心底欄</td></tr><tr><td><code>HPTokens.Size.pill</code></td><td class="num">104</td><td>玻璃膠囊鈕；pairedButton 440×104 同高</td></tr><tr><td><code>HPTokens.Size.round</code></td><td class="num">150</td><td>圓形主按鈕</td></tr><tr><td><code>HPTokens.Size.roundLarge</code></td><td class="num">240</td><td>對講的說話鈕</td></tr><tr><td><code>HPTokens.Size.chip</code></td><td class="num">68</td><td>場景／篩選晶片（命中補到 88）</td></tr><tr><td><code>HPTokens.Size.switchTrack</code></td><td class="num">66</td><td>開關軌道</td></tr><tr><td><code>HPTokens.Size.badge</code></td><td class="num">48</td><td>編輯模式移除徽標</td></tr><tr><td><code>HPTokens.Size.dot</code></td><td class="num">14</td><td>所有頁點</td></tr><tr class="frz"><td><code>HPTokens.Size.liveActivity</code></td><td class="num">62</td><td>系統 Live Activity，不進階梯 · frozen</td></tr><tr><td><code>HPTokens.Size.sourceBadge</code></td><td class="num">24</td><td>藥丸右下 CarPlay 角標（8908eac）</td></tr><tr><td><code>HPTokens.Size.sourceCapsule</code></td><td class="num">232×90</td><td>長按藥丸拉出的 HomeView／CarPlay 兩顆（8908eac）</td></tr></table></div>
+<p class="note">來源：<code>Sources/homeplay-pet/Design/README.md</code>「尺寸 HPTokens.Size」、<code>docs/plans/controls-audit.md</code> §2；階梯本體 <code>acbf458</code>。</p>
+</section>
+
+<section><div class="sec-head"><h2>容器：一條左緣、一條右緣</h2><p>標題、清單、預覽、主按鈕都對 <code>HPGrid.Inset.card</code> 40；行內距 <code>nested</code> 24；長按選單唯一邊線 <code>menu</code> 12；App 內容 <code>app</code> 64。卡片內只用 <code>HPGrid.Rhythm</code>：rowGap 8、groupGap 24、sectionGap 32。間距只用 8／16／24／32／48／64／96。</p></div>
+<figure class="diagram"><svg viewBox="80 0 900 760" role="img" aria-label="容器內縮與節奏" xmlns="http://www.w3.org/2000/svg"><defs><pattern id="g05b" width="64" height="64" patternUnits="userSpaceOnUse"><path d="M 64 0 L 0 0 0 64" class="g-grid" fill="none"/></pattern></defs><rect x="80" y="0" width="900" height="760" fill="url(#g05b)"/><rect x="112" y="40" width="800" height="680" rx="56" class="g-shape"/><line x1="152" y1="20" x2="152" y2="740" class="g-acc"/><line x1="872" y1="20" x2="872" y2="740" class="g-acc"/><text x="132" y="16" font-size="16" class="t g-accf" text-anchor="middle" font-weight="400">40</text><text x="892" y="16" font-size="16" class="t g-accf" text-anchor="middle" font-weight="400">40</text><text x="152" y="112" font-size="40" class="g-ink" text-anchor="start" font-weight="650" font-family="SF Pro Text, PingFang TC, system-ui, sans-serif">標題</text><rect x="152" y="144" width="720" height="88" class="g-dim"/><rect x="152" y="240" width="720" height="88" class="g-dim"/><rect x="152" y="352" width="720" height="88" class="g-dim"/><rect x="152" y="448" width="720" height="88" class="g-dim"/><rect x="176" y="164" width="200" height="48" class="g-band"/><text x="184" y="196" font-size="16" class="t g-accf" text-anchor="start" font-weight="400">nested 24</text><line x1="890" y1="232" x2="890" y2="240" class="g-acc"/><text x="898" y="242" font-size="16" class="t g-accf" text-anchor="start" font-weight="400">rowGap 8</text><line x1="890" y1="328" x2="890" y2="352" class="g-acc"/><text x="898" y="346" font-size="16" class="t g-accf" text-anchor="start" font-weight="400">groupGap 24</text><line x1="890" y1="536" x2="890" y2="568" class="g-acc"/><text x="898" y="558" font-size="16" class="t g-accf" text-anchor="start" font-weight="400">sectionGap 32</text><rect x="152" y="568" width="720" height="96" rx="48" class="g-ink"/><text x="512" y="626" font-size="22" class="t g-muted" text-anchor="middle" font-weight="400">cta 96</text><text x="140" y="196" font-size="16" class="t g-muted" text-anchor="end" font-weight="400">row 88</text></svg><figcaption>行 88 · 行間 8 · 組間 24 · 段間 32 · 底部 cta 96</figcaption></figure>
+</section>
+
+<section><div class="sec-head"><h2>批 C（已做，99fb15d）</h2><p>徽標縮到 48 後，主畫面「−」的點按範圍由 <code>SBUI.badgeHit</code> 補到 <code>Size.tap</code> 88（固定外擴 16 只剩 80）。</p></div>
+<div class="scroll"><table><tr><th>項</th><th>之前</th><th>之後</th><th>備註</th></tr>
+<tr><td>玻璃膠囊</td><td class="num">88 / 96 / 100</td><td class="num">104</td><td><code>Size.pill</code></td></tr>
+<tr><td>圓形主按鈕</td><td class="num">120</td><td class="num">150</td><td><code>Size.round</code>；對講用 <code>roundLarge</code> 240</td></tr>
+<tr><td>移除徽標</td><td class="num">40 / 56</td><td class="num">48</td><td><code>Size.badge</code></td></tr>
+<tr><td>Smart Stack 右側頁點</td><td class="num">10</td><td class="num">14</td><td>當指示器；AX 已有「第 n 個，共 m 個」，不補命中</td></tr>
+<tr><td>資料夾多頁不可達分支</td><td>存在</td><td>刪除</td><td>—</td></tr>
+</table></div>
+</section>
+
+<section><div class="sec-head"><h2>豁免（frozen）</h2><p>以下是官方量測或幾何約束，刻意不進階梯，不准「順手修正」。</p></div>
+<div class="scroll"><table><tr><th>項</th><th class="num">值</th><th>性質</th></tr>
+<tr class="frz"><td>主畫面網格</td><td class="num">98.5 / 225 / 152</td><td>官方幀逐項量</td></tr>
+<tr class="frz"><td>問候基線</td><td class="num">139 / 182</td><td>官方幀</td></tr>
+<tr class="frz"><td>頭像中心</td><td class="num">152</td><td>官方幀</td></tr>
+<tr class="frz"><td>面板內距</td><td class="num">14</td><td>官方幀（glass-audit §1）</td></tr>
+<tr class="frz"><td>Live Activity</td><td class="num">62</td><td>系統尺寸</td></tr>
+<tr class="frz"><td>控制中心頁點命中</td><td class="num">60 × 26</td><td>—</td></tr>
+</table></div>
+<p class="callout acc">README 豁免段仍列「應用右上時鐘右緣 931」「音樂來源膠囊中心 138.44」；自 <code>98d9a16</code> 起程式碼已是 960（<code>HPGrid.App.trailing</code>）與 105，兩者不再是豁免。</p>
+</section>
+<footer><a href="index.html">← 回到索引</a>　·　HomePlay 2 對齊收尾設計稿　·　畫布 1024 × 1024，1 單位 ≈ 0.53 pt</footer>
+</div></body></html>

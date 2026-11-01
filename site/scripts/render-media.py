@@ -32,10 +32,12 @@ GROUPS = {
         ("ambient-night", ["--finish", "gray", "--face", "idle", "--yaw", "0.28", "--pitch", "0.1", "--hour", "22", "--time", "23:12"]),
         ("asleep-night", ["--finish", "gray", "--face", "asleep", "--yaw", "0.28", "--pitch", "0.1", "--hour", "2", "--time", "02:07"]),
     ],
-    # 錶面一覽：正面、同一個時間（10:09，像 Apple 的產品圖），八款各一張
+    # 錶面一覽：正面、同一個時間（10:09，像 Apple 的產品圖），十款各一張
+    # 清單要跟官網文案的「10 款」與 README 一致：島、照片、模組、Typograph、Flow、天氣、行事曆、
+    # 陪伴的痕跡、黑、System 6。少一款就會出現「寫 10 款、只看到 8 張」。
     "styles": [(f"style-{st}", ["--finish", "silver", "--face", "idle", "--style", st, "--clock", "bold", "--yaw", "0", "--pitch", "0.04",
                                 "--near", "--hour", "16", "--time", "10:09", "--pointer", "0,0"])
-               for st in "island flow modular analog weather calendar growth system6".split()],
+               for st in "island photos modular analog flow weather calendar growth black system6".split()],
     # 轉一圈：每 10° 一張，官網拖動／捲動時逐張換
     "spin": [(f"spin/{i:02d}", ["--finish", "g4", "--face", "idle", "--yaw", f"{i * 2 * math.pi / 36:.4f}", "--pitch", "0.1", "--near", "--hour", "10"])
              for i in range(36)],
@@ -59,6 +61,8 @@ def shoot(path, args, env=None):
     extra = ([] if "--style" in args else ["--style", "island"]) + (["--lang", LANG] if LANG else [])
     if "style-weather" in os.path.basename(path):  # 天氣錶面：固定的假資料，不依賴網路
         env = dict(env or os.environ, HOMEPLAY_WEATHER_JSON=WEATHER_JSON)
+    if "style-photos" in os.path.basename(path):  # 照片錶面：用內建的示範照片（傍晚的海邊），否則拍到的是「放幾張照片進來」的空狀態
+        extra.append("--demo-official")
     for attempt in range(3):   # 機器忙時偶爾等不到第一張圖：最多重拍兩次
         if subprocess.run([os.path.join(HERE, "shoot.sh"), path, *args, *extra], env=env).returncode == 0:
             return

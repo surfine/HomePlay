@@ -130,8 +130,16 @@ extension PetView {
         let open = Shell.nav.screen != .face || Shell.nav.overlay != .none
         // CarPlay 畫面優先：直播一來，外殼全部收回
         if shellBlocked, open { shellNavigate(.carPlay); return }
-        // 遠距：沒人靠近一分鐘，主畫面與 App 淡回錶面
-        if open, now - Shell.lastActive > Shell.idleTimeout { shellNavigate(.idle); PersonalGate.hint = nil; Shell.homeEditing = false; Shell.widgetGallery = false }   // P02：回錶面就離開編輯模式
+        // 2.0 home-3：遠看（Shell/FarGlance.swift）——App 有一句話、人在遠處 8 秒沒碰就換成它；正在進行的事（ongoing）不回錶面
+        var farOngoing = false
+        if case .app = Shell.nav.screen, Shell.nav.overlay == .none, Shell.appMorph == nil, let a = Shell.currentApp, !PersonalGate.locks(a.id) {
+            let gl = a.farGlance(face: face, now: now)
+            let want = Shell.wantsFar(forced: Shell.forceFar, snapshot: SnapshotPrivacy.active, reveal: face.reveal, idle: now - Shell.lastActive, hasGlance: gl != nil)
+            if want != Shell.far { Shell.far = want; face.forceDirty = true }
+            farOngoing = want && gl?.ongoing == true
+        } else if Shell.far { Shell.far = false; face.forceDirty = true }
+        // 遠距：沒人靠近一分鐘，主畫面與 App 淡回錶面（遠看在顯示正在進行的事時不回）
+        if open, !farOngoing, now - Shell.lastActive > Shell.idleTimeout { shellNavigate(.idle); PersonalGate.hint = nil; Shell.homeEditing = false; Shell.widgetGallery = false }   // P02：回錶面就離開編輯模式
         if face.style != Shell.lastStyle { Shell.lastStyle = face.style; Shell.lastPageAt = now }
     }
 
@@ -167,6 +175,7 @@ extension PetView {
         guard let kind else { return false }
         S.down = (e, uv, kind, at)
         if kind == .tap, let p = shellPoint(uv) { HPGlass.pressDown(p); face.forceDirty = true }   // 2.0 R14：按下那一刻就變亮放大
+        if let p = shellPoint(uv), Shell.nav.screen.coversFace { sourceSwitcherArm(e, at: p) }   // 2.0 align D：會話在背景時長按藥丸＝兩顆切換
         return true
     }
 
@@ -174,6 +183,7 @@ extension PetView {
         let S = ShellInput.self, uv = S.uvOverride ?? uv0
         S.dragUV = uv   // 動效包
         if S.passThrough || S.replayed { return false }
+        if sourceSwitcherDragged(uv: uv) { return true }   // 2.0 align D：拉開兩顆之後，拖到哪顆選哪顆
         if SBInputState.press != nil { return sbMouseDragged(e, uv: uv) }   // 2.0 SpringBoard
         if FacePaging.drag != nil, facePageDragged(e) { return true }        // 2.0：錶面跟手換頁（直向交回下面原本的路）
         guard let d = S.down else { return false }
@@ -218,6 +228,7 @@ extension PetView {
         let S = ShellInput.self
         if S.passThrough { return false }
         if S.replayed { S.replayed = false; return false }
+        if sourceSwitcherReleased() { return true }   // 2.0 align D
         if SBInputState.press != nil { return sbMouseUp(e, uv: nil) }   // 放手的位置用最後一次拖到的點
         if FacePaging.drag != nil, facePageRelease(now: CACurrentMediaTime()) { ShellInput.down = nil; return true }   // 2.0：錶面跟手換頁
         FacePaging.drag = nil   // 2.0 SpringBoard
@@ -256,8 +267,9 @@ extension PetView {
         return true
     }
 
-    /// 2.0 P10（HV-SPECS-65）：頂端中間往下滑＝ClioTalk 立刻開始聽（👀 膠囊直接變成聆聽的水滴，照錶面年代）；已經開著就不重來
-    private func shellSwipeListen() {
+    /// 2.0 P10（HV-SPECS-65）：頂端中間往下滑＝ClioTalk 立刻開始聽（👀 膠囊直接變成聆聽的水滴，照錶面年代）；已經開著就不重來。
+    /// 2.0 home-2：提醒事項、行事曆的「＋ 新增」也走這裡（HomeView 沒有鍵盤：用說的）
+    func shellSwipeListen() {
         guard Shell.nav.overlay != .clioTalk else { return }
         ShellInput.swipeListen = true
         shellNavigate(.openClioTalk)
@@ -282,8 +294,10 @@ extension PetView {
     func shellTap(_ uv: CGPoint?, long: Bool = false) {   // 2.0 P05：輔助使用的「按下」也走這裡（Shell/ShellAccessibility.swift）
         if TimerChime.ringing { TimerChime.stop() }   // 2.0 depth：計時器在響：點哪裡都先停聲音（點到的東西照常）
         guard let p = shellPoint(uv) else { return }
+        if Shell.far, case .app = Shell.nav.screen { Shell.far = false; Shell.lastActive = CACurrentMediaTime(); face.forceDirty = true; return }   // 2.0 home-3：遠看時點一下＝回到近看（不穿透）
         if let m = Shell.appMorph {
-            // 2.0 R14：開到一半又按返回：從當下的大小縮回去（不等它播完）
+            // 2.0 R14：開到一半又按返回：從當下的大小縮回去（不等它播完）；藥丸＝Home 鍵，開關 App 的過場中也能按（Esc 也不等）
+            if LiveActivityStack.pillHit.contains(p) { shellHomeKey(now: CACurrentMediaTime()); return }
             if m.opening, Shell.closeButton.insetBy(dx: -8, dy: -8).contains(p) { shellNavigate(.back) }
             return
         }
@@ -297,8 +311,10 @@ extension PetView {
             Shell.peopleSheet = false; face.forceDirty = true
             return
         }
-        // 頂端藥丸：點＝打開那件事（深連結）、按住＝展開大卡、大卡外面點一下＝收回（2.0 P03，Shell/LiveActivityStack.swift）
-        if LiveActivityStack.tap(p, long: long, now: now, face: face, open: { a in LiveActivityStack.open(a) { shellOpenApp($0) } }) {
+        // 頂端藥丸＝Home 鍵（2.0 align C）：點＝回上一層（跟 Esc 同一條前置順序）、按住＝展開第一個活動、分體小藥丸點＝開它自己的活動、
+        // 大卡外面點一下＝收回（Shell/LiveActivityStack.swift）
+        if LiveActivityStack.tap(p, long: long, now: now, face: face, open: { a in LiveActivityStack.open(a) { shellOpenApp($0) } },
+                                 home: { self.shellHomeKey(now: now) }) {
             face.forceDirty = true; return
         }
         switch Shell.nav.screen {
@@ -324,6 +340,12 @@ extension PetView {
             }
         case .face: break
         }
+    }
+
+    /// 頂端藥丸＝Home 鍵：分派一次 .back，前面先過 Esc 的那串（sheet → 選單 → 資料夾 → 疊層 → 畫面）。不做雙擊（單擊會被拖慢 250–300 ms）
+    func shellHomeKey(now: Double) {
+        if sbDismissTop(now: now) { face.forceDirty = true; return }
+        shellNavigate(.back)
     }
 
     // MARK: 控制中心跟手（2.0 R14）
@@ -388,6 +410,7 @@ extension PetView {
         let dir = e.scrollingDeltaY > 0 ? -1 : (e.scrollingDeltaY < 0 ? 1 : 0)   // 跟原本滾輪換錶面同向
         switch Shell.nav.screen {
         case .app:
+            if Shell.far { Shell.far = false; Shell.lastActive = now; face.forceDirty = true; return true }   // 2.0 home-3：遠看時捲一下＝回到近看
             if let a = Shell.currentApp, !PersonalGate.locks(a.id), a.handleScroll(precise ? e.scrollingDeltaY : e.scrollingDeltaY * 10, now: now) { face.forceDirty = true; return true }
             return !precise
         case .home, .library:
@@ -512,11 +535,13 @@ extension PetView {
         Shell.lastActive = CACurrentMediaTime() + 3600   // 快照不要中途回錶面
         face.forceDirty = true
         applySBSnapshotFlags()   // 2.0 SpringBoard：--home-page、--home-menu、--home-folder、--home-gallery、--home-drag…
+        if SourceSwitcher.demo == .carPlay { SourceSwitcher.open = (CACurrentMediaTime() - 10, .carPlay) }   // 2.0 align D：--source carplay 拍拉開的兩顆
         if let script = ProcessInfo.processInfo.environment["HOMEPLAY_SHELL_SCRIPT"] { runShellScript(script) }
     }
 
     /// 自檢用：照腳本送假的滑鼠／鍵盤／滾輪事件走真的 PetView 入口（uv 直接給，不經 3D 投影），每步記一行日誌。
     /// HOMEPLAY_SHELL_SCRIPT="key:126;tap:0.3,0.25;drag:0.85,0.05,0,-40;wheel:-1"（tap/drag 的 x,y 是螢幕 uv；drag 的 dx,dy 是視窗點、y 往上）
+    /// hold:x,y,du,dv＝按住 0.6 s 再拖到 (x+du, y+dv)（uv）放手（長按藥丸的兩顆切換，2.0 align D）
     private func runShellScript(_ script: String) {
         let steps = script.split(separator: ";").map(String.init)
         for (i, step) in steps.enumerated() {
@@ -539,6 +564,15 @@ extension PetView {
                     }
                     if let u = mouse(.leftMouseUp, NSPoint(x: base.x + dx, y: base.y + dy)) { self.mouseUp(with: u) }
                     ShellInput.uvOverride = nil
+                case "hold" where nums.count == 4:
+                    ShellInput.uvOverride = CGPoint(x: nums[0], y: nums[1])
+                    if let d = mouse(.leftMouseDown, base) { self.mouseDown(with: d) }
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
+                        ShellInput.uvOverride = CGPoint(x: nums[0] + nums[2], y: nums[1] + nums[3])
+                        if let e = mouse(.leftMouseDragged, base) { self.mouseDragged(with: e) }
+                        if let u = mouse(.leftMouseUp, base) { self.mouseUp(with: u) }
+                        ShellInput.uvOverride = nil
+                    }
                 case "key" where nums.count == 1:
                     if let e = NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime,
                                                 windowNumber: win.windowNumber, context: nil, characters: "", charactersIgnoringModifiers: "",

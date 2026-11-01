@@ -99,7 +99,11 @@ enum PersonalGate {
     /// 主執行緒用
     static var allowed: Bool { allowed(inputs) }
 
-    static func locks(_ appID: String) -> Bool { locks(appID, inputs) || AppProviders.locks(appID) }   // 2.0 Web App：照提供者自己的門
+    static func locks(_ appID: String) -> Bool {
+        // 2.0 home-2：設了家人共用清單時，提醒事項不整個鎖——App 自己只畫那一份（RemindersApp.sharedMode）；遠端訪客照舊鎖
+        if appID == "reminders", RemindersApp.sharedListID != nil, !inputs.remoteGuest { return false }
+        return locks(appID, inputs) || AppProviders.locks(appID)   // 2.0 Web App：照提供者自己的門
+    }
     /// 純函數：個人 App 門關著就鎖；2.0 idle: 訪客裝置在用時，允許清單外的 App（家庭、尋找…）也鎖（Remote/RemoteInput.swift）
     static func locks(_ appID: String, _ i: Inputs) -> Bool {
         (personalApps.contains(appID) && !allowed(i)) || (i.remoteGuest && RemotePrivacy.guestLocks(appID))

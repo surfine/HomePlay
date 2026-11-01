@@ -198,7 +198,7 @@ final class IntercomApp: PetApp {
         let outName = demo != nil ? L("intercom.demo.output", "客厅 HomePod") : (output ?? L("intercom.thisMac", "这台 Mac"))
         let of = AppUI.font(34, .semibold), olabel = String(format: L("intercom.playsOn", "播放到：%@"), outName)
         let ow = min(Typo.width(olabel, of) + 120, AppUI.contentW)
-        outputRect = CGRect(x: 512 - ow / 2, y: T.outputBaseline - 60, width: ow, height: 88)
+        outputRect = CGRect(x: 512 - ow / 2, y: T.outputBaseline - 16 - HPTokens.Size.pill / 2, width: ow, height: HPTokens.Size.pill)   // 2.0 align F：88 → pill 104，中心不動
         HPComponents.glassButton(g, face, outputRect, olabel, symbol: "airplayaudio", size: 32)
 
         let recording = audio.recording || demo == "talking"

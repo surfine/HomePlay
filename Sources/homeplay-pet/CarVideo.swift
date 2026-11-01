@@ -166,8 +166,11 @@ final class CarVideoPlayer: NSObject {
         if let w = bigWindow { w.close(); bigWindow = nil; return }
         let w = CarVideoWindow(player: player, near: frame)
         w.onClose = { [weak self] in self?.bigWindow = nil }
+        let planned = w.frame
         w.makeKeyAndOrderFront(nil)
+        if w.frame != w.intendedFrame { w.setFrame(w.intendedFrame, display: true) }   // 被系統夾走就設回去
         bigWindow = w
+        appendDiag("carvideo.log", "big: mouse=\(NSEvent.mouseLocation) near=\(frame.map { "\($0)" } ?? "nil") intended=\(w.intendedFrame) planned=\(planned) shown=\(w.frame) screen=\(w.screen?.localizedName ?? "nil")")
     }
     var isBig: Bool { bigWindow != nil }
 
@@ -334,17 +337,27 @@ final class CarVideoPlayer: NSObject {
 /// 放大的影片視窗：16:9、可縮放、浮在最上層、所有桌面都在；雙擊或 Esc 收回桌寵螢幕。
 final class CarVideoWindow: NSPanel {
     var onClose: (() -> Void)?
+    /// 要的位置（全域座標）。macOS 會把新視窗夾回主螢幕（2026-10-31 carvideo.log：要 985,1119 → 建好變 985,287 → 顯示時又推到 750,287），
+    /// 由下面覆寫的 constrainFrameRect 放行，顯示後再核對一次
+    var intendedFrame: NSRect = .zero
     init(player: AVPlayer, near: NSRect?) {
-        let vis = NSScreen.main?.visibleFrame ?? NSRect(x: 0, y: 0, width: 1440, height: 900)
+        // 用按下去那一刻游標所在的螢幕（點的就是桌寵），不用 NSScreen.main：2026-10-31 真機，桌寵在 Studio Display 上，
+        // 視窗卻開在 MacBook 螢幕，看起來像按鈕沒作用。傳進來的 near 不一定是畫面上那個桌寵視窗，不在這個螢幕上就改以游標為錨點
+        let mouse = NSEvent.mouseLocation
+        let screen = NSScreen.screens.first { NSMouseInRect(mouse, $0.frame, false) } ?? NSScreen.main
+        let vis = screen?.visibleFrame ?? NSRect(x: 0, y: 0, width: 1440, height: 900)
+        let near = near.flatMap { vis.intersects($0) ? $0 : nil } ?? NSRect(x: mouse.x - 1, y: mouse.y - 1, width: 2, height: 2)
         let w = min(960, vis.width * 0.6), h = w * 9 / 16
-        var origin = NSPoint(x: vis.midX - w / 2, y: vis.midY - h / 2)
-        if let f = near {   // 從桌寵旁邊長出來：放在它左或右，夾在畫面內
-            origin.x = f.midX > vis.midX ? f.minX - w - 24 : f.maxX + 24
-            origin.y = f.midY - h / 2
-            origin.x = max(vis.minX + 12, min(origin.x, vis.maxX - w - 12))
-            origin.y = max(vis.minY + 12, min(origin.y, vis.maxY - h - 12))
-        }
-        super.init(contentRect: NSRect(origin: origin, size: NSSize(width: w, height: h)),
+        // 從桌寵旁邊長出來：放在它左或右，夾在畫面內
+        let f = near
+        var origin = NSPoint(x: f.midX > vis.midX ? f.minX - w - 24 : f.maxX + 24, y: f.midY - h / 2)
+        origin.x = max(vis.minX + 12, min(origin.x, vis.maxX - w - 12))
+        origin.y = max(vis.minY + 12, min(origin.y, vis.maxY - h - 12))
+        intendedFrame = NSRect(origin: origin, size: NSSize(width: w, height: h))
+        // 不用帶 screen 的那個初始化：它是 AppKit 的 convenience init，Swift 子類不能從 designated init 呼叫，
+        // 而且它會回頭在 self 上呼叫 designated init（2026-11-01 真機：按放大鍵 EXC_BREAKPOINT）。
+        // 改成建立後靠下面的 constrainFrameRect 放行，不再被夾回主螢幕。
+        super.init(contentRect: intendedFrame,
                    styleMask: [.titled, .closable, .resizable, .fullSizeContentView, .nonactivatingPanel], backing: .buffered, defer: false)
         titleVisibility = .hidden; titlebarAppearsTransparent = true
         isMovableByWindowBackground = true
@@ -361,6 +374,26 @@ final class CarVideoWindow: NSPanel {
         v.layer?.cornerRadius = 14; v.layer?.masksToBounds = true
         contentView = v
     }
+
+    /// NSWindow 的 `screen:` 版初始化會在 self 上再呼叫一次這個指定初始化器：
+    /// `-[NSWindow initWithContentRect:styleMask:backing:defer:screen:]` → `self.init(contentRect:…)`。
+    /// 子類有 stored property 又沒實作它時，Swift 產生的 @objc thunk 會 trap（2026-11-01 21:47 真機
+    /// 按放大鍵：EXC_BREAKPOINT，堆疊停在 CarVideoWindow.init(contentRect:styleMask:backing:defer:)），
+    /// 視窗還沒建好就整個行程結束。實作它，AppKit 回頭呼叫時才有東西可跑。
+    override init(contentRect: NSRect, styleMask style: NSWindow.StyleMask,
+                  backing backingStoreType: NSWindow.BackingStoreType, defer flag: Bool) {
+        super.init(contentRect: contentRect, styleMask: style, backing: backingStoreType, defer: flag)
+    }
+
+    /// macOS 建視窗與移動視窗時都會問「要不要把這個框夾進某個螢幕」。預設會把新視窗夾回
+    /// 主螢幕的 visibleFrame——這正是桌寵在 Studio Display、放大視窗卻跑到 MacBook 的原因
+    /// （2026-10-31：要 985,1119，實際 750,287，剛好貼齊內建螢幕的右緣與上緣）。
+    /// 只要這個框落在任何一個螢幕裡就原樣放行；真的整塊跑到畫面外才交給系統夾。
+    override func constrainFrameRect(_ frameRect: NSRect, to screen: NSScreen?) -> NSRect {
+        if NSScreen.screens.contains(where: { $0.visibleFrame.intersects(frameRect) }) { return frameRect }
+        return super.constrainFrameRect(frameRect, to: screen)
+    }
+
     override func keyDown(with e: NSEvent) { if e.keyCode == 53 { close() } else { super.keyDown(with: e) } }
     override func mouseDown(with e: NSEvent) { if e.clickCount == 2 { close() } else { super.mouseDown(with: e) } }
     override func close() { super.close(); onClose?() }

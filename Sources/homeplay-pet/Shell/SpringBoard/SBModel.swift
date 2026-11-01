@@ -120,6 +120,45 @@ struct SBStack: Codable, Equatable {
     }
 }
 
+/// Smart Stack 的「急事插隊」：狀態一變（計時器開始／音樂開播／鬧鐘響）就轉到對應小工具，不等定時檢查。
+/// 純邏輯、不碰 UI；SBBoard.tick 每幀餵狀態，只在「狀態轉換」那一幀可能回傳新的 index。
+enum SmartStackPolicy {
+    /// 手動翻頁後這麼久不被自動轉回去（秒）
+    static let manualHold = 600.0
+    /// 急事都結束這麼久才回到時段排序（秒）
+    static let idleReturn = 300.0
+
+    struct State: Equatable {
+        var timer = false
+        var music = false
+        var alarm = false
+        /// 距離「沒有任何急事」已經多久（秒）；仍有急事就是 0
+        var idleFor = 0.0
+        var urgent: Bool { timer || music || alarm }
+    }
+
+    /// 回傳該轉到的 index；nil＝不動。優先序：鬧鐘 > 計時器 > 音樂
+    static func next(current: Int, widgets: [SBWidget], state: State, prev: State,
+                     manualAt: Double?, now: Double, hour: Int) -> Int? {
+        if let m = manualAt, now - m < manualHold { return nil }
+        // 狀態轉換：剛出現的急事，疊放裡有那個 kind 才轉（沒有就交給 suggestion）
+        let rising: [(Bool, SBWidgetKind)] = [(state.alarm && !prev.alarm, .alarms), (state.timer && !prev.timer, .timers), (state.music && !prev.music, .music)]
+        for (on, k) in rising where on {
+            if let i = widgets.firstIndex(where: { $0.kind == k }) { return i == current ? nil : i }
+        }
+        // 計時器剛到點（消失）：轉去看結果，之後照急事結束的規則回去
+        if prev.timer && !state.timer, let i = widgets.firstIndex(where: { $0.kind == .timers }), !state.urgent { return i == current ? nil : i }
+        // 急事結束夠久，而且還停在急事的小工具上 → 回時段排序
+        if !state.urgent, state.idleFor > idleReturn, widgets.indices.contains(current),
+           [.timers, .music, .alarms].contains(widgets[current].kind) {
+            let probe = SBStack(id: "", size: .small, widgets: widgets, index: current)
+            let r = probe.rotatedIndex(hour: hour)
+            return r == current ? nil : r
+        }
+        return nil
+    }
+}
+
 struct SBFolder: Codable, Equatable {
     var id: String
     var name: String
@@ -604,6 +643,22 @@ enum SBModelSelftest {
         let st = SBStack(id: "z", size: .small, widgets: [SBWidget(id: "1", kind: .music, size: .small), SBWidget(id: "2", kind: .weather, size: .small)])
         check(st.rotatedIndex(hour: 8) == 1 && st.rotatedIndex(hour: 20) == 0 && st.suggestion(timerRunning: true, musicPlaying: false) == .timers,
               "SpringBoard：Smart Stack 早上天氣、晚上音樂，計時器在跑時建議計時器")   // l10n-ignore：selftest 訊息
+        // 急事插隊：狀態轉換才轉、手動翻過 10 分鐘內不轉、停夠久回時段、沒那個 kind 不動
+        let ws = [SBWidget(id: "a", kind: .weather, size: .small), SBWidget(id: "b", kind: .timers, size: .small), SBWidget(id: "c", kind: .music, size: .small)]
+        let idle = SmartStackPolicy.State(), tOn = SmartStackPolicy.State(timer: true), mOn = SmartStackPolicy.State(music: true)
+        check(SmartStackPolicy.next(current: 0, widgets: ws, state: tOn, prev: idle, manualAt: nil, now: 1000, hour: 8) == 1
+              && SmartStackPolicy.next(current: 0, widgets: ws, state: tOn, prev: tOn, manualAt: nil, now: 1000, hour: 8) == nil,
+              "Smart Stack 急事插隊：計時器剛開始轉到計時器，之後不再強轉")   // l10n-ignore：selftest 訊息
+        check(SmartStackPolicy.next(current: 0, widgets: ws, state: tOn, prev: idle, manualAt: 500, now: 1000, hour: 8) == nil
+              && SmartStackPolicy.next(current: 0, widgets: ws, state: tOn, prev: idle, manualAt: 300, now: 1000, hour: 8) == 1,
+              "Smart Stack 急事插隊：手動翻過 10 分鐘內不轉，超過就轉")   // l10n-ignore：selftest 訊息
+        var gone = idle; gone.idleFor = 301
+        check(SmartStackPolicy.next(current: 2, widgets: ws, state: gone, prev: mOn, manualAt: nil, now: 1000, hour: 8) == 0
+              && SmartStackPolicy.next(current: 2, widgets: ws, state: idle, prev: mOn, manualAt: nil, now: 1000, hour: 8) == nil,
+              "Smart Stack 急事插隊：音樂停超過 5 分鐘回時段排序，未滿 5 分鐘不動")   // l10n-ignore：selftest 訊息
+        check(SmartStackPolicy.next(current: 0, widgets: [ws[0]], state: tOn, prev: idle, manualAt: nil, now: 1000, hour: 8) == nil
+              && SmartStackPolicy.next(current: 0, widgets: ws, state: SmartStackPolicy.State(alarm: true), prev: idle, manualAt: nil, now: 1000, hour: 8) == nil,
+              "Smart Stack 急事插隊：疊放沒有那個 kind 就不動")   // l10n-ignore：selftest 訊息
         check(SBWidgetKind.allCases.allSatisfy { k in !k.sizes.isEmpty && k.sizes.allSatisfy { $0.span.w <= Lay.cols && $0.span.h <= Lay.rows } },
               "SpringBoard：每個小工具都有放得下的大小")   // l10n-ignore：selftest 訊息
     }

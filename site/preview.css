@@ -93,7 +93,8 @@
   box-shadow:0 0 0 1px rgba(0,0,0,.06),0 30px 60px -28px rgba(10,20,40,.45)}
 .pv-dark .pv-screen img{box-shadow:0 0 0 1px rgba(255,255,255,.08),0 40px 80px -30px rgba(0,0,0,.8)}
 .pv sup{font-size:.6em;line-height:0;vertical-align:super;margin-left:1px}
-.pv sup a{color:inherit;text-decoration:none;padding:0 2px}
+.pv sup a{display:inline-block;padding:16px 10px;margin:-16px -10px;line-height:1}   /* 9×12 的註標也要能點（負 margin 抵銷版面） */
+.pv sup a{color:inherit;text-decoration:none}
 .pv sup a:hover{text-decoration:underline}
 .pv-note{font-size:14px;color:var(--muted)}
 .pv-round{all:unset;box-sizing:border-box;width:44px;height:44px;border-radius:50%;display:grid;place-items:center;cursor:pointer;

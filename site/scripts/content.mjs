@@ -9,8 +9,8 @@ export const github = 'https://github.com/surfine/HomePlay';
 export const notice = `${github}/blob/main/NOTICE`;
 // 固定檔名 + releases/latest/download：以後出新版，官網的下載按鈕不用跟著改。
 export const releaseDownload = `${github}/releases/latest/download/HomePlay-macOS-arm64.zip`;
-// 2.0 測試版：pre-release 不算 latest，所以寫明 tag 與檔名；出 beta 2 時改這一行
-export const betaDownload = `${github}/releases/download/v2.0.0-beta.2/HomePlay-2.0-beta2-macOS-arm64.zip`;
+// 2.0 測試版：pre-release 不算 latest，所以寫明 tag 與檔名；出 beta 3 時改這一行
+export const betaDownload = `${github}/releases/download/v2.0.0-beta.3/HomePlay-2.0-beta3-macOS-arm64.zip`;
 
 const FACES = ['idle', 'happy', 'love', 'wink', 'thinking', 'annoyed', 'surprised', 'worried', 'sleepy', 'asleep'];
 const FINISHES = ['g4', 'silver', 'starlight', 'rose', 'gray'];
@@ -70,8 +70,8 @@ export const copy = {
     lede: "HomePlay 是 Mac 上的開源桌寵，長得像 HomeView。平常，它用一雙眼睛看著你；用力按一下螢幕，它就變成 iPhone 的 CarPlay。",
     viewSource: "看原始碼",
     download: "下載 App",
-    downloadNote: "v1.0.2，macOS 14 以上，Apple 晶片。有 Developer ID 簽名、通過 Apple 公證，解壓就能打開。",
-    heroNote: "v1.0.2 · macOS 14+ · Apple 晶片 · 已公證",
+    downloadNote: "v1.0.4，macOS 14 以上，Apple 晶片。有 Developer ID 簽名、通過 Apple 公證，解壓就能打開。",
+    heroNote: "v1.0.4 · macOS 14+ · Apple 晶片 · 已公證",
     heroLabel: "HomePlay 桌寵，目前的表情：{face}",
     faceNames: {
       idle: "平常",
@@ -109,7 +109,7 @@ export const copy = {
         "tiles",
         "10 款錶面",
         "照 HomeView 的版式做。",
-        "島、照片、模組、Typograph、Flow、天氣、行事曆、陪伴的痕跡、黑，還有 System 6。大時間是系統的 Liquid Glass；字體和顏色可以自己調，像 iOS 27 的鎖定畫面。"
+        "島、照片、模組、Typograph、Flow、天氣、行事曆、陪伴的痕跡、黑，還有 System 6。大時間是系統的 Liquid Glass；字體和顏色可以自己調，像 iOS 27 的<span class=\"nb\">鎖定畫面。</span>"
       ],
       [
         "cable",
@@ -120,8 +120,8 @@ export const copy = {
       [
         "keys",
         "順手的小工具",
-        "番茄鐘、正在播放、電量、下一個行程。",
-        "F7 到 F9 直接切歌；視窗可以置頂，當 iPhone 曲庫的迷你播放器。"
+        "番茄鐘、正在播放、電量、<span class=\"nb\">下一個行程。</span>",
+        "F7 到 F9 直接切歌；視窗可以置頂，當 iPhone 曲庫的<span class=\"nb\">迷你播放器。</span>"
       ]
     ],
     stylesTitle: "10 款，換個心情。",
@@ -132,8 +132,8 @@ export const copy = {
         "島"
       ],
       [
-        "flow",
-        "Flow"
+        "photos",
+        "照片"
       ],
       [
         "modular",
@@ -142,6 +142,10 @@ export const copy = {
       [
         "analog",
         "Typograph"
+      ],
+      [
+        "flow",
+        "Flow"
       ],
       [
         "weather",
@@ -156,6 +160,10 @@ export const copy = {
         "陪伴的痕跡"
       ],
       [
+        "black",
+        "黑"
+      ],
+      [
         "system6",
         "System 6"
       ]
@@ -163,16 +171,16 @@ export const copy = {
     devTitle: "開發者的話",
     dev: [
       "「👀」是我很喜歡的一個 emoji：興奮和期待都在裡面。唐老鴨也是我最愛的卡通角色，一雙靈動的大眼睛，呆萌呆萌的。",
-      "在 AI 時代，我更想守住好奇心、想像力和判斷力。希望這隻桌寵帶給你一點樂趣。"
+      "在 AI 時代，我更想守住好奇心、想像力和判斷力。希望這隻桌寵帶給你<span class=\"nb\">一點樂趣。</span>"
     ],
     devSign: "HomePlay 開發者",
     essayTitle: "為什麼是一雙眼睛？",
-    essayLede: "因為一雙眼睛剛好夠說「我在」，又不必你回應。",
+    essayLede: "因為一雙眼睛剛好夠說「我在」，又<span class=\"nb\">不必你回應。</span>",
     essayClose: "大多數螢幕都在搶你的注意力。HomePlay 不一樣：它多半只是看著你；你靠近，它才亮起來；夜深了，它比你先睡。",
     eyesHint: "移動游標，它會看你；停一會兒，它就閉上眼睛。",
     eyesLabel: "一雙會跟著游標看的眼睛",
     facesTitle: "你做什麼，它都看在眼裡。",
-    facesLede: "十種表情都來自眼睛的形狀。游標移到任一行，看它的反應。",
+    facesLede: "十種表情都來自眼睛的形狀。游標移到任一行，<span class=\"nb\">看它的反應。</span>",
     facesLabel: "桌寵目前的表情：{face}",
     rows: [
       [
@@ -227,7 +235,7 @@ export const copy = {
       ]
     ],
     carplayTitle: "用力按一下，就是 CarPlay。",
-    carplayLede: "不是錄影，也不是假介面。iPhone 把真正的 CarPlay 畫面和聲音傳過來；你在這裡點一下，就像在車上點一下。聲音從 Mac 的喇叭出來。",
+    carplayLede: "不是錄影，也不是假介面。iPhone 把真正的 CarPlay 畫面和聲音傳過來；你在這裡點一下，就像在車上點一下。聲音從 Mac 的<span class=\"nb\">喇叭出來。</span>",
     pathLabel: "畫面怎麼傳過來",
     flow: [
       [
@@ -244,7 +252,7 @@ export const copy = {
       ]
     ],
     spinTitle: "拖著它，轉一圈。",
-    spinLede: "照真機比例做：鐘形底座、不鏽鋼鉸鏈、往後仰 16° 的薄螢幕。拖一拖它，或拆開看看。",
+    spinLede: "照真機比例做：鐘形底座、不鏽鋼鉸鏈、往後仰 16° 的薄螢幕。拖一拖它，或<span class=\"nb\">拆開看看。</span>",
     spinLabel: "HomePlay 機身，可以左右拖動旋轉",
     spinHint: "左右拖動它，或繼續往下捲",
     apart: "拆開看看",
@@ -266,9 +274,9 @@ export const copy = {
     runLede: "下載就能用。想自己編譯也可以。",
     firstStepsTitle: "第一次用，三步",
     firstSteps: [
-      "下載、解壓，把 HomePlay 拖進「應用程式」，打開。",
+      "下載、解壓，把 HomePlay 拖進「<span class=\"nb\">應用程式」，打開。</span>",
       "用傳輸線把 iPhone 接上一次，在 iPhone 上點「信任」。",
-      "用力按桌寵的螢幕，就是 CarPlay。之後拔線會自動轉無線；第一次沒轉過去，把 iPhone 的 Wi-Fi 關了再開一次。"
+      "用力按桌寵的螢幕，就是 CarPlay。之後拔線會自動轉無線；第一次沒轉過去，把 iPhone 的 Wi-Fi <span class=\"nb\">關了再開一次。</span>"
     ],
     buildTitle: "自己編譯（進階）",
     runList: [
@@ -371,12 +379,12 @@ export const copy = {
     moreTitle: "還有更多。",
     more20Eyebrow: "2.0 Preview",
     more20Title: "整套 HomeView，放上你的 Mac。",
-    more20Body: "主畫面和小工具、十款錶面、十六個 App，還有會等你開口的助手 ClioTalk，也能認出家裡每個人。現在是 beta 1，免費下載。",
+    more20Body: "主畫面和小工具、十一款錶面、十六個 App，還有會等你開口的助手 ClioTalk，也能認出家裡每個人。現在是 beta 3，<span class=\"nb\">免費下載。</span>",
     more20Link: "看 2.0 Preview",
-    more20Beta: "下載 2.0 beta 1",
+    more20Beta: "下載 2.0 beta 3",
     moreHistEyebrow: "長文",
     moreHistTitle: "小工具往事。",
-    moreHistBody: "從 1984 年蘋果選單裡的計算機，講到今天的即時動態。六章，每章一件可以動手玩的展品；每個事實都有出處。",
+    moreHistBody: "從 1984 年蘋果選單裡的計算機，講到今天的即時動態。六章，每章一件可以動手玩的展品；每個事實<span class=\"nb\">都有出處。</span>",
     moreHistLink: "讀小工具往事"
   },
   "zh-Hans": {
@@ -425,8 +433,8 @@ export const copy = {
     lede: "HomePlay 是 Mac 上的开源桌宠，长得像 HomeView。平时，它用一双眼睛看着你；用力按一下屏幕，它就变成 iPhone 的 CarPlay。",
     viewSource: "看源代码",
     download: "下载 App",
-    downloadNote: "v1.0.2，macOS 14 及以上，Apple 芯片。有 Developer ID 签名、通过 Apple 公证，解压就能打开。",
-    heroNote: "v1.0.2 · macOS 14+ · Apple 芯片 · 已公证",
+    downloadNote: "v1.0.4，macOS 14 及以上，Apple 芯片。有 Developer ID 签名、通过 Apple 公证，解压就能打开。",
+    heroNote: "v1.0.4 · macOS 14+ · Apple 芯片 · 已公证",
     heroLabel: "HomePlay 桌宠，当前的表情：{face}",
     faceNames: {
       idle: "平常",
@@ -464,7 +472,7 @@ export const copy = {
         "tiles",
         "10 款表盘",
         "照 HomeView 的版式做。",
-        "岛、照片、模块、Typograph、Flow、天气、日历、陪伴的痕迹、黑，还有 System 6。大时间是系统的 Liquid Glass；字体和颜色可以自己调，像 iOS 27 的锁定屏幕。"
+        "岛、照片、模块、Typograph、Flow、天气、日历、陪伴的痕迹、黑，还有 System 6。大时间是系统的 Liquid Glass；字体和颜色可以自己调，像 iOS 27 的<span class=\"nb\">锁定屏幕。</span>"
       ],
       [
         "cable",
@@ -475,8 +483,8 @@ export const copy = {
       [
         "keys",
         "顺手的小工具",
-        "番茄钟、正在播放、电量、下一个日程。",
-        "F7 到 F9 直接切歌；窗口可以置顶，当 iPhone 曲库的迷你播放器。"
+        "番茄钟、正在播放、电量、<span class=\"nb\">下一个日程。</span>",
+        "F7 到 F9 直接切歌；窗口可以置顶，当 iPhone 曲库的<span class=\"nb\">迷你播放器。</span>"
       ]
     ],
     stylesTitle: "10 款，换个心情。",
@@ -487,8 +495,8 @@ export const copy = {
         "岛"
       ],
       [
-        "flow",
-        "Flow"
+        "photos",
+        "照片"
       ],
       [
         "modular",
@@ -497,6 +505,10 @@ export const copy = {
       [
         "analog",
         "Typograph"
+      ],
+      [
+        "flow",
+        "Flow"
       ],
       [
         "weather",
@@ -511,6 +523,10 @@ export const copy = {
         "陪伴的痕迹"
       ],
       [
+        "black",
+        "黑"
+      ],
+      [
         "system6",
         "System 6"
       ]
@@ -518,16 +534,16 @@ export const copy = {
     devTitle: "开发者的话",
     dev: [
       "“👀”是我很喜欢的一个 emoji：兴奋和期待都在里面。唐老鸭也是我最爱的卡通角色，一双灵动的大眼睛，呆萌呆萌的。",
-      "在 AI 时代，我更想守住好奇心、想象力和判断力。希望这只桌宠带给你一点乐趣。"
+      "在 AI 时代，我更想守住好奇心、想象力和判断力。希望这只桌宠带给你<span class=\"nb\">一点乐趣。</span>"
     ],
     devSign: "HomePlay 开发者",
     essayTitle: "为什么是一双眼睛？",
-    essayLede: "因为一双眼睛刚好够说「我在」，又不需要你回应。",
+    essayLede: "因为一双眼睛刚好够说「我在」，又<span class=\"nb\">不需要你回应。</span>",
     essayClose: "大多数屏幕都在抢你的注意力。HomePlay 不一样：它多半只是看着你；你靠近，它才亮起来；夜深了，它比你先睡。",
     eyesHint: "移动指针，它会看你；停一会儿，它就闭上眼睛。",
     eyesLabel: "一双会跟着指针看的眼睛",
     facesTitle: "你做什么，它都看在眼里。",
-    facesLede: "十种表情都来自眼睛的形状。指针移到任意一行，看它的反应。",
+    facesLede: "十种表情都来自眼睛的形状。指针移到任意一行，<span class=\"nb\">看它的反应。</span>",
     facesLabel: "桌宠当前的表情：{face}",
     rows: [
       [
@@ -582,7 +598,7 @@ export const copy = {
       ]
     ],
     carplayTitle: "用力按一下，就是 CarPlay。",
-    carplayLede: "不是录屏，也不是假界面。iPhone 把真正的 CarPlay 画面和声音传过来；你在这里点一下，就像在车上点一下。声音从 Mac 的扬声器出来。",
+    carplayLede: "不是录屏，也不是假界面。iPhone 把真正的 CarPlay 画面和声音传过来；你在这里点一下，就像在车上点一下。声音从 Mac 的<span class=\"nb\">扬声器出来。</span>",
     pathLabel: "画面怎么传过来",
     flow: [
       [
@@ -599,7 +615,7 @@ export const copy = {
       ]
     ],
     spinTitle: "拖着它，转一圈。",
-    spinLede: "照真机比例做：钟形底座、不锈钢铰链、向后仰 16° 的薄屏幕。拖一拖它，或者拆开看看。",
+    spinLede: "照真机比例做：钟形底座、不锈钢铰链、向后仰 16° 的薄屏幕。拖一拖它，或者<span class=\"nb\">拆开看看。</span>",
     spinLabel: "HomePlay 机身，可以左右拖动旋转",
     spinHint: "左右拖动它，或继续往下滚动",
     apart: "拆开看看",
@@ -621,9 +637,9 @@ export const copy = {
     runLede: "下载就能用。想自己编译也可以。",
     firstStepsTitle: "第一次用，三步",
     firstSteps: [
-      "下载、解压，把 HomePlay 拖进「应用程序」，打开。",
+      "下载、解压，把 HomePlay 拖进「<span class=\"nb\">应用程序」，打开。</span>",
       "用数据线把 iPhone 接上一次，在 iPhone 上点「信任」。",
-      "用力按桌宠的屏幕，就是 CarPlay。之后拔线会自动转无线；第一次没转过去，把 iPhone 的 Wi-Fi 关了再开一次。"
+      "用力按桌宠的屏幕，就是 CarPlay。之后拔线会自动转无线；第一次没转过去，把 iPhone 的 Wi-Fi <span class=\"nb\">关了再开一次。</span>"
     ],
     buildTitle: "自己编译（进阶）",
     runList: [
@@ -726,12 +742,12 @@ export const copy = {
     moreTitle: "还有更多。",
     more20Eyebrow: "2.0 Preview",
     more20Title: "整套 HomeView，放上你的 Mac。",
-    more20Body: "主屏幕和小组件、十款表盘、十六个 App，还有会等你开口的助手 ClioTalk，也能认出家里每个人。现在是 beta 1，免费下载。",
+    more20Body: "主屏幕和小组件、十一款表盘、十六个 App，还有会等你开口的助手 ClioTalk，也能认出家里每个人。现在是 beta 3，<span class=\"nb\">免费下载。</span>",
     more20Link: "看 2.0 Preview",
-    more20Beta: "下载 2.0 beta 1",
+    more20Beta: "下载 2.0 beta 3",
     moreHistEyebrow: "长文",
     moreHistTitle: "小工具往事。",
-    moreHistBody: "从 1984 年苹果菜单里的计算机，讲到今天的实时活动。六章，每章一件可以动手玩的展品；每个事实都有出处。",
+    moreHistBody: "从 1984 年苹果菜单里的计算机，讲到今天的实时活动。六章，每章一件可以动手玩的展品；每个事实<span class=\"nb\">都有出处。</span>",
     moreHistLink: "读小工具往事"
   },
   en: {
@@ -780,8 +796,8 @@ export const copy = {
     lede: "HomePlay is an open-source desk pet for the Mac that looks like HomeView. Most of the time it watches you with a pair of eyes. Press the screen firmly, and it becomes your iPhone’s CarPlay.",
     viewSource: "View source",
     download: "Download the app",
-    downloadNote: "v1.0.2, macOS 14 or later, Apple silicon. Signed with a Developer ID and notarized by Apple, so you can unzip it and open it.",
-    heroNote: "v1.0.2 · macOS 14+ · Apple silicon · Notarized",
+    downloadNote: "v1.0.4, macOS 14 or later, Apple silicon. Signed with a Developer ID and notarized by Apple, so you can unzip it and open it.",
+    heroNote: "v1.0.4 · macOS 14+ · Apple silicon · Notarized",
     heroLabel: "HomePlay desk pet, current expression: {face}",
     faceNames: {
       idle: "Idle",
@@ -842,8 +858,8 @@ export const copy = {
         "Island"
       ],
       [
-        "flow",
-        "Flow"
+        "photos",
+        "Photos"
       ],
       [
         "modular",
@@ -852,6 +868,10 @@ export const copy = {
       [
         "analog",
         "Typograph"
+      ],
+      [
+        "flow",
+        "Flow"
       ],
       [
         "weather",
@@ -864,6 +884,10 @@ export const copy = {
       [
         "growth",
         "Days Together"
+      ],
+      [
+        "black",
+        "Black"
       ],
       [
         "system6",
@@ -1081,9 +1105,9 @@ export const copy = {
     moreTitle: "There’s more.",
     more20Eyebrow: "2.0 Preview",
     more20Title: "The whole HomeView, on your Mac.",
-    more20Body: "A home screen with widgets, ten faces, sixteen apps, and ClioTalk, an assistant that waits for you to ask. It recognizes each person in the house too. Now in beta 1, free to download.",
+    more20Body: "A home screen with widgets, eleven faces, sixteen apps, and ClioTalk, an assistant that waits for you to ask. It recognizes each person in the house too. Now in beta 3, free to download.",
     more20Link: "See the 2.0 Preview",
-    more20Beta: "Download 2.0 beta 1",
+    more20Beta: "Download 2.0 beta 3",
     moreHistEyebrow: "Long read",
     moreHistTitle: "A history of widgets.",
     moreHistBody: "From the Calculator in the 1984 Apple menu to today’s Live Activities. Six chapters, one playable exhibit each, and a source for every fact.",

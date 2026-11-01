@@ -97,6 +97,7 @@ final class AlarmCenter {
         else if let raw = UserDefaults.standard.data(forKey: Self.defaultsKey), let a = try? JSONDecoder().decode([AlarmItem].self, from: raw) { alarms = a }
         nextID = (alarms.map(\.id).max() ?? 0) + 1
         if AppUI.flag("--demo-alarm-ring") { ringing = alarms.first; ringStart = CACurrentMediaTime() + 3600 }
+        if AppUI.flag("--demo-alarm-snooze"), let a = alarms.first { snoozed = (a, Date().addingTimeInterval(8 * 60 + 42)) }   // 快照：貪睡中，倒數約 8:42
     }
 
     static func demoAlarms() -> [AlarmItem] {
@@ -134,9 +135,8 @@ final class AlarmCenter {
         var dirty = false
         if ringing != nil {
             Shell.lastActive = now
-            // 離開了闹钟 App、或沒人理太久：算停止
-            let away = now - ringStart > 3 && Shell.nav.screen != .app("alarms")
-            if away || now - ringStart > Self.ringLimit { stop(face) }
+            // 沒人理太久才算停止；離開闹钟 App 不再停——頂端藥丸有 Live Activity（停止／稍后），點它回來
+            if now - ringStart > Self.ringLimit { stop(face) }
             dirty = true
         }
         if let (a, until) = snoozed, wall >= until { snoozed = nil; ring(a, face, now); dirty = true }
@@ -173,6 +173,9 @@ final class AlarmCenter {
         log("alarm ring")
     }
 
+    /// --selftest：不開 App、不出聲，直接進入響鈴狀態
+    func debugRing(_ a: AlarmItem) { ringing = a; ringStart = CACurrentMediaTime() }
+
     func stop(_ face: Face) {
         sound?.stop(); sound = nil
         ringing = nil; snoozed = nil
@@ -185,6 +188,23 @@ final class AlarmCenter {
         face.dismissBanner(); face.forceDirty = true
     }
     var snoozeUntil: Date? { snoozed?.1 }
+
+    /// 頂端藥丸的 Live Activity（iOS 26 AlarmKit 的作法）：響鈴中＝鬧鐘符號＋鬧鐘時間，展開有「稍后」「停止」；
+    /// 貪睡中＝倒數到下次響，展開只有「停止」（取消貪睡）。link 記是哪一種（ring／snooze），按鈕照它出
+    static func activity(ringing: AlarmItem?, snoozed: (AlarmItem, Date)?, wall: Date) -> LiveActivity? {
+        func name(_ a: AlarmItem) -> String { a.label.isEmpty ? L("alarm.default", "闹钟") : a.label }
+        if let a = ringing {
+            return LiveActivity(kind: .alarm, title: name(a), detail: Face.timeParts(hour: a.hour, minute: a.minute).time, accent: AlarmsApp.accent,
+                                progress: nil, appID: "alarms", symbol: "alarm.fill", link: "ring")
+        }
+        if let (a, until) = snoozed {
+            let left = max(0, until.timeIntervalSince(wall))
+            return LiveActivity(kind: .alarm, title: name(a), detail: timerClock(left), accent: AlarmsApp.accent,
+                                progress: nil, appID: "alarms", symbol: "zzz", link: "snooze")
+        }
+        return nil
+    }
+    var activity: LiveActivity? { Self.activity(ringing: ringing, snoozed: snoozed, wall: Date()) }
     /// 2.0 時鐘：響鈴畫面的脈動從這一刻起算
     /// （--demo-alarm-ring 的響鈴不會自己停：視覺上從開機那一刻起算，HOMEPLAY_CLOCK_T 往前推，逐格才拍得到脈動）
     var ringStartedAt: Double { ringStart > CACurrentMediaTime() ? demoRingStart - (ClockKit.frozenT ?? 0) : ringStart }
@@ -566,6 +586,26 @@ final class AlarmsApp: PetApp {
         return false
     }
 
-    /// 清單上方的小提示給 Live Activity 用：響鈴前一小時內的下一個鬧鐘（先不做，見回報）
-    func liveActivity(face: Face, now: Double) -> LiveActivity? { nil }
+    /// 響鈴中、貪睡中的 Live Activity；闹钟 App 自己開著就不重複（iOS：前景 App 的 Live Activity 不顯示，響鈴畫面本身就是）
+    func liveActivity(face: Face, now: Double) -> LiveActivity? {
+        if Shell.currentApp === self { return nil }
+        return AlarmCenter.shared.activity
+    }
+}
+
+// MARK: - 2.0 home-3：遠看（Shell/FarGlance.swift）
+extension AlarmsApp {
+    /// 響鈴中＝鬧鐘時間大字（ongoing）；平常＝24 小時內的下一個鬧鐘（床頭遠遠看得到「6:30」）
+    func farGlance(face: Face, now: Double) -> FarGlance? {
+        let c = AlarmCenter.shared
+        func name(_ a: AlarmItem) -> String { a.label.isEmpty ? L("alarm.default", "闹钟") : a.label }
+        if let a = c.ringing {
+            return FarGlance(title: name(a), headline: Face.timeParts(hour: a.hour, minute: a.minute).time, accent: Self.accent, numeric: true, ongoing: true)
+        }
+        let wall = Date()
+        guard let (a, at) = AlarmLogic.soonest(c.alarms, after: wall), at.timeIntervalSince(wall) < 24 * 3600 else { return nil }
+        let h = Int(at.timeIntervalSince(wall) / 3600), m = Int(at.timeIntervalSince(wall).truncatingRemainder(dividingBy: 3600) / 60)
+        let inText = h > 0 ? String(format: L("alarm.far.inHM", "%1$d 小时 %2$d 分钟后"), h, m) : String(format: L("alarm.far.inM", "%d 分钟后"), max(1, m))
+        return FarGlance(title: L("alarm.far.next", "下一个闹钟"), headline: Face.shortTime(at), details: [name(a), inText], numeric: true)
+    }
 }

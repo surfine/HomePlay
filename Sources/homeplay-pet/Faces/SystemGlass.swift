@@ -144,14 +144,23 @@ final class SystemGlass {
             if key != nil { sdfCache = (sdfKey, sdf, halfStroke, mask) }
         }
 
-        return caQueue.sync { composite(sdf: sdf, halfStroke: halfStroke, maxDist: maxDist, rect: rect, w: w, h: h, sc: sc,
-                                        backdrop: backdrop, params: p, lightTurn: lightTurn, device: device, queue: queue) }
-            .map { ($0.image, $0.rect, shapeMask) }
+        let out = caQueue.sync { composite(sdf: sdf, halfStroke: halfStroke, maxDist: maxDist, rect: rect, w: w, h: h, sc: sc,
+                                           backdrop: backdrop, params: p, lightTurn: lightTurn, device: device, queue: queue) }
+        if let dir = ProcessInfo.processInfo.environment["HOMEPLAY_GLASS_DUMP"], let o = out {
+            Self.dumpCount += 1
+            try? NSBitmapImageRep(cgImage: o.image).representation(using: .png, properties: [:])?
+                .write(to: URL(fileURLWithPath: "\(dir)/system-\(Self.dumpCount)-\(Int(rect.minX))x\(Int(rect.minY)).png"))
+        }
+        return out.map { ($0.image, $0.rect, shapeMask) }
     }
+    nonisolated(unsafe) private static var dumpCount = 0
 
     private func composite(sdf: CGImage, halfStroke: CGFloat, maxDist: Double, rect: CGRect, w: Int, h: Int, sc: CGFloat,
                            backdrop: CGImage, params p: SystemGlassParams, lightTurn: CGFloat, device: MTLDevice, queue: MTLCommandQueue) -> (image: CGImage, rect: CGRect)? {
         let t0 = CACurrentMediaTime()
+        if ProcessInfo.processInfo.environment["HOMEPLAY_GLASS_DUMP"] != nil {
+            FileHandle.standardError.write(Data("[systemglass] rect=\(rect) out=\(w)x\(h) backdrop=\(backdrop.width)x\(backdrop.height) params=\(p.fill)/\(p.white)\n".utf8))
+        }
         // 2. 層樹：背景 → 玻璃背板（濾鏡）→ SDF 形狀
         let k = CGFloat(backdrop.width) / 1024
         guard let crop = backdrop.cropping(to: CGRect(x: rect.minX * k, y: rect.minY * k, width: rect.width * k, height: rect.height * k).integral)

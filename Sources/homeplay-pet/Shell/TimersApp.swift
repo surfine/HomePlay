@@ -8,6 +8,9 @@
 // - 控制（點一下浮出，閒置 5 秒收起）：四角同心——左上返回、右上「＋」、左下「取消」（玻璃）、右下「暫停／繼續」
 //   （橘↔綠染色玻璃，彈簧換色、符號交叉縮放）。
 // - 到點：如果正開著這組，畫面變成「完成」——刻度整圈橘色呼吸、0:00、左下「重複」、右下「停止」；一分鐘沒人理就收。
+// - 轉動設定時長（「＋」畫面，照 watchOS 的數位錶冠）：HomeView 沒有鍵盤、App 也收不到拖曳，所以用滾輪／觸控板轉大轉盤——
+//   1:1 轉動，每格 1 分鐘（60 分鐘後每格 5 分鐘，最少 1、最多 720），連續滾動累積 dy、跨過門檻才換一格，每格一下觸覺回饋；
+//   轉盤上方一排預設時長晶片（點了直接開始），轉盤下方「开始」用設定的時長開一組。
 // - 減少動態效果：刻度不呼吸、數字交叉淡化、不做亮起動畫。幀率：只有刻度真的需要（短計時器）或在捲動時才要求 60 fps。
 
 import AppKit
@@ -24,6 +27,19 @@ final class TimersApp: PetApp {
     var adding = false
     private var lastQuantum = -1
     static let presets: [Double] = [1, 3, 5, 10, 15, 25]
+
+    // MARK: 轉盤的格位：0＝1 分鐘…59＝60 分鐘，之後每格 5 分鐘，191＝720 分鐘（12 小時）
+    static let dialMaxIndex = 191
+    static func dialMinutes(_ i: Int) -> Int { i < 60 ? i + 1 : 60 + (i - 59) * 5 }
+    static func dialIndex(forMinutes m: Int) -> Int {
+        m <= 60 ? max(0, m - 1) : min(dialMaxIndex, 59 + Int((Double(m - 60) / 5).rounded()))
+    }
+    /// 累積多少滾動量（畫布 px）換一格：滑鼠滾輪一格刻度＝10，剛好一格；觸控板連續滾動平順跨格
+    private static let dialStep: CGFloat = 10
+    private var dialIndex = TimersApp.dialIndex(forMinutes: 10)
+    private var dialAcc: CGFloat = 0
+    /// 減少動態效果時數字交叉淡化用：現在顯示的字、上一個字、換字的時刻
+    private var dialText = "", dialPrevText = "", dialFadeAt = -1e9
     static let accent = srgb(0xff9f0a)
 
     /// 牆上時間（快照逐格：HOMEPLAY_CLOCK_T 凍結，見 ClockKit.wall）
@@ -46,6 +62,10 @@ final class TimersApp: PetApp {
         let args = CommandLine.arguments
         chrome = HPComponents.Chrome(visible: args.contains("--timers-chrome"), idle: HPTokens.TimerFace.chromeIdle, now: CACurrentMediaTime(), name: "timers.chrome")
         if args.contains("--timer-paused"), let t = current { selected = t.id; Shell.timers.pause(t.id, now: Self.wallNow) }
+        // 快照：--timer-dial <分鐘> 直接打開「新计时器」並把轉盤設在那個值
+        if let i = args.firstIndex(of: "--timer-dial"), i + 1 < args.count, let m = Int(args[i + 1]) {
+            dialIndex = Self.dialIndex(forMinutes: m); adding = true
+        }
         if args.contains("--timer-done") {
             done = Done(label: String(format: L("timer.minutes", "%d 分钟"), 15), total: 900, at: CACurrentMediaTime()); adding = false
         }
@@ -117,11 +137,19 @@ final class TimersApp: PetApp {
     private static let addButton: CGRect = {
         let b = HPTokens.backButton; return CGRect(x: 1024 - b.maxX, y: b.minY, width: b.width, height: b.height)
     }()
+    // 「＋」畫面（1024 畫布，間距只用 8/16/24/32）：標題底下一排晶片 → 轉盤 → 「开始」，各隔 32
+    private static let chipSize = CGSize(width: 140, height: HPTokens.Size.chip)
     private static func presetRect(_ i: Int) -> CGRect {
-        let w: CGFloat = 260, h: CGFloat = 150, gap: CGFloat = 32
-        let x0 = 512 - (3 * w + 2 * gap) / 2
-        return CGRect(x: x0 + CGFloat(i % 3) * (w + gap), y: 300 + CGFloat(i / 3) * (h + gap), width: w, height: h)   // 標題底下
+        let gap: CGFloat = 8, n = CGFloat(presets.count)
+        let x0 = 512 - (n * chipSize.width + (n - 1) * gap) / 2
+        return CGRect(x: x0 + CGFloat(i) * (chipSize.width + gap), y: 288, width: chipSize.width, height: chipSize.height)
     }
+    private static let dialCenter = CGPoint(x: 512, y: 588)
+    private static let dialOuter: CGFloat = 200, dialInner: CGFloat = 158
+    private static let startButton: CGRect = {
+        let s = HPTokens.Size.pairedButton
+        return CGRect(x: 512 - s.width / 2, y: dialCenter.y + dialOuter + 32, width: s.width, height: s.height)
+    }()
     /// 底下其他幾組的小膠囊（最多兩個）
     private func chipRects(_ face: Face, _ others: [ShellTimer], now: Double) -> [(CGRect, ShellTimer, String)] {
         let font = AppUI.font(32, .semibold)
@@ -279,17 +307,82 @@ final class TimersApp: PetApp {
 
     private func renderPresets(_ g: CGContext, _ face: Face) {
         AppUI.title(g, face, onSubpage ? L("timers.new", "新计时器") : title)
+        let cf = AppUI.font(32, .semibold)
         for (i, m) in Self.presets.enumerated() {
             let r = Self.presetRect(i)
-            let k = Press.scale(r)
-            AppUI.group(g, k == 1 ? r : HPComponents.scaled(r, k), radius: 44)
-            HPAX.note(g, r, .button, String(format: L("timer.minutes", "%d 分钟"), Int(m)), shape: .rounded(44))   // 2.0 depth：VoiceOver
-            // 大數字＋單位（像 iOS 時鐘「最近使用」的圓：數字大、單位小）
-            let n = String(Int(m)), unit = String(format: L("timer.minutes", "%d 分钟"), Int(m)).replacingOccurrences(of: n, with: "").trimmingCharacters(in: .whitespaces)
-            let nf = FaceType.sf(72, .regular), uf = AppUI.font(30, .semibold)
-            AppUI.center(face, g, n, nf, cx: r.midX, y: r.midY + 14, AppUI.orange)
-            AppUI.center(face, g, unit, uf, cx: r.midX, y: r.midY + 56, AppUI.secondary)
+            let label = String(format: L("timer.minutes", "%d 分钟"), Int(m))
+            HPAX.note(g, r, .button, label)   // 2.0 depth：VoiceOver 念「5 分钟」；畫面上只有數字，單位在轉盤中間
+            HPComponents.glassCapsule(g, r) { c in
+                AppUI.center(face, c, String(Int(m)), cf, cx: r.midX, y: r.midY + cf.capHeight / 2, AppUI.orange)
+            }
         }
+        renderDial(g, face)
+        HPComponents.filledButton(g, face, Self.startButton, L("timer.start", "开始"), tint: Self.accent)
+    }
+
+    /// 大轉盤：60 格刻度環（亮的是這一圈的分鐘數，過 60 分鐘繞回頭），中間是設定的時長
+    private func renderDial(_ g: CGContext, _ face: Face) {
+        let wall = CACurrentMediaTime()
+        let minutes = Self.dialMinutes(dialIndex), c = Self.dialCenter
+        // 亮起的刻度數跟著分鐘走（彈簧追上去；減少動態效果時 Anim.track 直接給目標）
+        let pos = Double(Anim.track("timers.dial", to: CGFloat(minutes), spring: AppMotion.interactive))
+        var lit = pos.truncatingRemainder(dividingBy: 60)
+        if lit < 0.001 && pos > 0.5 { lit = 60 }
+        let n = HPTokens.TimerFace.ticks, full = Int(lit), frac = CGFloat(lit - Double(full))
+        let dim = Self.accent.withAlphaComponent(HPTokens.TimerFace.elapsedAlpha)
+        g.saveGState(); g.setLineCap(.round); g.setLineWidth(10)
+        for i in 0..<n {
+            let a = CGFloat(i) / CGFloat(n) * 2 * .pi, d = CGPoint(x: sin(a), y: -cos(a))
+            let col = i < full ? Self.accent : (i == full && frac > 0.001 ? (dim.blended(withFraction: frac, of: Self.accent) ?? dim) : dim)
+            g.setStrokeColor(col.cgColor)
+            g.move(to: CGPoint(x: c.x + d.x * Self.dialOuter, y: c.y + d.y * Self.dialOuter))
+            g.addLine(to: CGPoint(x: c.x + d.x * Self.dialInner, y: c.y + d.y * Self.dialInner))
+            g.strokePath()
+        }
+        g.restoreGState()
+        let text = timerClock(Double(minutes * 60)), label = String(format: L("timer.minutes", "%d 分钟"), minutes)
+        // 2.0 depth：可調整的轉盤——VoiceOver 念「设定时长，25 分钟」
+        HPAX.note(g, CGRect(x: c.x - Self.dialOuter, y: c.y - Self.dialOuter, width: Self.dialOuter * 2, height: Self.dialOuter * 2),
+                  .slider(Double(dialIndex) / Double(Self.dialMaxIndex)), L("timer.dial", "设定时长"), value: label, shape: .circle)
+        let tf = FaceType.sf(text.count > 5 ? 64 : 88, .medium, mono: false)
+        let y = c.y + tf.capHeight / 2 - 24
+        if HPMotion.reduceMotion {   // 減少動態效果：新舊數字交叉淡化
+            if text != dialText { dialPrevText = dialText; dialText = text; dialFadeAt = wall }
+            let k = CGFloat(min(1, (wall - dialFadeAt) / 0.15))
+            if k < 1 { Anim.keepAlive() }
+            if k < 1, !dialPrevText.isEmpty {
+                face.drawLeft(g, dialPrevText, font: tf, x: c.x - Typo.width(dialPrevText, tf) / 2, y: y, color: AppUI.label.withAlphaComponent(1 - k))
+            }
+            face.drawLeft(g, text, font: tf, x: c.x - Typo.width(text, tf) / 2, y: y, color: AppUI.label.withAlphaComponent(dialPrevText.isEmpty ? 1 : k))
+        } else {
+            HPNumeric.draw(g, face, key: "timers.dial", text, font: tf, x: c.x - Typo.width(text, tf) / 2, y: y, color: AppUI.label, now: wall)
+        }
+        let lf = AppUI.font(32, .semibold)
+        face.drawCentered(g, label, font: lf, y: c.y + 72, color: AppUI.secondary)
+    }
+
+    /// 轉動：往上（dy 正）加時間。累積 dy，跨過門檻才換一格，每格一下觸覺回饋
+    func handleScroll(_ dy: CGFloat, now: Double) -> Bool {
+        guard done == nil, adding || current == nil else { return false }
+        dialAcc += dy
+        while abs(dialAcc) >= Self.dialStep {
+            let d = dialAcc > 0 ? 1 : -1
+            dialAcc -= CGFloat(d) * Self.dialStep
+            let n = min(Self.dialMaxIndex, max(0, dialIndex + d))
+            if n == dialIndex { dialAcc = 0; break }   // 轉到頭：多餘的量丟掉，不要回轉時還要先還債
+            dialIndex = n
+            NSHapticFeedbackManager.defaultPerformer.perform(.alignment, performanceTime: .now)
+        }
+        return true
+    }
+
+    /// 加一組計時器並回到大圈（預設晶片與「开始」同一條路）
+    private func startTimer(minutes: Double, face: Face, now: Double) {
+        selected = Shell.addTimer(minutes: minutes, label: String(format: L("timer.minutes", "%d 分钟"), Int(minutes)), face: face)
+        adding = false
+        revealID = selected; revealAt = now
+        ClockKit.forget("timers.big")
+        chrome.show(CACurrentMediaTime())   // 剛開始：控制先亮著，閒置再收
     }
 
     // MARK: 點
@@ -307,14 +400,10 @@ final class TimersApp: PetApp {
             return false
         }
         if adding || current == nil {
-            for (i, m) in Self.presets.enumerated() where Self.presetRect(i).insetBy(dx: -8, dy: -8).contains(p) {
-                selected = Shell.addTimer(minutes: m, label: String(format: L("timer.minutes", "%d 分钟"), Int(m)), face: face)
-                adding = false
-                revealID = selected; revealAt = now
-                ClockKit.forget("timers.big")
-                chrome.show(CACurrentMediaTime())   // 剛開始：控制先亮著，閒置再收
-                return true
+            for (i, m) in Self.presets.enumerated() where Self.presetRect(i).insetBy(dx: -4, dy: -10).contains(p) {   // 命中補到 88 高
+                startTimer(minutes: m, face: face, now: now); return true
             }
+            if AppUI.hit(Self.startButton, p, pad: 8) { startTimer(minutes: Double(Self.dialMinutes(dialIndex)), face: face, now: now); return true }
             return false
         }
         guard let t = current else { return false }
@@ -355,5 +444,16 @@ final class TimersApp: PetApp {
         let wall = Self.wallNow
         return LiveActivity(kind: .timer, title: t.label, detail: timerClock(t.left(wall)), accent: Self.accent,
                             progress: t.fraction(wall), appID: id, link: String(t.id))   // 2.0 P03：點了開到這一組
+    }
+}
+
+// MARK: - 2.0 home-3：遠看（Shell/FarGlance.swift）
+extension TimersApp {
+    /// 在跑的那組：剩餘時間大字；到點＝「時間到」。在跑或到點＝ongoing（遠看時不回錶面，房間另一頭也看得到）
+    func farGlance(face: Face, now: Double) -> FarGlance? {
+        if let d = done { return FarGlance(title: d.label.isEmpty ? title : d.label, headline: L("timer.far.done", "时间到"), accent: Self.accent, ongoing: true) }
+        guard !adding, let t = current else { return nil }
+        return FarGlance(title: t.label.isEmpty ? title : t.label, headline: timerClock(t.left(Self.wallNow)),
+                         details: t.paused ? [L("timer.paused", "已暂停")] : [], accent: Self.accent, numeric: true, ongoing: !t.paused)
     }
 }

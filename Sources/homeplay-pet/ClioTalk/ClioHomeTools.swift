@@ -107,7 +107,8 @@ enum ClioHomeControl {
     }
 
     /// 使用者說的名字 → 配件：先比配件名（同分並列＝要問是哪一個），比不到再看房間名＋類別（「客廳的燈」＝那間房的所有燈）
-    static func resolve(_ query: String, action: HomeVoiceAction, in all: [Candidate], rooms: [String]) -> Resolution {
+    /// thisRoom：這台 HomeView 所在的房間（HomeThisRoom）。只說類別（「關燈」）時先作用在這個房間（HomePod 的做法），說「全部」或房間名才跨房間
+    static func resolve(_ query: String, action: HomeVoiceAction, in all: [Candidate], rooms: [String], thisRoom: String? = nil) -> Resolution {
         let q = normalized(query)
         guard !q.isEmpty else { return .none }
         let scored = all.map { ($0, max(score(q, name: $0.nName, room: $0.nRoom), score(q, name: normalized($0.alt), room: $0.nRoom))) }
@@ -125,6 +126,10 @@ enum ClioHomeControl {
         // 只說了類別（「燈」）：那一類的都是候選，一個就用、多個要問
         if contains(q, any: lightWords + coveringWords + outletWords + thermostatWords + lockWords) {
             let byKind = all.filter { wantKinds.contains($0.kind) }
+            if let here = thisRoom.map(normalized), !here.isEmpty {
+                let local = byKind.filter { $0.nRoom == here }
+                if !local.isEmpty { return .found(local) }
+            }
             if !byKind.isEmpty { return pick(byKind) }
         }
         return .none
@@ -223,7 +228,7 @@ enum ClioHomeControl {
         for a in snap.accessories { for t in HomeAppModel.tiles(a) { tilesByID[t.id] = t } }
         for cmd in req.commands {
             var step = Step(command: cmd)
-            switch resolve(cmd.target, action: cmd.action, in: cands, rooms: roomNames) {
+            switch resolve(cmd.target, action: cmd.action, in: cands, rooms: roomNames, thisRoom: HomeThisRoom.name(in: snap)) {
             case .none:
                 step.error = "No accessory or room matches \"\(cmd.target)\". Ask the user for the name as it appears in Home."
             case .ambiguous(let c):

@@ -20,7 +20,7 @@
 A HomeView that lives on your Mac’s desktop. It has a pair of eyes that watch you, and one firm press turns it into your iPhone’s CarPlay.
 
 - **It watches you.** One pair of 👀, ten expressions. Come closer and it looks over, curious. Rest your pointer on it and it smiles. Leave it alone late at night and it dozes off. The eyes live in a capsule that matches the face’s era: solid black, smoked, or Liquid Glass.
-- **10 faces.** Laid out like Apple’s HomeView faces: Island, Photos, Modular, Typograph (with an Embossed option), Flow, Weather, Calendar, Days Together, Black, and System 6 (three layouts). The big time is the system’s own Liquid Glass, and you can pick its font and color the way you do on the iOS 27 Lock Screen.
+- **11 faces.** Laid out like Apple’s HomeView faces: Island, Photos, Modular, Typograph (with an Embossed option), Flow, Weather, Calendar, Days Together, Black, System 6 (three layouts), and Gauges, drawn in CarPlay’s instrument-cluster style from this Mac’s load, battery and temperature (three layouts). The big time is the system’s own Liquid Glass, and you can pick its font and color the way you do on the iOS 27 Lock Screen.
 - **Press firmly for CarPlay.** Plug in once, then it’s wireless. Your iPhone sends real CarPlay video and sound to the little screen, and tapping it works like tapping the screen in a car. Hold F5 to talk to your iPhone’s Siri.
 - **Handy extras.** Focus timer, Now Playing, battery and your next event. F7–F9 skip tracks, and the window can float on top like a mini player for your iPhone’s library.
 
@@ -68,7 +68,7 @@ The app is signed with a Developer ID and notarized by Apple, so it opens straig
 ## What’s new in 1.0
 
 - **1.0.1: Wall Mounted.** Right-click › Appearance › Wall Mounted: the base goes away and only the screen remains, upright and facing you; faces, eyes and CarPlay all still work.
-- **10 faces, eyes on every one.** Island, Photos, Modular, Typograph (with an Embossed option), Flow, Weather, Calendar, Days Together, Black, and System 6 (Finder, Alarm Clock and About layouts, rebuilt the way they looked in 1988). The capsule follows each face’s era: solid black on the flat layouts, smoked on the iOS 27 ones, Liquid Glass on HomeView’s own, and a 1-bit button on System 6.
+- **11 faces, eyes on every one.** Island, Photos, Modular, Typograph (with an Embossed option), Flow, Weather, Calendar, Days Together, Black, System 6 (Finder, Alarm Clock and About layouts, rebuilt the way they looked in 1988), and Gauges (this Mac’s load, battery and temperature). The capsule follows each face’s era: solid black on the flat layouts, smoked on the iOS 27 ones, Liquid Glass on HomeView’s own, and a 1-bit button on System 6.
 - **10 expressions, each with its own silhouette.** New: Thinking (while CarPlay connects) and Annoyed (five quick clicks), easy to tell apart from across the room.
 - **Pair with a cable, then go wireless.** The first time you plug in, the screen walks you through pairing and the picture appears as soon as it’s done. Unplug afterwards and CarPlay moves to Wi-Fi without dropping picture or sound. After a restart it’s back in about 10–20 seconds.
 - **A Siri orb for F5.** While you talk, a colorful orb rises on the screen; let go and it shrinks back.

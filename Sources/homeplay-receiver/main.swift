@@ -450,7 +450,7 @@ if let pp = flag("--parent-pid").flatMap({ Int32($0) }), pp > 1 {
             DispatchQueue.main.async {
                 Wireless.shutdown()
                 FileHandle.standardError.write("父進程已結束，receiver 退出。\n".data(using: .utf8)!)
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { exit(0) }
+                DispatchQueue.main.asyncAfter(deadline: .now() + Wireless.exitGrace) { exit(0) }
             }
         }
     }
@@ -578,7 +578,7 @@ for sig in [SIGTERM, SIGINT] {
     src.setEventHandler {
         Wireless.shutdown()
         FileHandle.standardError.write("收到结束信号，已结束 CarPlay 会话。\n".data(using: .utf8)!)
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { exit(0) }
+        DispatchQueue.main.asyncAfter(deadline: .now() + Wireless.exitGrace) { exit(0) }
     }
     src.resume()
     shutdownSources.append(src)

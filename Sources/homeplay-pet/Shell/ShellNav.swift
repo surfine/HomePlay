@@ -225,5 +225,6 @@ enum ShellSelfTest {
         AppsSelfTest.run(check)   // 2.0: 闹钟、天气、日历、提醒事项的純邏輯
         RecipeSelfTest.run(check)   // 食譜 App：JSON-LD、時間、份量（Shell/Apps/RecipeParser.swift）
         MusicSelfTest.run(check)    // 音樂 App：資料庫輸出解析
+        MetricsSelfTest.run(check)  // 2.0 D1 儀表：警示門檻、格式、平滑、取樣器（Metrics/）
     }
 }

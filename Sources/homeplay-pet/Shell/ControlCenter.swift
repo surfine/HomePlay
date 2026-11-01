@@ -55,9 +55,9 @@ enum ControlCenter {
     /// 寬滑桿的圓角（截圖擬合成圓弧 ≈ 47）；2×2、4×2 ≈ 64（＝半格，跟膠囊同心）。我們用連續曲率的圓角，
     /// 2×2 的參數要小一點（refcompare 擬合：60 → 64）；寬滑桿只有 128 高，連續圓角最多 42，所以照截圖用一般圓弧 47
     static let wideRadius: CGFloat = 47, squareRadius: CGFloat = 60
-    /// 底下的「編輯控制項目」膠囊（截圖 182×46 → 字放大到 HomeView 的字級，高 60）
+    /// 底下的「編輯控制項目」膠囊：與 Sheet 主按鈕同一個高度（cta 96）
     static let editCapsuleY: CGFloat = gridY + gridH + 32
-    static let capsuleH: CGFloat = 60
+    static let capsuleH: CGFloat = HPTokens.Size.cta
     /// 長按展開的大卡（整個格子區）
     static let expandedRect = CGRect(x: gridX, y: gridY, width: 6 * 128 + 5 * 24, height: gridH)
     /// 舊名（P04 自檢、ShellAccessibility 用）

@@ -31,6 +31,9 @@ enum Shell {
     /// 最近一次有人互動或靠近（沒人看 60 秒就回錶面）
     nonisolated(unsafe) static var lastActive = CACurrentMediaTime()
     static let idleTimeout = 60.0
+    /// 除錯：HOMEPLAY_SKIP=nav,clock,pill,app,appstatus 逐項跳過，用來二分「同一個東西被畫兩遍」。
+    /// 玻璃合成那幾段見 HPDebug（native／systemglass／shader／blit／ring）。
+    static func skipping(_ part: String) -> Bool { HPDebug.skipping(part) }
     // 控制中心的開關（訪客模式、鎖定錶面先是旗標；亮度只壓暗桌寵的螢幕）
     nonisolated(unsafe) static var guestMode = false
     nonisolated(unsafe) static var lockFace = false
@@ -104,7 +107,9 @@ enum Shell {
     static let widgetRadius: CGFloat = HPTokens.Radius.widget   // 第五輪：官方 Photos 小工具量到約 56
 
     // 頂端藥丸：平常 208×62（稿 100×30）；2.0 P03：長成 Live Activity 時照內容變寬、高度不變（compact／minimal，Shell/LiveActivityStack.swift），上緣不動
-    static let pillTop: CGFloat = 46
+    /// 頂端藥丸的上緣。2.0 align：藥丸中心要跟左上返回鈕、右上時間同一條線（105）——
+    /// 62 高的話 105 − 31 = 74。以前是 46，整條頂列三個元件三條中心線，看起來高低錯落。
+    static let pillTop: CGFloat = HPTokens.cornerControlCenter - LiveActivityStack.height / 2
     static func pillRect(_ t: CGFloat) -> CGRect {
         lerp(CGRect(x: 512 - 104, y: pillTop, width: 208, height: 62), LiveActivityStack.compactPill, t)
     }
@@ -490,12 +495,18 @@ extension Face {
                 g.restoreGState()
             }
         } else {
-            drawShellBase(g, now, screen: Shell.nav.screen)
-            if let a = Shell.currentApp, a.showsCloseButton || PersonalGate.locks(a.id) { drawShellNav(g, a) }
-            HPGlass.flush(g, face: self, now: now)
-            if let a = Shell.currentApp, a.showsClock { drawShellClock(g) }
+            // 2.0 home-3：遠看＝整面一句話（沒有返回鈕、沒有時間；藥丸照舊）
+            if Shell.far || Shell.forceFar, Shell.nav.overlay == .none, let a = Shell.currentApp, !PersonalGate.locks(a.id), let gl = a.farGlance(face: self, now: now) {
+                Shell.drawFar(g, face: self, gl)
+                HPGlass.flush(g, face: self, now: now)
+            } else {
+                if !Shell.skipping("app") { drawShellBase(g, now, screen: Shell.nav.screen) }
+                if let a = Shell.currentApp, a.showsCloseButton || PersonalGate.locks(a.id), !Shell.skipping("nav") { drawShellNav(g, a) }
+                HPGlass.flush(g, face: self, now: now)
+                if let a = Shell.currentApp, a.showsClock, !Shell.skipping("clock") { drawShellClock(g) }
+            }
         }
-        drawShellPill(g, now)
+        if !Shell.skipping("pill") { drawShellPill(g, now) }
     }
 
     private func drawShellBase(_ g: CGContext, _ now: Double, screen: ShellScreen) {
@@ -622,6 +633,9 @@ extension Face {
 
     /// 2.0 R1：左上 88 px 玻璃圓鈕（影片 v1 0:47 行事曆、0:52 食譜：✕；子頁 ‹），系統玻璃（GlassPass，render 尾端一起算）
     func drawShellNav(_ g: CGContext, _ a: PetApp) {
+        if ProcessInfo.processInfo.environment["HOMEPLAY_GLASS_DUMP"] != nil {
+            FileHandle.standardError.write(Data("[nav] \(a.id) shows=\(a.showsCloseButton) locked=\(PersonalGate.locks(a.id))\n".utf8))
+        }
         HPComponents.shellBackButton(self, symbol: PersonalGate.locks(a.id) ? "xmark" : a.backSymbol)
     }
     /// 右上：小字時間（實機的 App 裡右上只有時間；媒體全螢幕的 App 自己關掉）
@@ -675,11 +689,16 @@ extension Face {
             r = Shell.lerp(pf.rect, r, e)
             k = (pf.rect.height / 156) + (k - pf.rect.height / 156) * e
         }
+        if SourceSwitcher.open != nil, from == nil, drawSourceSwitcher(g, pill: r, now: now) {   // 2.0 align D：長按拉出兩顆，這一幀不畫藥丸與眼睛
+            LiveActivityStack.hits = []
+            return
+        }
         if t > 0.02 {
             drawActivityStack(g, r, t: t, acts: acts, now: now)   // 2.0 P03：compact／minimal／expanded（Shell/LiveActivityStack.swift）
         } else {
             LiveActivityStack.hits = []; LiveActivityStack.shown = []
-            drawCapsuleBody(g, r, look: capsuleLook() == .system ? .black : capsuleLook(), animating: Shell.pillFrom != nil)
+            // 2.0 align A1：飛行中也用真的玻璃（以前飛行用暗色仿製品，0.45 s 一到整顆從暗灰跳成白玻璃，像一顆白膠囊突然壓上頂列）
+            drawCapsuleBody(g, r, look: capsuleLook() == .system ? .black : capsuleLook(), animating: false)
         }
         // P03：眼睛＝鏡頭，長成活動時留在正中、上緣不動（展開時也一樣，大卡從兩側與下方包住它）
         let ex = r.midX + (512 - r.midX) * t
@@ -689,6 +708,7 @@ extension Face {
         // 第四輪：夜間整面轉紅時只把眼睛那一段貼回原樣（Live Activity 的內容、分離的小藥丸、大卡一起變紅）
         Shell.nightKeep = t > 0.02 ? CGRect(x: ex - laEyesHalf - 6, y: r.minY, width: 2 * laEyesHalf + 12, height: LiveActivityStack.height) : nil
         LiveActivityStack.homeKeep = t > 0.02 ? LiveActivityStack.eyesPath(cx: ex, cy: ey, sep: cur.sep * k, rx: cur.rx * k, ry: cur.ry * k) : nil
+        if from == nil, SourceSwitcher.carPlayBehind(self) { drawSourceBadge(g, pill: r) }   // 2.0 align D：CarPlay 在背景
         let eyes = r.insetBy(dx: -12, dy: -10)
         islandRectBuilding = islandRectBuilding.map { $0.union(eyes) } ?? eyes
     }

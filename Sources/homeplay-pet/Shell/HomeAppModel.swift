@@ -374,7 +374,11 @@ enum HomeAppModel {
                          L("home.demo.cam.patio", "露台"), L("home.demo.cam.hall", "走廊")]
             for (k, name) in extra.prefix(min(9, n) - 4).enumerated() { all.append(acc("a3\(k)", name, "r1", "IP Camera", [], camera: true)) }
         }
-        return HomeSnapshot(ready: true, homes: [HomeInfo(id: "h1", name: L("home.demo.homeName", "我的家"), primary: true)], rooms: rooms, accessories: all, scenes: scenes)
+        // 2.0 home-1：示範的中樞與自動化（一則用捷徑跑、看不到目標；一則停用）
+        let autos = [HomeAutomation(id: "t1", name: L("home.demo.auto.arrive", "回家时开玄关灯"), home: "h1", enabled: true, kind: "event", targets: ["c10a"], when: ["arrive"]),
+                     HomeAutomation(id: "t2", name: L("home.demo.auto.sunset", "日落时拉上窗帘"), home: "h1", enabled: true, kind: "event", targets: ["c4b"], when: ["sunset"]),
+                     HomeAutomation(id: "t3", name: L("home.demo.auto.leave", "离家时关掉所有灯"), home: "h1", enabled: false, kind: "event", targets: [], when: ["leave"])]
+        return HomeSnapshot(ready: true, homes: [HomeInfo(id: "h1", name: L("home.demo.homeName", "我的家"), primary: true, hub: "connected")], rooms: rooms, accessories: all, scenes: scenes, automations: autos)
     }
 }
 
@@ -436,6 +440,8 @@ struct SnapshotSchedule: Equatable {
         return [pick]
     }
     mutating func began(_ id: String, now: Double) { asked[id] = now; inFlight.insert(id); lastStart = now }
+    /// 2.0 home-1：人走近時全部立刻到期（進行中的照舊等它回來）
+    mutating func refresh() { asked = [:]; lastStart = -1e9 }
 }
 
 // MARK: - 自檢
@@ -515,6 +521,7 @@ enum HomeAppSelfTest {
             && HomeAppModel.shortName("客厅嘅", room: "客厅") == "客厅嘅"   // l10n-ignore：自檢
         check(possessive, "家庭：房間名後面的「嘅／的／'s」一起拿掉")
         HomeAppSelfTest.realHome(check)
+        HomeStatusSelfTest.run(check)   // 2.0 home-1：家庭狀態、動態、遠看、這個房間
         HomeAppSelfTest.multiSwitch(check)
         // 磚的狀態
         let lamp = groups[0].tiles[1], sofa = groups[0].tiles[2], curtain = groups[0].tiles[3], thermo = groups[0].tiles[0]

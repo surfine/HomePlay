@@ -154,11 +154,13 @@ package enum Iap2Csm {
         name: String, model: String, manufacturer: String, serialNumber: String,
         firmwareVersion: String, hardwareVersion: String, externalAccessoryProtocol: String,
         bluetoothMac: String, ssid: String, language: String = "zh-Hans",
-        transport: Transport = .wireless
+        transport: Transport = .wireless, location: Bool = false
     ) -> Frame {
         let wired = transport == .wired
         var sent = messagesSentByAccessory
         if wired { sent.append(0xae03) }   // PowerSourceUpdate（照 MacPlay：有线才宣称供电）
+        if location { sent.append(Iap2Location.information) }   // 車機定位探針（Iap2Location.swift）
+        let received = messagesReceivedFromPhone + (location ? [Iap2Location.start, Iap2Location.stop] : [])
         var parameters: [Parameter] = [
             Parameter(id: 0, payload: nul(name)),
             Parameter(id: 1, payload: nul(model)),
@@ -167,7 +169,7 @@ package enum Iap2Csm {
             Parameter(id: 4, payload: nul(firmwareVersion)),
             Parameter(id: 5, payload: nul(hardwareVersion)),
             Parameter(id: 6, payload: u16List(sent)),
-            Parameter(id: 7, payload: u16List(messagesReceivedFromPhone)),
+            Parameter(id: 7, payload: u16List(received)),
             Parameter(id: 8, payload: [wired ? 2 : 0]), // 供电能力：有线 Advanced / 无线 None
             Parameter(id: 9, payload: be16(20)),
             Parameter(id: 10, payload: encodeParameters([
@@ -206,6 +208,7 @@ package enum Iap2Csm {
                 Parameter(id: 5, payload: []),
             ])))
         }
+        if location { parameters.append(Iap2Location.component(name: name)) }   // 參數 22 排在 24 之後也行：手機按 id 找
         parameters.append(Parameter(id: 30, payload: encodeParameters([
             Parameter(id: 0, payload: be16(42)),
             Parameter(id: 1, payload: nul("RouteGuidance")),

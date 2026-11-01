@@ -1,4 +1,4 @@
-// 錶面各自的選項：Typograph 的「材質」（平面／浮雕）、System 6 的「版式」（Finder／Alarm Clock／About）。
+// 錶面各自的選項：Typograph 的「材質」（平面／浮雕）、System 6 的「版式」（Finder／Alarm Clock／About）、儀表的「版式」（細線／技術／線性多錶）。
 // 原本是三款獨立錶面（浮雕指針、System 6 · Alarm Clock、System 6 · About），併進這兩款當選項；設定存 UserDefaults。
 
 import AppKit
@@ -11,6 +11,7 @@ extension Face {
         let snapshotting = CommandLine.arguments.contains("--snapshot")
         typographMaterial = TypographMaterial(rawValue: d.string(forKey: TypographMaterial.defaultsKey) ?? "") ?? .flat
         system6Layout = System6Layout(rawValue: d.string(forKey: System6Layout.defaultsKey) ?? "") ?? .finder
+        clusterLayout = ClusterLayout(rawValue: d.string(forKey: ClusterLayout.defaultsKey) ?? "") ?? .a
         let mig = saved.migratedOptions
         if let m = mig.material { typographMaterial = m }
         if let l = mig.layout { system6Layout = l }
@@ -21,6 +22,7 @@ extension Face {
         }
         if let m = faceOptionSnapshotOverride.material { typographMaterial = m }
         if let l = faceOptionSnapshotOverride.layout { system6Layout = l }
+        if let l = clusterLayoutSnapshotOverride { clusterLayout = l }
     }
 }
 
@@ -44,6 +46,8 @@ extension PetView {
                 TypographMaterial.allCases.map { ($0.title, $0.rawValue, face.typographMaterial == $0) }),
             sub(L("system6.layout", "System 6 版式"), face.style == .system6, #selector(menuSystem6Layout(_:)),
                 System6Layout.allCases.map { ($0.title, $0.rawValue, face.system6Layout == $0) }),
+            sub(L("cluster.layout", "仪表版式"), face.style == .cluster, #selector(menuClusterLayout(_:)),
+                ClusterLayout.allCases.map { ($0.title, $0.rawValue, face.clusterLayout == $0) }),
         ]
     }
     @objc func menuTypographMaterial(_ s: NSMenuItem) {
@@ -59,5 +63,12 @@ extension PetView {
         face.staticCache = nil; if face.style != .system6 { setFaceStyle(.system6) }
         if !showingVideo { model.setScreen(face.render()) }
         log("system6 layout \(raw)")
+    }
+    @objc func menuClusterLayout(_ s: NSMenuItem) {
+        guard let raw = s.representedObject as? String, let v = ClusterLayout(rawValue: raw) else { return }
+        face.clusterLayout = v; UserDefaults.standard.set(raw, forKey: ClusterLayout.defaultsKey)
+        face.staticCache = nil; if face.style != .cluster { setFaceStyle(.cluster) }
+        if !showingVideo { model.setScreen(face.render()) }
+        log("cluster layout \(raw)")
     }
 }

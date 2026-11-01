@@ -262,6 +262,11 @@ package enum CarPlayPlist {
         try BPlist.encode(["type": "forceKeyFrame", "params": ["uuid": displayUUID]] as [String: Any])
     }
 
+    /// 接收端要副屏内容（LIVI showUI）：uuid 是 /info 里那块显示器
+    package static func showUI(displayUUID: String, url: String) throws -> Data {
+        try BPlist.encode(["type": "showUI", "params": ["uuid": displayUUID, "url": url]] as [String: Any])
+    }
+
     package static func requestSiri(action: Int) throws -> Data {
         try BPlist.encode(["type": "requestSiri", "params": ["siriAction": action]] as [String: Any])
     }

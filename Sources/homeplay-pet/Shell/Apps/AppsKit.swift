@@ -9,7 +9,12 @@ enum AppUI {
     // MARK: 示範旗標（快照用，不需要任何權限）
     static let args = CommandLine.arguments
     static func flag(_ name: String) -> Bool { args.contains(name) }
-    static var demoAlarms: Bool { flag("--demo-alarms") || flag("--demo-alarm-ring") || flag("--demo-alarm-edit") || flag("--demo-alarm-insert") }
+    /// 旗標後面接一個值（`--worldclock-heard 台北`）；沒有就 nil
+    static func flagValue(_ name: String) -> String? {
+        guard let i = args.firstIndex(of: name), i + 1 < args.count, !args[i + 1].hasPrefix("--") else { return nil }
+        return args[i + 1]
+    }
+    static var demoAlarms: Bool { flag("--demo-alarms") || flag("--demo-alarm-ring") || flag("--demo-alarm-snooze") || flag("--demo-alarm-edit") || flag("--demo-alarm-insert") }
     static var demoCalendar: Bool { flag("--demo-calendar") || flag("--demo-calendar-month") || flag("--demo-calendar-detail") || OfficialDemo.on }
     static var demoReminders: Bool { flag("--demo-reminders") || flag("--demo-reminders-list") || flag("--demo-reminders-completed") }
     static var demoWeather: Bool { flag("--demo-weather") }

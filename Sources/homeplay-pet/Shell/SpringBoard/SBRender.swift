@@ -21,8 +21,13 @@ enum SBUI {
     static var doneButton: CGRect { Shell.editDoneRect }
     static func badge(_ item: CGRect, icon: Bool) -> CGRect {
         let ir = icon ? SB.iconRect(in: item) : item
-        let d: CGFloat = 56
+        let d = HPTokens.Size.badge   // 2.0 align F：56 → badge 48（命中照舊外擴 16）
         return CGRect(x: ir.minX - d * 0.3, y: ir.minY - d * 0.3, width: d, height: d)
+    }
+    /// 「−」的點按範圍：徽標 48 四周補到 Size.tap 88
+    static func badgeHit(_ item: CGRect, icon: Bool) -> CGRect {
+        let k = (HPTokens.Size.tap - HPTokens.Size.badge) / 2
+        return badge(item, icon: icon).insetBy(dx: -k, dy: -k)
     }
     /// 小工具右下的改大小把手（點按範圍 88）
     static func resizeHandle(_ r: CGRect) -> CGRect { CGRect(x: r.maxX - 66, y: r.maxY - 66, width: 88, height: 88) }
@@ -32,83 +37,131 @@ enum SBUI {
         return CGRect(x: 512 - w / 2, y: dotsY - 30, width: w, height: 60)
     }
 
-    // 資料夾（3×3）
+    // 資料夾（3×3）：標題與格子同一條內縮（48），上下留白同為 24
     static let folderPanel = CGRect(x: 182, y: 292, width: 660, height: 660)
+    static let folderInset: CGFloat = 48
     static func folderCells() -> [CGRect] {
         let pitchX: CGFloat = 206, pitchY: CGFloat = 206
-        let x0 = folderPanel.minX + (folderPanel.width - 2 * pitchX - 152) / 2, y0 = folderPanel.minY + 46
+        let x0 = folderPanel.minX + folderInset, y0 = folderPanel.minY + HPGrid.Rhythm.groupGap
         return (0..<9).map { CGRect(x: x0 + CGFloat($0 % 3) * pitchX, y: y0 + CGFloat($0 / 3) * pitchY, width: 152, height: 200) }
     }
-    static var folderTitle: CGRect { CGRect(x: folderPanel.minX + 8, y: folderPanel.minY - 120, width: folderPanel.width - 16, height: 96) }
+    static var folderTitle: CGRect { CGRect(x: folderPanel.minX + folderInset, y: folderPanel.minY - 120, width: folderPanel.width - folderInset * 2, height: 96) }
 
     // 選單
     // 10-grid：夾在螢幕內的邊距用 48（HPGrid.scale）；沒夾到時左緣對齊錨點（selftest 有驗）
-    static let menuWidth: CGFloat = 620, menuRow: CGFloat = 100, menuSizes: CGFloat = 116
+    // 2.0 align：一條左緣（menu 12）、一種行高（row 88）、行間 8；尺寸塊與清單列同高。
+    static let menuWidth: CGFloat = 620
+    static let menuRow: CGFloat = HPTokens.Size.row
+    static let menuSizes: CGFloat = HPTokens.Size.row
+    static let menuRowGap: CGFloat = HPGrid.Rhythm.rowGap
+    static let menuInset: CGFloat = HPGrid.Inset.menu
+    static let menuDividerGap: CGFloat = 12
+    /// 尺寸塊＋分隔線＋上下留白佔掉的高度（沒有尺寸塊時是 0）
+    static var menuSizeBlock: CGFloat { menuSizes + menuDividerGap * 2 + 2 }
     static func menuPanel(anchor: CGRect, rows: Int, sizes: Bool) -> CGRect {
-        let h = CGFloat(rows) * menuRow + (sizes ? menuSizes : 0) + 24
+        let n = CGFloat(rows)
+        let h = menuInset * 2 + (sizes ? menuSizeBlock : 0) + n * menuRow + max(0, n - 1) * menuRowGap
         var x = anchor.minX
         if x + menuWidth > 976 { x = anchor.maxX - menuWidth }
         x = max(48, min(976 - menuWidth, x))
         var y = anchor.maxY + 22
-        if y + h > 1000 { y = anchor.minY - 22 - h }
+        // 下緣留 30（selftest 要求整個面板在 30 內縮的畫面裡；原本用 1000 會差 5 單位）
+        if y + h > 994 { y = anchor.minY - 22 - h }
         if y < 48 { y = max(48, (1024 - h) / 2) }
         return CGRect(x: x, y: y, width: menuWidth, height: h)
     }
     static func menuRows(_ m: SBMenu) -> [CGRect] {
-        let top = m.panel.minY + 12 + (m.sizes.isEmpty ? 0 : menuSizes)
-        return m.rows.indices.map { CGRect(x: m.panel.minX + 12, y: top + CGFloat($0) * menuRow, width: m.panel.width - 24, height: menuRow) }
+        let top = m.panel.minY + menuInset + (m.sizes.isEmpty ? 0 : menuSizeBlock)
+        return m.rows.indices.map {
+            CGRect(x: m.panel.minX + menuInset, y: top + CGFloat($0) * (menuRow + menuRowGap),
+                   width: m.panel.width - menuInset * 2, height: menuRow)
+        }
     }
     static func menuSizeButtons(_ m: SBMenu) -> [(SBWidgetSize, CGRect)] {
-        let n = CGFloat(m.sizes.count), w: CGFloat = 110
-        let gap = (m.panel.width - 24 - n * w) / max(1, n - 1 + 2)
-        return m.sizes.enumerated().map { ($0.element, CGRect(x: m.panel.minX + 12 + gap + CGFloat($0.offset) * (w + gap), y: m.panel.minY + 14, width: w, height: 92)) }
+        let n = CGFloat(m.sizes.count)
+        let gap = menuInset, w: CGFloat = 140
+        let total = n * w + max(0, n - 1) * gap
+        let x0 = m.panel.midX - total / 2
+        return m.sizes.enumerated().map {
+            ($0.element, CGRect(x: x0 + CGFloat($0.offset) * (w + gap), y: m.panel.minY + menuInset, width: w, height: menuSizes))
+        }
     }
 
-    // sheet
+    // sheet（對齊：一條內縮 40、一組 topBar 圓鈕、標題字心＝圓鈕中心）
+    static let sheetInset: CGFloat = HPGrid.Inset.card
     static let sheetCard = CGRect(x: 40, y: 104, width: 944, height: 880)
-    static var sheetClose: CGRect { CGRect(x: sheetCard.maxX - 40 - 88, y: sheetCard.minY + 32, width: 88, height: 88) }
-    static var galleryBack: CGRect { CGRect(x: sheetCard.minX + 32, y: sheetCard.minY + 32, width: 88, height: 88) }
-    /// 圖庫清單：第一格 Smart Stack，其餘每個種類
+    /// 卡片內容邊線：標題、清單、預覽、主按鈕全部對這條
+    static var sheetContent: CGRect { sheetCard.insetBy(dx: sheetInset, dy: sheetInset) }
+    static var sheetTopBar: CGFloat { sheetCard.minY + sheetInset }
+    static var sheetClose: CGRect { CGRect(x: sheetCard.maxX - sheetInset - HPTokens.Size.topBar, y: sheetTopBar,
+                                          width: HPTokens.Size.topBar, height: HPTokens.Size.topBar) }
+    static var galleryBack: CGRect { CGRect(x: sheetCard.minX + sheetInset, y: sheetTopBar,
+                                           width: HPTokens.Size.topBar, height: HPTokens.Size.topBar) }
+    /// 標題基線：字心對圓鈕中心（56 bold 的 cap 高約 39.5）
+    static var sheetTitleBaseline: CGFloat { sheetTopBar + HPTokens.Size.topBar / 2 + 19.75 }
     static func galleryEntries() -> [(SBWidgetKind?, CGRect)] {
         let entries: [SBWidgetKind?] = [nil] + SBWidgetKind.allCases.filter { $0 != .webApp }.map { $0 }   // Web App 的小工具從它的圖示長按加
-        let colW = (sheetCard.width - 96) / 3
+        let c = sheetContent, gap = HPGrid.Rhythm.groupGap
+        let colW = (c.width - gap * 2) / 3
         var out: [(SBWidgetKind?, CGRect)] = []
         for (i, e) in entries.enumerated() {
-            let x = sheetCard.minX + 48 + CGFloat(i % 3) * colW + 6, y = sheetCard.minY + 160 + CGFloat(i / 3) * 128
-            out.append((e, CGRect(x: x, y: y, width: colW - 12, height: 112)))
+            let x = c.minX + CGFloat(i % 3) * (colW + gap)
+            let y = c.minY + 120 + CGFloat(i / 3) * (112 + HPGrid.Rhythm.rowGap)
+            out.append((e, CGRect(x: x, y: y, width: colW, height: 112)))
         }
         return out
     }
-    static var galleryPreviewBox: CGRect { CGRect(x: sheetCard.minX + 40, y: sheetCard.minY + 236, width: sheetCard.width - 80, height: 360) }
-    static var galleryAdd: CGRect { CGRect(x: sheetCard.minX + 48, y: sheetCard.maxY - 150, width: sheetCard.width - 96, height: 108) }
+    static var galleryPreviewBox: CGRect { CGRect(x: sheetContent.minX, y: sheetCard.minY + 236,
+                                                  width: sheetContent.width, height: 360) }
+    static var galleryAdd: CGRect { CGRect(x: sheetContent.minX, y: sheetContent.maxY - HPTokens.Size.cta,
+                                           width: sheetContent.width, height: HPTokens.Size.cta) }
     static func galleryDots(_ n: Int) -> [CGRect] {
         let pitch: CGFloat = 44, x0 = 512 - CGFloat(n - 1) * pitch / 2
-        return (0..<n).map { CGRect(x: x0 + CGFloat($0) * pitch - 22, y: galleryPreviewBox.maxY + 54, width: 44, height: 56) }
+        let y = galleryAdd.minY - 48
+        return (0..<n).map { CGRect(x: x0 + CGFloat($0) * pitch - 22, y: y - HPTokens.Size.tap / 2, width: 44, height: HPTokens.Size.tap) }
     }
     static func gallerySizes(kind: SBWidgetKind?) -> [SBWidgetSize] { kind?.sizes ?? [.small, .medium, .large] }
 
-    // 設定卡（Edit Widget、編輯疊放、自訂）
+    // 設定卡（對齊：內縮 40、選項行 72、主按鈕滿內容寬）
     static let configCard = CGRect(x: 96, y: 96, width: 832, height: 888)
-    static var configDone: CGRect { CGRect(x: configCard.midX - 200, y: configCard.maxY - 128, width: 400, height: 96) }
-    static func configRows(top: CGFloat, count: Int, rowH: CGFloat = 86) -> [CGRect] {
-        (0..<count).map { CGRect(x: configCard.minX + 40, y: top + CGFloat($0) * (rowH + 8), width: configCard.width - 80, height: rowH) }
+    static var configContent: CGRect { configCard.insetBy(dx: sheetInset, dy: sheetInset) }
+    static var configDone: CGRect { CGRect(x: configContent.minX, y: configCard.maxY - sheetInset - HPTokens.Size.cta,
+                                           width: configContent.width, height: HPTokens.Size.cta) }
+    static func configRows(top: CGFloat, count: Int, rowH: CGFloat = HPTokens.Size.rowCompact) -> [CGRect] {
+        (0..<count).map {
+            CGRect(x: configContent.minX, y: top + CGFloat($0) * (rowH + HPGrid.Rhythm.rowGap),
+                   width: configContent.width, height: rowH)
+        }
+    }
+    /// Edit Widget 的選項列（繪製與命中共用；以前兩邊各寫一份，改一個就會錯位）
+    static func configOptionRows(_ count: Int) -> [CGRect] { configRows(top: configCard.minY + 328, count: count) }
+    /// 編輯疊放：清單列
+    static func stackRows(_ count: Int) -> [CGRect] { configRows(top: configCard.minY + 124, count: count) }
+    /// 編輯疊放：下面兩個開關列
+    static func stackToggleRows(_ rows: [CGRect]) -> [CGRect] {
+        let t0 = (rows.last?.maxY ?? configCard.minY + 124) + HPGrid.Rhythm.groupGap
+        return configRows(top: t0, count: 2)
     }
     static func customizeTiles() -> [(HomeAppearance, CGRect)] {
-        let w: CGFloat = 170, gap = (configCard.width - 80 - 4 * w) / 3
-        return HomeAppearance.allCases.enumerated().map { ($0.element, CGRect(x: configCard.minX + 40 + CGFloat($0.offset) * (w + gap), y: configCard.minY + 150, width: w, height: 190)) }
+        let w: CGFloat = 170, gap = HPGrid.Rhythm.groupGap
+        return HomeAppearance.allCases.enumerated().map { ($0.element, CGRect(x: configContent.minX + CGFloat($0.offset) * (w + gap), y: configCard.minY + 150, width: w, height: 190)) }
     }
-    static var customizeLarge: CGRect { CGRect(x: configCard.minX + 40, y: configCard.minY + 380, width: configCard.width - 80, height: 96) }
+    static var customizeLarge: CGRect { CGRect(x: configContent.minX, y: configCard.minY + 380, width: configContent.width, height: HPTokens.Size.row) }
     static let tintSwatches: [UInt32] = [0x0A84FF, 0x30D158, 0xFF9F0A, 0xFF375F, 0xBF5AF2, 0x8E8E93]
     static func tintRects() -> [CGRect] {
-        let d: CGFloat = 88, gap: CGFloat = 26, x0 = configCard.midX - (CGFloat(tintSwatches.count) * d + CGFloat(tintSwatches.count - 1) * gap) / 2
+        // 6 顆鋪滿內容寬：6×92 + 5×40 = 752
+        let d: CGFloat = 92, gap: CGFloat = 40, x0 = configContent.minX
         return tintSwatches.indices.map { CGRect(x: x0 + CGFloat($0) * (d + gap), y: configCard.minY + 510, width: d, height: d) }
     }
 
-    // 提示卡（移除確認）
+    // 提示卡（移除確認）：標題、正文、按鈕同一條內縮 40
     static let alertCard = CGRect(x: 172, y: 300, width: 680, height: 460)
+    static var alertContent: CGRect { alertCard.insetBy(dx: sheetInset, dy: sheetInset) }
     static var alertButtons: [CGRect] {
-        [CGRect(x: alertCard.minX + 32, y: alertCard.maxY - 250, width: alertCard.width - 64, height: 100),
-         CGRect(x: alertCard.minX + 32, y: alertCard.maxY - 132, width: alertCard.width - 64, height: 100)]
+        let b = CGRect(x: alertContent.minX, y: alertCard.maxY - sheetInset - HPTokens.Size.cta,
+                       width: alertContent.width, height: HPTokens.Size.cta)
+        let a = b.offsetBy(dx: 0, dy: -(HPTokens.Size.cta + HPGrid.Rhythm.rowGap * 2))
+        return [a, b]
     }
 
     // 編輯頁面
@@ -173,14 +226,14 @@ extension Face {
 
     func drawSpringBoard(_ g: CGContext, _ now: Double, library: Bool) {
         if Shell.homeLayer == nil { SB.pageCache.removeAll() }   // 外觀、圖示、排列換了（各處照舊把 homeLayer 清掉）
-        let (bg, wallShot) = sbBackdrop()
+        let bg = sbBackdrop()
         Shell.homeLayer = ("sb", bg)
         drawUpright(g, bg, in: SBUI.full)
         if library { drawSBLibrary(g, now); return }
         let pagesHidden = SB.sheet == .editPages   // 編輯頁面：後面只留桌布（iOS 27）
         if !pagesHidden {
             drawSBTopBar(g, now)
-            drawSBPages(g, now, wallShot: wallShot)
+            drawSBPages(g, now)
             drawSBDots(g, now)
         }
         sbSelectionRing(g)
@@ -198,32 +251,34 @@ extension Face {
         if let s = SB.sheet { drawSBSheet(g, s, now) }
     }
 
-    /// 桌布＋面板（玻璃）一張；另外回面板之前的桌布（清透／染色的圖示玻璃取樣用）
-    private func sbBackdrop() -> (CGImage, CGImage?) {
+    /// 桌布＋面板（玻璃）一張。
+    /// 2.0 glass：清透／染色的圖示與小工具**不再**上玻璃（內容層不上 Liquid Glass——
+    /// 官方那層是系統替圖示做的 accented 版本；這裡直接畫 HomeIconVariant 的結果，見 HomeAppearance）。
+    private func sbBackdrop() -> CGImage {
         let wall = shellWallpaper()
         let sc = renderPixelScale, look = HomeAppearance.current
-        let key = "sbbg|\(ObjectIdentifier(wall).hashValue)|\(Int(sc * 100))|\(look.cacheKey)"
-        if let c = SB.pageCache[key], let w = SB.pageCache[key + "|wall"] { return (c, w) }
-        if let c = SB.pageCache[key] { return (c, nil) }
+        let key = "sbbg|\(ObjectIdentifier(wall).hashValue)|\(Int(sc * 100))|\(look.cacheKey)|a11y\(HPAccessibility.generation)"
+        if let c = SB.pageCache[key] { return c }
         let px = Int((1024 * sc).rounded())
-        var shot: CGImage?
         let img = makeImage(px, px) { g in
             g.scaleBy(x: sc, y: sc)
             let full = SBUI.full
             drawUpright(g, wall, in: full)
             if look.wallpaperShade > 0 { g.setFillColor(NSColor(white: 0, alpha: look.wallpaperShade).cgColor); g.fill(full) }
-            if look.glassBase { shot = g.makeImage() }
-            let inset = HPTokens.Home.panelInset
-            let panelPath = continuousRoundedRect(full.insetBy(dx: inset, dy: inset), radius: Screen.concentric(inset: inset))
-            HPGlass.add(panelPath) { _ in }
-            HPGlass.flush(g, face: self, clear: true)
-            g.saveGState(); g.addPath(panelPath); g.setFillColor(NSColor(white: 0, alpha: HPTokens.Home.panelShade).cgColor); g.fillPath(); g.restoreGState()
-            HPGlass.panelRim(g, panelPath)
+            // 減少透明度：內容層的面板不是控制，沒有「不透明版」可換——直接不畫，壁紙原樣留著。
+            // 換成淺色不透明面板的話，恆白的圖示標籤會壓在 #F2F2F7 上（約 1.6:1）。
+            if !HPGlass.reduceTransparency {
+                let inset = HPTokens.Home.panelInset
+                let panelPath = continuousRoundedRect(full.insetBy(dx: inset, dy: inset), radius: Screen.concentric(inset: inset))
+                HPGlass.add(panelPath) { _ in }
+                HPGlass.flush(g, face: self, clear: true)
+                g.saveGState(); g.addPath(panelPath); g.setFillColor(NSColor(white: 0, alpha: HPTokens.Home.panelShade).cgColor); g.fillPath(); g.restoreGState()
+                HPGlass.panelRim(g, panelPath)
+            }
         }
         if SB.pageCache.count > 40 { SB.pageCache.removeAll() }
         SB.pageCache[key] = img
-        if let shot { SB.pageCache[key + "|wall"] = shot }
-        return (img, shot)
+        return img
     }
 
     // MARK: 頂端：問候語＋頭像；編輯模式＝筆刷膠囊＋ ✓
@@ -254,7 +309,7 @@ extension Face {
 
     // MARK: 頁
 
-    private func drawSBPages(_ g: CGContext, _ now: Double, wallShot: CGImage?) {
+    private func drawSBPages(_ g: CGContext, _ now: Double) {
         let vis = SB.visiblePages, pos = SB.pagePosition(now)
         g.saveGState()
         g.addPath(continuousRoundedRect(SBUI.panel, radius: Screen.concentric(inset: HPTokens.Home.panelInset))); g.clip()
@@ -268,7 +323,7 @@ extension Face {
                     g.translateBy(x: -dx, y: 0)                       // 減少動態效果：不滑，交叉淡化
                     g.setAlpha(max(0, 1 - abs(CGFloat(vi) - pos)))
                 }
-                drawSBPage(g, vis[vi], now: now, wallShot: wallShot, current: vi == SB.page)
+                drawSBPage(g, vis[vi], now: now, current: vi == SB.page)
                 g.restoreGState()
             }
         }
@@ -276,12 +331,12 @@ extension Face {
     }
 
     /// 一頁：靜止（沒在編輯、沒有讓位動畫）用整張快取；不然逐項畫
-    private func drawSBPage(_ g: CGContext, _ pi: Int, now: Double, wallShot: CGImage?, current: Bool) {
+    private func drawSBPage(_ g: CGContext, _ pi: Int, now: Double, current: Bool) {
         let items = SB.displayItems(page: pi)
         let placed = SBLayout.pack(items).placed.filter { !$0.item.isSpacer }
         let live = SB.editing || SB.drag != nil || SB.pressedKey != nil || (current && SB.anims.values.contains { !$0.x.done(now) || !$0.y.done(now) }) || !SB.fades.isEmpty
         if !live {
-            drawUpright(g, sbPageImage(pi, placed, wallShot: wallShot), in: SBUI.full)
+            drawUpright(g, sbPageImage(pi, placed), in: SBUI.full)
             for p in placed { drawSBLiveContent(g, p.item, SB.frame(p), now: now) }
             if current { SB.anims.removeAll() }
             return
@@ -297,7 +352,7 @@ extension Face {
             g.setAlpha(alpha)
             if angle != 0 { g.translateBy(x: r.midX, y: r.midY); g.rotate(by: angle); g.translateBy(x: -r.midX, y: -r.midY) }
             if let d = SB.drag, d.folderReady, d.folderTarget == key { sbFolderHover(g, r) }
-            drawSBItem(g, p.item, r, now: now, glassApprox: true, badges: SB.editing)
+            drawSBItem(g, p.item, r, now: now, badges: SB.editing)
             g.restoreGState()
         }
     }
@@ -330,8 +385,9 @@ extension Face {
         return amp * CGFloat(sin(t))
     }
 
-    /// 靜止的一頁（圖示、標籤、資料夾圖示、清透／染色的玻璃底）；小工具的內容每幀另外畫
-    private func sbPageImage(_ pi: Int, _ placed: [SBPlacement], wallShot: CGImage?) -> CGImage {
+    /// 靜止的一頁（圖示、標籤、資料夾圖示）；小工具的內容每幀另外畫。
+    /// 2.0 glass：清透／染色的圖示底是 HomeIconVariant 的 accented 圖，不再墊一層 Liquid Glass。
+    private func sbPageImage(_ pi: Int, _ placed: [SBPlacement]) -> CGImage {
         let sc = renderPixelScale, look = HomeAppearance.current
         let fp = placed.map { "\($0.item.key ?? "")@\($0.col),\($0.row)" }.joined(separator: ";")
         let folders = placed.compactMap { if case .folder(let f) = $0.item { return f.apps.joined(separator: ",") + f.name }; return nil }.joined(separator: "|")
@@ -340,15 +396,7 @@ extension Face {
         let px = Int((1024 * sc).rounded())
         let img = makeImage(px, px) { g in
             g.scaleBy(x: sc, y: sc)
-            if look.glassBase {
-                for p in placed {
-                    let r = SB.frame(p)
-                    if p.item.isIcon { let ir = SB.iconRect(in: r); HPGlass.add(continuousRoundedRect(ir, radius: ir.width * 0.2237)) { _ in } }
-                    else { HPGlass.add(continuousRoundedRect(r, radius: Shell.widgetRadius)) { _ in } }
-                }
-                HPGlass.flush(g, face: self, clear: true, backdrop: wallShot)
-            }
-            for p in placed { drawSBItem(g, p.item, SB.frame(p), now: CACurrentMediaTime(), glassApprox: false, badges: false, content: false) }
+            for p in placed { drawSBItem(g, p.item, SB.frame(p), now: CACurrentMediaTime(), badges: false, content: false) }
         }
         if SB.pageCache.count > 40 { SB.pageCache.removeAll() }
         SB.pageCache[key] = img
@@ -367,8 +415,7 @@ extension Face {
     // MARK: 一個項目
 
     /// content＝要不要畫小工具內容（快取頁不畫，每幀另外畫）
-    func drawSBItem(_ g: CGContext, _ it: SBItem, _ r: CGRect, now: Double, glassApprox: Bool, badges: Bool, content: Bool = true, labels: Bool = true) {
-        let look = HomeAppearance.current
+    func drawSBItem(_ g: CGContext, _ it: SBItem, _ r: CGRect, now: Double, badges: Bool, content: Bool = true, labels: Bool = true) {
         let lf = HPType.sf(HPType.Size.iconLabel, HPTokens.Home.iconLabelWeight), lb = HPTokens.Home.labelBaseline
         let showLabel = labels && !SB.largeIcons
         func label(_ s: String, _ under: CGRect) {
@@ -376,36 +423,27 @@ extension Face {
             let t = Face.clipped(s, lf, r.width + Shell.colGap - 6)
             drawLeft(g, t, font: lf, x: r.midX - Typo.width(t, lf) / 2, y: under.maxY + lb, color: .white)
         }
-        func approxBase(_ path: CGPath) {
-            guard glassApprox, look.glassBase else { return }
-            g.saveGState(); g.addPath(path)
-            g.setFillColor(look == .tinted ? (HomeAppearance.tintColor.blended(withFraction: 0.78, of: .black) ?? .black).withAlphaComponent(0.6).cgColor : NSColor(white: 1, alpha: 0.16).cgColor)
-            g.fillPath(); g.restoreGState()
-        }
         let pressed = content && SB.pressedKey != nil && SB.pressedKey == it.key && !SB.editing   // 快取頁（content＝false）不烤進按下的樣子
         switch it {
         case .app(let id):
             guard let app = AppRegistry.app(id) else { return }
             let ir = SB.iconRect(in: r)
-            approxBase(continuousRoundedRect(ir, radius: ir.width * 0.2237))
             Shell.drawHomeIcon(g, face: self, app: app, in: ir)
             if pressed { g.saveGState(); g.addPath(continuousRoundedRect(ir, radius: ir.width * 0.2237)); g.setFillColor(NSColor(white: 0, alpha: 0.28).cgColor); g.fillPath(); g.restoreGState() }
             label(app.title, ir)
             if badges { sbBadge(g, SBUI.badge(r, icon: true)) }
         case .folder(let f):
             let ir = SB.iconRect(in: r)
-            sbFolderIcon(g, f, ir, glassApprox: glassApprox)
+            sbFolderIcon(g, f, ir)
             if pressed { g.saveGState(); g.addPath(continuousRoundedRect(ir, radius: ir.width * 0.2237)); g.setFillColor(NSColor(white: 0, alpha: 0.22).cgColor); g.fillPath(); g.restoreGState() }
             label(f.name, ir)
             if badges { sbBadge(g, SBUI.badge(r, icon: true)) }
         case .widget(let w):
-            approxBase(continuousRoundedRect(r, radius: Shell.widgetRadius))
             if content { drawSBWidget(g, w, r, now: now) }
             if pressed { g.saveGState(); g.addPath(continuousRoundedRect(r, radius: Shell.widgetRadius)); g.setFillColor(NSColor(white: 0, alpha: 0.18).cgColor); g.fillPath(); g.restoreGState() }
             label(w.title, r)
             if badges { sbBadge(g, SBUI.badge(r, icon: false)); if w.kind.sizes.count > 1 { sbResizeHandle(g, r) } }
         case .stack(let s):
-            approxBase(continuousRoundedRect(r, radius: Shell.widgetRadius))
             if content { drawSBStack(g, s, r, now: now) }
             let ws = SB.stackWidgets(s, face: self, now: now)
             label(ws.isEmpty ? "" : ws[min(s.index, ws.count - 1)].title, r)
@@ -435,7 +473,7 @@ extension Face {
         g.restoreGState()
     }
     /// 資料夾圖示：半透明的底＋九宮格的小圖示
-    func sbFolderIcon(_ g: CGContext, _ f: SBFolder, _ ir: CGRect, glassApprox: Bool) {
+    func sbFolderIcon(_ g: CGContext, _ f: SBFolder, _ ir: CGRect) {
         let path = continuousRoundedRect(ir, radius: ir.width * 0.2237)
         g.saveGState(); g.addPath(path); g.setFillColor(NSColor(white: 1, alpha: 0.24).cgColor); g.fillPath(); g.restoreGState()
         g.saveGState(); g.addPath(path); g.setStrokeColor(NSColor(white: 1, alpha: 0.28).cgColor); g.setLineWidth(1.5); g.strokePath(); g.restoreGState()
@@ -471,14 +509,15 @@ extension Face {
         place(idx, off)
         if off < 0 { place(idx + 1, off + r.height + 8) } else if off > 0 { place(idx - 1, off - r.height - 8) }
         g.restoreGState()
-        // 右邊的頁點：編輯模式一直有；平常換過之後亮 1.8 秒
+        // 右邊的頁點：編輯模式一直有；平常換過之後亮 1.8 秒。照 iOS 只是指示器、不能點（2.0 align F：輔助使用在小工具本身念「第 n 個，共 m 個」）
         let shown = SB.stackShown[key].map { now - $0 } ?? 99
         let alpha: CGFloat = SB.editing || SB.stackDrag?.key == key ? 1 : CGFloat(max(0, min(1, (1.8 - shown) / 0.4)))
         guard alpha > 0.01, ws.count > 1 else { return }
         let pitch: CGFloat = 22, x = r.maxX + 16, y0 = r.midY - CGFloat(ws.count - 1) * pitch / 2
         for i in ws.indices {
             g.setFillColor(NSColor.white.withAlphaComponent((i == idx ? 0.95 : 0.4) * alpha).cgColor)
-            g.fillEllipse(in: CGRect(x: x - 5, y: y0 + CGFloat(i) * pitch - 5, width: 10, height: 10))
+            let dot = HPTokens.Size.dot   // 2.0 align F：10 → dot 14（所有頁點同一個直徑）
+            g.fillEllipse(in: CGRect(x: x - dot / 2, y: y0 + CGFloat(i) * pitch - dot / 2, width: dot, height: dot))
         }
     }
 
@@ -525,7 +564,7 @@ extension Face {
         g.translateBy(x: r.midX, y: r.midY); g.scaleBy(x: k, y: k); g.translateBy(x: -r.midX, y: -r.midY)
         g.setShadow(offset: CGSize(width: 0, height: 14), blur: 34, color: NSColor(white: 0, alpha: 0.35).cgColor)
         g.beginTransparencyLayer(auxiliaryInfo: nil)
-        drawSBItem(g, d.item, r, now: now, glassApprox: true, badges: false, labels: false)
+        drawSBItem(g, d.item, r, now: now, badges: false, labels: false)
         g.endTransparencyLayer()
         g.restoreGState()
     }
@@ -550,7 +589,7 @@ extension Face {
         }
         g.restoreGState()
         let cells = SBUI.folderCells()
-        let apps = Array(folder.apps.dropFirst(f.page * SBFolder.pageSize).prefix(SBFolder.pageSize))
+        let apps = Array(folder.apps.prefix(SBFolder.pageSize))   // 2.0 align F：容量＝一頁，不再有翻頁
         let dragging = SB.drag?.key
         let k = panel.width / SBUI.folderPanel.width
         HPGlass.add(continuousRoundedRect(panel, radius: radius), union: nil, presence: HPMotion.reduceMotion ? t : 1) { [weak self] c in
@@ -561,16 +600,10 @@ extension Face {
                 cell = CGRect(x: panel.minX + (cell.minX - SBUI.folderPanel.minX) * k, y: panel.minY + (cell.minY - SBUI.folderPanel.minY) * k, width: cell.width * k, height: cell.height * k)
                 c.saveGState()
                 if SB.editing, !HPMotion.reduceMotion { let a = self.sbWiggle("a:\(id)", i, cell, now); c.translateBy(x: cell.midX, y: cell.midY); c.rotate(by: a); c.translateBy(x: -cell.midX, y: -cell.midY) }
-                self.drawSBItem(c, .app(id), cell, now: now, glassApprox: false, badges: SB.editing)
+                self.drawSBItem(c, .app(id), cell, now: now, badges: SB.editing)
                 c.restoreGState()
             }
-            let pages = (folder.apps.count + SBFolder.pageSize - 1) / SBFolder.pageSize
-            if pages > 1 {
-                for i in 0..<pages {
-                    c.setFillColor(NSColor.white.withAlphaComponent(i == f.page ? 0.95 : 0.4).cgColor)
-                    c.fillEllipse(in: CGRect(x: panel.midX - CGFloat(pages - 1) * 15 + CGFloat(i) * 30 - 7, y: panel.maxY - 34, width: 14, height: 14))
-                }
-            }
+            // 資料夾容量 9＝永遠一頁，頁點畫得出來卻永遠到不了；不畫（以前還會壓到第三列標籤）
             c.restoreGState()
         }
         HPGlass.flush(g, face: self, now: now)
@@ -586,7 +619,7 @@ extension Face {
         if let key = m.key, let it = SB.layout.item(key) {
             let s = 1 + 0.04 * t
             g.saveGState(); g.translateBy(x: m.anchor.midX, y: m.anchor.midY); g.scaleBy(x: s, y: s); g.translateBy(x: -m.anchor.midX, y: -m.anchor.midY)
-            drawSBItem(g, it, m.anchor, now: now, glassApprox: true, badges: false, labels: false)
+            drawSBItem(g, it, m.anchor, now: now, badges: false, labels: false)
             g.restoreGState()
         } else if let id = m.appID, let app = AppRegistry.app(id) {
             Shell.drawHomeIcon(g, face: self, app: app, in: SBUI.libraryIcon(m.anchor))
@@ -599,9 +632,11 @@ extension Face {
             if !m.sizes.isEmpty {
                 for (sz, r) in SBUI.menuSizeButtons(m) {
                     if sz == m.current { c.addPath(continuousRoundedRect(r, radius: 28)); c.setFillColor(NSColor(white: HPGlass.inkIsLight ? 1 : 0, alpha: 0.14).cgColor); c.fillPath() }
-                    self.drawSBSizeGlyph(c, sz, in: r.insetBy(dx: 26, dy: 22), color: HPGlass.ink)
+                    self.drawSBSizeGlyph(c, sz, in: r.insetBy(dx: 36, dy: 14), color: HPGlass.ink)
                 }
-                c.setFillColor(HPGlass.ink.withAlphaComponent(0.15).cgColor); c.fill(CGRect(x: panel.minX + 24, y: panel.minY + SBUI.menuSizes, width: panel.width - 48, height: 2))
+                let dividerY = panel.minY + SBUI.menuInset + SBUI.menuSizes + SBUI.menuDividerGap
+                c.setFillColor(HPGlass.ink.withAlphaComponent(0.15).cgColor)
+                c.fill(CGRect(x: panel.minX + SBUI.menuInset, y: dividerY, width: panel.width - SBUI.menuInset * 2, height: 2))
             }
             let f = HPType.sf(40, .regular)
             for (row, r) in zip(m.rows, SBUI.menuRows(m)) {
@@ -648,9 +683,11 @@ extension Face {
         drawLeft(g, t, font: f, x: cx - Typo.width(t, f) / 2, y: y, color: c)
     }
     private func toggle(_ g: CGContext, _ r: CGRect, on: Bool) {
-        let sw = CGRect(x: r.maxX - 150, y: r.midY - 32, width: 126, height: 64)
+        let h = HPTokens.Size.switchTrack
+        let sw = CGRect(x: r.maxX - 150, y: r.midY - h / 2, width: 132, height: h)
         g.addPath(HPComponents.capsulePath(sw)); g.setFillColor((on ? srgb(0x30D158) : NSColor(white: 1, alpha: 0.22)).cgColor); g.fillPath()
-        g.setFillColor(NSColor.white.cgColor); g.fillEllipse(in: CGRect(x: on ? sw.maxX - 60 : sw.minX + 4, y: sw.minY + 4, width: 56, height: 56))
+        let knob = h - 10
+        g.setFillColor(NSColor.white.cgColor); g.fillEllipse(in: CGRect(x: on ? sw.maxX - knob - 5 : sw.minX + 5, y: sw.minY + 5, width: knob, height: knob))
     }
 
     private func drawSBSheet(_ g: CGContext, _ s: SBSheet, _ now: Double) {
@@ -669,7 +706,7 @@ extension Face {
         sheetBase(g, card, key: "sbgallery")
         roundGlyph(g, SBUI.sheetClose, "xmark")
         guard kind != nil || stack else {
-            drawLeft(g, L("home.gallery.title", "小组件"), font: HPType.sf(56, .bold), x: card.minX + 56, y: card.minY + 104, color: .white)
+            drawLeft(g, L("home.gallery.title", "小组件"), font: HPType.sf(56, .bold), x: SBUI.sheetContent.minX, y: SBUI.sheetTitleBaseline, color: .white)
             let nf = HPType.sf(32, .semibold)
             for (k, r) in SBUI.galleryEntries() {
                 g.addPath(continuousRoundedRect(r, radius: 30)); g.setFillColor(NSColor(white: 1, alpha: 0.1).cgColor); g.fillPath()
@@ -690,10 +727,10 @@ extension Face {
         let size = sizes[max(0, min(sizes.count - 1, page))]
         let title = kind?.title ?? L("sb.smartStack", "智能叠放")
         let blurb = kind?.blurb ?? L("sb.smartStack.blurb", "叠放几个小组件，上下滑动切换；智能旋转会在合适的时候显示合适的那个。")
-        centered(g, title, HPType.sf(54, .bold), 512, card.minY + 104, .white, max: 640)
+        centered(g, title, HPType.sf(54, .bold), 512, SBUI.sheetTitleBaseline, .white, max: 640)
         let bf = HPType.sf(30, .regular)
         var y = card.minY + 170
-        for line in Face.photosWrap(blurb, bf, 760, maxLines: 2) { centered(g, line, bf, 512, y, NSColor.white.withAlphaComponent(0.6)); y += 40 }
+        for line in Face.photosWrap(blurb, bf, SBUI.sheetContent.width - 64, maxLines: 2) { centered(g, line, bf, 512, y, NSColor.white.withAlphaComponent(0.6)); y += 40 }
         let box = SBUI.galleryPreviewBox
         let real = SB.frame(col: 0, row: 0, span: size.span)
         let k = min(1, box.width / real.width, box.height / real.height) * 0.9
@@ -715,7 +752,8 @@ extension Face {
         centered(g, String(format: L("sb.size.caption", "%@ · %d×%d"), size.title, size.span.w, size.span.h), sf, 512, box.maxY + 38, NSColor.white.withAlphaComponent(0.6))
         for (i, d) in SBUI.galleryDots(sizes.count).enumerated() {
             g.setFillColor(NSColor.white.withAlphaComponent(i == page ? 0.95 : 0.35).cgColor)
-            g.fillEllipse(in: CGRect(x: d.midX - 9, y: d.midY - 9, width: 18, height: 18))
+            let dot = HPTokens.Size.dot
+            g.fillEllipse(in: CGRect(x: d.midX - dot / 2, y: d.midY - dot / 2, width: dot, height: dot))
         }
         button(g, SBUI.galleryAdd, L("sb.addWidget", "添加小组件"), fill: kind?.accent ?? srgb(0x5E5CE6), symbol: "plus")
     }
@@ -725,17 +763,17 @@ extension Face {
         let card = SBUI.configCard
         sheetBase(g, card, key: "sbconfig")
         centered(g, String(format: L("sb.editWidget.title", "编辑「%@」"), w.kind.title), HPType.sf(44, .bold), card.midX, card.minY + 84, .white, max: card.width - 80)
-        // 小預覽
+        // 小預覽（2.0 align：高 160，讓 5 列選項排得下；與標題、選項同一條內縮）
         let real = SB.frame(col: 0, row: 0, span: w.size.span)
-        let k = min(200 / real.height, 520 / real.width)
+        let k = min(160 / real.height, 520 / real.width)
         g.saveGState(); g.translateBy(x: card.midX - real.width * k / 2, y: card.minY + 116); g.scaleBy(x: k, y: k)
         drawSBWidget(g, w, CGRect(origin: .zero, size: real.size), now: now, preview: true)
         g.restoreGState()
         let opts = SBWidgetData.options(w.kind)
         if let o = opts.first {
-            drawLeft(g, o.title, font: HPType.sf(30, .semibold), x: card.minX + 48, y: card.minY + 356, color: NSColor.white.withAlphaComponent(0.6))
+            drawLeft(g, o.title, font: HPType.sf(30, .semibold), x: SBUI.configContent.minX, y: card.minY + 308, color: NSColor.white.withAlphaComponent(0.6))
             let cur = SBWidgetData.value(w, o.key), rf = HPType.sf(36, .regular)
-            for (c, r) in zip(o.choices.prefix(5), SBUI.configRows(top: card.minY + 376, count: min(5, o.choices.count), rowH: 66)) {
+            for (c, r) in zip(o.choices.prefix(5), SBUI.configOptionRows(min(5, o.choices.count))) {
                 g.addPath(HPComponents.capsulePath(r)); g.setFillColor(NSColor(white: 1, alpha: c.id == cur ? 0.2 : 0.08).cgColor); g.fillPath()
                 drawLeft(g, Face.clipped(c.title, rf, r.width - 120), font: rf, x: r.minX + 40, y: r.midY + rf.capHeight / 2, color: .white)
                 if c.id == cur { drawSymbol(g, "checkmark", in: CGRect(x: r.maxX - 76, y: r.midY - 20, width: 40, height: 40), color: srgb(0x0A84FF), weight: .bold) }
@@ -749,7 +787,7 @@ extension Face {
         let card = SBUI.configCard
         sheetBase(g, card, key: "sbstack")
         centered(g, L("sb.editStack", "编辑叠放"), HPType.sf(44, .bold), card.midX, card.minY + 84, .white)
-        let rows = SBUI.configRows(top: card.minY + 124, count: min(4, s.widgets.count), rowH: 92)
+        let rows = SBUI.stackRows(min(4, s.widgets.count))
         let rf = HPType.sf(36, .regular)
         for (w, r) in zip(s.widgets, rows) {
             g.addPath(HPComponents.capsulePath(r)); g.setFillColor(NSColor(white: 1, alpha: 0.08).cgColor); g.fillPath()
@@ -761,9 +799,8 @@ extension Face {
             g.setFillColor(srgb(0xFF453A).cgColor); g.fillEllipse(in: mr)
             g.setFillColor(NSColor.white.cgColor); g.fill(CGRect(x: mr.midX - 15, y: mr.midY - 3, width: 30, height: 6))
         }
-        let t0 = (rows.last?.maxY ?? card.minY + 124) + 20
         for (i, (title, on)) in [(L("sb.smartRotate", "智能旋转"), s.smartRotate), (L("sb.suggestions", "小组件建议"), s.suggestions)].enumerated() {
-            let r = SBUI.configRows(top: t0, count: 2, rowH: 92)[i]
+            let r = SBUI.stackToggleRows(rows)[i]
             g.addPath(HPComponents.capsulePath(r)); g.setFillColor(NSColor(white: 1, alpha: 0.08).cgColor); g.fillPath()
             drawLeft(g, title, font: rf, x: r.minX + 40, y: r.midY + rf.capHeight / 2, color: .white)
             toggle(g, r, on: on)
@@ -800,7 +837,7 @@ extension Face {
         g.setFillColor(NSColor.black.withAlphaComponent(0.55).cgColor); g.fill(SBUI.full)
         let l = SB.layout
         let thumbs = SBUI.pageThumbs(l.pages.count)
-        let (bg, _) = sbBackdrop()
+        let bg = sbBackdrop()
         for (pi, r) in thumbs.enumerated() {
             let img = sbThumb(pi, bg)
             g.saveGState()
@@ -832,7 +869,7 @@ extension Face {
         let img = makeImage(px, px) { g in
             g.scaleBy(x: CGFloat(px) / 1024, y: CGFloat(px) / 1024)
             drawUpright(g, bg, in: SBUI.full)
-            for p in SB.placements(page: pi) { drawSBItem(g, p.item, SB.frame(p), now: CACurrentMediaTime(), glassApprox: true, badges: false) }
+            for p in SB.placements(page: pi) { drawSBItem(g, p.item, SB.frame(p), now: CACurrentMediaTime(), badges: false) }
         }
         SB.pageCache[key] = img
         return img
@@ -847,11 +884,13 @@ extension Face {
         let name = SBUI.itemName(key)
         let isApp = key.hasPrefix("a:")
         let title = String(format: isApp ? L("sb.remove.appTitle", "要移除「%@」吗？") : L("sb.remove.widgetTitle", "要移除「%@」吗？"), name)
-        drawLeft(g, Face.clipped(title, HPType.sf(40, .semibold), card.width - 72), font: HPType.sf(40, .semibold), x: card.minX + 40, y: card.minY + 76, color: .white)
+        // 標題、正文、按鈕同一條內縮（HPGrid.Inset.card = 40）
+        let c = SBUI.alertContent
+        drawLeft(g, Face.clipped(title, HPType.sf(40, .semibold), c.width), font: HPType.sf(40, .semibold), x: c.minX, y: card.minY + 76, color: .white)
         let body = isApp ? L("sb.remove.appBody", "从主屏幕移除后，App 仍在 App 资源库里。") : (key.hasPrefix("f:") ? L("sb.remove.folderBody", "文件夹里的 App 会移到 App 资源库。") : L("sb.remove.widgetBody", "移除这个小组件不会删除任何数据。"))
         let bf = HPType.sf(30, .regular)
         var y = card.minY + 128
-        for line in Face.photosWrap(body, bf, card.width - 80, maxLines: 2) { drawLeft(g, line, font: bf, x: card.minX + 40, y: y, color: NSColor.white.withAlphaComponent(0.6)); y += 40 }
+        for line in Face.photosWrap(body, bf, c.width, maxLines: 2) { drawLeft(g, line, font: bf, x: c.minX, y: y, color: NSColor.white.withAlphaComponent(0.6)); y += 40 }
         let b = SBUI.alertButtons
         button(g, b[0], isApp ? L("sb.remove.fromHome", "从主屏幕移除") : L("sb.remove.confirm", "移除"), fill: NSColor(white: 1, alpha: 0.14), color: srgb(0xFF453A))
         button(g, b[1], L("sb.cancel", "取消"), fill: NSColor(white: 1, alpha: 0.14))

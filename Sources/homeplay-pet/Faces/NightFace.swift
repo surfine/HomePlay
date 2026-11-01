@@ -20,11 +20,11 @@ extension Face {
     /// 2.0 P07：這一格錶面在夜間自己畫黑底紅（Modular），不經下面的「亮度→紅」整面映射；
     /// 錶面上後畫的膠囊內容（計時器、正在播放、Live Activity）要直接用 HPTokens.Night 的顏色。
     /// 只看「錶面本身正在畫」：主畫面蓋著的時候（shellCoversFace）內容不是 Modular 的，照常走映射。
-    var nightOwnPalette: Bool { nightRed && style == .modular && !shellCoversFace }
+    var nightOwnPalette: Bool { nightRed && (style == .modular || style == .cluster) && !shellCoversFace }   // D3：儀表也自畫夜間色票（ClusterTheme.night）
 
     func drawNightFace(_ g: CGContext) {
         guard nightRed else { return }
-        if nightOwnPalette { return }   // 2.0 P07：Modular 夜間自畫黑底亮紅（Faces/ModularFace.swift），不再整面換色（也省一次整面讀回）
+        if nightOwnPalette { return }   // 2.0 P07／D3：Modular、儀表夜間自畫黑底亮紅（Faces/ModularFace.swift），不再整面換色（也省一次整面讀回）
         guard let shot = g.makeImage() else { return }
         let ci = CIImage(cgImage: shot)
         // 亮度 → 暗紅（Rec.709 亮度），再壓一下中間調：背景沉成黑，只剩亮的線與字

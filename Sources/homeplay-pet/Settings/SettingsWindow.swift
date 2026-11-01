@@ -30,6 +30,7 @@ final class SettingsModel: ObservableObject {
     @Published var era = Era.y2026
     @Published var typographMaterial = TypographMaterial.flat
     @Published var system6Layout = System6Layout.finder
+    @Published var clusterLayout = ClusterLayout.a
     /// 這個錶面用自己年代的島身（System 6 系列、島的 1988／2002）：膠囊設定在這裡不作用
     var capsuleLocked: Bool { [.system6, .alarmClock, .about].contains(faceStyle) || (faceStyle == .island && era != .y2026) }
     /// 「字體與顏色」只作用在 2026 的島與照片錶面
@@ -59,7 +60,7 @@ final class SettingsModel: ObservableObject {
         language = PetLanguage.chosen?.rawValue ?? "system"
         calendarOn = CalendarSource.enabled; nowPlayingOn = NowPlayingPoller.enabled
         finish = s.finish; faceStyle = s.faceStyle; viewMode = s.viewMode; touring = app.view?.touring ?? false; capsule = capsuleMaterialSetting
-        if let f = app.view?.face { clockStyle = f.clockStyle == .thin ? .bold : f.clockStyle; islandBackground = f.background; era = f.era; typographMaterial = f.typographMaterial; system6Layout = f.system6Layout }
+        if let f = app.view?.face { clockStyle = f.clockStyle == .thin ? .bold : f.clockStyle; islandBackground = f.background; era = f.era; typographMaterial = f.typographMaterial; system6Layout = f.system6Layout; clusterLayout = f.clusterLayout }
         phones = CarPlayPhoneBook.phones; currentPhone = CarPlayPhoneBook.current
         gazeFollow = s.gazeFollow; followDegrees = s.followDegrees; gazePitch = s.gazePitch; roomLight = s.roomLight; petWidth = s.petWidth
         var p: [PermissionKind: PermissionStatus] = [:]
@@ -76,7 +77,7 @@ final class SettingsModel: ObservableObject {
 
 /// 侧边栏的分页（顺序＝显示顺序）；上次看到哪一页会记住
 enum SettingsSection: String, CaseIterable, Identifiable {
-    case general, appearance, gestures, carplay, cliotalk, camera, people, devices, permissions   // 2.0：ClioTalk、people＝家人、devices＝iPhone 與 iPad（網頁串流）
+    case general, appearance, gestures, carplay, home, cliotalk, camera, people, devices, permissions   // 2.0：ClioTalk、people＝家人、devices＝iPhone 與 iPad（網頁串流）；home＝家庭捷徑（B 方案）
     var id: String { rawValue }
     static let key = "HomePlaySettingsSection"
     var title: String {
@@ -85,6 +86,7 @@ enum SettingsSection: String, CaseIterable, Identifiable {
         case .appearance: return L("settings.appearance", "外观")
         case .gestures: return L("settings.gestures", "手势")
         case .carplay: return L("settings.carplay", "CarPlay")
+        case .home: return L("settings.home", "家庭")
         case .cliotalk: return L("settings.cliotalk", "ClioTalk")
         case .camera: return L("settings.camera", "相机")
         case .people: return L("settings.people", "家人")
@@ -99,6 +101,7 @@ enum SettingsSection: String, CaseIterable, Identifiable {
         case .appearance: return "circle.lefthalf.filled"
         case .gestures: return "hand.point.up.left"
         case .carplay: return "car"
+        case .home: return "house"
         case .cliotalk: return "bubble.left.and.text.bubble.right"
         case .camera: return "camera"
         case .people: return "person.2"
@@ -114,6 +117,7 @@ enum SettingsSection: String, CaseIterable, Identifiable {
         case .gestures: return ["settings.gesture.pinch.title", "settings.gesture.slide.title", "settings.gesture.three.title", "settings.gesture.force.title",
                                 "settings.gesture.liveSlide", "settings.gesture.reset", "settings.gesture.apart", "settings.gesture.overview", "settings.gesture.keys"]
         case .carplay: return ["prefs.plugConnect", "menu.iphone", "menu.pairNewPhone", "menu.wifiPassword", "handoff.header"]   // 2.0 promo
+        case .home: return ["settings.home.title", "settings.home.name", "settings.home.openApp"]
         case .cliotalk: return ["clio.provider", "clio.key", "clio.fast", "clio.deep", "clio.section.data", "clio.cap", "clio.speak", "clio.f5", "clio.clear"]
         case .camera: return ["settings.follow.title", "settings.followRange", "settings.followPitch", "settings.roomLight.title"]
         case .people: return ["people.pane.recognize", "people.pane.family", "people.pane.addTitle", "people.pane.deleteAll"]
@@ -221,6 +225,7 @@ struct SettingsRoot: View {
                 case .appearance: AppearancePane()
                 case .gestures: GesturesPane()
                 case .carplay: CarPlayPane()
+                case .home: HomePane()
                 case .cliotalk: ClioTalkPane()
                 case .camera: CameraPane()
                 case .people: PeoplePane()

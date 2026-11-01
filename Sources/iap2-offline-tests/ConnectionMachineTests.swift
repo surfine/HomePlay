@@ -109,7 +109,7 @@ enum ConnectionMachineTests {
             var s = MachineSim(paired: [A], nearby: [A], processAge: 300)
             s.send(.start(preferred: A))
             let fx = s.send(.linkFinished(gen: s.gen, code: 9))
-            expect(fx.contains(.dropBaseband(address: A)) && fx.contains(.refreshSDP(address: A, timeout: 4)), "2 first code 9 → drop baseband + SDP refresh")
+            expect(!fx.contains(.dropBaseband(address: A)) && fx.contains(.refreshSDP(address: A, timeout: 4)), "2 first code 9 → SDP refresh, keep the baseband (prior art never drops ACL on a timeout)")
             expect(!fx.contains { $0.isOpen }, "2 no immediate retry after a failure")
             let later = s.advance(2)
             expect(later.compactMap(\.opensBluetooth) == [A], "2 retry after 2 s")

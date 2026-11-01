@@ -25,6 +25,8 @@ package final class Iap2AccessoryCore {
         package var ssid = "HomePlay"
         /// 识别信息的链路布局：USB 用有线（USB host transport），蓝牙用无线组件。
         package var transport: Iap2Csm.Transport = .wireless
+        /// 車機定位探針：有值才宣告定位元件；收到 0xFFFA 後每秒送一組 NMEA（Iap2Location.swift）
+        package var fakeGPS: FakeGPS?
         package init() {}
     }
 
@@ -53,6 +55,9 @@ package final class Iap2AccessoryCore {
     private var fileTransfer = FileTransferReceiver()
     private var progressTimer: DispatchSourceTimer?
     private var linkTicker: DispatchSourceTimer?
+    private var gpsTimer: DispatchSourceTimer?
+    private var gps: FakeGPS?
+    private var gpsSent = 0
     /// 链路层有字节要发（来包/主动发/重传定时器之后）；传输包装层负责写出去
     package var onDrain: (([UInt8]) -> Void)?
 
@@ -107,9 +112,33 @@ package final class Iap2AccessoryCore {
         finished = true
         cancelProgress()
         linkTicker?.cancel(); linkTicker = nil
+        gpsTimer?.cancel(); gpsTimer = nil
         if exitCode == 0 { exitCode = code }
         transportTeardown?(exitCode)
         onFinished?(exitCode)
+    }
+
+    // MARK: 車機定位探針
+
+    private func startFakeGPS(_ wanted: [String]) {
+        log("iPhone 發 0xFFFA 要定位：\(wanted)")
+        gpsTimer?.cancel()
+        if gps == nil { gps = info.fakeGPS }
+        let t = DispatchSource.makeTimerSource(queue: .main)
+        t.schedule(deadline: .now(), repeating: 1)
+        t.setEventHandler { [weak self] in
+            guard let self, !self.finished, var g = self.gps else { return }
+            let lines = g.sentences(at: Date(), wanted: wanted)
+            self.gps = g
+            for s in lines { self.link.sendControl(Iap2Location.frame(s).encoded) }
+            self.drain()
+            self.gpsSent += lines.count
+            if self.gpsSent <= lines.count || self.gpsSent % 60 < lines.count {
+                self.log("送定位：\(lines.joined(separator: " "))")
+            }
+        }
+        gpsTimer = t
+        t.resume()
     }
 
     // MARK: 内部
@@ -168,7 +197,8 @@ package final class Iap2AccessoryCore {
                     serialNumber: info.serialNumber, firmwareVersion: info.firmwareVersion,
                     hardwareVersion: info.hardwareVersion, externalAccessoryProtocol: info.externalAccessoryProtocol,
                     bluetoothMac: Iap2AccessoryCore.localBluetoothAddress, ssid: info.ssid,
-                    transport: info.transport)
+                    transport: info.transport, location: info.fakeGPS != nil)
+                if info.fakeGPS != nil { log("識別資訊宣告車機定位元件（參數 22）") }
                 link.sendControl(reply.encoded)
             case Iap2Csm.Identify.accepted:
                 setPhase(.mfi)
@@ -217,6 +247,11 @@ package final class Iap2AccessoryCore {
                         log("已订阅 \(name)")
                     }
                 }
+            case Iap2Location.start where info.fakeGPS != nil:
+                startFakeGPS(Iap2Location.requested(frame))
+            case Iap2Location.stop where info.fakeGPS != nil:
+                log("iPhone 發 0xFFFC 停止定位（已送 \(gpsSent) 句）")
+                gpsTimer?.cancel(); gpsTimer = nil
             case Iap2Csm.Mfi.failed:
                 log("MFi 认证失败（0xAA04）—— iPhone 拒了这个身份")
                 finish(8)

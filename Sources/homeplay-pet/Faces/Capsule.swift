@@ -66,7 +66,7 @@ extension Face {
         case .auto:
             switch style {
             case .analog where typographMaterial == .embossed: return .glass   // 浮雕材質：粉色底上的玻璃膠囊
-            case .modular, .analog, .pocket, .black: return .black   // 平面、Dynamic Island 年代的版式；OLED 全黑
+            case .modular, .analog, .pocket, .black, .cluster: return .black   // 平面、Dynamic Island 年代的版式；OLED 全黑
             case .growth, .calendar: return .smoke                     // 2026 iOS 27
             default: return .glass                                // HomeView 本身是 Liquid Glass 年代
             }

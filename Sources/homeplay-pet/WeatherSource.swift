@@ -35,6 +35,7 @@ struct WeatherData: Equatable, Codable {
     var hourly: [WeatherHour]? = nil    // 2.0：接下來 12 小時
     var daily: [WeatherDay]? = nil      // 2.0：今天起 10 天（舊快取 5 天）
     var sunrise: String? = nil          // 2.0 天氣 App：當地 "HH:mm"（舊快取沒有）
+    var rainSlots: [WeatherRainSlot]? = nil   // 「快下雨了」用：接下來幾小時的降水預報（WeatherAlert；舊快取沒有）
 }
 
 final class WeatherSource: NSObject, CLLocationManagerDelegate {
@@ -214,7 +215,7 @@ final class WeatherSource: NSObject, CLLocationManagerDelegate {
 
     private static func download(lat: Double, lon: Double, city: String?) -> WeatherData? {
         let ll = String(format: "latitude=%.3f&longitude=%.3f", lat, lon)
-        guard let w = getJSON("https://api.open-meteo.com/v1/forecast?\(ll)&current=temperature_2m,weather_code,wind_speed_10m,relative_humidity_2m,is_day&hourly=temperature_2m,weather_code,is_day&daily=temperature_2m_max,temperature_2m_min,sunset,sunrise,weather_code&forecast_days=10&timezone=auto"),   // 2.0: 同一個請求多拿逐時、逐日（天氣 App：10 天、日出）
+        guard let w = getJSON("https://api.open-meteo.com/v1/forecast?\(ll)&current=temperature_2m,weather_code,wind_speed_10m,relative_humidity_2m,is_day&hourly=temperature_2m,weather_code,is_day,precipitation_probability&minutely_15=precipitation,weather_code&forecast_minutely_15=12&daily=temperature_2m_max,temperature_2m_min,sunset,sunrise,weather_code&forecast_days=10&timezone=auto"),   // 2.0: 同一個請求多拿逐時、逐日（天氣 App：10 天、日出）；「快下雨了」再多要 hourly=precipitation_probability 與 minutely_15=precipitation,weather_code，forecast_minutely_15=12＝從目前這 15 分鐘起 3 小時（參數出處 https://open-meteo.com/en/docs ；minutely_15 在北美、中歐、日本是真的 15 分鐘資料，其他地區是逐時內插）
               let cur = w["current"] as? [String: Any], let t = (cur["temperature_2m"] as? NSNumber)?.doubleValue else { return nil }
         let daily = w["daily"] as? [String: Any]
         func first(_ k: String) -> Double? { ((daily?[k] as? [Any])?.first as? NSNumber)?.doubleValue }
@@ -226,10 +227,34 @@ final class WeatherSource: NSObject, CLLocationManagerDelegate {
         if let a = getJSON("https://air-quality-api.open-meteo.com/v1/air-quality?\(ll)&current=us_aqi"),
            let c = a["current"] as? [String: Any] { aqi = (c["us_aqi"] as? NSNumber)?.doubleValue }
         let (hourly, dailyList) = forecast(w, now: cur["time"] as? String)
+        let slots = rainSlots(w)
         return WeatherData(temp: t, hi: first("temperature_2m_max") ?? t, lo: first("temperature_2m_min") ?? t,
                            code: (cur["weather_code"] as? NSNumber)?.intValue ?? 0, wind: (cur["wind_speed_10m"] as? NSNumber)?.doubleValue ?? 0,
                            humidity: (cur["relative_humidity_2m"] as? NSNumber)?.doubleValue ?? 0, aqi: aqi, sunset: sunset, city: city,
-                           night: (cur["is_day"] as? NSNumber).map { $0.intValue == 0 }, hourly: hourly, daily: dailyList, sunrise: sunrise)
+                           night: (cur["is_day"] as? NSNumber).map { $0.intValue == 0 }, hourly: hourly, daily: dailyList, sunrise: sunrise, rainSlots: slots)
+    }
+
+    /// 「快下雨了」：有 minutely_15 就用 15 分鐘的（代碼＋降水量），沒有就用逐時的（代碼＋降水機率，只留現在起 6 小時）。
+    /// 回應的時間是當地時間字串（"2026-10-24T13:15"），減 utc_offset_seconds 換成 epoch
+    static func rainSlots(_ w: [String: Any], now: Date = Date()) -> [WeatherRainSlot]? {
+        let offset = (w["utc_offset_seconds"] as? NSNumber)?.doubleValue ?? 0
+        let f = DateFormatter(); f.locale = Locale(identifier: "en_US_POSIX"); f.timeZone = TimeZone(secondsFromGMT: 0); f.dateFormat = "yyyy-MM-dd'T'HH:mm"
+        func slots(_ key: String, span: Double, prob: String?, mm: String?) -> [WeatherRainSlot] {
+            guard let o = w[key] as? [String: Any], let times = o["time"] as? [String], let codes = o["weather_code"] as? [Any] else { return [] }
+            let probs = prob.flatMap { o[$0] as? [Any] }, mms = mm.flatMap { o[$0] as? [Any] }
+            var out: [WeatherRainSlot] = []
+            for (i, t) in times.enumerated() where i < codes.count {
+                guard let d = f.date(from: t) else { continue }
+                let start = d.timeIntervalSince1970 - offset
+                guard start >= now.timeIntervalSince1970 - span, start <= now.timeIntervalSince1970 + 6 * 3600 else { continue }
+                out.append(WeatherRainSlot(start: start, span: span, code: (codes[i] as? NSNumber)?.intValue ?? 0,
+                                           prob: (probs?[safe: i] as? NSNumber)?.doubleValue, mm: (mms?[safe: i] as? NSNumber)?.doubleValue))
+            }
+            return out
+        }
+        let m = slots("minutely_15", span: 900, prob: nil, mm: "precipitation")
+        let r = m.isEmpty ? slots("hourly", span: 3600, prob: "precipitation_probability", mm: nil) : m
+        return r.isEmpty ? nil : r
     }
 
     /// 2.0：從同一份回應裡取接下來 12 小時（從目前這個整點起）與 5 天

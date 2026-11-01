@@ -84,7 +84,7 @@ HPDS 是 HomePlay 2 所有畫面共用的那一層：外殼、內建 App、ClioT
 | `capsule(r)` | 高 ÷ 2 | 按鈕、膠囊列、分段 |
 | `group` | 52 | inset grouped 卡片 |
 | `tile` | 50 | 家庭磚（影片 49–50） |
-| `widget` | 50 | 主畫面 small 小工具（第三輪照官方主畫面 Photos 小工具） |
+| `widget` | 56 | 主畫面 small 小工具（`HPTokens.Radius.widget` 一直是 56；舊版這張表誤寫 50） |
 
 形狀一律用 `continuousRoundedRect`（iOS 的連續曲率係數），膠囊用半圓。角落的控制（返回鈕、右上時間）讓圓心落在螢幕圓角的圓心上（`Screen.cornerCapsuleCenter`）。
 
@@ -100,7 +100,29 @@ HPDS 是 HomePlay 2 所有畫面共用的那一層：外殼、內建 App、ClioT
 
 ### 尺寸 `HPTokens.Size`
 
-點按範圍至少 88（44 pt）；返回圓鈕 88；主要動作圓鈕 150（影片 150–162）；主畫面圖示 150；家庭磚 300。
+**同一個角色只有一個高度**（2026-10-28 對齊檢討：以前列表行有 6 種、主按鈕 6 種、玻璃膠囊 5 種，所以看起來高低錯落）。新元件一律從這裡拿，不要再寫即興值；稽核與豁免見 `docs/plans/controls-audit.md`。
+
+| 令牌 | 值 | 用在 |
+| --- | --- | --- |
+| `tap` | 88 | 最小點按範圍（44 pt）。視覺可以比它小，命中不行 |
+| `topBar` | 90 | 頂欄圓鈕：返回、關閉、‹/✕、編輯欄兩顆膠囊 |
+| `row` | 88 | 列表行：控制中心展開、Sheet 清單、資料夾 |
+| `rowCompact` | 72 | 選項行：兩張設定卡共用（命中補到 88） |
+| `cta` | 96 | 卡片底部主按鈕、彈窗按鈕、控制中心底欄 |
+| `pill` | 104 | 玻璃膠囊鈕；`pairedButton` 440×104 同高 |
+| `round` | 150 | 圓形主按鈕 |
+| `roundLarge` | 240 | 對講的說話鈕 |
+| `chip` | 68 | 場景／篩選晶片（命中補到 88） |
+| `switchTrack` | 66 | 開關軌道 |
+| `badge` | 48 | 編輯模式移除徽標 |
+| `dot` | 14 | 所有頁點 |
+| `liveActivity` | 62 | 系統 Live Activity，不進階梯 |
+| `sourceBadge` | 24 | 藥丸右下的 CarPlay 角標（會話活著但在背景；≈ 12.7 pt） |
+| `sourceCapsule`、`sourceGap` | 232 × 90、48 | 長按藥丸拉出的「HomeView／CarPlay」兩顆；上面那顆在頂列 105 線上，下面那顆滴出來，中間 48（> HPDrip.merge 40，頸子斷） |
+
+內縮與節奏（`HPGrid.Inset` / `HPGrid.Rhythm`）：一個容器**只有一條左緣、一條右緣**——`card` 40（標題、清單、預覽、主按鈕都對它）、`nested` 24（卡片內行的內距）、`menu` 12（長按選單唯一的邊線）、`app` 64（沿用）。卡片內部只用 `rowGap` 8、`groupGap` 24、`sectionGap` 32。
+
+**豁免**（量測值或幾何約束，刻意不進階梯）：主畫面整組（官方幀逐項量）、Live Activity 62、控制中心頁點命中 60×26。（以前的「右上時鐘右緣 931」「音樂來源膠囊中心 138.44」已在 `98d9a16` 取消：頂列一條線，時鐘右緣 960、來源膠囊中心 105。）
 
 ### 助理回答 `HPTokens.Assistant`（第三輪量自官方 siri-calendar／siri-cyanotype）
 
@@ -116,7 +138,7 @@ HPDS 是 HomePlay 2 所有畫面共用的那一層：外殼、內建 App、ClioT
 
 ### 主畫面 `HPTokens.Home`
 
-第五輪（官方 home-screen-erica 正視校正後量，稽核見 scratchpad/real/r5-home-audit.md）：問候語 32、全大寫、字距 +1 px，第一行 regular 白 60%、名字那行 semibold 白 82%，基線 139／182，原點比圖示左緣內縮 9；頭像直徑 100（中心 874, 152）、沒有描邊；網格圖示 152、左右邊距 98.5、欄距 225、首列頂 241、列距 240；圖示標籤 regular 30、白、沒有投影，基線＝圖示底 + 41；小工具是兩列高的正方形（391²）、置中在第 2–3 欄，圓角 `Radius.widget` 56；桌布＝錶面模糊 σ 18、亮度 × 0.72（平均亮度不超過 0.45）；面板內 14、裡面壓暗 15%，再疊厚玻璃亮邊（`HPGlass.panelRim`：2 px 亮線＋往內 24 px 內光）。行事曆圖示跟著 `Face.displayDate`，靜態層的 key 含日期，午夜換日重畫。
+第五輪（官方 home-screen-erica 正視校正後量，稽核見 scratchpad/real/r5-home-audit.md）：問候語 32、全大寫、字距 +1 px，第一行 regular 白 60%、名字那行 semibold 白 82%，基線 139／182，原點比圖示左緣內縮 9；頭像直徑 100（中心 874, 152）、沒有描邊；網格圖示 152、左右邊距 98.5、欄距 225、首列頂 241、列距 240；圖示標籤 regular 30、白、沒有投影，基線＝圖示底 + 41；小工具是兩列高的正方形（391²）、置中在第 2–3 欄，圓角 `Radius.widget` 56；桌布＝錶面模糊 σ 18、亮度 × 0.72（平均亮度不超過 0.45）；面板內 14、裡面壓暗 15%，再疊厚玻璃亮邊（`HPGlass.panelRim`：2 px 亮線＋往內 24 px 內光；`panelRimAlpha` 0.20、`panelGlowAlpha` 0.12 是照官方幀校準的，實測亮邊峰值／面板外亮度 1.27–1.39，官方 1.27–1.44。判定與數據見 `docs/plans/glass-audit.md`）。行事曆圖示跟著 `Face.displayDate`，靜態層的 key 含日期，午夜換日重畫。
 
 ### 家庭模組錶面 `HPTokens.HomeModular`
 
@@ -188,10 +210,11 @@ HPDS 是 HomePlay 2 所有畫面共用的那一層：外殼、內建 App、ClioT
 
 規則：
 
-- **Regular 與 Clear 不混用**，一個畫面一種。
+- **同一個背景層只用一種**：主畫面面板（蓋在模糊錶面壁紙上）用 Clear；浮在它上面的資料夾、選單、sheet 用 Regular——HIG 的 Regular 就是給大字量面板的那一檔，兩者疊在不同層不算混用。
 - **不准玻璃疊玻璃**：控制中心模組、ClioTalk 卡、Live Activity 展開版、小工具「裡面」的開關與滑桿用 `fill`＋vibrant 白。
 - **小元件自己翻淺深**：短邊 ≤ 200 的形狀依背後平均亮度翻（> 0.6 淺、< 0.4 深，中間維持上次，不閃）；上面的字與符號用 `HPGlass.ink`。大的跟 `HPTokens.dark`。不加外框。
 - **外陰影自適應**：底下有字（邊緣多）就濃、純淡色就淡（0.10–0.30），顏色取底下平均色壓暗。
+- **控制中心例外（2.0 align B，iOS 26）**：`HPGlass.flush(…, shadows: false, thicken: true)`——模組不畫外陰影（自適應的與 iOS 濾鏡緣外那圈都不畫；二十幾塊疊在 24 的縫裡是一片灰污），玻璃面合成後再蓋一層淺白 8%／深黑 10%（不碰系統材質參數）。亮度、音量模組本身就是滑桿：沒有細軌道、標題與旋鈕，白色沿長邊從左長到目前值，符號在左緣內縮 `Inset.card` 40，按住任何地方相對拖動（按下不跳值）。
 - **靜止時不融合**；只有同一個 union 名字的形狀在變形動畫中融合（距離 14），例如 ClioTalk 的珠從 👀 膠囊滴下。
 - **出現／消失要 materialize**：presence 0→1 時折射、模糊、面、高光一起長出，形狀 0.96→1；只有內容用透明度。
 - **按下**：mouse down 那一幀放大 1.08、亮邊亮起、從觸點亮起一圈往外擴散；放開回彈；拖出範圍取消。
@@ -227,7 +250,9 @@ HPDS 是 HomePlay 2 所有畫面共用的那一層：外殼、內建 App、ClioT
 
 **輔助使用（P01，`Design/HPAccessibility.swift`）**：
 
-- 「減少透明度」：不畫玻璃，形狀改成霧面不透明（`.identity`：淺 #F2F2F7、深 #1C1C1E，95%，染色用自己的色）。
+- 「減少透明度」：不畫玻璃，形狀改成霧面不透明（`.identity`：**跟隨外觀**——淺色 #F2F2F7、深色 #1C1C1E，95%，染色用自己的色）。以前 `clear: true` 會強制 dark，淺色主畫面一開就整面變黑，已修。
+  - 主畫面那塊內容層面板**直接不畫**（壁紙原樣）：它沒有「不透明版」可換，換成淺色不透明面會讓恆白的圖示標籤壓在 #F2F2F7 上（約 1.6:1）。
+  - 「增加對比」除 1.5 px label 色描邊外，再把玻璃面加厚 10%（淺色加白、深色加黑）。
 - 「增加對比」：玻璃與膠囊加 1.5 px 的 label 色描邊，次要字改成 label 80%，系統色換 HIG 表上的高對比版。
 - 設定改變時監聽 `accessibilityDisplayOptionsDidChangeNotification`，並清掉玻璃快取。
 - 快照可用 `HOMEPLAY_REDUCE_TRANSPARENCY=1`、`HOMEPLAY_INCREASE_CONTRAST=1` 強制打開。
@@ -264,6 +289,7 @@ HPDS 是 HomePlay 2 所有畫面共用的那一層：外殼、內建 App、ClioT
 | 接管（門鈴、Handoff） | v2 0:31.80→32.33 | `takeoverZoom` 0.2 s → `takeoverFade` 0.28 s | 舊畫面放大 5%＋模糊，再交叉淡化；新畫面同時從模糊變清楚 |
 | ClioTalk 滴落 | v1 0:21.625→21.83 | `clioDrip` 0.19 s | 👀 膠囊被水滴拉出去：原處那一截縮小、兩者之間一段頸子（`HPDrip` smooth union），飛的時候拉長 ≤ 1.15；主畫面上是頂端藥丸接手。白幕停到 0.58 s，每行 `clioLine` 晚 0.03 s、卡片 0.1 s、鈕 0.3 s |
 | Live Activity 展開／收回 | — | `liveActivity` 0.32 s | 點按沒有動量 → 臨界阻尼 |
+| 藥丸拉成兩顆（2.0 align D） | — | `sourceSplit` 0.32 s | 長按 0.5 s：藥丸原處長成 HomeView，CarPlay 從底下滴出（HPDrip 頸子 merge 40）；左右排開會壓到頂列標題，所以往下；減少動態效果直接兩顆、沒有頸子 |
 | 換分鐘數字 | v1 2:57.76→2:58.26 | `digitOut` 0.17 s／`digitIn` 0.3 s | 十位數早 80 ms，只動變了的位數 |
 | 數值（倒數、溫度） | v2 0:43.0→44.5 | `numeric` Spring(1, 0.35) | `HPNumeric.draw`：右對齊配對、高位先、錯開 33 ms；倒數方向反過來 |
 | 清單插入／刪除 | — | `listMove` Spring(1, 0.30)、`listInsert` 晚 0.12 s、`listDelete` 0.08 s | `HPListMotion`：鄰居先讓位，新的晚到；刪掉的留在原地加速淡出 |
@@ -277,15 +303,17 @@ HPDS 是 HomePlay 2 所有畫面共用的那一層：外殼、內建 App、ClioT
 - **拉過頭**：rubber band `x·d·0.55 / (d + 0.55·|x|)`（0.55 是業界對 UIScrollView 的逆向值）。
 - **同一個來回走同一條路**：從哪裡出就回哪裡。
 - **減少動態效果**：位移與縮放換成 0.2 s 交叉淡化，玻璃不回彈、不融合。
-- **驗收**：`HOMEPLAY_ANIM=名字:秒` 把那個動畫凍結在第 t 秒；`--screen-png out.png --frames N` 一次出 30 fps 的 N 格（`Design/HPFrames.swift`）；`HOMEPLAY_REVERSE=秒` 讓凍結的動畫在那一刻反向（打斷測試）；`HOMEPLAY_REDUCE_MOTION=1` 看減少動態效果。跟官方影格並排；每格位置／大小／透明度差距大於 10% 或總長差一格以上就調。
+- **驗收**：`HOMEPLAY_ANIM=名字:秒` 把那個動畫凍結在第 t 秒；`--screen-png out.png --frames N` 一次出 30 fps 的 N 格（`Design/HPFrames.swift`）；`HOMEPLAY_REVERSE=秒` 讓凍結的動畫在那一刻反向（打斷測試）；`HOMEPLAY_REDUCE_MOTION=1` 看減少動態效果；`HOMEPLAY_FROMFACE=<App id>` 拍從錶面直接進 App（👀 膠囊縮成頂端藥丸，不加 --app）。跟官方影格並排；每格位置／大小／透明度差距大於 10% 或總長差一格以上就調。
 
 ## Components（`HPComponents`）
 
 | 元件 | API | 數字 |
 | --- | --- | --- |
 | 頂列：返回圓鈕 | `shellBackButton(face, symbol:)`；照片上的頁面 `backButton(g, face, symbol:)` | 90，圓心 (105, 105)（`HPTokens.cornerControlCenter`，第三輪量自官方 recipe-overview）；✕ 0.34、‹ 0.36；Regular（照片上 Clear） |
+| 頂列：藥丸＝Home 鍵（2.0 align C） | `ShellInput.shellHomeKey`、`LiveActivityStack.pillHit` | 點＝分派一次 `.back`，前面先走 Esc 那串（選單 → sheet → 資料夾 → 編輯模式；資料庫：選單 → 搜尋 → 疊層 → 畫面）：App → 資料庫／主畫面 → 錶面；開關 App 的過場中也能按。長按＝展開第一個活動；分體小藥丸點＝開它自己的活動。不做雙擊（單擊會被拖慢 250–300 ms）。命中整顆、上下補到 `Size.tap` 88。AX 一條按鈕，標籤跟層級（返回上一層／回到主畫面／回到錶面），有活動時活動是值 |
+| 顯示源切換（2.0 align D） | `SourceSwitcher`、`Face.drawSourceBadge／drawSourceSwitcher` | CarPlay 會話在背景時：藥丸右下角標（綠底白 `car.fill`）；長按藥丸＝兩顆，拖到哪顆放手切到哪（另一顆 55%），只換顯示源（`switchSource`，不拆會話）。沒有會話時長按照舊展開活動。手動切到 HomeView 後 60 s 內重連的第一幀不自動拉回 CarPlay（`homeLatchUntil`）。快照 `--source home|carplay`、`HOMEPLAY_ANIM=source.split:t`；腳本 `hold:x,y,du,dv` |
 | 頂列：大標題 | `bigTitle(g, face, s)` | SF Pro bold 56，x = 返回鈕右緣 + 24，基線 = 圓心 + 20；放不下縮到 40 |
-| 頂列：右上時間 | `topClock(g, face, size:, baselineDY:, color:)` | semibold 32（照片上 34），中線 y 105、右緣 931（跟返回鈕對稱）；媒體全螢幕不畫 |
+| 頂列：右上時間 | `topClock(g, face, size:, baselineDY:, color:)` | semibold 32（照片上 34），中線 y 105、右緣 960（`HPGrid.App.trailing`，`98d9a16` 起與內容邊線同列）；媒體全螢幕不畫 |
 | 主要動作圓鈕 | `actionButton(g, face, r, symbol:, role:, label:)`、`actionRect(cx:cy:)` | 150；`.stop` 紅、`.mic` 黃（黑符號）、`.start` 綠、`.glass` 無色；符號 0.36；下方說明 28 |
 | 玻璃圓鈕 | `glassCircle(g, face, r, symbol:, tint:)` | 符號 0.38 |
 | 膠囊鈕 | `glassButton(…)`（無色）、`filledButton(…, tint:)`（染色主要動作） | 高 ≥ 88、字 regular 36（官方食譜圖的膠囊是 Regular）、符號同字重 1.1 倍字級＋間距 16。並排成一組的鈕共用 `HPTokens.Size.pairedButton`（440 × 104），只靠樣式分主次。`busy: true`＝符號換轉圈（`HPComponents.spinner`，0.9 s 一圈）、標籤換 `busyTitle`（進行式，如「打開中…」；nil＝標籤不變）；用在 Music 打開音樂、ClioTalk 想的時候的「停止」鈕，FaceTime 呼叫中是結束鈕外圈轉圈。快照 `HOMEPLAY_ANIM=busy:t` 凍結 |
@@ -331,8 +359,10 @@ python3 tooling/refcompare.py ours.png <參考圖> -o out.png [--mask m.json] [-
 | 著色 | accented | 去飽和：底＝所選色 × 0.22、62%（玻璃透出），主體＝所選色提亮 | 拿掉背景＝玻璃＋所選色的深色版；照片去飽和乘所選色；primary＝所選色混白 55%、accent＝所選色提亮 | 再壓 16% |
 | （夜間） | vibrant | 交給 `Faces/NightFace.swift` 整面轉紅，👀 不變 | 同左 | — |
 
+「桌布」那一欄講的是**外觀額外**的壓暗；四種外觀之前，錶面畫面都已經過同一道管線（σ 18 模糊、×0.72、平均亮度鉗到 0.45，`HomeScreen.captureHomeBackdrop`），所以「淺色」不等於原樣。標籤對比度的實測（10 個錶面）與三條可選路線見 `docs/plans/glass-audit.md` §6：偏亮的錶面會有成片標籤低於 4.5:1，目前是記錄、不設硬門。
+
 - **圖示變體從哪來**：系統原生圖示與 HomeView 官網圖示（`Shell/OfficialIcons.swift`）都是拍平的圖，拿不到 Icon Composer 的分層，所以照 HIG「沒提供的變體由系統自動產生」的做法自己推：每一列取左右邊緣當底色（跟著上下漸層走），每個像素離底色的距離＝主體權重，等於拆回「底＋主體」兩層，再照上表重組（`HomeIconVariant.derive`，算一次快取）。各外觀保持同樣的核心特徵（HIG：不要在變體之間換元素）。主畫面的桌布偏暗，所以透明與著色用 HIG 表裡的 clear dark／tinted dark 那一組。
-- **玻璃**：透明／著色時，所有圖示與小工具的底是同一個 `HPGlass` 容器、一次取樣；取樣的是畫面板之前的桌布（玻璃不取樣玻璃）。
+- **玻璃**：透明／著色時，圖示與小工具的底**不再上 Liquid Glass**——直接畫 `HomeIconVariant` 的 accented 結果（`sbPageImage` 不呼叫 HPGlass）。官方那層是系統替圖示做的 accented 版本，不是 App 自己疊的第二層玻璃；螢幕上只剩主畫面面板一層。代價是折射與亮邊一起消失，觀感比官方清透圖示少一層光澤。
 - **著色的色**：沒選過就從桌布的色相建議（跟 iOS 一樣），選過就存 `shell.homeTint`。
 - **每人主畫面**：`PersonHome` 照右上頭像那個人（`PersonalGate.avatarPerson`）載入他的排列（右上 2×2 小工具＋App 順序，存 `shell.homeLayouts`）；訪客與認不出的人用官方預設、不能編輯。長按 0.5 秒進編輯：「−」拿掉、左上「＋」開小工具圖庫、右上「完成」。
 - **小工具圖庫**：玻璃 sheet，照片／天氣／世界時鐘三個真實預覽（示範資料）、名稱、一句動詞開頭的說明、目前那個藍框；底部「還原預設主畫面」用填色膠囊（玻璃上不疊玻璃）。

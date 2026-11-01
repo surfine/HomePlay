@@ -406,7 +406,7 @@ struct FaceParams: Equatable {
 /// 錶面样式：滚轮或 ← → 换，像 Apple Watch 的数字表冠
 enum FaceStyle: String, CaseIterable {
     // 順序＝滾輪換錶面的順序（稿：docs/design-drafts/faces-v3/artifact）
-    case island, photos, modular, analog, flow, weather, calendar, homeModular, embossed, growth, black, bedside, system6, alarmClock, about, pocket
+    case island, photos, modular, analog, flow, weather, calendar, homeModular, embossed, growth, black, bedside, system6, alarmClock, about, pocket, cluster
     var title: String {
         switch self {
         case .island: return L("face.style.island", "岛")
@@ -425,9 +425,10 @@ enum FaceStyle: String, CaseIterable {
         case .black: return L("face.style.black", "黑色")
         case .alarmClock: return "System 6 · Alarm Clock"   // 復古系列維持英文（史實），名稱前綴分組
         case .about: return "System 6 · About"
+        case .cluster: return L("face.style.cluster", "仪表")
         }
     }
-    /// 陣容（滾輪、總覽、選單、設定都用這份）：十款。Pocket 併進 Modular、床頭夜燈併進「黑」的夜間（稿：faces-v3），
+    /// 陣容（滾輪、總覽、選單、設定都用這份）：十一款（最後一款是儀表，三種版式）。Pocket 併進 Modular、床頭夜燈併進「黑」的夜間（稿：faces-v3），
     /// 浮雕指針成了 Typograph 的「材質」、Alarm Clock／About 成了 System 6 的「版式」，Home Modular 不再列出（要開發簽名的小幫手）；
     /// 程式都還留著，舊的偏好讀進來時換成新的那款（見 inLineup、migratedOptions）
     static var lineup: [FaceStyle] {
@@ -484,7 +485,7 @@ enum System6Layout: String, CaseIterable {
     }
 }
 
-/// 快照專用：命令行強行指定材質／版式（不寫 UserDefaults）
+/// 快照專用：命令行強行指定材質／版式（不寫 UserDefaults）；儀表的版式在 Faces/ClusterFace.swift
 nonisolated(unsafe) var faceOptionSnapshotOverride: (material: TypographMaterial?, layout: System6Layout?) = (nil, nil)
 
 /// 本机电量（IOKit）。台式机没有电池时回 nil。
@@ -949,6 +950,7 @@ final class Face {
     var era: Era = .y2026 { didSet { if era != oldValue { forceDirty = true } } }
     var typographMaterial: TypographMaterial = .flat { didSet { if typographMaterial != oldValue { forceDirty = true } } }
     var system6Layout: System6Layout = .finder { didSet { if system6Layout != oldValue { forceDirty = true } } }
+    var clusterLayout: ClusterLayout = .a { didSet { if clusterLayout != oldValue { forceDirty = true } } }
     /// 正在播放（NowPlaying.swift 的轮询写入；计时器优先）
     var nowPlaying = NowPlayingState()
     /// 电量（PetView 每分钟读一次）；nil＝没有电池
@@ -1044,8 +1046,10 @@ final class Face {
         case .alarmClock: if tickAlarmClockFace(now) { dirty = true }
         case .about: if tickAboutFace(now) { dirty = true }
         case .island: if tickIslandOptions(now) { dirty = true }
+        case .cluster: if tickClusterFace(now) { dirty = true }   // 儀表：取樣器只在這個錶面上跑（Faces/ClusterFace.swift）
         default: break
         }
+        if style != .cluster { ClusterMetrics.shared.stop() }
         if tickOverview(now, dt) { dirty = true }   // 长按换錶面总览（FaceOverview.swift）
         if faceTransition != nil { dirty = true }  // 換錶面的過場還在跑
         return dirty
@@ -1093,6 +1097,7 @@ final class Face {
             case .black: renderBlackFace(g, now)              // Faces/BlackFace.swift
             case .alarmClock: renderAlarmClockFace(g, now)    // Faces/System6Series.swift
             case .about: renderAboutFace(g, now)              // Faces/System6Series.swift
+            case .cluster: renderClusterFace(g, now)          // Faces/ClusterFace.swift
             }
             }
             if let tr { endFaceTransitionFrame(g, tr) }   // 舊錶面像起霧的玻璃一樣化開
@@ -2499,9 +2504,10 @@ final class ReceiverClient: NSObject, URLSessionWebSocketDelegate {
     }
     func requestKeyframe() { send(#"{"type":"keyframe"}"#) }
     /// 真正断开：先請接收器 TEARDOWN 手機會話，再關本地 WS。接收器收到後會結束並退出。
-    func requestTeardown() {
+    /// reason 會寫進接收器日誌（2026-10-30：事後查不到是誰送了 stop）
+    func requestTeardown(reason: String) {
         guard let t = currentTask() else { close(); return }
-        t.send(.string(#"{"type":"stop"}"#)) { [weak self] _ in
+        t.send(.string(#"{"type":"stop","reason":"\#(reason)"}"#)) { [weak self] _ in
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { self?.close() }
         }
     }
@@ -2677,6 +2683,8 @@ final class PetView: NSView {
     let carVideo = CarVideoPlayer()
     var onTouch: ((Double, Double, Bool) -> Void)?
     var onToggleLive: (() -> Void)?
+    /// 只換顯示源（HomeView ⇄ CarPlay），不拆會話：空格、Esc、重按都走這條
+    var onSwitchSource: (() -> Void)?
     var onCancelConnect: (() -> Void)?   // 菜单「取消连线」
     /// 重按（Force Touch）＝进入 CarPlay；AppDelegate 负责拉起 receiver 并连接
     var onForceEnter: (() -> Void)?
@@ -5180,8 +5188,8 @@ final class PetView: NSView {
             if PermissionPrimer.active { PermissionPrimer.dismiss() }
             else if ClioTalkController.shared.isOpen { ClioTalkController.shared.close() }   // 2.0: 收起 ClioTalk
             else if face.onboardingActive { face.dismissOnboarding(); FaceOverview.pressToken += 1 }
-            else if showingVideo { onToggleLive?() }
-        case 49: onToggleLive?()                      // 空格
+            else if showingVideo { onSwitchSource?() }
+        case 49: onSwitchSource?()                    // 空格
         case 18: setView(yaw: 0, pitch: 0.12, label: "front")      // 1 正面
         case 19: setView(yaw: .pi / 2, pitch: 0.18, label: "side") // 2 侧面
         case 20: setView(yaw: .pi, pitch: 0.15, label: "back")     // 3 背面
@@ -5766,6 +5774,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var isLive = false
     /// 手机上点了 HomePlay 图标（requestUI）：会话还在，只是画面让回给表面；重按／空格立刻回到 CarPlay
     private var carPlayInBackground = false
+    /// 2.0 align D：手動切到 HomeView（硬按、空白鍵、藥丸兩顆、iPhone 點 HomePlay 圖示）之後 60 s 內，
+    /// 重連出第一幀不自動把 CarPlay 拉回前面（不然剛切走又被拉回來）；手動切回 CarPlay 就解除
+    private var homeLatchUntil: Double = 0
+    private static let homeLatch: Double = 60
     private var quietAttach = false   // 启动时后台挂到 receiver：没画面就不弹连接卡，出画面自动显示
     private var handoffFreeze = false    // 插线稳定后切无线：冻住最后一帧，别把「会话结束」当断线
     private var handoffTimeoutWork: DispatchWorkItem?
@@ -5945,7 +5957,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func hidePet() {
         view.setOccluded(true)              // 隐藏期间停掉主循环与轮询；也在结束直播前拦住摄像头恢复
-        if view.showingVideo { toggle() }   // 看不见就不该继续直播/解码
+        if view.showingVideo { endCarPlay(reason: "hidePet") }   // 看不见就不该继续直播/解码
         NowPlayingPoller.shared.paused = true
         window?.orderOut(nil)               // 不结束 App：状态栏图标还在，随时显示回来
         // 明确隐藏＝马上关摄像头，不等遮挡防抖；用户看不见它时不该亮绿点。
@@ -6380,7 +6392,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // 只有真的在直播時才向 receiver 發 stop；閒置退出不要誤殺 login item 的常駐 receiver
         if !Self.isDiagnosticRun, isLive || view.showingVideo, let c = client {
             c.onLive = nil; c.onFrameReceived = nil; c.onText = nil
-            c.requestTeardown()
+            c.requestTeardown(reason: "appQuit")
             Thread.sleep(forTimeInterval: 0.45)
         }
         ReceiverLauncher.stop()
@@ -6391,6 +6403,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         wirePermissionMoods()
         if HomePlayState.isolated { log("rehearsal state: Application Support/\(HomePlayState.name), agent \(ReceiverAgent.label)") }
         tightenLogPermissions()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 3) { ActivityBridge.shared.start() }   // iPhone 即時動態：沒有 ActivityKit、沒有活動都只是空清單，不影響桌寵
+        if let i = CommandLine.arguments.firstIndex(of: "--iphone-activity") {   // 截图／示範：假一則 iPhone 活動
+            let next = i + 1 < CommandLine.arguments.count ? CommandLine.arguments[i + 1] : nil
+            ActivityBridge.shared.applyDemo(appName: (next?.hasPrefix("--") == false ? next! : L("la.iphone.demo", "外卖")))
+        }
         // 除錯／截图：开机 3 秒后在桌宠上弹出右键菜单（--show-menu）
         if CommandLine.arguments.contains("--show-menu") {
             DispatchQueue.main.asyncAfter(deadline: .now() + 3) { [weak self] in
@@ -6515,6 +6532,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             log("car video ended")
         }
         view.onToggleLive = { [weak self] in self?.toggle() }
+        view.onSwitchSource = { [weak self] in self?.switchSource() }
         view.onCancelConnect = { [weak self] in self?.cancelConnect() }
         view.onForceEnter = { [weak self] in self?.enterCarPlay() }
         view.onSelectPhone = { [weak self] address in self?.switchPhone(to: address) }
@@ -7201,8 +7219,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     self.view.mood.disconnected = false
                     self.view.mood.show(.happy, for: 0.8, now: now)
                 }
-                self.view.showVideo(true)
-                if self.gazeFollow { GazeTracker.shared.setPaused(true) }   // 看 CarPlay 时关摄像头
+                if now < self.homeLatchUntil, !self.view.showingVideo {   // 2.0 align D：剛手動切到 HomeView，留在後台
+                    self.carPlayInBackground = true
+                    self.view.face.status = .background
+                    log("CarPlay live again; staying behind HomeView (manual switch \(Int(self.homeLatchUntil - now)) s left)")
+                } else {
+                    self.view.showVideo(true)
+                    if self.gazeFollow { GazeTracker.shared.setPaused(true) }   // 看 CarPlay 时关摄像头
+                }
             } else {
                 // 直播中断（不是用户按空格停的）：屏幕回到擔心臉，直到重连成功
                 PhoneNowPlayingBridge.shared.clear()
@@ -7352,6 +7376,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 // 手机上点了 HomePlay 图标：回到表面，CarPlay 留在后台（和「重按进入 CarPlay」形成闭环）
                 if self.view.showingVideo {
                     self.carPlayInBackground = true
+                    self.homeLatchUntil = CACurrentMediaTime() + Self.homeLatch
                     self.view.showVideo(false)
                     self.view.face.status = .background
                     self.view.mood.show(.happy, for: 0.8, now: CACurrentMediaTime())
@@ -7505,32 +7530,63 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func resumeFromBackground() -> Bool {
         guard carPlayInBackground, isLive, !view.showingVideo else { return false }
         carPlayInBackground = false
+        homeLatchUntil = 0
         view.showVideo(true)
         view.face.status = .live
         client?.requestKeyframe()
         log("CarPlay back to the front")
         return true
     }
+    /// 把 CarPlay 收到后台、回到 HomeView：会话不动、不关 WS、不发 stop。
+    /// 这就是 iPhone 点 HomePlay 图标（requestUI）走的同一条路，只是改成可以在本机触发。
+    @discardableResult
+    private func showHomeView() -> Bool {
+        guard view.showingVideo, isLive, !carPlayInBackground else { return false }
+        carPlayInBackground = true
+        homeLatchUntil = CACurrentMediaTime() + Self.homeLatch
+        view.showVideo(false)
+        view.face.status = .background
+        userStopped = false
+        log("CarPlay stays live in the background; showing HomeView")
+        return true
+    }
+    /// 本机切换显示源。只动表现层（showVideo／carPlayInBackground／status），
+    /// 绝不发 stop、不关 WS、不碰连接状态机——真正结束会话只留右键菜单。
+    func switchSource() {
+        if view.showingVideo { showHomeView(); return }
+        if resumeFromBackground() { return }
+        enterCarPlay()
+    }
+    /// 選單「退出 CarPlay」、控制中心的 CarPlay 方塊：跟重按／空格一致，回到 HomeView、會話留在背景，
+    /// 再進 CarPlay 立刻有畫面（2026-10-31 真機：原本這裡整個斷線，每次回 CarPlay 要重連 2–5 秒）。
+    /// 只有不在直播時（交接中等）才真的斷開。
     private func toggle() {
         if !view.showingVideo, resumeFromBackground() { return }
         handoffFreeze = false
         handoffTimeoutWork?.cancel(); handoffTimeoutWork = nil
         if view.showingVideo {
-            userStopped = true; reconnectTimer?.invalidate()
-            PhoneNowPlayingBridge.shared.clear()
-            client?.requestTeardown()          // 讓 iPhone 端也結束 CarPlay，而不是只關畫面
-            view.showVideo(false); view.face.status = .pausedResume
+            if showHomeView() { return }
+            endCarPlay(reason: "toggle")
         } else if let endpoint {
             userStopped = false; client?.close(); client = nil
             ensureReceiver { [weak self] in self?.connect(endpoint) }   // receiver 已退出時重新拉起
         }
     }
 
+    /// 真正結束 CarPlay：請接收器拆掉手機會話（接收器隨後退出）。現在只有隱藏桌寵、交接中退出會走這裡。
+    private func endCarPlay(reason: String) {
+        userStopped = true; reconnectTimer?.invalidate()
+        PhoneNowPlayingBridge.shared.clear()
+        client?.requestTeardown(reason: reason)   // 讓 iPhone 端也結束 CarPlay，而不是只關畫面
+        view.showVideo(false); view.face.status = .pausedResume
+        log("CarPlay ended (\(reason))")
+    }
+
     // MARK: 重按进入 CarPlay（照 MacPlay「启动接收」的定位，但做成一键：receiver 不在就拉起，然后连；
     // 连不上靠既有的 5/10/20/30/60s 退避一直等，receiver 侧自己也会退避重试手机——两边都不用管）
     @objc func enterCarPlay() {
-        // 同一個手勢進出：已經在直播就退出（等同空格／選單的暫停直播）
-        if view.showingVideo { toggle(); return }
+        // 同一個手勢進出：已經在直播就收到後台（不拆會話）
+        if view.showingVideo { showHomeView(); return }
         if resumeFromBackground() { return }
         view.mood.show(.surprised, for: 0.35, now: CACurrentMediaTime())
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { [weak self] in
@@ -7716,6 +7772,7 @@ if let o = arg("--hpicons-png") { HPIcons.writeSheet(o); exit(0) }   // 2.0 第�
 if let o = arg("--avatars-png") { HPAvatar.writeSheet(o); exit(0) }   // 2.0 第四輪：👀 人物頭像排一張（Design/HPAvatar.swift）
 if let o = arg("--avatar-editor-png") { AvatarEditorSnapshot.write(o) }   // 2.0 第四輪：換頭像表單的快照（People/PeoplePane.swift）
 
+if CommandLine.arguments.contains(where: { $0 == "--metrics-json" || $0 == "--metrics-json-pretty" }) { MetricsCLI.run(CommandLine.arguments) }   // 2.0 D1：儀表讀值逐行印 JSON 就結束（Metrics/MetricsSampler.swift）
 if CommandLine.arguments.contains("--cliotalk-speech-probe") { ClioSpeechProbe.run() }   // 2.0: 本機聽寫支援哪些語系（不開麥克風）
 if let i = CommandLine.arguments.firstIndex(of: "--glass-calibrate"), i + 1 < CommandLine.arguments.count {   // 2.0 glass: 真的 NSGlassEffectView 對我們的玻璃（Design/GlassCalibrate.swift）
     let a = CommandLine.arguments
@@ -7824,7 +7881,7 @@ if CommandLine.arguments.contains("--selftest") {
     check(fp == .of(.surprised) && !fp.approach(.of(.surprised), 0.2), "表情插值收敛并停止重画")
     // 錶面切换与倒数显示
     check(FaceStyle.island.next(1) == .photos && FaceStyle.island.next(-1) == FaceStyle.lineup.last! && FaceStyle.lineup.last!.next(1) == .island, "錶面头尾相接")
-    check(FaceStyle.lineup.map(\.rawValue) == ["island", "photos", "modular", "analog", "flow", "weather", "calendar", "growth", "black", "system6"], "錶面陣容十款")
+    check(FaceStyle.lineup.map(\.rawValue) == ["island", "photos", "modular", "analog", "flow", "weather", "calendar", "growth", "black", "system6", "cluster"], "錶面陣容十一款")
     check(FaceStyle.embossed.inLineup == .analog && FaceStyle.alarmClock.inLineup == .system6 && FaceStyle.about.inLineup == .system6 && FaceStyle.homeModular.inLineup == .modular, "舊錶面搬進新款")
     check(timerClock(299.2) == "5:00" && timerClock(59) == "0:59" && timerClock(0.3) == "0:01" && timerClock(3725) == "1:02:05", "倒数显示")
     let fct = Face(); fct.frozen = true; fct.startTimer(seconds: 2, now: 100)
@@ -8109,6 +8166,7 @@ if CommandLine.arguments.contains("--selftest") {
     }
     ShellSelfTest.run(check)   // 2.0: 外殼導覽與多組計時器（Shell/ShellNav.swift）
     HomeAppSelfTest.run(check)   // 2.0: 家庭 App（Shell/HomeAppModel.swift）
+    HomeShortcut.selftest(check)   // B 方案：捷徑深連結（Shell/HomeShortcut.swift）
     GlassSelfTest.run(check)   // 2.0 glass: 玻璃的形狀辨識、融合遮罩（Design/GlassCalibrate.swift）
     HPAccessibilitySelfTest.run(check)   // 2.0 glass: WCAG 對比（Design/HPAccessibility.swift）
     ClioSelftest.run(check)   // 2.0: ClioTalk（ClioTalk/ClioSelftest.swift）
@@ -8159,6 +8217,15 @@ if let s = arg("--system6-layout") {   // 快照用：finder alarmClock about
     guard let l = System6Layout(rawValue: s) else { log("--system6-layout 只认：finder alarmClock about"); exit(2) }
     faceOptionSnapshotOverride.layout = l
 }
+if let s = arg("--cluster-layout") {   // 快照用：a b c
+    guard let l = ClusterLayout(rawValue: s) else { log("--cluster-layout 只认：a b c"); exit(2) }
+    clusterLayoutSnapshotOverride = l
+}
+if let s = arg("--cluster-state") {   // 快照用：normal memory thermal battery disk offline
+    guard let st = ClusterState(rawValue: s) else { log("--cluster-state 只认：normal memory thermal battery disk offline"); exit(2) }
+    clusterStateSnapshotOverride = st
+}
+if CommandLine.arguments.contains("--cluster-live") { clusterSnapshotLive = true }   // 快照用：儀表不用設計稿的示範值，取兩次真讀值
 if let s = arg("--clock") { islandSnapshotOverride.clock = ClockStyle(rawValue: s) }
 if let s = arg("--clock-look") { ClockLook.snapshotOverride = ClockLook.parse(s) }   // 快照用：字体与颜色   // 快照用：島錶面时钟样式 bold thin stacked compact
 if let s = arg("--bg") { islandSnapshotOverride.bg = IslandBackground(rawValue: s) }     // daytime flow photo solid black

@@ -663,3 +663,13 @@ enum MusicSelfTest {
         check(items.map(\.name) == ["Blue Hour", "Rainy Day", "Focus"] && items.first?.kind == .album && items.first?.pid == "AB12" && items.first?.detail == "Nova", "音乐：资料库输出解析（专辑在前、空行与坏行略过）")
     }
 }
+
+// MARK: - 2.0 home-3：遠看（Shell/FarGlance.swift）
+extension MusicApp {
+    /// 正在播放：歌名（節目名）大字＋演出者；在播＝ongoing（遠看時不回錶面）
+    func farGlance(face: Face, now: Double) -> FarGlance? {
+        guard let s = NowPlayingPage.shared.state(face: face), !s.info.title.isEmpty else { return nil }
+        return FarGlance(title: title, headline: s.info.title, details: [s.info.artist].filter { !$0.isEmpty },
+                         alert: nil, ongoing: s.info.playing)
+    }
+}

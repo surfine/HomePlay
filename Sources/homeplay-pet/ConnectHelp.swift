@@ -68,6 +68,13 @@ enum ConnectHelp {
                                subtitle: L("status.help.usbNet.body", "拔掉再插一次，直接插 Mac、不经扩展坞"),
                                hint: L("status.help.usbNet.hint", "或拔线改用无线：iPhone 和 Mac 连同一个 Wi-Fi"),
                                chip: report)
+        case "phoneNoAnswer":
+            // 藍牙開通道一直逾時：iPhone 鎖著或睡著，或藍牙卡住。不是配對壞了，不叫人重新配對；
+            // 插線每次都能連上（2026-10-30 真機），所以一開始就給這條路
+            return ConnectCard(title: L("status.help.noAnswer.title", "解锁 iPhone"),
+                               subtitle: L("status.help.noAnswer.body", "iPhone 锁着时不接 HomePlay 的蓝牙连接"),
+                               hint: cable,
+                               chip: late ? report : L("status.help.unlockChip", "解锁后自动继续"))
         case "inboundBlocked":
             return ConnectCard(title: L("status.help.inbound.title", "iPhone 连不进这台 Mac"),
                                subtitle: L("status.help.inbound.body", "同一个 Wi-Fi 却被挡住：检查防火墙或 Little Snitch、LuLu 这类 App"),

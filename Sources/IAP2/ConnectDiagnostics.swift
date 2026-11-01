@@ -14,6 +14,7 @@ package struct ConnectDiagnostics: Sendable {
         case ssidUnknown        // 不知道 Wi-Fi 名稱（macOS 對 App 隱藏）：iPhone 拿到的 Wi-Fi 設定是空的
         case inboundBlocked     // iPhone 在同一個網路（回應了我們的探測），卻連不進 Mac：第三方防火牆之類
         case wifiNoConnectBack  // 交了 Wi-Fi 設定、送了開會話，iPhone 沒從 Wi-Fi 連回來
+        case phoneNoAnswer      // 藍牙開通道一直逾時：iPhone 鎖著或睡著（BluetoothFailureRules）
         // 有線：不由 stalledReason 判斷，接收器看到就直接給卡
         case usbNoData          // iPhone 在 USB 匯流排上，usbmuxd 卻看不到（鎖著／USB 限制模式／只供電的線或擴充座）
         case usbLocked          // carkit 打不開：PasswordProtected
@@ -230,5 +231,28 @@ package enum UsbOpenFailure: String, Sendable, CaseIterable {
         if d.contains("StartSession") || d.contains("InvalidHostID") || d.contains("信任过期") { return .trustExpired }
         if d.contains("不是 iPhone") { return .notIPhone }
         return .other
+    }
+}
+
+/// 藍牙 iAP2 沒走到認證就結束時，接收器下一步怎麼做。
+/// 結束碼（Iap2BluetoothAccessory）：9＝RFCOMM 打開逾時，3＝打開完成但失敗，11＝開了就被關。
+/// 逾時是 iPhone 沒回應：鎖著、睡著或不在範圍內——2026-10-30 真機：手機在旁邊、鎖著時一整晚都是 9，
+/// 一解鎖下一次就打開。只有 3／11 才像 iPhone 忘了這台 Mac（配對兩邊不同步）。
+package enum BluetoothFailureRules {
+    package enum Advice: Equatable, Sendable {
+        case keepRetrying     // 安靜重試，不打擾
+        case hintUnlock       // 使用者正在等連線：請他解鎖 iPhone
+        case pairingGuide     // 開配對引導
+    }
+
+    package static func isNoAnswer(_ code: Int) -> Bool { code == 9 }
+
+    /// refusedStreak：連續「開啟失敗／開了就關」的次數；engagedNoAnswer：使用者在等連線期間連續逾時的次數（都含這一次）
+    package static func advice(code: Int, refusedStreak: Int, engagedNoAnswer: Int, engaged: Bool) -> Advice {
+        if !isNoAnswer(code) { return refusedStreak == 2 ? .pairingGuide : .keepRetrying }
+        guard engaged else { return .keepRetrying }
+        // 逾時永遠不開配對引導：2026-10-30 真機，卡住時配對一直是好的，重新配對救不了；插線（USB）每次都能連上，
+        // 所以卡片直接給插線這條路（ConnectHelp phoneNoAnswer）
+        return engagedNoAnswer == 1 ? .hintUnlock : .keepRetrying
     }
 }

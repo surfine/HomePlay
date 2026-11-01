@@ -54,6 +54,10 @@ final class HomeApp: PetApp {
     private var demoImages: [String: CGImage] = [:]
     private var pendingWrite: (id: String, value: HomeValue, type: String)?
     private var lastWrite = 0.0
+    // 2.0 home-1：「家庭狀態」子頁、遠看摘要（Shell/HomeStatus.swift）
+    private var statusOpen = HomeApp.args.contains("--home-status")
+    private var status = HomeStatusPage()
+    private var lastReveal: CGFloat = 1
 
     private var clock: Double { CACurrentMediaTime() }
 
@@ -85,6 +89,8 @@ final class HomeApp: PetApp {
     }
 
     func didOpen(now: Double) {
+        if Self.demo { HomeActivity.shared.seedDemo(demoSnap, now: Date()) }   // 2.0 home-1：示範的家庭動態
+        statusOpen = Self.args.contains("--home-status"); status = HomeStatusPage()
         scroll = 0; detail = nil; detailClosing = false; levelRaw = nil; levelAnim = nil; cameraID = nil; locks.cancel(); tab = 0
         if let w = wantCameras, clock - w.at < 5 {   // 2.0: 只認剛剛 ClioTalk 要的那一次
             tab = 1
@@ -126,16 +132,24 @@ final class HomeApp: PetApp {
 
     /// 一格裡放什麼：配件磚、場景、攝影機快照
     /// 一格裡放什麼：配件磚、場景、攝影機快照、類比時鐘、「家庭」（開 Mac 的家庭 App）
-    private enum Item { case tile(HomeTile), scene(HomeScene), camera(HomeCameraItem), clock, homeApp
+    private enum Item { case tile(HomeTile), scene(HomeScene), camera(HomeCameraItem), clock, homeApp, status
         var tile: HomeTile? { if case .tile(let t) = self { return t }; return nil }
         var big: Bool { if case .tile(let t) = self { return t.kind == .thermostat }; return false }
     }
     /// R15：官方那一頁的排法——時鐘、前兩個配件；攝影機、家庭、第一個場景；其餘配件、場景、攝影機接在後面
     private func items(_ p: Page) -> [Item] {
         guard let g = p.group else { return [] }
-        let tiles = g.tiles.map { Item.tile($0) }, scenes = p.scenes.map { Item.scene($0) }, cams = p.cameras.map { Item.camera($0) }
+        // 2.0 home-1：這台所在的房間（HomeThisRoom）的磚排最前面（HomePod：預設控制自己所在的房間）
+        let here = HomeThisRoom.room(in: snap)?.id
+        let ordered = here.map { r in g.tiles.filter { $0.room == r } + g.tiles.filter { $0.room != r } } ?? g.tiles
+        let tiles = ordered.map { Item.tile($0) }, scenes = p.scenes.map { Item.scene($0) }, cams = p.cameras.map { Item.camera($0) }
         if Self.guestView { return [.clock] + tiles }   // 訪客版：沒有「家庭」磚（會在 Mac 上開家庭 App）
-        return [.clock] + tiles.prefix(2) + cams.prefix(1) + [.homeApp] + scenes.prefix(1) + tiles.dropFirst(2) + scenes.dropFirst(1) + cams.dropFirst(1)
+        // 狀態磚：一切正常時排在第一個場景之後；有問題（配件沒回應、中樞離線）就插隊到第一列右上角（提案原則 4：只有急事插隊；
+        // 中上那格在 👀 藥丸底下，圖示會被蓋住，所以不放那裡）
+        if !HomeHealth.make(snap, lastSeen: HomeActivity.shared.lastSeen).ok {
+            return [.clock] + tiles.prefix(1) + [.status] + tiles.dropFirst(1).prefix(1) + cams.prefix(1) + [.homeApp] + scenes.prefix(1) + tiles.dropFirst(2) + scenes.dropFirst(1) + cams.dropFirst(1)
+        }
+        return [.clock] + tiles.prefix(2) + cams.prefix(1) + [.homeApp] + scenes.prefix(1) + [.status] + tiles.dropFirst(2) + scenes.dropFirst(1) + cams.dropFirst(1)
     }
     /// 磚上第二行：房間名
     private func roomName(_ t: HomeTile, _ p: Page) -> String { p.groups.first { $0.id == t.room }?.name ?? "" }
@@ -176,10 +190,13 @@ final class HomeApp: PetApp {
         let c = Screen.cornerCapsuleCenter(.bottomRight, width: HPComponents.actionSize, height: HPComponents.actionSize); return HPComponents.actionRect(cx: c.x, cy: c.y)
     }()
     private static let openHomeButton = CGRect(x: 512 - 330, y: 700, width: 660, height: 112)
+    // 沒有小幫手時的捷徑導引（B 方案）：主按鈕＝建立或執行，次按鈕＝去設定填名字
+    private static let shortcutMainButton = CGRect(x: 512 - 330, y: 640, width: 660, height: 112)
+    private static let shortcutSettingsButton = CGRect(x: 512 - 250, y: 640 + 112 + HPGrid.Rhythm.groupGap, width: 500, height: HPTokens.Size.pill)   // 2.0 align F：玻璃膠囊 88 → pill 104
     // 滿版控制卡
-    private static let thermoDown = HPComponents.actionRect(cx: 150, cy: 520, size: 120)
-    private static let thermoUp = HPComponents.actionRect(cx: 874, cy: 520, size: 120)
-    private static let thermoPower = CGRect(x: 512 - 150, y: 800, width: 300, height: 96)
+    private static let thermoDown = HPComponents.actionRect(cx: 150, cy: 520, size: HPTokens.Size.round)   // 2.0 align F：圓形主按鈕 120 → round 150
+    private static let thermoUp = HPComponents.actionRect(cx: 874, cy: 520, size: HPTokens.Size.round)
+    private static let thermoPower = CGRect(x: 512 - 150, y: 848 - HPTokens.Size.pill / 2, width: 300, height: HPTokens.Size.pill)   // 96 → pill 104，中心 848 不動
 
     // MARK: 選擇
 
@@ -218,11 +235,12 @@ final class HomeApp: PetApp {
 
     // 2.0 r2：滿版控制卡與攝影機是全螢幕（外殼的返回鈕與時間不畫，卡上自己畫）
     // R15：根頁跟官方一樣磚鋪滿、不畫 ✕ 與時間（離開：Esc／↓、底部往上推）；攝影機子頁照常有 ‹ 與時間
-    private var onDashboard: Bool { state == .ready && detail == nil && cameraID == nil && !page().onCameras }
+    private var onDashboard: Bool { state == .ready && detail == nil && cameraID == nil && !page().onCameras && !statusOpen }
     var showsCloseButton: Bool { detail == nil && cameraID == nil && !onDashboard }
     var showsClock: Bool { detail == nil && cameraID == nil && !onDashboard }
-    var backSymbol: String { state == .ready && page().onCameras ? "chevron.left" : "xmark" }
+    var backSymbol: String { state == .ready && (page().onCameras || statusOpen) ? "chevron.left" : "xmark" }
     func handleBack(now: Double) -> Bool {
+        if statusOpen, cameraID == nil, detail == nil { statusOpen = false; status = HomeStatusPage(); return true }
         if detail != nil, !detailClosing { closeDetail(now: clock); return true }
         if cameraID != nil { cameraID = nil; return true }
         if tab != 0, state == .ready { tab = 0; scroll = 0; return true }
@@ -362,6 +380,7 @@ final class HomeApp: PetApp {
     // MARK: 輸入
 
     func handleScroll(_ dy: CGFloat, now: Double) -> Bool {
+        if statusOpen, detail == nil, cameraID == nil { return status.scroll(by: dy) }
         let p = page()
         let t = clock
         if let tile = currentTile(p), !detailClosing {
@@ -389,7 +408,7 @@ final class HomeApp: PetApp {
     }
 
     func handleLongPress(_ pt: CGPoint, face: Face, now: Double) -> Bool {
-        guard state == .ready, cameraID == nil, detail == nil else { return false }
+        guard state == .ready, cameraID == nil, detail == nil, !statusOpen else { return false }
         let p = page()
         for (r, it) in tileLayout(p) where r.contains(pt) && pt.y > Self.gridTop - 8 {
             guard let t = it.tile, t.reachable, t.kind == .covering || (t.kind == .light && t.brightnessID != nil) else { return false }
@@ -401,12 +420,31 @@ final class HomeApp: PetApp {
     func handleTap(_ pt: CGPoint, face: Face, now: Double) -> Bool {
         let st = state
         if st == .noHelper {
-            if Self.openHomeButton.insetBy(dx: -8, dy: -8).contains(pt) { Self.openAppleHome(); return true }
+            guard HomeShortcut.available else {
+                if Self.openHomeButton.insetBy(dx: -8, dy: -8).contains(pt) { Self.openAppleHome(); return true }
+                return false
+            }
+            if Self.shortcutMainButton.insetBy(dx: -8, dy: -8).contains(pt) {
+                if HomeShortcut.isSet { HomeShortcut.run() } else { HomeShortcut.openApp() }
+                return true
+            }
+            if Self.shortcutSettingsButton.insetBy(dx: -12, dy: -12).contains(pt) { Self.openShortcutSettings(); return true }
             return false
         }
         guard st == .ready else { return false }
         let p = page()
         let t = clock
+        if statusOpen, detail == nil, cameraID == nil {
+            switch status.tap(pt) {
+            case .toggle(let id, let on)?:
+                log("home automation \(id) → \(on ? "on" : "off")")
+                if !Self.demo { HomeLink.shared.enableAutomation(id: id, enabled: on) { [weak self] _, _ in self?.dirty = true } }
+                else if let i = demoSnap.automations?.firstIndex(where: { $0.id == id }) { demoSnap.automations?[i].enabled = on }
+                dirty = true; return true
+            case .openHome?: Self.openAppleHome(); return true
+            case nil: return true
+            }
+        }
 
         // 滿版控制卡
         if let tile = currentTile(p) {
@@ -429,8 +467,20 @@ final class HomeApp: PetApp {
             return true
         }
         // 攝影機全螢幕
-        if cameraID != nil {
+        if let cid = cameraID {
             if Self.camClose.insetBy(dx: -8, dy: -8).contains(pt) { HPComponents.navigateBack(); return true }
+            // 2.0 home-1：同一個房間的燈、門鎖（iOS 家庭 App 攝影機畫面底下的相關配件）
+            for (r, tile) in relatedLayout(cid) where r.insetBy(dx: -8, dy: -8).contains(pt) {
+                guard tile.reachable else { return true }
+                if tile.kind == .lock, let id = tile.lockTargetID {
+                    switch locks.press(id: tile.id, locked: tile.locked ?? false, now: t) {
+                    case .lock: commit(id, HomeValue(number: 1), type: "lockTarget")
+                    case .unlock: commit(id, HomeValue(number: 0), type: "lockTarget")
+                    case .arm: break
+                    }
+                } else if let id = tile.powerID { commit(id, HomeValue(bool: !tile.on), type: "power") }
+                return true
+            }
             if Self.camGrid.insetBy(dx: -8, dy: -8).contains(pt) { cameraID = nil; tab = 1; return true }
             return true
         }
@@ -446,6 +496,7 @@ final class HomeApp: PetApp {
             case .camera(let c): cameraID = c.id; return true
             case .clock: return true
             case .homeApp: locks.cancel(); Self.openAppleHome(); return true
+            case .status: locks.cancel(); statusOpen = true; status = HomeStatusPage(); log("home status open"); return true
             case .scene(let s):
                 if HomeWrite.refusesGuest { return true }   // 2.0 idle: 訪客裝置不能跑場景
                 sceneFlash = (s.id, t + 0.7)
@@ -509,6 +560,10 @@ final class HomeApp: PetApp {
     }
 
     func render(into g: CGContext, face: Face, rect: CGRect, now: Double) {
+        // 2.0 home-1：人走近（reveal 從遠端升上來）＝攝影機立刻重拍；遠近兩檔在 tick 判斷
+        let rv = face.reveal
+        if rv > 0.5, lastReveal <= 0.5 { schedule.refresh() }
+        lastReveal = rv
         switch state {
         case .noHelper:
             g.setFillColor(HPComponents.bg.cgColor); g.fill(rect); AppUI.title(g, face, title); drawNoHelper(g, face)
@@ -521,6 +576,11 @@ final class HomeApp: PetApp {
         case .ready:
             let p = page()
             if let cid = cameraID, let cam = p.cameras.first(where: { $0.id == cid }) { drawCameraPage(g, face, cam); return }
+            if statusOpen {
+                status.draw(g, face, snapshot: snap, now: Date(), owner: !Self.guestView && !Shell.guestMode)
+                AppUI.title(g, face, L("home.status.title", "家庭状态"))
+                return
+            }
             if p.onCameras {
                 g.setFillColor(HPComponents.bg.cgColor); g.fill(rect)
                 AppUI.title(g, face, L("home.cameras", "摄像头"))
@@ -538,12 +598,45 @@ final class HomeApp: PetApp {
     }
 
     private func drawNoHelper(_ g: CGContext, _ face: Face) {
-        Shell.drawAppIcon(g, face: face, icon: icon, in: CGRect(x: 512 - 96, y: 260, width: 192, height: 192))
-        let f = HPComponents.sf(42, weight: .semibold)
-        let lines = MediaUI.wrap(L("home.needHelper", "家庭需要 HomePlay Home 小帮手（目前只在开发版提供）"), f, 760, maxLines: 4)
-        for (i, l) in lines.enumerated() { textCentered(g, face, l, font: f, cx: 512, y: 530 + CGFloat(i) * 58, color: HPComponents.label) }
-        HPAX.note(g, CGRect(x: 128, y: 480, width: 768, height: CGFloat(lines.count) * 58 + 30), .text, L("home.needHelper", "家庭需要 HomePlay Home 小帮手（目前只在开发版提供）"), shape: .rounded(16))   // 2.0 depth：VoiceOver
-        HPComponents.filledButton(g, face, Self.openHomeButton, L("home.openApple", "在 Mac 的「家庭」App 中打开"), tint: HPComponents.orange)
+        // macOS 12 以前沒有「捷徑」App：只能講小幫手（開發版才有）
+        guard HomeShortcut.available else {
+            Shell.drawAppIcon(g, face: face, icon: icon, in: CGRect(x: 512 - 96, y: 260, width: 192, height: 192))
+            let f = HPComponents.sf(42, weight: .semibold)
+            let lines = MediaUI.wrap(L("home.needHelper", "家庭需要 HomePlay Home 小帮手（目前只在开发版提供）"), f, 760, maxLines: 4)
+            for (i, l) in lines.enumerated() { textCentered(g, face, l, font: f, cx: 512, y: 530 + CGFloat(i) * 58, color: HPComponents.label) }
+            HPAX.note(g, CGRect(x: 128, y: 480, width: 768, height: CGFloat(lines.count) * 58 + 30), .text, L("home.needHelper", "家庭需要 HomePlay Home 小帮手（目前只在开发版提供）"), shape: .rounded(16))
+            HPComponents.filledButton(g, face, Self.openHomeButton, L("home.openApple", "在 Mac 的「家庭」App 中打开"), tint: HPComponents.orange)
+            return
+        }
+        // B 方案（2026-10-26 使用者拍板）：HomeKit 的權利只跟著 App Store 的簽章走，
+        // 公開版用 macOS 捷徑的家庭動作代替。這裡只負責記名字與執行，配件資料完全拿不到。
+        Shell.drawAppIcon(g, face: face, icon: icon, in: CGRect(x: 512 - 84, y: 176, width: 168, height: 168))
+        let tf = HPComponents.sf(46, weight: .semibold)
+        textCentered(g, face, L("home.shortcut.title", "用捷径控制家庭"), font: tf, cx: 512, y: 392, color: HPComponents.label)
+        let bf = HPComponents.sf(29, weight: .regular)
+        let body = L("home.shortcut.body", "HomePlay 不能直接读 HomeKit。在「捷径」App 建一个捷径，加入「控制家庭」动作，再回来填入它的名字。")
+        let bodyLines = MediaUI.wrap(body, bf, 700, maxLines: 3)
+        for (i, l) in bodyLines.enumerated() {
+            textCentered(g, face, l, font: bf, cx: 512, y: 462 + CGFloat(i) * 42, color: HPComponents.secondary)
+        }
+        HPAX.note(g, CGRect(x: 168, y: 440, width: 688, height: CGFloat(bodyLines.count) * 42 + 24), .text, L("home.shortcut.title", "用捷径控制家庭"), value: body, shape: .rounded(16))
+        let main = HomeShortcut.isSet
+            ? String(format: L("home.shortcut.run", "执行「%1$@」"), HomeShortcut.name)
+            : L("home.shortcut.create", "建立家庭捷径")
+        HPComponents.filledButton(g, face, Self.shortcutMainButton, main, tint: HPComponents.orange)
+        let second = HomeShortcut.isSet ? L("home.shortcut.change", "换一个捷径") : L("home.shortcut.setName", "在设置里填入捷径名称")
+        HPComponents.glassButton(g, face, Self.shortcutSettingsButton, second, size: 30, ink: HPComponents.label)
+        // 誠實寫出這條路的代價（使用者拍板時已經知道；畫面上再寫一次）
+        let lf = HPComponents.sf(24, weight: .regular)
+        let limit = L("home.shortcut.limit", "执行时会切到捷径 App；这里看不到配件清单，也没有即时状态。")
+        for (i, l) in MediaUI.wrap(limit, lf, 780, maxLines: 2).enumerated() {
+            textCentered(g, face, l, font: lf, cx: 512, y: 886 + CGFloat(i) * 34, color: HPComponents.secondary)
+        }
+    }
+
+    /// 打開設定的「家庭」分頁（填捷徑名稱）
+    static func openShortcutSettings() {
+        if let d = NSApp.delegate as? AppDelegate { SettingsWindowController.show(app: d, pane: .home) }
     }
 
     private func drawMessage(_ g: CGContext, _ face: Face, _ s: String, sub: String) {
@@ -568,6 +661,9 @@ final class HomeApp: PetApp {
             case .camera(let c):
                 HPAX.note(g, r, .button, c.name, value: ageText(c), shape: .rounded(Self.tileRadius))   // 2.0 depth：VoiceOver
                 drawFrame(g, face, c, r, radius: Self.tileRadius)
+                drawAgeChip(g, face, c, r)   // 2.0 home-1：快照是多久以前拍的（過期的縮圖會讓人以為門口沒人）
+            case .status:
+                drawStatusTile(g, face, r)
             case .clock:
                 let st = HPComponents.dashTileStyle(on: true)
                 HPComponents.analogClockTile(g, face, r, date: Face.displayDate, tint: st.ink, hands: HPTokens.label)
@@ -632,6 +728,69 @@ final class HomeApp: PetApp {
         HPAX.note(g, r, .button, s.name, value: L("home.scene", "场景"), shape: .rounded(Self.tileRadius))   // 2.0 P05
         HPComponents.dashTile(g, face, r, fill: st.fill, title: s.name, subtitle: L("home.scene", "场景"), ink: st.ink, sub: st.sub,
                               glyph: HPComponents.dashSymbol(face, "sun.max.fill", color: st.ink))
+    }
+
+    // MARK: 2.0 home-1：狀態磚、快照時間、相關配件、遠看
+
+    /// 狀態磚：一切正常＝淺灰勾勾；有問題＝琥珀底「N 個沒有回應」／「家庭中樞離線」
+    private func drawStatusTile(_ g: CGContext, _ face: Face, _ r: CGRect) {
+        let h = HomeHealth.make(snap, lastSeen: HomeActivity.shared.lastSeen)
+        let title: String, sub: String
+        if h.hub == "disconnected" { title = L("home.tile.hubOff", "中枢离线"); sub = L("home.tile.autosPaused", "自动化暂停") }
+        else if !h.issues.isEmpty { title = String(format: L("home.tile.noResponse", "%d 个没回应"), h.issues.count); sub = L("home.tile.status", "家庭状态") }
+        else { title = L("home.tile.ok", "一切正常"); sub = L("home.tile.status", "家庭状态") }
+        let st = h.ok ? HPComponents.dashTileStyle(on: false)
+            : HPComponents.DashTileStyle(fill: HPComponents.orange, ink: .white, sub: NSColor.white.withAlphaComponent(0.8))
+        HPAX.note(g, r, .button, sub, value: title, shape: .rounded(Self.tileRadius))
+        HPComponents.dashTile(g, face, r, fill: st.fill, title: title, subtitle: sub, ink: st.ink, sub: st.sub,
+                              glyph: HPComponents.dashSymbol(face, h.ok ? "checkmark.circle" : "exclamationmark.circle", color: st.ink))
+    }
+
+    /// 根頁攝影機磚左下：「12 秒前」；拍不到＝「沒有回應」
+    private func drawAgeChip(_ g: CGContext, _ face: Face, _ c: HomeCameraItem, _ r: CGRect) {
+        guard !RemotePrivacy.guestActive, !Self.demo || images[c.id] != nil || demoImages[c.id] != nil || cameraImage(c) != nil else { return }
+        let txt = ageText(c), f = HPType.sf(26, .semibold)
+        let w = Typo.width(txt, f) + 32, chip = CGRect(x: r.minX + 20, y: r.maxY - 20 - 44, width: w, height: 44)
+        AppUI.fillPill(g, chip, color: NSColor.black.withAlphaComponent(0.45))
+        face.drawLeft(g, txt, font: f, x: chip.minX + 16, y: chip.midY + 9, color: .white)
+    }
+
+    /// 攝影機所在房間的燈／插座／門鎖（最多兩顆；燈在前）
+    private func related(_ cameraID: String) -> [HomeTile] {
+        guard let room = snap.accessories.first(where: { $0.id == cameraID })?.room else { return [] }
+        let all = HomeAppModel.groups(snap).flatMap(\.tiles).filter { $0.room == room }
+        let lights = all.filter { $0.kind == .light || $0.kind == .outlet }, locks = all.filter { $0.kind == .lock }
+        return Array((lights.prefix(1) + locks.prefix(1) + lights.dropFirst(1)).prefix(2))
+    }
+    private func relatedLayout(_ cameraID: String) -> [(CGRect, HomeTile)] {
+        let ts = related(cameraID)
+        guard !ts.isEmpty, !Self.guestView else { return [] }
+        let w: CGFloat = 320, gap = HPGrid.Rhythm.groupGap, total = CGFloat(ts.count) * w + CGFloat(ts.count - 1) * gap
+        let y = Self.camMic.minY - 72 - HPTokens.Size.pill
+        return ts.enumerated().map { i, t in (CGRect(x: 512 - total / 2 + CGFloat(i) * (w + gap), y: y, width: w, height: HPTokens.Size.pill), t) }
+    }
+    private func drawRelated(_ g: CGContext, _ face: Face, _ cameraID: String) {
+        let t = clock
+        for (r, tile) in relatedLayout(cameraID) {
+            let armed = locks.isArmed(tile.id, now: t)
+            let name = HomeAppModel.shortName(tile.name, room: "")
+            let title = armed ? L("home.lock.again", "再按一次开锁") : "\(name) · \(tile.status)"
+            let sym = tile.kind == .lock ? ((tile.locked ?? false) ? "lock.fill" : "lock.open.fill") : (tile.on ? "lightbulb.fill" : "lightbulb")
+            if armed || (tile.on && tile.kind != .lock) {
+                HPComponents.filledButton(g, face, r, title, tint: armed ? HPComponents.orange : HPComponents.yellow, symbol: sym)
+            } else {
+                HPComponents.glassButton(g, face, r, title, symbol: sym)
+            }
+        }
+    }
+
+    /// 遠看（提案原則 1，外殼統一畫）：這個房間（沒設就整個家）一句話；只在根頁（打開了攝影機、狀態頁、滿版卡就不換）
+    func farGlance(face: Face, now: Double) -> FarGlance? {
+        guard state == .ready, detail == nil, cameraID == nil, !statusOpen, tab == 0, !Self.guestView else { return nil }
+        let h = HomeHealth.make(snap, lastSeen: HomeActivity.shared.lastSeen)
+        let m = HomeFarSummary.make(snap, thisRoom: HomeThisRoom.room(in: snap), health: h)
+        return FarGlance(title: m.title, headline: m.headline, details: m.details,
+                         alert: m.issues > 0 ? String(format: L("home.far.issues", "%d 个配件没有回应"), m.issues) : nil)
     }
 
     // MARK: 滿版控制卡
@@ -807,6 +966,7 @@ final class HomeApp: PetApp {
         HPComponents.actionButton(g, face, Self.camClose, symbol: "xmark", role: .stop)
         HPComponents.actionButton(g, face, Self.camMic, symbol: "mic.slash.fill", role: .mic, enabled: false)
         HPComponents.glassCircle(g, face, Self.camGrid, symbol: "square.grid.2x2.fill", ink: .white, scale: 0.36, tint: HPComponents.mediaTint)
+        drawRelated(g, face, cam.id)   // 2.0 home-1：門鈴響了，開門燈、開鎖不必離開畫面
         let note = L("home.cam.noTalk", "目前不支持双向语音")
         textCentered(g, face, note, font: HPComponents.fitted(note, size: 26, weight: .regular, maxWidth: 360), cx: Self.camMic.midX, y: Self.camMic.minY - 24, color: NSColor.white.withAlphaComponent(0.7))
     }

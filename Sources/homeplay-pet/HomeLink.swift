@@ -57,9 +57,21 @@ struct HomeAccessory: Codable, Equatable {
     func characteristic(_ type: String) -> HomeCharacteristic? { characteristics.first { $0.type == type } }
 }
 
-struct HomeInfo: Codable, Equatable { var id: String; var name: String; var primary: Bool }
+struct HomeInfo: Codable, Equatable { var id: String; var name: String; var primary: Bool
+    var hub: String? = nil   // 2.0 home-1：家中樞 connected／disconnected／notAvailable（舊幫手沒有這欄）
+}
 struct HomeRoom: Codable, Equatable { var id: String; var name: String; var home: String? }
 struct HomeScene: Codable, Equatable { var id: String; var name: String; var type: String; var home: String? }
+/// 2.0 home-1：一則自動化（HMTrigger）。targets＝它會寫的特性 id（轉成捷徑的自動化是空的）；when＝觸發短碼
+struct HomeAutomation: Codable, Equatable {
+    var id: String
+    var name: String
+    var home: String?
+    var enabled: Bool
+    var kind: String?
+    var targets: [String]?
+    var when: [String]?
+}
 
 struct HomeSnapshot: Codable, Equatable {
     var ready: Bool
@@ -67,6 +79,7 @@ struct HomeSnapshot: Codable, Equatable {
     var rooms: [HomeRoom]
     var accessories: [HomeAccessory]
     var scenes: [HomeScene]
+    var automations: [HomeAutomation]? = nil   // 2.0 home-1（舊幫手沒有）
     static let empty = HomeSnapshot(ready: false, homes: [], rooms: [], accessories: [], scenes: [])
 }
 
@@ -167,6 +180,11 @@ final class HomeLink: @unchecked Sendable {
     func value(of id: String) -> HomeValue? {
         for a in snapshot.accessories { if let c = a.characteristics.first(where: { $0.id == id }) { return c.value } }
         return nil
+    }
+
+    /// 2.0 home-1：啟用／停用一則自動化（幫手成功後會推新快照）
+    func enableAutomation(id: String, enabled: Bool, completion: ((Bool, String?) -> Void)? = nil) {
+        send(["op": "enableTrigger", "id": id, "enabled": enabled], completion)
     }
 
     func runScene(id: String, completion: ((Bool, String?) -> Void)? = nil) {
@@ -290,12 +308,14 @@ final class HomeLink: @unchecked Sendable {
 
     private func apply(_ s: HomeSnapshot) {
         setConnected(true)
+        HomeActivity.shared.note(old: snapshot, new: s, now: Date())   // 2.0 home-1：可達性的變化記進家庭動態
         snapshot = s
         onSnapshot?(s)
         NotificationCenter.default.post(name: .homeLinkSnapshot, object: s)
     }
 
     private func apply(_ ch: HomeChange) {
+        HomeActivity.shared.note(ch, in: snapshot, now: Date())   // 2.0 home-1：值真的變了才記（重連後的整批重讀不算）
         for ai in snapshot.accessories.indices where snapshot.accessories[ai].id == ch.accessory {
             for ci in snapshot.accessories[ai].characteristics.indices where snapshot.accessories[ai].characteristics[ci].id == ch.characteristic {
                 snapshot.accessories[ai].characteristics[ci].value = ch.value

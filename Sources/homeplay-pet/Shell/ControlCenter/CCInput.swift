@@ -66,12 +66,15 @@ extension ControlCenter {
         return list.filter { $0.rect.contains(p) }.min { $0.rect.width * $0.rect.height < $1.rect.width * $1.rect.height }
     }
 
-    /// 寬滑桿：點在 x 對應的值（大卡裡的大滑桿用大軌道）
+    /// 按下滑桿那一刻的（值, x）：模組滑桿照 iOS 用相對位移，按下不跳值
+    nonisolated(unsafe) static var slideFrom: (level: CGFloat, x: CGFloat) = (0, 0)
+    /// 滑桿在 p 的值：大卡裡的大滑桿點在哪就是哪；模組本身是滑桿（iOS 26），值＝按下時的值＋拖過的距離 ÷ 模組寬
     static func sliderValue(_ t: Tile, at p: CGPoint) -> CGFloat {
-        let tr: CGRect
-        if expanded == t { tr = track(t, CGRect(x: expandedRect.minX, y: expandedRect.minY, width: expandedRect.width, height: 200), .s4x1, big: true) }
-        else { tr = track(t, rect(t), size(t), big: false) }
-        return max(0, min(1, (p.x - tr.minX) / max(1, tr.width)))
+        if expanded == t {
+            let tr = track(t, CGRect(x: expandedRect.minX, y: expandedRect.minY, width: expandedRect.width, height: 200), .s4x1, big: true)
+            return max(0, min(1, (p.x - tr.minX) / max(1, tr.width)))
+        }
+        return max(0, min(1, slideFrom.level + (p.x - slideFrom.x) / max(1, rect(t).width)))
     }
 }
 
@@ -87,7 +90,8 @@ extension PetView {
             case .slider(let t):
                 C.sliding = t
                 C.slideAnim = MotionValue("cc.knob", spring: .interactive, from: C.slideAnim.value(now), to: 1, now: now)
-                ccSetSlider(t, C.sliderValue(t, at: p))
+                C.slideFrom = (C.level(t), p.x)
+                if C.expanded == t { ccSetSlider(t, C.sliderValue(t, at: p)) }
                 return t
             case .module(let t) where C.editing:
                 C.dragCandidate = (t, CGPoint(x: p.x - C.rect(t).minX, y: p.y - C.rect(t).minY))

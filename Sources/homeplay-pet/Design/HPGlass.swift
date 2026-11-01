@@ -17,6 +17,14 @@ import AppKit
 
 typealias GlassPass = HPGlass
 
+/// 除錯：HOMEPLAY_SKIP 逐項跳過玻璃合成的某一段，用來二分「這一筆是誰畫的」。
+/// 名稱：nav/clock/pill/app/appstatus（外殼）、native/systemglass/shader/blit/ring（玻璃）。
+enum HPDebug {
+    static let parts: Set<String> = Set((ProcessInfo.processInfo.environment["HOMEPLAY_SKIP"] ?? "")
+        .split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) })
+    static func skipping(_ part: String) -> Bool { parts.contains(part) }
+}
+
 enum HPGlass {
     /// 玻璃的種類（chan-notes G5／G12）：參數表在 SystemGlassParams（macOS 27 量到的 NSGlassEffectView 兩種 style）
     enum Variant {
@@ -191,10 +199,14 @@ enum HPGlass {
     /// 小元件淺／深的滯後狀態（照形狀位置記）
     nonisolated(unsafe) private static var flip: [String: Bool] = [:]
     nonisolated(unsafe) static var stats = (hits: 0, misses: 0, fallbacks: 0)
+    nonisolated(unsafe) private static var shaderDump = 0
 
     /// 把收集到的形狀上玻璃、畫內容。clear：true＝媒體上的 Clear（照片、模糊錶面）；false/nil＝Regular。
     /// backdrop：給了就用它當背景（控制中心：霧化的底圖，磚一起位移），否則拍當下這一幀
-    static func flush(_ g: CGContext, face: Face, clear: Bool? = nil, backdrop given: CGImage? = nil, now: Double = CACurrentMediaTime()) {
+    /// shadows：false＝不畫外陰影（自適應的與 iOS 濾鏡的緣外那圈都不畫）；thicken：玻璃面再蓋一層極淡的填色（淺白 8%、深黑 10%），
+    /// 兩個都只給控制中心——二十幾塊模組的外陰影疊在 24 的縫裡是一片灰污，模組也要比一般控制實一點（2.0 align B）
+    static func flush(_ g: CGContext, face: Face, clear: Bool? = nil, backdrop given: CGImage? = nil, now: Double = CACurrentMediaTime(),
+                      shadows: Bool = true, thicken: Bool = false) {
         let list = items
         items.removeAll()
         guard !list.isEmpty else { return }
@@ -206,7 +218,7 @@ enum HPGlass {
         struct Shaped { let item: Item; let path: CGPath; let press: CGFloat; let darkGlass: Bool; let stats: (lum: CGFloat, edge: CGFloat, avg: NSColor); var live = false }
         var shaped: [Shaped] = list.map { it in
             // 2.0 live glass：容器、融合組、互動的形狀交給 LiveGlass 的常駐系統樹（按壓照舊用我們的放大與光）
-            let live = LiveGlass.claims(container: it.container, union: it.union, interactive: it.interactive, presence: it.presence, path: it.path)
+            let live = !HPDebug.skipping("live") && LiveGlass.claims(container: it.container, union: it.union, interactive: it.interactive, presence: it.presence, path: it.path)
             let k = it.interactive ? pressAmount(it.path, now: now) : 0
             let b = it.path.boundingBoxOfPath
             let s = (1 + pressScale * k) * materializeScale(it.presence)
@@ -225,7 +237,7 @@ enum HPGlass {
             return Shaped(item: it, path: p, press: k, darkGlass: dark, stats: st, live: live)
         }
         // 外陰影（自適應）：底下有字（邊緣多）就濃、純色就淡；顏色＝底下平均色壓暗。玻璃再蓋上去
-        for sh in shaped where !materialOnly && !systemShadow {
+        for sh in shaped where !materialOnly && !systemShadow && shadows {
             let a = (0.10 + 0.20 * min(1, sh.stats.edge * 6)) * sh.item.presence
             let col = (sh.stats.avg.blended(withFraction: 0.75, of: .black) ?? .black).withAlphaComponent(a)
             let big = min(sh.path.boundingBoxOfPath.width, sh.path.boundingBoxOfPath.height) > 200
@@ -284,22 +296,47 @@ enum HPGlass {
         // 先貼每組緣外那一圈（不蓋到任何一塊玻璃），再貼形狀裡面：iOS 的外陰影比較寬，鄰組的圈不會蓋掉別組的玻璃
         let allShapes = CGMutablePath()
         for sh in shaped { allShapes.addPath(sh.path) }
-        for b in pending where b.outset > 0 { blitRing(g, face: face, b, excluding: allShapes) }
-        for b in pending { blit(g, face: face, b.image, b.rect, mask: b.mask, path: b.path) }
+        for b in pending where b.outset > 0 && shadows { if !HPDebug.skipping("ring") { blitRing(g, face: face, b, excluding: allShapes) } }
+        for b in pending { if !HPDebug.skipping("blit") { blit(g, face: face, b.image, b.rect, mask: b.mask, path: b.path) } }
+        if thicken, !materialOnly, !identity {
+            for sh in shaped {
+                g.saveGState(); g.addPath(sh.path)
+                g.setFillColor(NSColor(white: sh.darkGlass ? 0 : 1, alpha: (sh.darkGlass ? 0.10 : 0.08) * sh.item.presence).cgColor)
+                g.fillPath(); g.restoreGState()
+            }
+        }
         // 2.0 glass（P01）：輔助使用——「減少透明度」不畫玻璃，改霧面不透明（.identity，沒有折射；染色的用自己的色 95%）；
-        // 「增加對比」加 1.5 px 的 label 色描邊（只畫在形狀裡面那一半，不往外長）
+        // 「增加對比」先把面填厚一層（HIG：stronger fills），再加 1.5 px 的 label 色描邊（只畫在形狀裡面那一半）
         if !materialOnly, identity || increaseContrast {
             for sh in shaped {
                 g.saveGState()
                 if identity {
-                    let base = sh.item.tint.map { $0.withAlphaComponent(0.95) } ?? identityFill(dark: sh.darkGlass)
+                    // 2.0 glass：不透明版**跟隨外觀**（淺色→淺、深色→深）。以前 clear 一律強制 dark，
+                    // 淺色主畫面一開「減少透明度」就整面變黑。玻璃上的字也跟著這個外觀（見下面的 ink）。
+                    let base = sh.item.tint.map { $0.withAlphaComponent(0.95) } ?? identityFill(dark: HPTokens.dark)
                     g.addPath(sh.path); g.setFillColor(base.withAlphaComponent(base.alphaComponent * sh.item.presence).cgColor); g.fillPath()
                 }
                 if increaseContrast {
-                    let label: NSColor = sh.darkGlass ? .white : .black
+                    if !identity {   // 玻璃：面再加厚一檔（淺色加白、深色加黑），讀起來更實
+                        g.addPath(sh.path)
+                        g.setFillColor(NSColor(white: sh.darkGlass ? 0 : 1, alpha: 0.10 * sh.item.presence).cgColor)
+                        g.fillPath()
+                    }
+                    let label: NSColor = (identity ? HPTokens.dark : sh.darkGlass) ? .white : .black
                     g.addPath(sh.path); g.clip()
                     g.addPath(sh.path); g.setLineWidth(3); g.setStrokeColor(label.withAlphaComponent(sh.item.presence).cgColor); g.strokePath()
                 }
+                g.restoreGState()
+            }
+        }
+        // 除錯：把每個玻璃項的包圍框與編號畫出來，用來判斷某一筆畫面屬於哪個形狀
+        if ProcessInfo.processInfo.environment["HOMEPLAY_GLASS_BBOX"] != nil {
+            for (i, sh) in shaped.enumerated() {
+                let b = sh.item.path.boundingBoxOfPath
+                let c = NSColor(hue: CGFloat(i % 8) / 8, saturation: 1, brightness: 1, alpha: 1)
+                g.saveGState()
+                g.setStrokeColor(c.cgColor); g.setLineWidth(2); g.addRect(b); g.strokePath()
+                face.drawLeft(g, "\(i)", font: FaceType.sf(30, .bold), x: b.minX + 4, y: b.minY + 34, color: c)
                 g.restoreGState()
             }
         }
@@ -323,8 +360,10 @@ enum HPGlass {
             let b = sh.item.path.boundingBoxOfPath, s = (1 + pressScale * sh.press) * materializeScale(sh.item.presence)
             if abs(s - 1) > 0.0005 { g.translateBy(x: b.midX, y: b.midY); g.scaleBy(x: s, y: s); g.translateBy(x: -b.midX, y: -b.midY) }
             if sh.item.presence < 0.999 { g.setAlpha(max(0, (sh.item.presence - 0.3) / 0.7)) }
-            inkIsLight = sh.darkGlass
-            ink = sh.darkGlass ? .white : .black
+            // 不透明版（減少透明度）的字色跟著外觀；玻璃版照舊跟著這塊自己的淺／深
+            let inkLight = identity ? HPTokens.dark : sh.darkGlass
+            inkIsLight = inkLight
+            ink = inkLight ? .white : .black
             sh.item.content(g)
             g.restoreGState()
         }
@@ -416,12 +455,12 @@ enum HPGlass {
             let bkey = givenBackdrop.map { "img\(ObjectIdentifier($0).hashValue)" } ?? BackdropProbe(backdrop).hash(ink)
             let shapes = ink.debugDescription + "#\(pathHash(path))"
             let full = "\(key)|\(shapes)|\(bkey)|\(params.black)\(params.white)\(params.blurRadius)\(params.tint != nil)|\(Int(sc * 100))|\(merge)|\(platform)"
-            if let c = cache[full] {
+            if let c = cache[full], !HPDebug.skipping("cache") {
                 stats.hits += 1
                 return Blit(image: c.image, rect: c.rect, mask: c.mask, path: path, outset: c.outset)
             }
             // 2.0 glass：先用真的 NSGlassEffectView 層樹（SystemGlassNative.swift）；融合組的遮罩是同一個 smooth union（k＝spacing）
-            if let native, let out = NativeGlass.shared.render(native, backdrop: backdrop) {
+            if let native, !HPDebug.skipping("native"), let out = NativeGlass.shared.render(native, backdrop: backdrop) {
                 stats.misses += 1
                 let m: CGImage? = merge > 0 && native.shapes.count > 1
                     ? (native.shapes.allSatisfy { $0.path == nil } ? NativeGlass.unionMask(native.shapes, rect: out.rect, scale: sc, smooth: merge, outset: nativeOutset)
@@ -432,7 +471,8 @@ enum HPGlass {
                 cache[full] = (out.image, out.rect, m, outset)
                 return Blit(image: out.image, rect: out.rect, mask: m, path: path, outset: outset)
             }
-            if let out = SystemGlass.shared.renderContainer(path: path, key: "glasspass|\(shapes)|\(merge)", scale: sc, backdrop: backdrop,
+            if !HPDebug.skipping("systemglass"),
+               let out = SystemGlass.shared.renderContainer(path: path, key: "glasspass|\(shapes)|\(merge)", scale: sc, backdrop: backdrop,
                                                             params: params, merge: merge) {
                 stats.misses += 1
                 let m: CGImage? = merge > 0 ? out.mask : nil
@@ -442,9 +482,20 @@ enum HPGlass {
                 return Blit(image: out.image, rect: out.rect, mask: m, path: path, outset: 0)
             }
             // 系統玻璃拿不到：自己的光學 shader
-            if let r = LiquidGlass.shared.render(path: path, key: nil, scale: sc, backdrop: backdrop, frosted: nil, params: .portrait) {
+            if !HPDebug.skipping("shader"),
+               let r = LiquidGlass.shared.render(path: path, key: nil, scale: sc, backdrop: backdrop, frosted: nil, params: .portrait) {
                 stats.fallbacks += 1
+                if let dir = ProcessInfo.processInfo.environment["HOMEPLAY_GLASS_DUMP"] {
+                    shaderDump += 1
+                    try? NSBitmapImageRep(cgImage: r.image).representation(using: .png, properties: [:])?
+                        .write(to: URL(fileURLWithPath: "\(dir)/shader-\(shaderDump)-\(Int(r.rect.minX))x\(Int(r.rect.minY)).png"))
+                    FileHandle.standardError.write(Data("[shader] rect=\(r.rect) img=\(r.image.width)x\(r.image.height) shape=\(ink)\n".utf8))
+                }
                 g.saveGState(); g.setAlpha(presence); face.drawUpright(g, r.image, in: r.rect); g.restoreGState()
+                // shader 只吃 .portrait、不認染色：染色的主要動作（白字）要自己把色蓋上去，不然是白卡上的白膠囊、字也看不到（2.0 align A2）
+                if let t = params.tint.flatMap({ NSColor(cgColor: $0) }) {
+                    g.saveGState(); g.addPath(path); g.setFillColor(t.withAlphaComponent(t.alphaComponent * presence).cgColor); g.fillPath(); g.restoreGState()
+                }
                 return nil
             }
         }

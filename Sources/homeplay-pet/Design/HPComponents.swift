@@ -132,8 +132,8 @@ enum HPComponents {
     static func topClock(_ g: CGContext, _ face: Face, size: CGFloat = HPType.Size.clock, baselineDY: CGFloat = 11, color: NSColor) {
         let s = Face.statusClock(Face.displayDate)   // 2.0 depth：12／24 小時制照系統
         let f = FaceType.sf(size, .semibold)
-        // 第三輪：跟返回鈕對稱——中線 y＝105、右緣＝1024 − 93（官方 recipe-overview 的「10:09」右緣 931）
-        let cy = HPTokens.cornerControlCenter, right = 1024 - HPTokens.cornerControlCenter + 12
+        // 2.0 align：右緣對 App 內容邊線（960）、中心 y 對返回鈕（105）
+        let cy = HPTokens.cornerControlCenter, right = HPGrid.App.trailing
         face.drawLeft(g, s, font: f, x: right - Typo.width(s, f), y: cy + baselineDY, color: color)
     }
     /// 外殼的左上返回圓鈕（HPTokens.backButton，90 px、圓心 (105, 105)，Regular 玻璃，可按）：符號 ✕（xmark，0.34）或 ‹（chevron.left，0.36），

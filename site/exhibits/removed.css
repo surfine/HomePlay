@@ -11,7 +11,7 @@
 .rm-ico[data-k=g0]{background:linear-gradient(135deg,#8fd0ff,#3f86d8)}.rm-ico[data-k=g1]{background:linear-gradient(135deg,#b8e08a,#4f9a3c)}
 .rm-ico[data-k=g2]{background:radial-gradient(circle at 30% 30%,#fff 0 12%,transparent 13%),linear-gradient(135deg,#ffd36a,#e8863a)}.rm-ico[data-k=g3]{background:linear-gradient(135deg,#d7b6ff,#7a52d0)}
 .rm-nm{font-weight:700}.rm-ds{font-size:12px;color:#4a5670;flex:1}
-.rm-inst,.rm-yes,.rm-no,.rm-next{min-height:34px;padding:0 14px;border-radius:17px;border:1px solid #7b88a6;background:linear-gradient(#fff,#dbe2ef);font-weight:600}
+.rm-inst,.rm-yes,.rm-no,.rm-next{min-height:40px;padding:0 16px;border-radius:17px;border:1px solid #7b88a6;background:linear-gradient(#fff,#dbe2ef);font-weight:600}
 .rm-inst:disabled{opacity:.5;cursor:default}
 .rm-card.done{background:rgba(210,238,218,.8)}
 .rm-trayrow{display:flex;flex-direction:column}

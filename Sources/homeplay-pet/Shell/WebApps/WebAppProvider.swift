@@ -181,7 +181,7 @@ final class WebAppApp: PetApp {
         } else if web?.failed == true {
             HPComponents.emptyState(g, face, symbol: "wifi.exclamationmark", tint: AppUI.secondary, title: L("safari.failed", "打不开这个网页"),
                                     body: L("safari.failed.hint", "检查网址和网络后再试一次。"), top: 280)
-            let b = CGRect(x: 512 - 180, y: 760, width: 360, height: 100)
+            let b = CGRect(x: 512 - 180, y: 760, width: 360, height: HPTokens.Size.pill)   // 2.0 align F：玻璃膠囊 100 → pill 104
             HPComponents.glassButton(g, face, b, L("webapp.retry", "再试一次"), symbol: "arrow.clockwise")
             hits.append((b, { [weak self] in self?.web?.reload() }))
         } else {

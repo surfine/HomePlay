@@ -49,6 +49,7 @@ final class GazeTracker: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate 
     private var lastSeen: Double = 0
     private var sentAbsent = true
     private var lastLog: Double = 0
+    private var loggedFirstFrame = false   // 每次开相机记一行第一帧：区分「开了但没出帧」和「没人」
     private var trackFaces = true
     private var device: AVCaptureDevice?
     private var highFormat: AVCaptureDevice.Format?
@@ -85,6 +86,26 @@ final class GazeTracker: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate 
             appendDiag("gaze.log", "camera interruption ended")
             if !self.isPaused, !self.isRunningLocked, !self.isStarting { self.start() }
         }
+        // 外接相机被拔掉：清掉旧 input，退避后再找一台（找不到就停在 "no camera available"）。
+        c.addObserver(forName: AVCaptureDevice.wasDisconnectedNotification, object: nil, queue: .main) { [weak self] n in
+            guard let self, let d = n.object as? AVCaptureDevice, d == self.device else { return }
+            appendDiag("gaze.log", "camera disconnected: \(d.localizedName)")
+            self.teardown(notify: true)
+            if !self.isPaused { self.scheduleRestart() }
+        }
+    }
+
+    /// 内建前置优先；Mac mini 这类没有内建相机的，用系统偏好的相机（通常是外接显示器的）。
+    /// HOMEPLAY_CAMERA=名称片段：测试时指定某台相机。
+    private static func pickCamera() -> AVCaptureDevice? {
+        if let want = ProcessInfo.processInfo.environment["HOMEPLAY_CAMERA"], !want.isEmpty {
+            let all = AVCaptureDevice.DiscoverySession(deviceTypes: [.builtInWideAngleCamera, .external, .continuityCamera],
+                                                       mediaType: .video, position: .unspecified).devices
+            if let d = all.first(where: { $0.localizedName.localizedCaseInsensitiveContains(want) }) { return d }
+        }
+        return AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .front)
+            ?? AVCaptureDevice.systemPreferredCamera
+            ?? AVCaptureDevice.default(for: .video)
     }
 
     private var restartWork: DispatchWorkItem?
@@ -138,10 +159,7 @@ final class GazeTracker: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate 
         do {
             try device.lockForConfiguration()
             if device.activeFormat != fmt { device.activeFormat = fmt }
-            let f = Double(fps)
-            let ranges = device.activeFormat.videoSupportedFrameRateRanges
-            if ranges.contains(where: { $0.minFrameRate <= f && f <= $0.maxFrameRate }) {
-                let d = CMTime(value: 1, timescale: CMTimeScale(max(1, fps)))
+            if let d = Self.frameDuration(fps, in: device.activeFormat) {
                 device.activeVideoMinFrameDuration = d
                 device.activeVideoMaxFrameDuration = d
             }
@@ -153,18 +171,25 @@ final class GazeTracker: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate 
 
     /// 只開房間光線：光線一秒變不了多少，挑格式支援的最低幀率（2 → 5 → 15），相機與縮放都省
     private func lightOnlyFPS(_ fmt: AVCaptureDevice.Format?) -> Int {
-        guard let ranges = fmt?.videoSupportedFrameRateRanges else { return 5 }
-        return [2, 5, 15].first { f in ranges.contains { $0.minFrameRate <= Double(f) && Double(f) <= $0.maxFrameRate } } ?? 15
+        guard let fmt else { return 5 }
+        return [2, 5, 15].first { Self.frameDuration($0, in: fmt) != nil } ?? 15
+    }
+
+    /// 格式支援 fps 时回传要设的帧间隔，不支援回 nil。超出范围设下去会抛 ObjC 例外（进程直接退出），
+    /// 所以所有设帧率的地方都先过这里。Studio Display 这类 UVC 相机只给离散档位，而且是
+    /// 15.000015…15.000015 这种不精确的值：比较留一点容差，离散档直接用格式自己的帧间隔。
+    static func frameDuration(_ fps: Int, in fmt: AVCaptureDevice.Format) -> CMTime? {
+        let f = Double(fps)
+        guard let r = fmt.videoSupportedFrameRateRanges.first(where: { $0.minFrameRate - 0.01 <= f && f <= $0.maxFrameRate + 0.01 })
+        else { return nil }
+        if r.maxFrameRate - r.minFrameRate < 0.01 { return r.minFrameDuration }
+        return CMTime(value: 1, timescale: CMTimeScale(max(1, fps)))
     }
 
     private func setFrameRate(_ fps: Int, device: AVCaptureDevice) {
-        // 超过 activeFormat 支持的帧率范围会抛 ObjC 例外（进程会直接退出），先检查。
-        let f = Double(fps)
-        let ranges = device.activeFormat.videoSupportedFrameRateRanges
-        guard ranges.contains(where: { $0.minFrameRate <= f && f <= $0.maxFrameRate }) else { return }
+        guard let d = Self.frameDuration(fps, in: device.activeFormat) else { return }
         do {
             try device.lockForConfiguration()
-            let d = CMTime(value: 1, timescale: CMTimeScale(max(1, fps)))
             device.activeVideoMinFrameDuration = d
             device.activeVideoMaxFrameDuration = d
             device.unlockForConfiguration()
@@ -233,8 +258,7 @@ final class GazeTracker: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate 
                 self.finish(true, nil, completion)
                 return
             }
-            guard let device = AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .front)
-                    ?? AVCaptureDevice.default(for: .video) else {
+            guard let device = Self.pickCamera() else {
                 self.setStartingFlag(false)
                 self.finish(false, "no camera available", completion)
                 return
@@ -283,7 +307,7 @@ final class GazeTracker: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate 
                 let highCandidates = device.formats.filter { f in
                     let (w, h) = dims(f)
                     let ok = w >= 640 && h >= 480 && w <= 1280 && h <= 720
-                    return ok && f.videoSupportedFrameRateRanges.contains { $0.minFrameRate <= 15 && $0.maxFrameRate >= 15 }
+                    return ok && Self.frameDuration(15, in: f) != nil
                 }
                 let high = highCandidates.min(by: { a, b in
                     let (aw, ah) = dims(a); let (bw, bh) = dims(b)
@@ -294,16 +318,18 @@ final class GazeTracker: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate 
                 let lowCandidates = device.formats.filter { f in
                     let (w, h) = dims(f)
                     let ok = w >= 160 && h >= 120 && w <= 640 && h <= 480
-                    return ok && f.videoSupportedFrameRateRanges.contains { $0.minFrameRate <= 15 && $0.maxFrameRate >= 15 }
+                    return ok && Self.frameDuration(15, in: f) != nil
                 }
                 self.lowFormat = lowCandidates.min(by: { a, b in
                     let (aw, ah) = dims(a); let (bw, bh) = dims(b)
                     return aw * ah < bw * bh
                 })
                 if let high { device.activeFormat = high }
-                let d = CMTime(value: 1, timescale: 15)
-                device.activeVideoMinFrameDuration = d
-                device.activeVideoMaxFrameDuration = d
+                // 找不到合适格式时 activeFormat 还是相机预设的，不一定有 15 fps：不支援就保持原帧率。
+                if let d = Self.frameDuration(15, in: device.activeFormat) {
+                    device.activeVideoMinFrameDuration = d
+                    device.activeVideoMaxFrameDuration = d
+                }
                 device.unlockForConfiguration()
                 let fd = CMVideoFormatDescriptionGetDimensions(device.activeFormat.formatDescription)
                 appendDiag("gaze.log", "active format \(fd.width)x\(fd.height)")
@@ -329,6 +355,7 @@ final class GazeTracker: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate 
                 else { self.setFrameRate(self.lightOnlyFPS(device.activeFormat), device: device) }
             }
             self.lastSeen = 0
+            self.loggedFirstFrame = false
             self.sentAbsent = true
             self.smoothX = 0; self.smoothY = 0; self.smoothRoll = 0; self.smoothSize = 0
             appendDiag("gaze.log", "camera started \(device.localizedName) preset=\(self.session.sessionPreset.rawValue)")
@@ -370,6 +397,11 @@ final class GazeTracker: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate 
                        from connection: AVCaptureConnection) {
         guard isRunningLocked, !isPaused, let buf = CMSampleBufferGetImageBuffer(sampleBuffer) else { return }
         let now = CACurrentMediaTime()
+        if !loggedFirstFrame {
+            loggedFirstFrame = true
+            let fps = device.map { 1 / max(0.001, CMTimeGetSeconds($0.activeVideoMinFrameDuration)) } ?? 0
+            appendDiag("gaze.log", String(format: "first frame %dx%d %.0ffps", CVPixelBufferGetWidth(buf), CVPixelBufferGetHeight(buf), fps))
+        }
         onLightFrame?(buf, now)
         guard trackFaces else { return }
         onFaceFrame?(buf, now)   // 2.0: 认人（自己节流，不在这里做重活）

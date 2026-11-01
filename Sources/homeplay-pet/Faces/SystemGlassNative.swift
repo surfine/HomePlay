@@ -98,6 +98,10 @@ final class NativeGlass {
         CATransaction.flush()
         p.renderer.beginFrame(atTime: CACurrentMediaTime(), timeStamp: nil)
         p.renderer.addUpdate(CGRect(x: 0, y: 0, width: w, height: h)); p.renderer.render(); p.renderer.endFrame()
+        if ProcessInfo.processInfo.environment["HOMEPLAY_GLASS_DUMP"] != nil {   // 除錯：每個形狀的貼回框與圖尺寸
+            let b = q.shapes.map { "\(Int($0.rect.minX)),\(Int($0.rect.minY)) \(Int($0.rect.width))x\(Int($0.rect.height))" }.joined(separator: " | ")
+            FileHandle.standardError.write(Data("[glass] rect=\(rect) img=\(w)x\(h) shapes=[\(b)] sc=\(sc) clear=\(q.clear)\n".utf8))
+        }
         guard let cb = queue.makeCommandBuffer() else { return nil }
         cb.commit(); cb.waitUntilCompleted()
         var px = [UInt8](repeating: 0, count: w * h * 4)

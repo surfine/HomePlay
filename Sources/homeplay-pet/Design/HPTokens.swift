@@ -139,15 +139,48 @@ enum HPTokens {
     }
 
     // MARK: 尺寸
+    // 高度階梯（2026-10-28 對齊檢討）：**同一個角色只有一個高度**。以前列表行有 6 種、主按鈕 6 種、
+    // 玻璃膠囊 5 種、頁點 3 種，所以看起來高低錯落。新元件一律從這裡拿；不要再寫即興值。
+    // 稽核與前後對照見 docs/plans/controls-audit.md。
     enum Size {
-        /// 最小點按範圍（44 pt ≈ 83 px，取 88）
+        /// 最小點按範圍（44 pt ≈ 83 px，取 88）。視覺可以比它小，**命中不行**。
         static let tap: CGFloat = 88
-        /// 左上返回圓鈕（官方 recipe-overview 量到 90）
+        /// 頂欄圓鈕：返回、關閉、Sheet 的 ‹/✕、編輯欄的兩顆膠囊
+        static let topBar: CGFloat = 90
+        /// 左上返回圓鈕（官方 recipe-overview 量到 90）：就是 topBar，保留舊名給還沒遷的呼叫端
         static let backButton: CGFloat = 90
-        /// 主要動作圓鈕（影片 150–162）
+        /// 列表行：控制中心展開、Sheet 清單、資料夾格
+        static let row: CGFloat = 88
+        /// 選項行：兩張設定卡共用（視覺 72，命中補到 tap 88）
+        static let rowCompact: CGFloat = 72
+        /// 卡片底部的主要按鈕：Sheet 的「完成」「加入小工具」、彈窗按鈕、控制中心底欄
+        static let cta: CGFloat = 96
+        /// 玻璃膠囊鈕（原本 88/96/100/104 並存）；並排鈕 pairedButton 也是這個高度
+        static let pill: CGFloat = 104
+        /// 圓形主按鈕（原本 120/150 並存）
+        static let round: CGFloat = 150
+        /// 對講的說話鈕（刻意比一般主按鈕大，命名起來避免變成即興值）
+        static let roundLarge: CGFloat = 240
+        /// 場景／篩選晶片（視覺 68，命中補到 tap）
+        static let chip: CGFloat = 68
+        /// 開關軌道（原本 64/66/76 並存）
+        static let switchTrack: CGFloat = 66
+        /// 編輯模式的移除徽標（原本 40/56 並存）
+        static let badge: CGFloat = 48
+        /// 藥丸右下的顯示源角標（CarPlay 會話活著但在背景；2.0 align D）：badge 的一半，≈ 12.7 pt
+        static let sourceBadge: CGFloat = 24
+        /// 長按藥丸拉出的兩顆「HomeView／CarPlay」：高＝topBar；上面那顆留在頂列 105 線上，寬 232（長標題最多到 384，左右各留 12）；
+        /// 下面那顆從它底下滴出來，中間空 48（> HPDrip.merge 40，頸子拉斷）
+        static let sourceCapsule = CGSize(width: 232, height: topBar)
+        static let sourceGap: CGFloat = 48
+        /// 頁點直徑（原本 12/14/18 並存）
+        static let dot: CGFloat = 14
+        /// Live Activity 緊湊藥丸：系統尺寸，不進階梯
+        static let liveActivity: CGFloat = 62
+        /// 主要動作圓鈕（影片 150–162）= round，保留舊名
         static let action: CGFloat = 150
         /// 並排成一組的膠囊鈕共用這一個尺寸，只靠樣式（染色／玻璃）分主次（HIG Buttons：同尺寸＝對等選項）。Music 的「打開音樂」＋「資料庫」
-        static let pairedButton = CGSize(width: 440, height: 104)
+        static let pairedButton = CGSize(width: 440, height: pill)
         /// 主畫面圖示
         static let icon: CGFloat = 150
         /// 家庭磚（影片 304–315）
@@ -190,9 +223,13 @@ enum HPTokens {
         /// 面板裡壓暗（系統 Clear 提亮 ×1.25 → 官方 ×1.07）
         static let panelShade: CGFloat = 0.15
         static let panelRimLine: CGFloat = 2
-        static let panelRimAlpha: CGFloat = 0.5
+        /// 2.0 glass：官方主畫面亮邊／內光的實測（home-screen-erica：亮邊峰值 ÷ 面板外亮度 = 1.27–1.44，
+        /// 絕對峰值 0.55–0.63）。原本 0.50／0.30 做出 1.48–1.69（過亮）；只留系統 @2 亮邊是 1.11–1.17（過暗）。
+        /// 掃值結果 0.20／0.12 → 1.27–1.39、峰值 0.58–0.64，落在官方區間。可用 HOMEPLAY_PANEL_RIM／
+        /// HOMEPLAY_PANEL_GLOW 覆寫（校準掃值用，產品照預設跑）。
+        static let panelRimAlpha: CGFloat = CGFloat(Double(ProcessInfo.processInfo.environment["HOMEPLAY_PANEL_RIM"] ?? "") ?? 0.20)
         static let panelGlowBlur: CGFloat = 24
-        static let panelGlowAlpha: CGFloat = 0.30
+        static let panelGlowAlpha: CGFloat = CGFloat(Double(ProcessInfo.processInfo.environment["HOMEPLAY_PANEL_GLOW"] ?? "") ?? 0.12)
     }
 
     // MARK: 家庭模組錶面（第三輪：量自官方 face-home-modular-purple／-blue、home-modular-teal-angled）
@@ -272,7 +309,7 @@ enum HPTokens {
     static let bannerCard = CGRect(x: HPGrid.App.leading, y: 56, width: HPGrid.App.trailing - HPGrid.App.leading, height: 230)
 
     /// 第三輪：頂列角落控制的中心離螢幕左（右）緣與上緣 105——官方正面圖 recipe-overview 的 ✕ 量到圓心 (105, 105)、直徑 90、
-    /// 右上「10:09」的中線也在 y 105、右緣 931；影片 v1 O-038（斜拍）量到 ≈ 0.09 W ≈ 92。不再放在螢幕圓角的圓心 (138, 138)
+    /// 右上「10:09」的中線也在 y 105、右緣 960（98d9a16 起對內容邊線；官方 recipe-overview 量到 931）；影片 v1 O-038（斜拍）量到 ≈ 0.09 W ≈ 92。不再放在螢幕圓角的圓心 (138, 138)
     static let cornerControlCenter: CGFloat = 105
     /// App 頂列：左上返回圓鈕（90 px，圓心 (105, 105)）、大標題的起點
     static let backButton: CGRect = {

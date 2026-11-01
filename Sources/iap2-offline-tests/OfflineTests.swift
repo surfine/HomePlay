@@ -134,6 +134,55 @@ func hexBytes(_ s: String) -> [UInt8] {
             expect(macGroup?.payload == [0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff], "bluetooth mac group roundtrips")
         }
 
+        // 藍牙沒認證就結束：逾時（9）＝iPhone 沒回應，不算配對不同步；開啟失敗（3）／開了就關（11）才算
+        do {
+            typealias R = BluetoothFailureRules
+            expect(R.advice(code: 9, refusedStreak: 0, engagedNoAnswer: 0, engaged: false) == .keepRetrying,
+                   "timeout while nobody waits: retry quietly (locked iPhone overnight)")
+            expect(R.advice(code: 9, refusedStreak: 5, engagedNoAnswer: 0, engaged: false) == .keepRetrying,
+                   "timeouts never reach the pairing guide when nobody waits")
+            expect(R.advice(code: 9, refusedStreak: 0, engagedNoAnswer: 1, engaged: true) == .hintUnlock,
+                   "first timeout while the user waits: ask to unlock")
+            expect(R.advice(code: 9, refusedStreak: 0, engagedNoAnswer: 2, engaged: true) == .keepRetrying,
+                   "the unlock hint is sent once, not on every retry")
+            expect((2...50).allSatisfy { R.advice(code: 9, refusedStreak: 0, engagedNoAnswer: $0, engaged: true) == .keepRetrying },
+                   "timeouts never open the pairing guide, however long the user waits (cable is the fallback)")
+            expect(R.advice(code: 11, refusedStreak: 2, engagedNoAnswer: 0, engaged: false) == .pairingGuide
+                   && R.advice(code: 3, refusedStreak: 2, engagedNoAnswer: 0, engaged: false) == .pairingGuide,
+                   "open-then-close or failed open twice: pairing guide, as before")
+            expect(R.advice(code: 11, refusedStreak: 1, engagedNoAnswer: 0, engaged: true) == .keepRetrying,
+                   "one refusal is not enough")
+        }
+
+        // 車機定位探針：識別宣告、0xFFFA 解析、NMEA 格式
+        do {
+            let id = { (loc: Bool) in Iap2Csm.identificationInformation(
+                name: "Probe", model: "M", manufacturer: "H", serialNumber: "S", firmwareVersion: "1", hardwareVersion: "1",
+                externalAccessoryProtocol: "me.test", bluetoothMac: "AA:BB:CC:DD:EE:FF", ssid: "net", location: loc) }
+            let u16s = { (p: Iap2Csm.Parameter?) -> [UInt16] in
+                guard let b = p?.payload else { return [] }
+                return stride(from: 0, to: b.count - 1, by: 2).map { UInt16(b[$0]) << 8 | UInt16(b[$0 + 1]) } }
+            let on = id(true), off = id(false)
+            expect(on.parameters.contains { $0.id == 22 } && !off.parameters.contains { $0.id == 22 }, "location component (22) only when asked")
+            expect(u16s(on.parameters.first { $0.id == 6 }).contains(0xfffb) && u16s(on.parameters.first { $0.id == 7 }).contains(0xfffa)
+                   && u16s(on.parameters.first { $0.id == 7 }).contains(0xfffc), "location messages declared sent/received")
+            let comp = on.parameters.first { $0.id == 22 }.flatMap { Iap2Csm.parseParameters($0.payload) } ?? []
+            expect(comp.map(\.id) == [0, 1, 17, 18], "location component carries id, name, GGA and RMC flags")
+            let start = Iap2Csm.Frame(messageId: 0xfffa, parameters: [Iap2Csm.Parameter(id: 1, payload: []), Iap2Csm.Parameter(id: 2, payload: [])])
+            expect(Iap2Location.requested(start) == ["GGA", "RMC"], "0xFFFA flags map to sentence types")
+            // 維基百科的經典 RMC 範例句，檢查碼 6A
+            expect(FakeGPS.checksum("GPRMC,123519,A,4807.038,N,01131.000,E,022.4,084.4,230394,003.1,W") == "6A", "NMEA checksum matches the textbook sentence")
+            expect(FakeGPS.coord(48.1173, isLat: true) == ("4807.0380", "N") && FakeGPS.coord(-11.5166667, isLat: false) == ("01131.0000", "W"), "degrees become ddmm.mmmm with hemisphere")
+            var g = FakeGPS(lat: 25.0339, lon: 121.5645, heading: 90, speedKmh: 36)
+            let t0 = Date(timeIntervalSince1970: 1_800_000_000)
+            let first = g.sentences(at: t0, wanted: ["GGA", "RMC"])
+            _ = g.sentences(at: t0.addingTimeInterval(10), wanted: ["RMC"])
+            expect(first.count == 2 && first[0].hasPrefix("$GPGGA,") && first[1].hasPrefix("$GPRMC,") && !first[0].contains("\r"), "one sentence per entry, no line ending")
+            expect(abs(g.lat - 25.0339) < 1e-6 && g.lon > 121.5645 + 0.0009 && g.lon < 121.5645 + 0.0011, "36 km/h east for 10 s moves about 100 m east")
+            expect(FakeGPS.fromEnvironment(["HOMEPLAY_FAKE_GPS": "25.0339,121.5645,90,30"])?.speedKmh == 30
+                   && FakeGPS.fromEnvironment(["HOMEPLAY_FAKE_GPS": "x"]) == nil && FakeGPS.fromEnvironment([:]) == nil, "env parsing")
+        }
+
         // CSM：分块与垃圾字节
         do {
             let frame = Iap2Csm.authenticationResponse(Array(repeating: 0x5a, count: 64))

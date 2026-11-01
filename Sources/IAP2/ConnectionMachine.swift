@@ -553,7 +553,9 @@ package struct ConnectionMachine: Sendable {
     private mutating func retryAfterFailure() {
         guard link == .idle, !retryPending else { return }
         if let address = target?.address {
-            if failStreak == 1, lastFailCode == 9 || lastFailCode == 11 {
+            // 只有「開了就關」（11）才斷基帶。逾時（9）不斷：LIVI／DiPlay／MacPlay 都不會因開通道失敗斷 ACL，
+            // 斷了再開＝多一次配對層嘗試；2026-10-30 整晚「逾時→斷 ACL→重開」之後 iPhone 拒絕這台 Mac
+            if failStreak == 1, lastFailCode == 11 {
                 out.append(.dropBaseband(address: address))
             }
             if lastFailCode == 9, failStreak == 1 {

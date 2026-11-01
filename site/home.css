@@ -12,11 +12,13 @@
 .home-hero-pet{grid-column:9 / span 4;justify-self:end;width:100%}
 /* 首頁的 h1 比 2.0 頁收一階：第二行帶英文產品名，一行放得下才不破格 */
 .pv.home h1{font-size:clamp(38px,4.9vw,68px);letter-spacing:-.035em}
+/* 中文大標題不壓字距：68px 的 -.035em 是 -2.4px，漢字會黏在一起 */
+.pv.home h1:lang(zh){letter-spacing:-.008em}
 @media (min-width:1800px){.pv.home h1{font-size:80px}}
 /* 公告 chip：一條膠囊，badge 用夕照漸層，整條可點，指到時輕輕浮起 */
 .home-new{display:inline-flex;align-items:center;gap:10px;max-width:100%;padding:6px 14px 6px 6px;border-radius:var(--pill);
   background:color-mix(in srgb,var(--ink) 6%,transparent);box-shadow:inset 0 0 0 1px var(--line);
-  text-decoration:none;color:var(--ink);font-size:15px;font-weight:550;line-height:1.3;
+  text-decoration:none;color:var(--ink);font-size:15px;font-weight:550;line-height:1.3;min-height:44px;
   transition:transform .25s var(--spring),background .2s}
 .home-new:hover{background:color-mix(in srgb,var(--ink) 10%,transparent);transform:translateY(-1px)}
 .home-new:active{transform:scale(.98)}
@@ -53,6 +55,7 @@
 .home-card-media svg{height:76px;width:auto;display:block;overflow:visible;color:var(--ink)}
 .home-card-text{padding:22px 26px 30px;display:flex;flex-direction:column}
 .home-card-text h3{font-size:20px;letter-spacing:-.02em}
+.home-card-text h3:lang(zh){letter-spacing:0}
 .home-card-sub{margin-top:6px;color:var(--ink);font-weight:550;font-size:15px}
 .home-card-text p:last-child{margin-top:8px;color:var(--muted);font-size:15px;line-height:1.6}
 /* 線稿動畫的顏色（與 style.css 原本同一套，搬來這裡） */
@@ -90,11 +93,13 @@
 .home-film-video{display:block;width:100%;height:auto;border-radius:var(--r);background:#000;
   box-shadow:0 0 0 1px rgba(0,0,0,.06),0 40px 80px -36px rgba(10,20,40,.4)}
 .home-film-fig figcaption{margin-top:12px;font-size:15px;color:var(--muted)}
-.home-film-fig a{color:var(--muted)}
+.home-film-fig a{display:inline-block;padding:13px 0;color:var(--muted)}   /* 觸控目標 ≥44 */
 
 /* ── 為什麼是眼睛：左邊把話說完，右邊一雙會看人的眼睛 ── */
 .home-why-grid{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));column-gap:var(--gutter);align-items:start}
 .home-why-text{grid-column:1 / span 6}
+/* 這欄只有一半寬；68px 的標題會折在不該斷的地方，收一階讓它一行 */
+.home-why-text .pv-head h2{font-size:clamp(32px,4.4vw,56px)}
 .home-why-text .home-essay-close{margin-top:44px;font-size:clamp(18px,1.6vw,21px);line-height:1.7;max-width:30em}
 .home-why-eyes{grid-column:8 / span 5;position:sticky;top:96px}
 .eyes-card{width:min(100%,360px);aspect-ratio:1;border-radius:var(--r);background:linear-gradient(160deg,#3a4c7c,#9e869c 55%,#d8a87c);
@@ -194,7 +199,7 @@
 .home-run li{padding-left:22px;position:relative;color:var(--muted)}
 .home-run li::before{content:"";position:absolute;left:0;top:.7em;width:8px;height:8px;border-radius:50%;background:var(--accent)}
 .code{position:relative;min-width:0}
-.copy{all:unset;box-sizing:border-box;position:absolute;top:14px;right:14px;cursor:pointer;padding:5px 14px;border-radius:var(--pill);font:600 13px var(--font);color:#e7ebf1;background:rgba(255,255,255,.1);transition:background .2s}
+.copy{all:unset;box-sizing:border-box;position:absolute;top:14px;right:14px;cursor:pointer;padding:14px 18px;border-radius:var(--pill);font:600 13px var(--font);color:#e7ebf1;background:rgba(255,255,255,.1);transition:background .2s}
 .copy:hover{background:rgba(255,255,255,.18)} .copy.done{background:var(--accent);color:var(--accent-ink)} .copy:focus-visible{outline:2px solid var(--accent);outline-offset:2px} .copy[hidden]{display:none}
 pre{margin:0;padding:26px 28px;border-radius:var(--r);background:var(--code);color:#e7ebf1;font:14px/1.75 var(--mono);overflow:auto}
 pre code{font:inherit}
@@ -238,6 +243,7 @@ details p{color:var(--muted);margin-top:10px}
 .home-more-text{padding:28px 32px 32px;display:grid;gap:10px;justify-items:start}
 .home-more-text .pv-eyebrow{margin-bottom:0}
 .home-more-text h3{font-size:clamp(26px,2.6vw,34px);letter-spacing:-.02em}
+.home-more-text h3:lang(zh){letter-spacing:0}
 .home-more-text p{color:var(--muted);font-size:17px;line-height:1.55}
 .home-more-text .pv-ctas{margin-top:12px}
 .home .home-more .btn-ghost{background:rgba(255,255,255,.1);box-shadow:inset 0 0 0 1px rgba(255,255,255,.18);color:#fff}
@@ -252,7 +258,7 @@ details p{color:var(--muted);margin-top:10px}
   .home-hero-grid{grid-template-columns:1fr;row-gap:32px}
   .home-hero-copy,.home-hero-pet{grid-column:1}
   .home-hero-pet{justify-self:center;order:-1}
-  .home-hero-pet .pet{max-width:300px}
+  .home-hero-pet .pet{max-width:300px;margin-inline:auto}   /* 區塊預設靠左：不置中的話，寬一點的手機上圖會偏在一邊 */
   .home-hero-copy{text-align:center;display:grid;justify-items:center}
   .home-ctas-center{justify-content:center}
   .home-why-grid{grid-template-columns:1fr;row-gap:40px}

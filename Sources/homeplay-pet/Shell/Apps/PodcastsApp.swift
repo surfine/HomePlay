@@ -25,12 +25,14 @@ final class PodcastsApp: PetApp {
 
     // 2.0 逼真化：不重複膠囊上的 App 名稱；說明＝系統空狀態（符號、標題、灰字），主要動作紫色實心、次要玻璃
     private static let primary = CGRect(x: 512 - 300, y: 700, width: 600, height: 104)
-    private static let secondary = CGRect(x: 512 - 300, y: 828, width: 600, height: 100)
+    private static let secondary = CGRect(x: 512 - 300, y: 828, width: 600, height: HPTokens.Size.pill)   // 2.0 align F：100 → pill 104，跟主要動作同高、間距 24
     private static let rowH: CGFloat = 124, x0: CGFloat = 64, top: CGFloat = 206
 
     /// CarPlay 連著（畫面在播、暫停、在背景，或手機的正在播放資料正在進來）
+    /// 快照：`--carplay-connected` 直接當成連著，用來拍「在 iPhone 上播放」那一版（不然要有真手機）
     static func carPlayConnected(_ face: Face) -> Bool {
-        [.live, .paused, .pausedResume, .background].contains(face.status) || PhoneNowPlayingBridge.shared.active
+        if CommandLine.arguments.contains("--carplay-connected") { return true }
+        return [.live, .paused, .pausedResume, .background].contains(face.status) || PhoneNowPlayingBridge.shared.active
     }
 
     func showsNowPlaying(face: Face) -> Bool { nowPlayingShown(face) }
@@ -256,5 +258,15 @@ final class PodcastsApp: PetApp {
         if name == "show", let s = PodcastLibrary.shared.shows.first { page = .show(s) }
         if name == "intro" { PodcastLibrary.shared.demo = false; PodcastLibrary.allowedOverride = false }
         face.forceDirty = true
+    }
+}
+
+// MARK: - 2.0 home-3：遠看（Shell/FarGlance.swift）
+extension PodcastsApp {
+    /// 正在播放：歌名（節目名）大字＋演出者；在播＝ongoing（遠看時不回錶面）
+    func farGlance(face: Face, now: Double) -> FarGlance? {
+        guard let s = NowPlayingPage.shared.state(face: face), !s.info.title.isEmpty else { return nil }
+        return FarGlance(title: title, headline: s.info.title, details: [s.info.artist].filter { !$0.isEmpty },
+                         alert: nil, ongoing: s.info.playing)
     }
 }

@@ -3,10 +3,33 @@ import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
-import { copy, origin, github, notice, releaseDownload, betaDownload, FACES, FINISHES, LANGS } from './content.mjs';
-import { history, HISTORY_SLUG } from './history.mjs';
-import { preview, PREVIEW_SLUG } from './preview.mjs';
+import { copy as rawCopy, origin, github, notice, releaseDownload, betaDownload, FACES, FINISHES, LANGS } from './content.mjs';
+import { history as rawHistory, HISTORY_SLUG } from './history.mjs';
+import { preview as rawPreview, PREVIEW_SLUG } from './preview.mjs';
 import { previewPage } from './preview-page.mjs';
+
+// ── 中文排版（規則見 site/typography.md）──────────────────────────────
+// 1) 產品名內部的空格改成不斷行空格：換行不可以拆「System 6」「Smart Stack」。
+//    只保護短名（最小寬度放得下）；外側仍是普通空格，所以整組仍可換行。
+// 2) 數字與中文量詞之間也不斷行：「10 款」不要變成「10」在上一行、「款」在下一行。
+// 文案裡的中英邊界是真正的空格，由 scripts/typography.mjs 檢查，不在這裡動。
+const NBSP = '\u00a0';
+const BRANDS = ['System 6', 'Smart Stack', 'Liquid Glass', 'Apple Vision', 'HomePlay Home', 'CarPlay Ultra', 'Mac App Store'];
+const CN_UNITS = '款章秒分鐘小時天年個種類層位件張台支項步格度套';
+const typo = (v) => {
+  if (typeof v === 'string') {
+    let s = v;
+    for (const b of BRANDS) if (s.includes(b)) s = s.split(b).join(b.replaceAll(' ', NBSP));
+    if (/[\u3400-\u9fff]/.test(s)) s = s.replace(new RegExp(`(\\d+)\\s+([${CN_UNITS}])`, 'g'), `$1${NBSP}$2`);
+    return s;
+  }
+  if (Array.isArray(v)) return v.map(typo);
+  if (v && typeof v === 'object') return Object.fromEntries(Object.entries(v).map(([k, x]) => [k, typo(x)]));
+  return v;
+};
+const copy = typo(rawCopy);
+const history = typo(rawHistory);
+const preview = typo(rawPreview);
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const dist = path.join(root, 'dist');
@@ -377,7 +400,7 @@ function historyPage(c, h) {
   <p class="ch-era"><span class="ch-no">${String(i + 1).padStart(2, '0')}</span>${ch.era}</p>
   <h2>${ch.title}</h2>
   ${ch.body.map((t) => `<p>${t}</p>`).join('\n  ')}
-  ${ch.links.length ? `<p class="ch-src">${ch.links.map(([t, u]) => `${ext(u)}${t} ↗</a>`).join('')}</p>` : ''}
+  ${ch.links.length ? `<details class="src-fold"><summary>${h.srcToggle.replace('{n}', ch.links.length)}</summary><p class="ch-src">${ch.links.map(([t, u]) => `${ext(u)}${t} ↗</a>`).join('')}</p></details>` : ''}
   ${ch.lesson ? `<aside class="lesson"><b>${h.lessonLabel}</b><p>${ch.lesson}</p></aside>` : ''}
   ${exhibit(ch.id, i, c.lang, h)}
 </section>`;
@@ -425,18 +448,23 @@ ${h.chapters.map(chapter).join('\n\n')}
   </table></div>
 </section>
 
-<section class="ch h-unsure" id="unsure">
+
+${h.unsure.length ? `<section class="ch h-unsure" id="unsure">
   <h2>${h.unsureTitle}</h2>
+  <details class="src-fold"><summary>${h.unsureToggle.replace('{n}', h.unsure.length)}</summary>
   <p class="lede">${h.unsureLede}</p>
   <ul>${h.unsure.map((t) => `<li>${t}</li>`).join('')}</ul>
-</section>
+  </details>
+</section>` : ''}
 
 <section class="ch h-sources" id="sources">
   <h2>${h.sourcesTitle}</h2>
+  <details class="src-fold"><summary>${h.sourcesToggle.replace('{n}', h.sources.length)}</summary>
   <p class="lede">${h.sourcesLede}</p>
   <ol class="source-list">
     ${h.sources.map(([k, t, u, n]) => `<li><span class="src-kind">${k}</span>${ext(u)}${t} ↗</a><span class="src-note">${n}</span></li>`).join('\n    ')}
   </ol>
+  </details>
   <p class="h-notice">${h.notice}</p>
 </section>
 
@@ -476,7 +504,7 @@ function notFound() {
 <img src="/media/icon-192.png" width="72" height="72" alt="">
 <h1>${zh.notFound.h1}</h1>
 <p>${zh.notFound.body}</p>
-<p lang="zh-Hans" class="nf-en">${hans.notFound.h1} ${hans.notFound.body}</p>
+<p lang="zh-Hans" class="nf-en">${hans.notFound.h1}<br>${hans.notFound.body}</p>
 <p lang="en" class="nf-en">${en.notFound.h1} ${en.notFound.body}</p>
 <p class="ctas"><a class="btn btn-primary" href="${zh.notFound.homeHref}">${zh.notFound.home}</a><a class="btn btn-ghost" lang="zh-Hans" href="${hans.notFound.homeHref}">${hans.notFound.home}</a><a class="btn btn-ghost" lang="en" href="${en.notFound.homeHref}">${en.notFound.home}</a></p>
 </main>

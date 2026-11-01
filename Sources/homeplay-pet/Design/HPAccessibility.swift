@@ -76,5 +76,21 @@ enum HPAccessibilitySelfTest {
         HPAccessibility.forceIncreaseContrast = false
         HPTokens.dark = false
         check(abs(HPAccessibility.contrast(.black, on: .white) - 21) < 0.01, "a11y：黑對白 21:1")
+        // 2.0 glass：不透明版（減少透明度）跟隨外觀，字壓在上面一定要讀得到；
+        // 填色 95% 疊在最糟的底（黑、白）上都要 ≥ 4.5:1
+        for dark in [false, true] {
+            let side = dark ? "dark" : "light"
+            let fill = HPGlass.identityFill(dark: dark)
+            let a = fill.alphaComponent
+            for under in [NSColor.black, NSColor.white] {
+                let u = under.usingColorSpace(.sRGB) ?? under
+                let bg = NSColor(srgbRed: fill.redComponent * a + u.redComponent * (1 - a),
+                                 green: fill.greenComponent * a + u.greenComponent * (1 - a),
+                                 blue: fill.blueComponent * a + u.blueComponent * (1 - a), alpha: 1)
+                let ink: NSColor = dark ? .white : .black
+                let c = HPAccessibility.contrast(ink, on: bg)
+                check(c >= 4.5, "a11y：減少透明度 \(side) 不透明面（疊在 \(under == .black ? "黑" : "白")）上的字 ≥ 4.5（\(String(format: "%.1f", c)):1）")
+            }
+        }
     }
 }

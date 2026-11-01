@@ -1,7 +1,7 @@
 /* 02 · 口袋裡的小工具。左：一直醒著的小工具；右：手機主畫面的時間軸小工具。用站上的色彩變數，深色模式自動跟著走。 */
-.pk{display:grid;gap:14px;padding:12px;background:var(--panel);color:var(--ink);font:14px/1.5 var(--font)}
-.pk-cols{display:grid;grid-template-columns:1fr 1fr;gap:12px}
-@container (max-width:520px){.pk-cols{grid-template-columns:1fr}}
+.pk{display:grid;grid-template-columns:minmax(0,1fr);gap:14px;padding:12px;background:var(--panel);color:var(--ink);font:14px/1.5 var(--font)}   /* 外層也是 auto 軌道的話，長文字的 max-content 會把整塊撐出容器 */
+.pk-cols{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:12px}
+@container (max-width:520px){.pk-cols{grid-template-columns:minmax(0,1fr)}}
 .pk-card{background:var(--surface);border-radius:20px;padding:14px;display:grid;gap:10px;align-content:start;box-shadow:inset 0 0 0 1px var(--line)}
 .pk-h{margin:0;font-size:15px}
 .pk-sub{margin:-4px 0 0;font-size:13px;color:var(--muted)}
@@ -18,6 +18,8 @@
 .pk-mbar{height:8px;border-radius:var(--pill);background:var(--panel);overflow:hidden}
 .pk-mfill{display:block;height:100%;width:100%;border-radius:inherit;background:var(--accent);transform-origin:left;transform:scaleX(var(--v,0))}
 .pk-card:first-child .pk-mfill{background:#e5484d}
+/* 卡片裡的 grid／flex 項目允許縮到 0：英文標籤的 min-content 否則會把卡片撐出容器 */
+.pk-cols>*,.pk-card>*,.pk-ctl>*,.pk-scrub>*,.pk-strip>*{min-width:0}
 /* 抽象的「一塊口袋螢幕」：細線框、不畫邊框與瀏海，和第 9、10 章同一種畫法 */
 .pk-phone{position:relative;justify-self:center;width:min(100%,190px);aspect-ratio:9/12;border-radius:20px;background:linear-gradient(160deg,#2c3d63,#6b5a82 60%,#b8826e);padding:14px 12px 10px;box-shadow:0 0 0 1px var(--line),0 14px 30px -18px rgba(0,0,0,.45);display:grid;grid-template-rows:auto 1fr;gap:10px;overflow:hidden}
 .pk-island{display:none}
@@ -38,11 +40,11 @@
 .pk-scrub{display:flex;align-items:center;gap:10px}
 .pk-range{flex:1;min-width:0;height:32px;accent-color:var(--accent)}
 .pk-time{font:600 14px/1 var(--mono);min-width:4.2em;text-align:right}
-.pk-btn{min-height:36px;padding:0 16px;border-radius:var(--pill);border:0;background:var(--accent);color:var(--accent-ink);font-weight:600;cursor:pointer;touch-action:manipulation}
+.pk-btn{min-height:40px;padding:0 16px;border-radius:var(--pill);border:0;background:var(--accent);color:var(--accent-ink);font-weight:600;cursor:pointer;touch-action:manipulation}
 .pk-btn:disabled{opacity:.5}
 .pk-ask{justify-self:start;background:var(--ink);color:var(--bg)}
 .pk-cap{font-size:13px;color:var(--muted)}
-.pk-strip{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(7,1fr);gap:4px}
+.pk-strip{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:4px}
 .pk-ent{display:grid;justify-items:center;gap:2px;padding:6px 0;border-radius:12px;background:var(--panel);font-size:11px;opacity:.7}
 .pk-ent.on{opacity:1;background:var(--surface);box-shadow:0 0 0 2px var(--accent)}
 .pk-et{font:600 11px/1.2 var(--mono)}.pk-ed{font-weight:600}.pk-ent .pk-ico{width:22px;height:22px}

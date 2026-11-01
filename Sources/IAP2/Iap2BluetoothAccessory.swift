@@ -9,7 +9,7 @@ package final class Iap2BluetoothAccessory: NSObject, IOBluetoothRFCOMMChannelDe
     package let core: Iap2AccessoryCore
     /// RFCOMM 打开超时（秒）；0 关闭。照 MacPlay 的 15s。
     /// 手机愿意回时都在 1 秒内（2026-10-22 真机）；15 秒（MacPlay 值）只是在拉长每次被忽略的代价。
-    package var openTimeout: TimeInterval = 6
+    package var openTimeout: TimeInterval = 15
     private var channel: IOBluetoothRFCOMMChannel?
     private var openTimer: DispatchSourceTimer?
     /// 打开完成时刻与是否收到过字节：用来识别「开了立刻被手机关闭」——

@@ -87,7 +87,6 @@ struct SBDrag {
 
 struct SBOpenFolder {
     var id: String
-    var page = 0
     var anim: MotionValue
     var closing = false
     var renaming = false
@@ -252,6 +251,10 @@ enum SB {
     nonisolated(unsafe) static var lastRotateCheck = -1e9
     nonisolated(unsafe) static var pageCache: [String: CGImage] = [:]
     nonisolated(unsafe) static var homeVisible = false
+    /// Smart Stack 急事插隊：上一幀的急事狀態、急事上次結束的時刻、各疊最近一次手動翻頁的時刻
+    nonisolated(unsafe) static var urgentPrev = SmartStackPolicy.State()
+    nonisolated(unsafe) static var urgentEndedAt = 0.0
+    nonisolated(unsafe) static var manualAt: [String: Double] = [:]
 
     static var overlayOpen: Bool { menu != nil || sheet != nil || folder != nil }
     /// 主畫面要不要每幀重畫
@@ -465,6 +468,30 @@ enum SB {
         let h = frame(col: 0, row: 0, span: s.size.span).height
         stackAnim[key] = MotionValue("sbstack", spring: SBMotion.stack, from: CGFloat(d) * h, to: 0, now: now)
         stackShown[key] = now
+        manualAt[key] = now
+    }
+    /// 急事插隊：每幀看一次急事狀態，只有轉換那一幀（或急事結束夠久）才可能轉；回傳有沒有換
+    static func urgentRotate(_ face: Face, now: Double) -> Bool {
+        var st = SmartStackPolicy.State(timer: !Shell.timers.isEmpty, music: face.musicActive(now),
+                                        alarm: AlarmCenter.shared.ringing != nil || AlarmCenter.shared.snoozeUntil != nil)
+        if st.urgent { urgentEndedAt = now } else if urgentPrev.urgent { urgentEndedAt = now }
+        st.idleFor = st.urgent ? 0 : now - urgentEndedAt
+        let prev = urgentPrev
+        urgentPrev = st
+        guard st != prev || (!st.urgent && st.idleFor > SmartStackPolicy.idleReturn) else { return false }
+        var l = layout, changed = false
+        let hour = Calendar.current.component(.hour, from: Face.displayDate)
+        for p in l.pages.indices {
+            for i in l.pages[p].items.indices {
+                guard case .stack(var s) = l.pages[p].items[i], s.smartRotate,
+                      let to = SmartStackPolicy.next(current: s.index, widgets: s.widgets, state: st, prev: prev,
+                                                     manualAt: manualAt["s:\(s.id)"], now: now, hour: hour), to != s.index else { continue }
+                s.index = to; l.pages[p].items[i] = .stack(s); changed = true
+                stackShown["s:\(s.id)"] = now
+            }
+        }
+        if changed { layout = l; commit() }
+        return changed
     }
     /// 智慧型旋轉：回到主畫面時，照時段換到最相關的那個
     static func smartRotate(now: Double) {
@@ -488,6 +515,7 @@ enum SB {
         if Shell.homeEditing && !wasEditing { wasEditing = true; editSince = now }
         let visible = Shell.nav.screen == .home
         if visible && !homeVisible, now - lastRotateCheck > 600 { lastRotateCheck = now; smartRotate(now: now) }
+        if visible, !CommandLine.arguments.contains("--snapshot"), urgentRotate(face, now: now) { dirty = true }
         if !visible && homeVisible { folder = nil; menu = nil; if !editing { sheet = nil } }
         homeVisible = visible
         if let f = folder, f.closing, f.anim.done(now) { folder = nil; dirty = true }

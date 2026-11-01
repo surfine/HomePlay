@@ -4,7 +4,8 @@
 // 屏幕流解密后喂 H264Sink（同一套 wire 推给桌宠／App）；桌宠的触控经事件通道变成 HID 报告。
 // 音频（100/101/102）收 ChaCha20-Poly1305 加密的 RTP，AAC-LC 解码进 AVAudioEngine 出声（见 CarPlayAudio.swift）。
 // iAP 数据通道（130）：SETUP 时绑数据口、解 APTransportPackage，把原始 iAP2 字节经 IapTunnelLink 交给接收器
-// （反向经事件通道 iAPSendMessage，见 IapTunnel.swift）。仪表盘副屏还没做：只记日志。
+// （反向经事件通道 iAPSendMessage，见 IapTunnel.swift）。仪表盘副屏（111）只有探针：/info 宣告了 cluster 才接，
+// 主屏 SETUP 后照 LIVI 发 showUI 要导航第二地图，收到的码流原样存档（ClusterProbe.swift）。
 import Foundation
 import Network
 import CryptoKit
@@ -20,6 +21,14 @@ package struct CarPlaySessionConfig {
     /// 选定的 iPhone 蓝牙地址：只探这台的 _carplay-ctrl
     package var phoneBluetoothAddress: String?
     package var probeForPhone = true
+    /// 副屏探针：showUI 要的网址（LIVI 预设 maps:/car/instrumentcluster/map）与码流存档路径；info.cluster 为空时不用
+    package var clusterURL = ClusterProbe.defaultURL
+    /// 探针轮替：每 clusterRotateSeconds 秒换下一个网址重送 showUI（LIVI follow_cluster_url 同法）；只有一个就不轮
+    package var clusterURLs: [String] = []
+    package var clusterRotateSeconds = 30
+    /// 副屏外观：nil 不送；true 深色、false 浅色（LIVI send_appearance：ui＋map 两则，appearanceSetting 0）
+    package var clusterDark: Bool?
+    package var clusterDumpPath: String?
     package init(info: InfoConfig) { self.info = info }
 }
 
@@ -33,6 +42,9 @@ final class ControlCipherSealer: MessageSealer {
 
 package final class CarPlaySession {
     package private(set) var config: CarPlaySessionConfig
+    /// F1/在场信号：手机此刻是否已通过 pair-verify（live 连接且已加密）。
+    /// 只读投影，不发事件；HomePlay 接收器轮询或回调后对外广播。
+    package var phoneAuthenticated: Bool { live?.authenticated ?? false }
     /// 自动匹配/重按发现手机后回填地址（CtrlProbe 每次探测时读 config）
     package func setPhoneBluetoothAddress(_ address: String) {
         config.phoneBluetoothAddress = address
@@ -269,6 +281,9 @@ private final class ControlConnection {
     let pairVerify: PairVerify
     var screen: ScreenStream?
     var adapter: ScreenStreamH264Adapter?
+    var cluster: ClusterProbe?
+    var clusterTimer: DispatchSourceTimer?
+    var clusterURLIndex = 0
     var event: EventChannel?
     var timing: TimingServer?
     var audio: [CarPlayAudioStream] = []
@@ -321,6 +336,8 @@ private final class ControlConnection {
         closed = true
         conn.cancel()
         screen?.stop(); screen = nil
+        clusterTimer?.cancel(); clusterTimer = nil
+        cluster?.stop(); cluster = nil
         event?.stop(); event = nil
         timing?.stop(); timing = nil
         for a in audio { a.close() }
@@ -494,6 +511,17 @@ private final class ControlConnection {
                     session.note("SETUP 屏幕（110，dataPort \(port)，id \(sid)）")
                     if let png = CornerMaskProtocol.find(sd) { session.note("圓角遮罩（屏幕 SETUP，\(png.count)B）"); session.onCornerMask?(true, png) }
                     resp.append(["type": type, "dataPort": Int(port)])
+                    if session.config.info.cluster != nil { requestClusterUI() }
+                case CarPlayStream.altScreen where session.config.info.cluster != nil:
+                    let key = deriveStreamKey(sharedSecret: shared, salt: StreamKeyInfo.salt(streamConnectionID: sid),
+                                              info: "DataStream-Output-Encryption-Key")
+                    cluster?.stop()
+                    let c = ClusterProbe(key: Data(key), dumpPath: session.config.clusterDumpPath)
+                    c.onLog = { [weak self] s in self?.session.note(s) }
+                    let port = try c.start()
+                    cluster = c
+                    session.note("SETUP 副屏（111，dataPort \(port)，id \(sid)）：探针收码流")
+                    resp.append(["type": type, "dataPort": Int(port)])
                 case CarPlayStream.mainAudio, CarPlayStream.altAudio, CarPlayStream.mainHighAudio:
                     // 同类型的重复 SETUP：旧的先收掉
                     audio.removeAll { old in
@@ -655,7 +683,8 @@ private final class ControlConnection {
         event = ev
         session.note("SETUP 会话（timingPort \(timingPort)，eventPort \(eventPort)）")
         var body = try BPlist.decodeDict(try CarPlayPlist.setupSessionResponse(
-            timingPort: Int(timingPort), eventPort: Int(eventPort), hevc: session.config.info.hevc))
+            timingPort: Int(timingPort), eventPort: Int(eventPort), hevc: session.config.info.hevc,
+            altScreen: session.config.info.cluster != nil))
         if !session.config.advertiseIAPChannel, var f = body["enabledFeatures"] as? [String] {
             f.removeAll { $0 == "iAPChannel" }; body["enabledFeatures"] = f
         }
@@ -679,6 +708,46 @@ private final class ControlConnection {
             session.note("SETUP：手機提議 videoPlayback，已啟用（允許＝\(session.config.info.videoAllowed)）")
         }
         return RTSPResponse(status: 200, headers: [("Content-Type", Self.plist)], body: try BPlist.encode(body))
+    }
+
+    // MARK: 副屏探针
+
+    /// 照 LIVI events.rs activate_cluster_stream：showUI{uuid: 副屏, url} 之后对副屏 forceKeyFrame
+    func requestClusterUI() {
+        let urls = session.config.clusterURLs.isEmpty ? [session.config.clusterURL] : session.config.clusterURLs
+        clusterURLIndex = 0
+        showCluster(urls[0])
+        sendClusterAppearance()   // 2026-10-29 真機：送在 showUI 之前沒生效，改在之後
+        clusterTimer?.cancel(); clusterTimer = nil
+        guard urls.count > 1 else { return }
+        let t = DispatchSource.makeTimerSource(queue: session.controlQueue)
+        let every = max(5, session.config.clusterRotateSeconds)
+        t.schedule(deadline: .now() + .seconds(every), repeating: .seconds(every))
+        t.setEventHandler { [weak self] in
+            guard let self, !self.closed else { return }
+            self.clusterURLIndex = (self.clusterURLIndex + 1) % urls.count
+            self.showCluster(urls[self.clusterURLIndex])
+        }
+        t.resume()
+        clusterTimer = t
+    }
+
+    private func sendClusterAppearance() {
+        guard let dark = session.config.clusterDark else { return }
+        for kind in ["uiAppearanceUpdate", "mapAppearanceUpdate"] {
+            if let b = try? BPlist.encode(["type": kind, "params": ["uuid": CarPlayPlist.altDisplayUUID,
+                                           "appearanceMode": dark ? 1 : 0, "appearanceSetting": 0] as [String: Any]] as [String: Any]) {
+                event?.sendCommand(b)
+            }
+        }
+        session.note("副屏外觀：\(dark ? "深色" : "淺色")")
+    }
+
+    private func showCluster(_ url: String) {
+        guard let b = try? CarPlayPlist.showUI(displayUUID: CarPlayPlist.altDisplayUUID, url: url) else { return }
+        event?.sendCommand(b)
+        event?.forceKeyFrame(displayUUID: CarPlayPlist.altDisplayUUID)
+        session.note("showUI 副屏 \(url)（＋forceKeyFrame；此時已收 \(cluster?.frameCount ?? 0) 幀）")
     }
 
     // MARK: CarPlay 影片
@@ -755,6 +824,7 @@ private final class ControlConnection {
         session.note("TEARDOWN 流 \(types)")
         for t in types {
             if t == CarPlayStream.mainScreen { screen?.stop(); screen = nil; adapter = nil }
+            if t == CarPlayStream.altScreen { cluster?.stop(); cluster = nil }
             if t == CarPlayStream.data {
                 // 130 有好幾條：streamID 缺省或 1＝iAP 隧道；2＝影片設定資料流；3 起＝影片遙控會話（拆它不能關 iAP）
                 for e in entries where (e["type"] as? NSNumber)?.intValue == t {

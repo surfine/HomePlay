@@ -1,5 +1,6 @@
-// 日历 App（唯讀）：「日程」＝今天起的行程分日列出（時間、標題、日曆顏色），「月」＝月曆格（有行程的日子打點），
-// 點行程看詳情（時間、地點、備註截斷）；點月曆的某一天＝日程從那天開始列。新增行程是 ClioTalk 的工作，這裡不寫。
+// 日历 App：「日程」＝今天起的行程分日列出（時間、標題、日曆顏色），「月」＝月曆格（有行程的日子打點），
+// 點行程看詳情（時間、地點、備註截斷）；點月曆的某一天＝日程從那天開始列。
+// 2.0 home-2：底部「＋ 新增行程」＝ClioTalk 直接開始聽（它會念出來等「好」才寫），回來後日程跳到那一天、新的那張卡亮 3 秒。
 // 資料來自 EventKit（跟 CalendarSource 同一個授權）；沒授權＝說明卡＋按鈕走既有的權限流程（PermissionPrimer）。
 // 開了「認出誰在看」而眼前不是主人：換成「需要主人」鎖卡。
 
@@ -84,7 +85,11 @@ final class AgendaSource {
 
     // 2.0 depth：「一般 › 讀取行事曆」只管錶面的「下一個行程」（它的說明這樣寫），不再連行事曆 App 一起關
     var authorized: Bool { demo || CalendarSource.auth == .fullAccess }
-    var denied: Bool { !demo && ![.notDetermined, .fullAccess].contains(CalendarSource.auth) }
+    /// 快照：`--calendar-denied` 強制走「拒絕」那一版（不然要把系統的日曆權限真的關掉才看得到）
+    var denied: Bool {
+        if CommandLine.arguments.contains("--calendar-denied") && !demo { return true }
+        return !demo && ![.notDetermined, .fullAccess].contains(CalendarSource.auth)
+    }
 
     init() {
         if demo { events = OfficialDemo.on ? OfficialDemo.events() : Self.demoEvents(now: Face.displayDate); loaded = (.distantPast, .distantFuture) }
@@ -176,6 +181,21 @@ final class CalendarApp: PetApp {
     private var src: AgendaSource { AgendaSource.shared }
     private var today: Date { Face.displayDate }
 
+    // 2.0 home-2：用說的新增
+    private var addArmedAt: Double?
+    private var addBefore: Set<String> = []
+    private var highlight: [String: Double] = [:]
+    private var addButton: CGRect { RemindersApp.addButtonRect }
+    private func catchNewEvents(now: Double) {
+        guard let t0 = addArmedAt else { return }
+        if now - t0 > 120 { addArmedAt = nil; return }
+        let fresh = src.events.filter { !addBefore.contains($0.id) }
+        guard let first = fresh.min(by: { $0.start < $1.start }) else { return }
+        for e in fresh { highlight[e.id] = now + 3 }
+        tab = .agenda; selected = nil; agendaStart = first.start; scroll = AppScroll()
+        addArmedAt = nil
+    }
+
     func didOpen(now: Double) {
         tab = .agenda; agendaStart = today; monthShown = today; selected = nil; scroll = AppScroll()
         if AppUI.flag("--demo-calendar-month") { tab = .month }
@@ -189,7 +209,8 @@ final class CalendarApp: PetApp {
     func tick(_ now: Double) -> Bool {
         if HPComponents.needsFrame(now) { return true }
         var dirty = false
-        if src.version != lastVersion { lastVersion = src.version; dirty = true }
+        if src.version != lastVersion { lastVersion = src.version; dirty = true; catchNewEvents(now: CACurrentMediaTime()) }
+        if !highlight.isEmpty { dirty = true; let t = CACurrentMediaTime(); highlight = highlight.filter { $0.value > t } }
         let m = Int(Date().timeIntervalSince1970 / 60)
         if m != lastMinute { lastMinute = m; dirty = true }
         return dirty
@@ -261,6 +282,13 @@ final class CalendarApp: PetApp {
         case .month: renderMonth(g, face)
         }
         HPComponents.topFade(g, AppUI.bg, solidTo: Self.fadeSolid, height: Self.listTop - Self.fadeSolid)
+        if tab == .agenda, !OfficialDemo.on {   // 2.0 home-2：浮在底部的「＋ 新增行程」；後面墊捲動邊緣（--demo-official 是跟官方圖逐像素對照用的，官方畫面沒有這顆，不畫）
+            RemindersApp.bottomEdge(g, from: addButton.minY - HPGrid.Rhythm.sectionGap)
+            HPComponents.glassButton(g, face, addButton, L("calendar.add", "新增行程"), symbol: "plus")
+            if !Calendar.current.isDate(agendaStart, inSameDayAs: today) {
+                AppUI.center(face, g, String(format: L("calendar.from", "从 %@ 起 · 点「日程」回到今天"), fmt("MMMd", agendaStart)), AppUI.font(28), cx: 512, y: 988, AppUI.secondary)
+            }
+        }
         AppUI.title(g, face, tab == .month ? fmt("yMMMM", monthShown) : fmt("MMMM", agendaStart))
         drawTabs(g, face)
     }
@@ -279,7 +307,7 @@ final class CalendarApp: PetApp {
         }
         let secs = agendaSections
         let lay = layout(secs)
-        scroll.clamp(contentHeight: lay.height, viewport: 944 - Self.listTop + 20)
+        scroll.clamp(contentHeight: lay.height + HPTokens.Size.pill + HPGrid.Inset.app, viewport: 944 - Self.listTop + 20)
         g.saveGState()
         g.clip(to: CGRect(x: 0, y: 0, width: 1024, height: 960))   // P12：上緣交給柔邊蓋，不用硬裁切
         // 2.0 r2：照影片 v2 00:21.25 的日視圖——每個行程一張淡色卡（日曆顏色約 20%）＋左側同色細直條，不再是一整組白卡
@@ -310,6 +338,11 @@ final class CalendarApp: PetApp {
             // 淡色卡：淺色時是日曆色 20% 疊在白上，深色時 30% 疊在 #1C1C1E 上（不透明，捲動時不透出後面）
             let base = AppUI.grouped
             AppUI.fillRound(g, rr, radius: 36, color: base.blended(withFraction: HPTokens.dark ? 0.3 : 0.2, of: tint) ?? base)
+            if let until = highlight[e.id] {   // 2.0 home-2：剛用說的加進來：日曆色描一圈，3 秒內淡掉
+                let k = CGFloat(max(0, min(1, (until - CACurrentMediaTime()) / 1.2)))
+                g.saveGState(); g.addPath(continuousRoundedRect(rr.insetBy(dx: 2, dy: 2), radius: 34)); g.setLineWidth(4)
+                g.setStrokeColor(tint.withAlphaComponent(k).cgColor); g.strokePath(); g.restoreGState()
+            }
             AppUI.fillPill(g, CGRect(x: rr.minX + 22, y: rr.minY + 20, width: 8, height: rr.height - 40), color: tint)
             // 字：淺色時用日曆色壓深（影片：深綠字），深色時用 label
             let ink = HPTokens.dark ? AppUI.label : (tint.blended(withFraction: 0.55, of: .black) ?? AppUI.label)
@@ -332,9 +365,6 @@ final class CalendarApp: PetApp {
         g.restoreGState()
         if secs.flatMap(\.events).isEmpty {
             AppUI.center(face, g, L("calendar.empty", "接下来 30 天没有行程"), AppUI.font(34), cx: 512, y: 560, AppUI.secondary)
-        }
-        if !Calendar.current.isDate(agendaStart, inSameDayAs: today) {
-            AppUI.center(face, g, String(format: L("calendar.from", "从 %@ 起 · 点「日程」回到今天"), fmt("MMMd", agendaStart)), AppUI.font(28), cx: 512, y: 988, AppUI.secondary)
         }
     }
 
@@ -457,6 +487,11 @@ final class CalendarApp: PetApp {
             if p.y > 910 { selected = nil; return true }
             return true
         }
+        if tab == .agenda, !OfficialDemo.on, addButton.insetBy(dx: -8, dy: -8).contains(p) {   // 2.0 home-2
+            addBefore = Set(src.events.map(\.id)); addArmedAt = CACurrentMediaTime()
+            (NSApp.delegate as? AppDelegate)?.view?.shellSwipeListen()
+            return true
+        }
         for i in 0..<2 where AppUI.hit(Self.tabRect(i), p, pad: 0) {
             let want: Tab = i == 0 ? .agenda : .month
             if want == .agenda { agendaStart = today; scroll = AppScroll() }
@@ -480,5 +515,21 @@ final class CalendarApp: PetApp {
             }
         }
         return false
+    }
+}
+
+// MARK: - 2.0 home-3：遠看（Shell/FarGlance.swift）
+extension CalendarApp {
+    /// 下一件事（今天還沒結束的）＋還有多久；個人內容：只在認出主人時才有（訪客看不到行程）
+    func farGlance(face: Face, now: Double) -> FarGlance? {
+        guard PersonalGate.allowed, src.authorized, selected == nil, tab == .agenda else { return nil }
+        let wall = Date(), cal = Calendar.current
+        let todayEvents = src.events.filter { $0.end > wall && cal.isDate($0.start, inSameDayAs: wall) && !$0.allDay }.sorted { $0.start < $1.start }
+        guard let e = todayEvents.first else { return FarGlance(title: L("calendar.far.today", "今天"), headline: L("calendar.far.none", "今天没有行程了")) }
+        let mins = Int(e.start.timeIntervalSince(wall) / 60)
+        let when = mins <= 0 ? L("calendar.far.now", "进行中") : (mins < 60 ? String(format: L("calendar.far.inM", "还有 %d 分钟"), mins)
+            : String(format: L("calendar.far.inH", "还有 %d 小时"), mins / 60))
+        return FarGlance(title: "\(Face.shortTime(e.start)) – \(Face.shortTime(e.end))", headline: e.title.isEmpty ? L("calendar.untitled", "（无标题）") : e.title,
+                         details: [when] + [e.location].compactMap { $0 }.filter { !$0.isEmpty }, accent: srgb(e.color).blended(withFraction: 0.35, of: HPComponents.label))
     }
 }

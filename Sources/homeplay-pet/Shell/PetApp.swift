@@ -18,7 +18,7 @@ struct AppIcon {
 
 /// 頂端藥丸要長成的 Live Activity
 struct LiveActivity {
-    enum Kind { case timer, music, message, assistant, call }   // 2.0 #10：call＝FaceTime 通話（綠色）
+    enum Kind { case timer, music, message, assistant, call, iphone, alarm, weather }   // 2.0 #10：call＝FaceTime 通話（綠色）；iphone＝來自配對 iPhone 的即時動態；alarm＝鬧鐘響鈴／貪睡（link＝ring／snooze）；weather＝快下雨了（link＝開始時間的 epoch 秒，收起時記住是哪一場）
     var kind: Kind
     var title: String
     var detail: String          // 計時器：剩餘時間；音樂：演出者
@@ -27,6 +27,9 @@ struct LiveActivity {
     var appID: String           // 點一下打開哪個 App
     var symbol: String? = nil   // 右邊的圖示（nil：音樂的波形）
     var link: String? = nil     // 2.0 P03：點了帶到哪一件事（訊息：對話的 chat ROWID／"demo"；計時器：那一組的 id）
+    /// 這一則活動的身分（展開、命中、8 小時、數字動畫都用它）：自家 App 一個 App 一則，就是 appID；
+    /// iPhone 轉來的全部共用 mirroringAppID，要加上各自的 id，不然兩則同時在時點第二則展開的是第一則
+    var uid: String { kind == .iphone ? "\(appID)#\(link ?? "")" : appID }
 }
 
 protocol PetApp: AnyObject {
@@ -62,6 +65,8 @@ protocol PetApp: AnyObject {
     func handleBack(now: Double) -> Bool
     /// 2.0 depth：App 不在畫面上了（不管是按返回、閒置回錶面、點 Live Activity、ClioTalk 開別的 App）：關相機、停錄音之類
     func didClose()
+    /// 2.0 home-3：遠看（提案原則 1）——人在遠處時整個 App 換成這一句話（外殼統一畫，Shell/FarGlance.swift）；nil＝沒有遠看版
+    func farGlance(face: Face, now: Double) -> FarGlance?
 }
 
 extension PetApp {
@@ -78,6 +83,7 @@ extension PetApp {
     var backSymbol: String { "xmark" }
     func handleBack(now: Double) -> Bool { false }
     func didClose() {}
+    func farGlance(face: Face, now: Double) -> FarGlance? { nil }
 }
 
 /// 主畫面順序就是這份清單的順序（全部 App 頁也照這個順序）
@@ -127,20 +133,3 @@ final class PlaceholderApp: PetApp {
     }
 }
 
-/// 設定：打開原本的設定視窗（原生 SwiftUI 表單），不在螢幕上畫
-final class SettingsApp: PetApp {
-    let id = "settings"
-    var title: String { L("app.settings", "设置") }
-    let icon = AppIcon(color: srgb(0x8e8e93), symbol: "gearshape.fill", system: "/System/Applications/System Settings.app")
-    func render(into g: CGContext, face: Face, rect: CGRect, now: Double) {
-        g.setFillColor(srgb(0x0b0b0e).cgColor); g.fill(rect)
-    }
-    func launch(face: Face) -> Bool {
-        if RemoteInput.fromGuest { return true }   // 2.0 idle: 訪客裝置不能在 Mac 上開設定視窗
-        if let app = NSApp.delegate as? AppDelegate {
-            NSApp.activate(ignoringOtherApps: true)
-            SettingsWindowController.show(app: app)
-        }
-        return true
-    }
-}

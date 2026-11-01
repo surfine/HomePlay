@@ -19,7 +19,21 @@
   --accent:#5b8ff5; --accent-ink:#0b1730; --panel:#1d2126; --code:#0b0d10;}}
 
 *{box-sizing:border-box} html{scroll-behavior:smooth;scroll-padding-top:72px}
-body{margin:0;background:var(--bg);color:var(--ink);font:17px/1.6 var(--font);-webkit-font-smoothing:antialiased}
+body{margin:0;background:var(--bg);color:var(--ink);font:17px/1.6 var(--font);-webkit-font-smoothing:antialiased;
+  /* 文案裡的中英邊界是真正的空格（build 時檢查）；別讓瀏覽器再加一層自動間距 */
+  text-autospace:no-autospace}
+/* 簡體頁用 PingFang SC，不要落到繁體（TC）字型：兩者的字形不同，
+   同一個字在 TC 裡可能是舊字形或根本沒有，會變成 fallback 混排。 */
+body:lang(zh-Hans){font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display","SF Pro Text","PingFang SC","Noto Sans SC",sans-serif}
+/* 中文標題不套英文的負字距（漢字沒有側邊空白，負值會把字壓在一起）；
+   各頁自己的 letter-spacing 用 :lang(zh) 覆寫，這裡只給尚未覆寫的標題一個安全值。 */
+:is(h1,h2,h3):lang(zh){letter-spacing:0}
+/* 產品名與段尾詞組的保護：nowrap 只在最小支援寬度放得下時使用（見 typography.md） */
+.nb{white-space:nowrap}
+/* 懸掛標點：標點不佔前進寬度但仍看得見，讓置中標題的漢字真正居中。
+   只在置中的首頁 h1 使用；左對齊的標題若也懸掛，標點會壓到前一個字。 */
+.hang{display:inline}
+@media (max-width:820px){.pv.home h1 .hang{display:inline-block;width:0;overflow:visible}}
 img{max-width:100%;display:block}
 a{color:inherit}
 /* 觸控：不要系統的灰色點按閃光與長按彈出（iOS） */
@@ -31,6 +45,11 @@ h1,h2,h3{margin:0;letter-spacing:-.02em;line-height:1.12;font-weight:650;text-wr
 p{text-wrap:pretty}
 h2{font-size:clamp(30px,4vw,48px)}
 p{margin:0}
+/* 中文標點禁則：句號、逗號、收尾括號不落在行首（只對中日韓生效，英文不受影響）；
+   配合 text-wrap: pretty，減少最後一行只剩一兩個字。
+   兩者都可繼承，設在 body 讓卡片、圖說這些非 p 的文字也吃到。 */
+body{line-break:strict;text-wrap:pretty}
+h1,h2,h3{text-wrap:balance}
 code{font-family:var(--mono);font-size:.92em}
 .lede{color:var(--muted);max-width:34em}
 .btn{display:inline-flex;align-items:center;gap:8px;height:46px;padding:0 22px;border-radius:var(--pill);

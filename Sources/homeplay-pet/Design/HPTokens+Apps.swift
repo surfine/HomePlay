@@ -251,7 +251,7 @@ extension HPTokens {
     /// 對講：中間黃色大麥克風圓鈕（官方攝影機頁的對講鈕是黃的，HPDS「黃＝麥克風」）、外圈電平刻度（照官方對講圖示的直條排成圓）
     enum Intercom {
         static let talkCenter = CGPoint(x: 512, y: 540)
-        static let talk: CGFloat = 240
+        static let talk: CGFloat = HPTokens.Size.roundLarge   // 2.0 align F：說話鈕用階梯裡的 roundLarge
         static let ringInner: CGFloat = 150
         static let ringOuter: CGFloat = 230
         static let bars = 36

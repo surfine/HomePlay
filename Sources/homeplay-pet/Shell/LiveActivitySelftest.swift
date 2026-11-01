@@ -69,5 +69,50 @@ enum LiveActivitySelftest {
         }
         Shell.timers.remove(id)
         MessagesDemo.mode = savedMode; Shell.nav = savedNav
+
+        // 鬧鐘（iOS 26 AlarmKit）：響鈴中有 LA、按鈕是稍后／停止；貪睡中有 LA、detail 是倒數、只有停止；沒事就沒有
+        let alarm = AlarmItem(id: 1, hour: 6, minute: 30, label: "x", days: [], enabled: true)
+        let now0 = Date()
+        let ringLA = AlarmCenter.activity(ringing: alarm, snoozed: nil, wall: now0)
+        check(ringLA?.kind == .alarm && ringLA?.link == "ring" && ringLA?.detail == "6:30" && ringLA?.appID == "alarms"
+              && ringLA?.accent == AlarmsApp.accent, "鬧鐘 Live Activity：響鈴中有活動，compact 顯示鬧鐘時間（ring）")   // l10n-ignore：selftest 訊息
+        let snoozeLA = AlarmCenter.activity(ringing: nil, snoozed: (alarm, now0.addingTimeInterval(522)), wall: now0)
+        check(snoozeLA?.kind == .alarm && snoozeLA?.link == "snooze" && snoozeLA?.detail == "8:42"
+              && AlarmCenter.activity(ringing: nil, snoozed: nil, wall: now0) == nil, "鬧鐘 Live Activity：貪睡中有活動，detail 是倒數 8:42；沒響沒貪睡就沒有")   // l10n-ignore：selftest 訊息
+        // 按鈕：在大卡裡出現的由 laExpanded 畫，這裡驗核心動作——稍后＝貪睡 9 分鐘、停止＝清掉兩種狀態
+        let ac = AlarmCenter.shared   // 不 upsert：那會寫進真的 UserDefaults
+        ac.debugRing(alarm)
+        ac.snooze(face)
+        check(ac.ringing == nil && ac.snoozeUntil.map { abs($0.timeIntervalSinceNow - AlarmCenter.snoozeMinutes * 60) < 2 } == true
+              && ac.activity?.link == "snooze", "鬧鐘 Live Activity：「稍后」＝貪睡 \(Int(AlarmCenter.snoozeMinutes)) 分鐘，活動變成倒數版")   // l10n-ignore：selftest 訊息
+        ac.stop(face)
+        check(ac.activity == nil, "鬧鐘 Live Activity：「停止」（貪睡中也一樣）收掉活動")   // l10n-ignore：selftest 訊息
+
+        // iPhone 即時動態（系統轉來的）：接進同一個堆疊、排最前、點擊交給 iPhone Mirroring、收起後消失
+        ActivityBridge.shared.applyDemo(appName: "外送")   // l10n-ignore：自測的假資料（下面照名字比對）
+        let acts = face.shellActivities(CACurrentMediaTime())
+        check(acts.first?.kind == .iphone && acts.first?.appID == ActivityBridge.mirroringAppID && acts.first?.title == "外送"
+              && acts.first?.detail.isEmpty == false,
+              "iPhone 即時動態：排在最前、帶 App 名與已進行時間、點擊交給鏡像")   // l10n-ignore：selftest 訊息
+        ActivityBridge.shared.hide("demo-iphone")
+        check(face.shellActivities(CACurrentMediaTime()).allSatisfy { $0.kind != .iphone },
+              "iPhone 即時動態：按「收起」後不再出現在膠囊")   // l10n-ignore：selftest 訊息
+        // 2.0 align E：兩則 iPhone 活動共用 mirroringAppID，身分要分得開（展開、8 小時各算各的）
+        let blue = NSColor.systemBlue
+        let two = ["a", "b"].map { LiveActivity(kind: .iphone, title: $0, detail: "0:01", accent: blue, progress: nil, appID: ActivityBridge.mirroringAppID, link: $0) }
+        var seenTwo: [String: Double] = [:]
+        let vis = LiveActivityStack.visible(two, wall: 100, seen: &seenTwo, enabled: { _ in true })
+        check(two[0].uid != two[1].uid && vis.count == 2 && seenTwo.count == 2, "iPhone 即時動態：兩則同時在，身分各自獨立")   // l10n-ignore：selftest 訊息
+
+        // 快下雨了（WeatherAlert）：60 分鐘內會開始下雨＝有；正在下＝沒有；資料過期＝沒有
+        let wall = Date(timeIntervalSince1970: 1_800_000_000)
+        let soon = WeatherApp.demoRainData(date: wall)
+        let hit = WeatherAlert.next(data: soon, updatedAt: wall.addingTimeInterval(-600), now: wall)
+        check(hit?.kind == .rain && hit.map { abs($0.start.timeIntervalSince(wall) - 25 * 60) < 1 } == true,
+              "快下雨了：25 分鐘後開始下雨＝有提醒，開始時間是那一格")   // l10n-ignore：selftest 訊息
+        var raining = soon; raining.code = 61
+        check(WeatherAlert.next(data: raining, updatedAt: wall, now: wall) == nil, "快下雨了：現在已經在下就不提醒")   // l10n-ignore：selftest 訊息
+        check(WeatherAlert.next(data: soon, updatedAt: wall.addingTimeInterval(-2 * 3600 - 60), now: wall) == nil
+              && WeatherAlert.next(data: soon, updatedAt: nil, now: wall) == nil, "快下雨了：資料超過 2 小時沒更新就不提醒")   // l10n-ignore：selftest 訊息
     }
 }

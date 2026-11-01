@@ -38,8 +38,20 @@
 .ch h2{margin-top:16px;font-size:clamp(28px,3.6vw,40px)}
 .ch > p:not(.ch-era):not(.lede):not(.ch-src){margin-top:20px;font-size:18px;line-height:1.85}
 .ch h2 + p{margin-top:24px}
-.ch-src{margin-top:16px;display:flex;flex-wrap:wrap;gap:8px 16px;font-size:14px}
-.ch-src a,.source-list a{color:var(--accent);text-decoration:none}
+/* 考據摺疊：正文不打斷，要看的人自己展開。summary 一律 ≥44px 觸控。 */
+.src-fold{margin-top:16px}
+.src-fold summary{display:inline-flex;align-items:center;gap:8px;min-height:44px;padding:8px 18px;list-style:none;cursor:pointer;
+  font-size:14px;font-weight:600;color:var(--muted);border-radius:var(--pill);box-shadow:inset 0 0 0 1px var(--line);transition:color .2s,background .2s}
+.src-fold summary::-webkit-details-marker{display:none}
+.src-fold summary::after{content:"";width:7px;height:7px;margin-top:-3px;border-right:1.5px solid currentColor;border-bottom:1.5px solid currentColor;transform:rotate(45deg);transition:transform .2s}
+.src-fold[open] summary::after{transform:rotate(225deg);margin-top:3px}
+.src-fold summary:hover,.src-fold summary:focus-visible{color:var(--ink)}
+.src-fold summary:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.src-fold[open] summary{margin-bottom:4px}
+.src-fold .ch-src{margin-top:12px}
+.src-fold .lede,.src-fold .source-list{margin-top:16px}
+.ch-src{margin-top:0;display:flex;flex-wrap:wrap;gap:8px 16px;font-size:14px}
+.ch-src a,.source-list a{display:inline-block;padding:11px 0;color:var(--accent);text-decoration:none}   /* 觸控目標 ≥44 */
 .ch-src a:hover,.source-list a:hover{text-decoration:underline;text-underline-offset:3px}
 
 .lesson{margin:32px 0 0;padding:16px 24px;border-radius:18px;background:var(--surface);box-shadow:inset 0 0 0 1px var(--line)}
@@ -52,7 +64,7 @@
 .ex-head{display:flex;align-items:baseline;gap:8px}
 .ex-no{font:600 12px/1 var(--mono);color:var(--accent)}
 .ex-head h3{font-size:16px;letter-spacing:0;flex:1}
-.ex-reset{font:inherit;font-size:13px;color:var(--muted);background:none;border:0;padding:6px 10px;border-radius:var(--pill);cursor:pointer;box-shadow:inset 0 0 0 1px var(--line)}
+.ex-reset{font:inherit;font-size:13px;color:var(--muted);background:none;border:0;padding:12px 16px;border-radius:var(--pill);cursor:pointer;box-shadow:inset 0 0 0 1px var(--line)}
 .ex-reset:hover{color:var(--ink)}
 .ex-task{margin-top:8px;font-size:15px;line-height:1.6;color:var(--muted)}
 .ex-stage{position:relative;margin-top:16px;container-type:inline-size;border-radius:18px;overflow:hidden;min-height:120px}

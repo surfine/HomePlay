@@ -21,9 +21,9 @@ extension HPTokens {
         static let stepSize: CGFloat = 38, stepBaseline: CGFloat = 438
         static let timeSize: CGFloat = 170, timeBaseline: CGFloat = 604
         static let labelSize: CGFloat = 38, labelBaseline: CGFloat = 670
-        /// 左下 ✕（玻璃）、右下暫停（黃）：直徑 120，圓心離邊 150
-        static let close = HPComponents.actionRect(cx: 150, cy: 874, size: 120)
-        static let pause = HPComponents.actionRect(cx: 874, cy: 874, size: 120)
+        /// 左下 ✕（玻璃）、右下暫停（黃）：直徑 round 150（2.0 align F：原本 120），圓心離邊 150
+        static let close = HPComponents.actionRect(cx: 150, cy: 874, size: HPTokens.Size.round)
+        static let pause = HPComponents.actionRect(cx: 874, cy: 874, size: HPTokens.Size.round)
         /// 左上小玻璃鈕（回到步驟，計時器照跑、變成頂端膠囊）
         static let back = HPTokens.Media.backButton
     }

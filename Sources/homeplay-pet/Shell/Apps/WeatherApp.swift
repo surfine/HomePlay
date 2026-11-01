@@ -15,6 +15,9 @@ final class WeatherApp: PetApp {
     var title: String { L("app.weather", "天气") }
     let icon = AppIcon(color: srgb(0x1e88f0), symbol: "cloud.sun.fill", system: "/System/Applications/Weather.app")
 
+    /// 天氣 App 圖示的藍（「快下雨了」的 Live Activity 也用它）
+    static let accent = srgb(0x1e88f0)
+
     private var scroll = AppScroll()
     private var lastVersion = -1
     private var lastMinute = -1
@@ -50,6 +53,47 @@ final class WeatherApp: PetApp {
     }
 
     func handleScroll(_ dy: CGFloat, now: Double) -> Bool { scroll.scroll(dy, contentHeight: contentHeight, viewport: 1024) }
+
+    // MARK: Live Activity：快下雨了
+
+    /// 「約 14:20 開始下雨」：接下來 60 分鐘內要開始降雨／雪／雷雨才有（WeatherAlert）；天氣 App 自己開著時不重複（iOS：前景 App 的 Live Activity 不顯示）；
+    /// 按「收起」後這一場不再出現。資料只用已經有的（不在這裡啟動定位）
+    func liveActivity(face: Face, now: Double) -> LiveActivity? {
+        if Shell.currentApp === self { return nil }
+        let wall = Face.displayDate
+        let found: (kind: WeatherAlert.Kind, start: Date)?
+        if AppUI.flag("--demo-weather-rain") {   // 快照：25 分鐘後開始下雨的示範資料（用 displayDate，--demo-official 也對得上畫面上的時間）
+            found = WeatherAlert.next(data: Self.demoRainData(date: wall), updatedAt: wall, now: wall)
+        } else if let d = WeatherSource.shared.data {
+            found = WeatherAlert.next(data: d, updatedAt: WeatherSource.shared.updatedAt, now: wall)
+        } else { found = nil }
+        guard let (kind, start) = found, !WeatherAlert.isDismissed(start: start) else { return nil }
+        let hm = Face.shortTime(start)   // 句子裡：時制照系統（12／24 小時，含上午／下午）
+        // 藥丸收起時只放「10:34」（iOS 的 compact 不帶上午／下午，不然塞不下）
+        let twelve = (DateFormatter.dateFormat(fromTemplate: "j", options: 0, locale: L10n.language.locale) ?? "").contains("a")
+        let short = Face.formatter(twelve ? "h:mm" : "HH:mm", raw: true).string(from: start)
+        let (symbol, sentence): (String, String) = {
+            switch kind {
+            case .rain: return ("umbrella.fill", L("la.weather.rain", "约 %@ 开始下雨"))
+            case .snow: return ("snowflake", L("la.weather.snow", "约 %@ 开始下雪"))
+            case .thunder: return ("cloud.bolt.rain.fill", L("la.weather.thunder", "约 %@ 有雷雨"))
+            }
+        }()
+        return LiveActivity(kind: .weather, title: String(format: sentence, hm), detail: short, accent: Self.accent, progress: nil, appID: id,
+                            symbol: symbol, link: String(Int(start.timeIntervalSince1970)))
+    }
+
+    /// 示範：現在多雲不下雨，25 分鐘後開始下雨（15 分鐘一格）
+    static func demoRainData(date: Date) -> WeatherData {
+        var d = demoData(date: date)
+        d.code = 3
+        let t0 = date.timeIntervalSince1970
+        d.rainSlots = (0..<8).map { i in
+            let start = t0 + Double(i - 1) * 900 + 600   // 現在這一格從 5 分鐘前開始，下一格（+10 分）無雨，再下一格（+25 分）開始下雨
+            return WeatherRainSlot(start: start, span: 900, code: i >= 2 ? 61 : 3, mm: i >= 2 ? 0.6 : 0)
+        }
+        return d
+    }
 
     // MARK: 資料
     private var demoCache: (minute: Int, data: WeatherData)?
@@ -389,5 +433,15 @@ final class WeatherApp: PetApp {
         g.restoreGState()
         WeatherLiveSky.shared.setColliders(colliders)
         return y + 2 * 216 + 40 - o
+    }
+}
+
+// MARK: - 2.0 home-3：遠看（Shell/FarGlance.swift）
+extension WeatherApp {
+    /// 現在幾度＋天氣＋高低
+    func farGlance(face: Face, now: Double) -> FarGlance? {
+        guard let d = current(face) else { return nil }   // 跟畫面同一份（示範資料也一樣）
+        return FarGlance(title: d.city ?? title, headline: HomeAppModel.tempText(d.temp),
+                         details: [Face.weatherText(d.code), String(format: L("weather.far.hilo", "最高 %1$@ 最低 %2$@"), HomeAppModel.tempText(d.hi), HomeAppModel.tempText(d.lo))], numeric: true)
     }
 }

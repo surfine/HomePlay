@@ -66,17 +66,20 @@ extension ControlCenter {
             face.drawLeft(c, title(t), font: tf, x: d.maxX + 24, y: d.midY + 14, color: ink)
         }
     }
-    static func toggleRect(_ E: CGRect) -> CGRect { CGRect(x: E.maxX - 40 - 128, y: E.minY + 84 - 38, width: 128, height: 76) }
+    /// 2.0 align：與標題列同一條內縮 40、同一個右緣；高度＝row（原本 76）
+    static func toggleRect(_ E: CGRect) -> CGRect { CGRect(x: E.maxX - 40 - 132, y: E.minY + 40, width: 132, height: HPTokens.Size.row) }
 
     private struct Row { var symbol: String; var title: String; var trailing: String?; var check: Bool; var tint: NSColor?; var action: CCHit.Action; var toggle: Bool? = nil }
 
-    private static func rows(_ c: CGContext, _ face: Face, _ E: CGRect, top: CGFloat, _ list: [Row], record: Bool, rowH: CGFloat = 92) {
+    /// 2.0 align：列與標題列同一條內縮 40；列圖示對標題圖示（rr.minX）、字對標題（rr.minX+112）、
+    /// 右緣對標題列的開關（rr.maxX）；列高 row 88（原本 92，5 列會壓到設定列）。
+    private static func rows(_ c: CGContext, _ face: Face, _ E: CGRect, top: CGFloat, _ list: [Row], record: Bool, rowH: CGFloat = HPTokens.Size.row) {
         let ink = HPGlass.ink, lightGlass = !HPGlass.inkIsLight
         for (i, row) in list.enumerated() {
             let y = top + CGFloat(i) * rowH
-            let rr = CGRect(x: E.minX + 24, y: y, width: E.width - 48, height: rowH)
-            if i > 0 { c.setFillColor(ink.withAlphaComponent(0.14).cgColor); c.fill(CGRect(x: rr.minX + 96, y: y, width: rr.width - 112, height: 1.5)) }
-            let d = CGRect(x: rr.minX + 16, y: rr.midY - 30, width: 60, height: 60)
+            let rr = CGRect(x: E.minX + HPGrid.Inset.card, y: y, width: E.width - HPGrid.Inset.card * 2, height: rowH)
+            if i > 0 { c.setFillColor(ink.withAlphaComponent(0.14).cgColor); c.fill(CGRect(x: rr.minX + 112, y: y, width: rr.width - 112 - 24, height: 1.5)) }
+            let d = CGRect(x: rr.minX, y: rr.midY - 30, width: 60, height: 60)
             if let tint = row.tint {
                 c.setFillColor((row.check ? tint : ink.withAlphaComponent(lightGlass ? 0.10 : 0.24)).cgColor); c.fillEllipse(in: d)
                 drawGlyph(c, face, row.symbol, in: d.insetBy(dx: 16, dy: 16), color: row.check ? .white : ink)
@@ -85,16 +88,16 @@ extension ControlCenter {
             }
             let f = HPType.sf(32, row.check ? .semibold : .regular)
             let trailingW: CGFloat = row.trailing.map { Typo.width($0, HPType.sf(28)) + 24 } ?? 0
-            let w = rr.width - 112 - trailingW - (row.check || row.toggle != nil ? 140 : 24)
-            face.drawLeft(c, Face.clipped(row.title, f, w), font: f, x: rr.minX + 100, y: rr.midY + 11, color: ink)
+            let w = rr.width - 112 - 24 - trailingW - (row.check || row.toggle != nil ? 140 : 0)
+            face.drawLeft(c, Face.clipped(row.title, f, w), font: f, x: rr.minX + 112, y: rr.midY + 11, color: ink)
             var tx = rr.maxX - 24
             if let on = row.toggle {
-                let tr = CGRect(x: rr.maxX - 24 - 112, y: rr.midY - 33, width: 112, height: 66)
+                let tr = CGRect(x: rr.maxX - 132, y: rr.midY - HPTokens.Size.switchTrack / 2, width: 132, height: HPTokens.Size.switchTrack)
                 plainToggle(c, tr, on: on)
                 tx = tr.minX - 20
             } else if row.check {
-                face.drawSymbol(c, "checkmark", in: CGRect(x: rr.maxX - 24 - 36, y: rr.midY - 16, width: 36, height: 32), color: ink, weight: .bold)
-                tx = rr.maxX - 24 - 56
+                face.drawSymbol(c, "checkmark", in: CGRect(x: rr.maxX - 36, y: rr.midY - 16, width: 36, height: 32), color: ink, weight: .bold)
+                tx = rr.maxX - 56
             }
             if let tr = row.trailing {
                 let tf = HPType.sf(28)
@@ -116,7 +119,7 @@ extension ControlCenter {
 
     static func drawExpandedContent(_ c: CGContext, _ t: Tile, _ E: CGRect, face: Face, now: Double, record: Bool) {
         let sys = CCSystem.shared, ink = HPGlass.ink
-        let bottom = E.maxY - 24 - 92
+        let bottom = E.maxY - 24 - HPTokens.Size.row
         switch t {
         case .wifi:
             header(c, face, E, t, sub: subtitle(t, face: face), on: sys.wifi.on)
@@ -313,10 +316,10 @@ extension ControlCenter {
             c.saveGState(); c.addPath(path); c.clip()
             AppUI.fillPill(c, CGRect(x: G.midX - 36, y: G.minY + 16, width: 72, height: 8), color: ink.withAlphaComponent(0.3))
             let tf = HPType.sf(40, .bold), heading = L("cc.addControl", "添加控制")
-            face.drawLeft(c, heading, font: tf, x: G.midX - Typo.width(heading, tf) / 2, y: G.minY + 92, color: ink)
-            // 完成（右上，填色膠囊）
+            face.drawLeft(c, heading, font: tf, x: G.midX - Typo.width(heading, tf) / 2, y: G.minY + 102, color: ink)
+            // 完成（右上，填色膠囊）：與標題同一條內縮 40、字心對齊
             let df = HPType.sf(28, .semibold), done = L("home.done", "完成")
-            let dr = CGRect(x: G.maxX - 56 - Typo.width(done, df) - 48, y: G.minY + 48, width: Typo.width(done, df) + 48, height: 60)
+            let dr = CGRect(x: G.maxX - 40 - Typo.width(done, df) - 48, y: G.minY + 40, width: Typo.width(done, df) + 48, height: HPTokens.Size.cta)
             AppUI.fillPill(c, dr, color: ink.withAlphaComponent(lightGlass ? 0.08 : 0.16))
             face.drawLeft(c, done, font: df, x: dr.minX + 24, y: dr.midY + 10, color: ink)
             if record { hits.append(CCHit(rect: dr.insetBy(dx: -8, dy: -14), action: .galleryClose, label: done)) }

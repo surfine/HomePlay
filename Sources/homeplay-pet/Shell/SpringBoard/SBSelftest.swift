@@ -93,7 +93,7 @@ enum SBBoardSelftest {
         fresh()
         SB.enterEdit(now: now)
         let pl = SB.placements(page: 0)
-        check(pl.allSatisfy { SBUI.badge(SB.frame($0), icon: $0.item.isIcon).insetBy(dx: -16, dy: -16).width >= 88 } && SBUI.doneButton.height >= 88
+        check(pl.allSatisfy { SBUI.badgeHit(SB.frame($0), icon: $0.item.isIcon).width >= 88 } && SBUI.doneButton.height >= 88
               && SBUI.editMenuButton.height >= 88 && SBUI.galleryAdd.height >= 88 && SBUI.alertButtons.allSatisfy { $0.height >= 88 },
               "SpringBoard：「−」、完成、筆刷、加入小工具、提示卡按鈕的點按範圍都 ≥ 88")   // l10n-ignore：selftest 訊息
         let screen = CGRect(x: 0, y: 0, width: 1024, height: 1024)

@@ -3,6 +3,17 @@
 // 展品在載入後依序初始化；離開畫面時，用 api.whileVisible 停掉動畫與計時器。
 (() => {
   const doc = document;
+
+  // 從目錄或連結跳到「出處／還不確定」時自動展開摺疊，別讓人跳到一個收著的空殼
+  const openTarget = () => {
+    if (!location.hash) return;
+    const t = doc.getElementById(decodeURIComponent(location.hash.slice(1)));
+    if (!t) return;
+    for (const d of t.querySelectorAll('details.src-fold')) d.open = true;
+    if (t instanceof HTMLDetailsElement) t.open = true;
+  };
+  addEventListener('hashchange', openTarget);
+  doc.addEventListener('DOMContentLoaded', openTarget);
   const motion = matchMedia('(prefers-reduced-motion: reduce)');
   const I = (() => { try { return JSON.parse(doc.getElementById('hx-i18n').textContent); } catch { return { ex: {}, ui: {} }; } })();
   const hasIO = 'IntersectionObserver' in window;
