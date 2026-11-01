@@ -70,8 +70,8 @@ export const copy = {
     lede: "HomePlay 是 Mac 上的開源桌寵，長得像 HomeView。平常，它用一雙眼睛看著你；用力按一下螢幕，它就變成 iPhone 的 CarPlay。",
     viewSource: "看原始碼",
     download: "下載 App",
-    downloadNote: "v1.0.4，macOS 14 以上，Apple 晶片。有 Developer ID 簽名、通過 Apple 公證，解壓就能打開。",
-    heroNote: "v1.0.4 · macOS 14+ · Apple 晶片 · 已公證",
+    downloadNote: "v1.0.5，macOS 14 以上，Apple 晶片。有 Developer ID 簽名、通過 Apple 公證，解壓就能打開。",
+    heroNote: "v1.0.5 · macOS 14+ · Apple 晶片 · 已公證",
     heroLabel: "HomePlay 桌寵，目前的表情：{face}",
     faceNames: {
       idle: "平常",
@@ -433,8 +433,8 @@ export const copy = {
     lede: "HomePlay 是 Mac 上的开源桌宠，长得像 HomeView。平时，它用一双眼睛看着你；用力按一下屏幕，它就变成 iPhone 的 CarPlay。",
     viewSource: "看源代码",
     download: "下载 App",
-    downloadNote: "v1.0.4，macOS 14 及以上，Apple 芯片。有 Developer ID 签名、通过 Apple 公证，解压就能打开。",
-    heroNote: "v1.0.4 · macOS 14+ · Apple 芯片 · 已公证",
+    downloadNote: "v1.0.5，macOS 14 及以上，Apple 芯片。有 Developer ID 签名、通过 Apple 公证，解压就能打开。",
+    heroNote: "v1.0.5 · macOS 14+ · Apple 芯片 · 已公证",
     heroLabel: "HomePlay 桌宠，当前的表情：{face}",
     faceNames: {
       idle: "平常",
@@ -796,8 +796,8 @@ export const copy = {
     lede: "HomePlay is an open-source desk pet for the Mac that looks like HomeView. Most of the time it watches you with a pair of eyes. Press the screen firmly, and it becomes your iPhone’s CarPlay.",
     viewSource: "View source",
     download: "Download the app",
-    downloadNote: "v1.0.4, macOS 14 or later, Apple silicon. Signed with a Developer ID and notarized by Apple, so you can unzip it and open it.",
-    heroNote: "v1.0.4 · macOS 14+ · Apple silicon · Notarized",
+    downloadNote: "v1.0.5, macOS 14 or later, Apple silicon. Signed with a Developer ID and notarized by Apple, so you can unzip it and open it.",
+    heroNote: "v1.0.5 · macOS 14+ · Apple silicon · Notarized",
     heroLabel: "HomePlay desk pet, current expression: {face}",
     faceNames: {
       idle: "Idle",

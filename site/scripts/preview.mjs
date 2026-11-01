@@ -20,7 +20,7 @@ const zhHant = {
   h1: '<span class="l">整套 HomeView，</span> <span class="l glow">放上你的 Mac。</span>',
   lede: 'HomeView 是 Apple 放在家裡的小螢幕。HomePlay 把它做成 Mac 桌面上的桌寵。1.0 有一雙會看你的眼睛，也能接 iPhone 的 CarPlay。2.0 加上 HomeView 的整套介面：主畫面和小工具、十一款錶面、十六個 App、語音助手 ClioTalk，還能認出家人。',
   ctaBeta: '下載 2.0 beta 3',
-  ctaDownload: '穩定版 1.0.4',
+  ctaDownload: '穩定版 1.0.5',
   ctaSource: '在 GitHub 看進度',
   heroNote: 'beta 3 是測試版，可能有錯。畫面都是 App 用示範資料拍的。',
   heroSwitchLabel: '機身上顯示的畫面',
@@ -150,7 +150,7 @@ const zhHant = {
     ],
     trademark: 'HomeView、CarPlay、Siri、Apple Intelligence、FaceTime 與 Apple 是 Apple Inc. 的商標。HomePlay 是獨立的開源專案，與 Apple 無關，也未經 Apple 授權或認可。',
     ctaTitle: '試試 2.0 beta 3。',
-    ctaBody: 'beta 3 可能有錯，遇到問題請到 GitHub 告訴我們。想要穩定，就用 1.0.4。兩個版本都要 macOS 14 以上和 Apple 晶片，都有 Developer ID 簽名並通過 Apple 公證。',
+    ctaBody: 'beta 3 可能有錯，遇到問題請到 GitHub 告訴我們。想要穩定，就用 1.0.5。兩個版本都要 macOS 14 以上和 Apple 晶片，都有 Developer ID 簽名並通過 Apple 公證。',
   },
 };
 
@@ -170,7 +170,7 @@ const zhHans = {
   h1: '<span class="l">整套 HomeView，</span> <span class="l glow">放上你的 Mac。</span>',
   lede: 'HomeView 是 Apple 放在家里的小屏幕。HomePlay 把它做成 Mac 桌面上的桌宠。1.0 有一双会看你的眼睛，也能接 iPhone 的 CarPlay。2.0 加上 HomeView 的整套界面：主屏幕和小组件、十一款表盘、十六个 App、语音助手 ClioTalk，还能认出家人。',
   ctaBeta: '下载 2.0 beta 3',
-  ctaDownload: '稳定版 1.0.4',
+  ctaDownload: '稳定版 1.0.5',
   ctaSource: '在 GitHub 看进度',
   heroNote: 'beta 3 是测试版，可能有错。画面都是 App 用示例数据拍的。',
   heroSwitchLabel: '机身上显示的画面',
@@ -300,7 +300,7 @@ const zhHans = {
     ],
     trademark: 'HomeView、CarPlay、Siri、Apple 智能、FaceTime 与 Apple 是 Apple Inc. 的商标。HomePlay 是独立的开源项目，与 Apple 无关，也未经 Apple 授权或认可。',
     ctaTitle: '试试 2.0 beta 3。',
-    ctaBody: 'beta 3 可能有错，遇到问题请到 GitHub 告诉我们。想要稳定，就用 1.0.4。两个版本都要 macOS 14 及以上和 Apple 芯片，都有 Developer ID 签名并通过 Apple 公证。',
+    ctaBody: 'beta 3 可能有错，遇到问题请到 GitHub 告诉我们。想要稳定，就用 1.0.5。两个版本都要 macOS 14 及以上和 Apple 芯片，都有 Developer ID 签名并通过 Apple 公证。',
   },
 };
 
@@ -320,7 +320,7 @@ const en = {
   h1: '<span class="l">All of HomeView.</span> <span class="l glow">On your Mac.</span>',
   lede: 'HomeView is Apple’s small screen for the home. HomePlay turns it into a desk pet on your Mac. 1.0 has a pair of eyes that watch you, and it also takes CarPlay from your iPhone. 2.0 adds the full HomeView interface: a Home Screen with widgets, eleven faces, sixteen apps, ClioTalk (a voice assistant), and family recognition.',
   ctaBeta: 'Download 2.0 beta 3',
-  ctaDownload: 'Stable 1.0.4',
+  ctaDownload: 'Stable 1.0.5',
   ctaSource: 'Follow 2.0 on GitHub',
   heroNote: 'Beta 3 is a test version and may have bugs. The app captured every screen here with demo data.',
   heroSwitchLabel: 'Screen shown on the device',
@@ -450,7 +450,7 @@ const en = {
     ],
     trademark: 'HomeView, CarPlay, Siri, Apple Intelligence, FaceTime and Apple are trademarks of Apple Inc. HomePlay is an independent open source project, not affiliated with, authorised or endorsed by Apple.',
     ctaTitle: 'Try 2.0 beta 3.',
-    ctaBody: 'Beta 3 may have bugs. If you find one, tell us on GitHub. For a stable app, use 1.0.4. Both need macOS 14 or later on Apple silicon. Both are signed with Developer ID and notarised by Apple.',
+    ctaBody: 'Beta 3 may have bugs. If you find one, tell us on GitHub. For a stable app, use 1.0.5. Both need macOS 14 or later on Apple silicon. Both are signed with Developer ID and notarised by Apple.',
   },
 };
 
