@@ -679,6 +679,9 @@ enum Wireless {
   /// 引导期间打开的可发现性必须在每一条退出路径上都恢复，不能只在引导正常结束时。
   nonisolated(unsafe) static var onShutdown: (() -> Void)?
 
+  /// 退出前等多久：让关通道、断基带的 XPC 送到 bluetoothd 并生效（原本 0.2–0.3 秒太短，留下孤儿通道）
+  static let exitGrace: TimeInterval = 1.5
+
   static func shutdown() {
         guard Thread.isMainThread else {
             DispatchQueue.main.async { shutdown() }
@@ -687,6 +690,10 @@ enum Wireless {
         onShutdown?()
 try? FileManager.default.removeItem(at: runningMarker)
         accessory?.close()
+        // 关完通道再断这支手机的 ACL：强迫 bluetoothd 把它上面的 RFCOMM 一起拆掉。2026-10-30 系统日志：
+        // 行程关通道后 0.2 秒就退出，bluetoothd 没拆那条 RFCOMM（没有 rfcommDisconnectedCb），留下没主人的连接
+        // 与管线（之后开通道回 0x38f、或「Pipe 0x0102 is already registered」→ 0x76f），之后每次都连不上。
+        if accessory?.dropBaseband() == true { note("退出前已断开到手机的基带，让 bluetoothd 收掉通道") }
         accessory = nil
         accessoryUsb?.close()
         accessoryUsb = nil
@@ -881,7 +888,7 @@ try? FileManager.default.removeItem(at: runningMarker)
             if text.contains("\"type\":\"stop\"") {
                 note("收到斷開指令，結束 CarPlay 會話")
                 Wireless.shutdown()
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { exit(0) }
+                DispatchQueue.main.asyncAfter(deadline: .now() + Wireless.exitGrace) { exit(0) }
                 return
             }
             if text.contains("\"type\":\"usePhone\"") {
@@ -1280,7 +1287,7 @@ try? FileManager.default.removeItem(at: runningMarker)
                     idleExitScheduled = true
                     note("后台空闲 2 分钟：结束会话并退出，等桌宠下次打开再拉起")
                     Wireless.shutdown()   // 先干净收掉手机会话，再照 SIGTERM 的规矩退出
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { exit(0) }
+                    DispatchQueue.main.asyncAfter(deadline: .now() + Wireless.exitGrace) { exit(0) }
                 }
             }
             RunLoop.main.add(watch, forMode: .common)
@@ -1351,7 +1358,7 @@ try? FileManager.default.removeItem(at: runningMarker)
             if text.contains("\"type\":\"stop\"") {
                 note("收到斷開指令，結束 CarPlay 會話")
                 Wireless.shutdown()
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { exit(0) }
+                DispatchQueue.main.asyncAfter(deadline: .now() + Wireless.exitGrace) { exit(0) }
                 return
             }
             if text.contains("\"keyframe\"") { s.requestKeyframe() }
@@ -1789,7 +1796,7 @@ try? FileManager.default.removeItem(at: runningMarker)
             if text.contains("\"type\":\"stop\"") {
                 note("收到斷開指令，結束 CarPlay 會話")
                 Wireless.shutdown()
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { exit(0) }
+                DispatchQueue.main.asyncAfter(deadline: .now() + Wireless.exitGrace) { exit(0) }
                 return
             }
             if text.contains("\"type\":\"discoverable\"") {
@@ -2861,7 +2868,7 @@ try? FileManager.default.removeItem(at: runningMarker)
                 restarting = true
                 inbox.removeAll()
                 Wireless.shutdown()
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { Wireless.reexec() }
+                DispatchQueue.main.asyncAfter(deadline: .now() + Wireless.exitGrace) { Wireless.reexec() }
             case .setTimer(let id, let after, let token):
                 timers[id]?.cancel()
                 let item = DispatchWorkItem { timers[id] = nil; feed(.timer(id, token: token)) }
@@ -3002,7 +3009,7 @@ try? FileManager.default.removeItem(at: runningMarker)
                     idleExitScheduled = true
                     note("后台空闲 2 分钟：结束会话并退出，等桌宠下次打开再拉起")
                     Wireless.shutdown()   // 先干净收掉手机会话，再照 SIGTERM 的规矩退出
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { exit(0) }
+                    DispatchQueue.main.asyncAfter(deadline: .now() + Wireless.exitGrace) { exit(0) }
                 }
             }
             RunLoop.main.add(watch, forMode: .common)

@@ -159,5 +159,13 @@ for (const need of ['_headers', '_redirects', 'robots.txt', 'sitemap.xml', '404.
 const headers = await readFile(path.join(root, '_headers'), 'utf8').catch(() => '');
 if (!headers.includes("default-src 'self'") || !headers.includes("frame-ancestors 'none'")) errors.push('_headers: CSP missing');
 
+// deploy-guard：官網只有一份部署、整包替換。1.x 的 site 只有首頁；
+// 從這裡 deploy 會把 /2.0/ 與 /history/ 蓋成 404（2026-10-27 發生過兩次）。
+// 要改官網請到 v2-site2，並從那裡部署。
+for (const need of ['2.0/index.html', 'history/index.html']) {
+  if (!files.some((f) => rel(f) === need))
+    errors.push(`deploy-guard：這份 site 沒有 ${need}，不能部署（會蓋掉線上 /2.0/、/history/）。官網請從 v2-site2 部署。`);
+}
+
 if (errors.length) { console.error(errors.join('\n')); process.exit(1); }
 console.log(`OK: ${files.length} files, ${pages} HTML pages. Local references, meta, hreflang (zh-Hant, zh-Hans, en, x-default), JSON-LD with FAQPage, 1200x630 JPEG share cards, 512x512 share-square, spin, hello and blink/glance frames, no dashes, no third-party hosts, CSP-clean (no inline handlers, styles or scripts).`);

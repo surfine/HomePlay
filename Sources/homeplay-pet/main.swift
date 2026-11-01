@@ -5441,8 +5441,8 @@ enum ReceiverAgent {
         let cfg = (try? JSONDecoder().decode(ReceiverLauncher.Config.self, from: Data(contentsOf: ReceiverLauncher.configURL()))) ?? .init()
         do { try plistText(cfg: cfg, bin: bin).data(using: .utf8)?.write(to: plistURL, options: .atomic) }
         catch { log("LaunchAgent 迁移失败：\(error.localizedDescription)"); return }
-        log(wrongPath ? "LaunchAgent 迁移：接收器改到 \(bin.path)，重载让新布局生效"
-                      : "LaunchAgent 迁移：加入 --background（桌宠不在时停广播）")
+        log(wrongPath ? "LaunchAgent migration: receiver moved to \(bin.path), reloading for the new layout"
+                      : "LaunchAgent migration: added --background (stop advertising while the pet is closed)")
         _ = launchctl(["bootout", "gui/\(getuid())/\(label)"])
         for attempt in 0..<5 {
             if launchctl(["bootstrap", "gui/\(getuid())", plistURL.path]) { return }

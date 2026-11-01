@@ -450,7 +450,7 @@ if let pp = flag("--parent-pid").flatMap({ Int32($0) }), pp > 1 {
             DispatchQueue.main.async {
                 Wireless.shutdown()
                 FileHandle.standardError.write("父進程已結束，receiver 退出。\n".data(using: .utf8)!)
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { exit(0) }
+                DispatchQueue.main.asyncAfter(deadline: .now() + Wireless.exitGrace) { exit(0) }
             }
         }
     }
@@ -578,7 +578,7 @@ for sig in [SIGTERM, SIGINT] {
     src.setEventHandler {
         Wireless.shutdown()
         FileHandle.standardError.write("收到结束信号，已结束 CarPlay 会话。\n".data(using: .utf8)!)
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { exit(0) }
+        DispatchQueue.main.asyncAfter(deadline: .now() + Wireless.exitGrace) { exit(0) }
     }
     src.resume()
     shutdownSources.append(src)
@@ -641,7 +641,10 @@ if sourceKind == "wireless" || sourceKind == "usb" || sourceKind == "auto" {
         o.iface = w
     }
     if let p = flag("--control-port"), let n = UInt16(p) { o.controlPort = n }  // --port 是 WS 口（WSServer），別混
-    o.background = CommandLine.arguments.contains("--background")   // 登录项常驻：桌宠不在就停广播、闲置退出
+    // 2026-11-01：--background（桌宠不在就撤 SDP 广播、闲置退出）关掉。手机还连着的时候把自己从车机
+    // SDP 里撤掉，iPhone 之后就不接受这台 Mac 的通道——10/30 与 11/01 两次实测都卡死，只能重开 iPhone
+    // 再重启 Mac 蓝牙才救得回来。1.0.5 回到接收器常驻：参数照收，但忽略（与 2.0 的 02ff84f 同一决定）。
+    o.background = false
     if let sz = flag("--size") {
         let wh = sz.split(separator: "x").compactMap { Int($0) }
         if wh.count == 2 { o.width = wh[0]; o.height = wh[1] }
