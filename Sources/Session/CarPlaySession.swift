@@ -6,6 +6,7 @@
 // iAP 数据通道（130）：SETUP 时绑数据口、解 APTransportPackage，把原始 iAP2 字节经 IapTunnelLink 交给接收器
 // （反向经事件通道 iAPSendMessage，见 IapTunnel.swift）。仪表盘副屏（111）只有探针：/info 宣告了 cluster 才接，
 // 主屏 SETUP 后照 LIVI 发 showUI 要导航第二地图，收到的码流原样存档（ClusterProbe.swift）。
+import AVFoundation
 import Foundation
 import Network
 import CryptoKit
@@ -140,12 +141,47 @@ package final class CarPlaySession {
     /// 桌宠/诊断触发 Siri（与按车机 Siri 键等价）
     /// 会话还没 live 时先挂起，RECORD 之后补发（F5 可以先按、桌宠再连）
     private var siriKey = SiriKeyState()
+    /// 會話級預熱麥克風：CarPlay live 時就開 VPIO 並持續緩衝最近幾秒。
+    /// Siri/F5 的 SETUP 到了直接 configure + 補發，不必等引擎啟動（實測要 0.7–2.4 秒）。
+    private var sharedMic: MicUplink?
+    private let sharedMicLock = NSLock()
     /// `.click`＝按一下（buttonDown＋buttonUp）；`.down`／`.up`＝按住說話，放開才結束
     package func requestSiri(_ action: SiriAction = .click) {
         queue.async { [self] in
             let e = live?.event
+            if e != nil, action != .up { note("Siri 键按下，预热麦克风已就绪"); ensureSharedMic() }
             for a in siriKey.press(action, live: e != nil) { e?.sendSiri(action: a) }
         }
+    }
+
+    private func ensureSharedMic() {
+        // 沒有麥克風授權就不要在背景開引擎（測試/未授權時也避免 TCC 彈窗）。
+        guard AVCaptureDevice.authorizationStatus(for: .audio) == .authorized else { return }
+        sharedMicLock.lock()
+        if sharedMic == nil {
+            let voice = MicUplink.wantsVoiceProcessing(audioType: "speechRecognition")
+            let m = MicUplink(prewarm: true, voiceProcessing: voice)
+            m.onLog = { [weak self] s in self?.note(s) }
+            m.start()
+            sharedMic = m
+        }
+        sharedMicLock.unlock()
+    }
+
+    fileprivate func getSharedMic() -> MicUplink? {
+        sharedMicLock.lock(); let m = sharedMic; sharedMicLock.unlock(); return m
+    }
+
+    fileprivate func stopSharedMic() {
+        sharedMicLock.lock()
+        let m = sharedMic
+        sharedMic = nil
+        sharedMicLock.unlock()
+        m?.stop()
+    }
+    /// 桌寵 Esc → CarPlay 旋鈕的「返回」（和真實車機的 Back 鍵同一個 HID）。
+    package func sendKnob(_ state: KnobState) {
+        queue.async { [self] in live?.event?.sendKnob(state) }
     }
     /// 桌寵的電話鍵（接聽＝hookSwitch、拒接／掛斷＝drop）→ CarPlay 電話 HID。沒有 live 會話就丟。
     package func sendTelephony(_ button: HID.TelephonyButton) {
@@ -236,12 +272,16 @@ package final class CarPlaySession {
         live = cc
         probe?.stop(); probe = nil   // 真的开始了才停叫回连
         log("RECORD：会话开始")
+        // 系統 Siri 在錄音前就把 audio input 準備好；CarPlay 一 live 就預熱，
+        // F5 當下麥克風已在跑，手機 SETUP 的瞬間就有音訊可補。
+        ensureSharedMic()
         onActive?()
         cc.videoBecameLive()
         for a in siriKey.becameLive() { cc.event?.sendSiri(action: a) }
     }
 
     fileprivate func end(_ why: String) {
+        stopSharedMic()
         guard let cc = live else { return }
         live = nil
         cc.close()
@@ -526,17 +566,29 @@ private final class ControlConnection {
                     // 同类型的重复 SETUP：旧的先收掉
                     audio.removeAll { old in
                         guard old.type == type else { return false }
-                        old.close(); return true
+                        // 同型別立刻重開：先讓 VPIO/裝置空出來；TTS 尾巴的 drain 只在
+                        // 真正 TEARDOWN/會話結束時做。
+                        old.close(drain: false); return true
                     }
                     let key = deriveStreamKey(sharedSecret: shared, salt: StreamKeyInfo.salt(streamConnectionID: sid),
                                               info: "DataStream-Output-Encryption-Key")
                     let fmt = (sd["audioFormat"] as? NSNumber)?.intValue ?? 0
                     let latencyMs = (sd["audioLatencyMs"] as? NSNumber)?.intValue ?? 0
                     let (codec, canPlay) = audioCodec(fromFormat: fmt)
+                    // Opus 下行 RTP 時鐘不一定是 48k：Siri 24k 流的時間戳每 20ms 只前進 480。
+                    // jitter buffer 要用這個時鐘，不然會把一半的包當成缺包丟掉（破音/半速）。
+                    let rtpClockRate: Int = {
+                        guard codec.isOpus else { return codec.rate }
+                        if fmt & 0x40000000 != 0 { return 48000 }
+                        if fmt & 0x20000000 != 0 { return 24000 }
+                        if fmt & 0x10000000 != 0 { return 16000 }
+                        return 48000
+                    }()
                     // type 100（MainAudio）帶 dataPort＝手機要麥克風（Siri/電話）。上行是 Opus，
                     // 密鑰是 Output 的鏡像；包格式照 MacPlay mic/src/lib.rs。
                     let phoneMicPort = (sd["dataPort"] as? NSNumber)?.uint16Value ?? 0
-                    session.note("SETUP 流 \(type) 参数：fmt=0x\(String(fmt, radix: 16)) dataPort=\(phoneMicPort) audioType=\(sd["audioType"] as? String ?? "?")")
+                    let framesPerPacket = (sd["framesPerPacket"] as? NSNumber)?.intValue ?? 0
+                    session.note("SETUP 流 \(type) 参数：fmt=0x\(String(fmt, radix: 16)) dataPort=\(phoneMicPort) framesPerPacket=\(framesPerPacket) audioType=\(sd["audioType"] as? String ?? "?")")
                     var mic: MicUplink?
                     if type == CarPlayStream.mainAudio, phoneMicPort > 0 {
                         // 上行负载跟着下行协商：Opus 位在就编 Opus；否则手机要的是 PCM
@@ -556,30 +608,38 @@ private final class ControlConnection {
                         }
                         let micKey = deriveStreamKey(sharedSecret: shared, salt: StreamKeyInfo.salt(streamConnectionID: sid),
                                                      info: "DataStream-Input-Encryption-Key")
-                        let framesPerPacket = (sd["framesPerPacket"] as? NSNumber)?.intValue ?? 0
                         let frameMs = framesPerPacket > 0 ? max(5, framesPerPacket * 1000 / rate) : 20
                         let bitrate = rate <= 24000 ? 48000 : (rate <= 32000 ? 64000 : 96000)
                         // 電話與 Siri 開回音消除：Mac 喇叭的聲音不能被收回去給對方／Siri 聽
                         let voice = MicUplink.wantsVoiceProcessing(audioType: sd["audioType"] as? String)
-                        let m = MicUplink(codec: wire, key: Data(micKey), payloadType: type, sampleRate: rate,
-                                          channels: micChannels, frameMs: frameMs, bitrate: bitrate,
-                                          host: peerHost, port: phoneMicPort,
-                                          voiceProcessing: voice && canPlay,
-                                          downlinkRate: codec.rate, downlinkChannels: codec.channels)
-                        m.onLog = { [weak self] s in self?.session.note(s) }
-                        mic = m
+                        if let shared = session.getSharedMic() {
+                            // 會話級預熱引擎已經在跑（VPIO/播放器都熱的），只換金鑰與編碼器，
+                            // 並把 SETUP 前緩衝的預卷補發給手機。
+                            shared.configure(key: Data(micKey), payloadType: type, host: peerHost,
+                                             port: phoneMicPort, wireCodec: wire, sampleRate: rate,
+                                             channels: micChannels, frameMs: frameMs, bitrate: bitrate)
+                            mic = shared
+                        } else {
+                            let m = MicUplink(codec: wire, key: Data(micKey), payloadType: type, sampleRate: rate,
+                                              channels: micChannels, frameMs: frameMs, bitrate: bitrate,
+                                              host: peerHost, port: phoneMicPort,
+                                              voiceProcessing: voice && canPlay,
+                                              downlinkRate: codec.rate, downlinkChannels: codec.channels)
+                            m.onLog = { [weak self] s in self?.session.note(s) }
+                            mic = m
+                        }
                     }
                     let a = try CarPlayAudioStream(
                         type: type, connectionID: sd["streamConnectionID"] as? NSNumber,
-                        key: Data(key), codec: codec,
+                        key: Data(key), codec: codec, rtpClockRate: rtpClockRate,
                         latencyMs: latencyMs > 0 ? latencyMs : (type == CarPlayStream.mainHighAudio ? 1000 : 0),
                         canPlay: canPlay, mic: mic)
-                    mic?.start()   // Siri 可能先要麥克風、後才有下行音訊；SETUP 一完成就開始送
+                    mic?.start()   // 預熱引擎已啟動時是 no-op；一般路徑則啟動上行
                     a.onLog = { [weak self] s in self?.session.note(s) }
                     let described = sd["audioType"] as? String ?? "?"
                     let codecName = canPlay ? (codec.isAAC ? "AAC-LC" : (codec.isOpus ? "Opus" : "PCM")) : "暂不解"
                     let micNote = mic.map { "，麦克风上行 \($0.description)" } ?? ""
-                    session.note("SETUP 音频 \(type)（\(described)，\(codecName) \(codec.rate)×\(codec.channels)，dataPort \(a.dataPort)\(micNote)）")
+                    session.note("SETUP 音频 \(type)（\(described)，\(codecName) 下行 \(codec.rate)×\(codec.channels)，fpp \(framesPerPacket)，dataPort \(a.dataPort)\(micNote)）")
                     audio.append(a)
                     resp.append(["type": type, "dataPort": Int(a.dataPort), "controlPort": Int(a.controlPort),
                                  "streamConnectionID": sd["streamConnectionID"] ?? 0])

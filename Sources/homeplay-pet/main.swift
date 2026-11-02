@@ -2564,6 +2564,10 @@ final class ReceiverClient: NSObject, URLSessionWebSocketDelegate {
     func sendSiri() { send(#"{"type":"siri"}"#) }
     /// F5 按住說話：按下送 down、放開送 up（接收器轉成 requestSiri siriAction 2／3）
     func sendSiri(down: Bool) { send(down ? #"{"type":"siri","action":"down"}"# : #"{"type":"siri","action":"up"}"#) }
+    /// 車機的旋鈕／返回鍵（接收器轉成 CarPlay knob HID）；Esc 走這條。
+    func sendKnob(_ command: String) { send(#"{"type":"knob","command":"\#(command)"}"#) }
+    /// 獨立通話音量（MacPlay 的 callVolume）；接收器改 DynamicsProcessor 的 OverallGain。
+    func sendCallGain(_ db: Double) { send(#"{"type":"audio","command":"callGain","db":\#(db)}"#) }
     /// 來電卡的按鍵（接收器轉成 CarPlay 電話 HID）
     func sendTelephony(_ action: PhoneCallAction) { send(#"{"type":"telephony","command":"\#(action.rawValue)"}"#) }
     func sendUsePhone(address: String) {
@@ -5571,6 +5575,10 @@ enum SystemKeyTap {
     static let auxSubtype: Int16 = 8
     /// NX_SYSDEFINED：CGEventType 没公开这个枚举值，只在这里用裸数字
     static let sysDefinedType: UInt32 = 14
+    /// NSEvent 的 subtype／data1 在 CGEvent 里的未公开字段。事件 tap 跑在自己的执行绪，
+    /// 不能在那边构造 NSEvent（AppKit 会要求主执行绪；Caps Lock 一按就 SIGTRAP）。
+    static let subtypeField = CGEventField(rawValue: 0x53)!
+    static let data1Field = CGEventField(rawValue: 0x95)!
 
     /// 只給「換了鍵盤、要知道它發哪個鍵碼」的除錯用；平常不記錄系統按鍵。
     static let logAllAuxKeys = ProcessInfo.processInfo.environment["HOMEPLAY_DIAG_KEYS"] != nil
@@ -5694,14 +5702,15 @@ enum SystemKeyTap {
             }
             return Unmanaged.passUnretained(event)
         }
-        if type.rawValue == SystemKeyTap.sysDefinedType, let ns = NSEvent(cgEvent: event),
-           ns.subtype.rawValue == SystemKeyTap.auxSubtype {
-            let data1 = ns.data1
+        if type.rawValue == SystemKeyTap.sysDefinedType {
+            let subtype = event.getIntegerValueField(SystemKeyTap.subtypeField)
+            guard subtype == Int64(SystemKeyTap.auxSubtype) else { return Unmanaged.passUnretained(event) }
+            let data1 = event.getIntegerValueField(SystemKeyTap.data1Field)
             let key = (data1 & 0xFFFF0000) >> 16
             let state = (data1 & 0xFF00) >> 8
             // 換鍵盤後要確認它發哪個鍵碼時才開 HOMEPLAY_DIAG_KEYS=1；平時不落地按鍵。
             if SystemKeyTap.logAllAuxKeys { appendDiag("syskeys.log", "aux key=\(key) state=\(state)") }
-            if key == Int(SystemKeyTap.siriKeyCode) {
+            if key == SystemKeyTap.siriKeyCode {
                 if state == 0x0A, data1 & 0x1 == 0 { fireSiri(down: true) }   // 低位＝自動重複
                 else if state == 0x0B { fireSiri(down: false) }
                 return nil
@@ -6003,6 +6012,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menu.popUp(positioning: nil, at: anchor, in: nil)
         view.stopMenuTicker()
     }
+
+    func sendCallGain(_ db: Double) { client?.sendCallGain(db) }
 
     private func sendPhoneMedia(_ c: MediaCommand) {
         let cmd: String
@@ -7500,6 +7511,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             guard let self, let c else { return }
             self.receiverKickstarted = false   // 这一轮已成功连上；下次 receiver 掉了还能再 kickstart
             c.sendEngaged(!self.quietAttach)
+            if let savedGain = UserDefaults.standard.object(forKey: "HomePlayCallGainDb") as? Double {
+                c.sendCallGain(savedGain)
+            }
             if let address = self.pendingUsePhone {
                 self.pendingUsePhone = nil
                 c.sendUsePhone(address: address)

@@ -121,7 +121,8 @@ package final class CarPlayAudioPlayer {
     package enum Codec {
         case aacLc(rate: Int, channels: Int)
         case pcmBe(rate: Int, channels: Int)
-        /// 無線的低延遲流（導航/Siri/電話）：Opus 單聲道
+        /// 無線的低延遲流（導航/Siri/電話）：Opus 單聲道。下行時鐘固定 48k；
+        /// SETUP 高位（16/24/48k）只決定麥克風上行的編碼率。
         case opus(rate: Int, channels: Int)
 
         package var rate: Int {
@@ -155,10 +156,15 @@ package final class CarPlayAudioPlayer {
     private var failed = false
     private var running = false
     package private(set) var played = 0
+    /// 已交給 player node、但還沒播完的音訊秒數（TTS 尾巴）。系統 Siri 會等佇列清空
+    /// 才結束 session；接收器在 TEARDOWN 時也要先讓它播完，不能立刻 stop。
+    private var scheduledSeconds = 0.0
     package var onLog: ((String) -> Void)?
     /// 另一台引擎要代放（麥克風開了回音消除：下行得從語音處理引擎出聲才有參考）。
     /// 回 false＝那邊還沒準備好，照舊用自己的引擎放。
     package var renderSink: ((AVAudioPCMBuffer) -> Bool)?
+    /// 下行 PCM 的參考訊號給麥克風的 SpeexDSP AEC（只有 type 100 且有麥克風時會設）。
+    package var referenceSink: (([Float]) -> Void)?
 
     package init(codec: Codec) {
         self.codec = codec
@@ -175,13 +181,9 @@ package final class CarPlayAudioPlayer {
             guard rc == noErr else { fail("ADTS 解析器建不起来（\(rc)）"); return }
         }
         // 接上輸出要打開預設輸出裝置（藍牙耳機、AirPlay 時常要好幾秒，真機 2026-10-24 量到 0.9–16 秒）。
-        // 這段原本在 SETUP 回應之前同步做，手機等不到就報錯（1852797029＝'nope'）並拆掉重來。
-        // 改到 engineQueue 上非同步：SETUP 立刻回；第一幀來時 ensureRunning 也在這條佇列上，順序不變。
-        engineQueue.async { [engine, node] in
-            engine.attach(node)
-            engine.connect(node, to: engine.mainMixerNode, format: fmt)
-            engine.prepare()
-        }
+        // 所以不在 SETUP 時接：第一幀真要由這台播放器出聲時（ensureRunningOnQueue）
+        // 才 attach/connect/prepare。電話/Siri 的 VPIO 需要獨占輸出裝置；若這台播放器
+        // 先把裝置打開，VPIO 的 aggregate 會起不來。renderSink 接住下行時完全不碰它。
         running = true
         // 預設輸出裝置被拔掉／切換時，AVAudioEngine 會停下來；不重建連線就一直沒聲。
         // 回到 engineQueue 重新接上 mainMixer，下一幀或立刻繼續。
@@ -208,6 +210,8 @@ package final class CarPlayAudioPlayer {
     private var lastActivity = CACurrentMediaTime()
     /// 裝置切換的瞬間引擎可能起不來；留 1 秒重試，不要一次失敗就永久靜音
     private var startRetryAt = 0.0
+    /// 是否已把 player 接到 mainMixer；第一幀真要自己出聲時才做。
+    private var wired = false
 
     private func isRunning() -> Bool {
         lock.lock(); defer { lock.unlock() }
@@ -234,7 +238,13 @@ package final class CarPlayAudioPlayer {
     }
 
     private func ensureRunningOnQueue() {
-        guard isRunning() else { return }
+        guard isRunning(), let fmt = format else { return }
+        if !wired {
+            engine.attach(node)
+            engine.connect(node, to: engine.mainMixerNode, format: fmt)
+            engine.prepare()
+            wired = true
+        }
         if !engine.isRunning {
             let now = CACurrentMediaTime()
             guard now >= startRetryAt else { return }
@@ -247,6 +257,7 @@ package final class CarPlayAudioPlayer {
     /// 裝置切換後重建輸出連線；音訊流本身（密鑰、nonce、排隊）不動
     private func recoverEngineOnQueue() {
         guard isRunning(), let fmt = format else { return }
+        guard wired else { ensureRunningOnQueue(); return }
         onLog?("音频设备变化，重建输出")
         node.stop()
         engine.stop()
@@ -323,12 +334,39 @@ package final class CarPlayAudioPlayer {
         }
     }
 
+    /// 還沒播完的下行秒數（排隊中 + 已排給 player node）。
+    package var queuedSeconds: Double {
+        lock.lock()
+        let pendingCount = pending.count
+        let scheduled = scheduledSeconds
+        lock.unlock()
+        let perFrame = codec.isAAC ? 1024.0 / Double(codec.rate) : 0.02
+        return Double(pendingCount) * perFrame + scheduled
+    }
+
+    /// 系統 Siri 的行為：TTS 佇列清空才結束。TEARDOWN 後先讓尾巴播完再 stop。
+    package func stopAfterDrain(_ seconds: Double) {
+        let delay = min(max(0, seconds), 3)
+        if delay <= 0.02 { stop(); return }
+        // 強參考到 stop 為止：CarPlayAudioStream 收掉後播放器仍要把 TTS 尾巴播完。
+        DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + delay) {
+            self.stop()
+        }
+    }
+
+    private func didFinishBuffer(_ seconds: Double) {
+        lock.lock()
+        scheduledSeconds = max(0, scheduledSeconds - seconds)
+        lock.unlock()
+    }
+
     package func stop() {
         idleTimer?.cancel(); idleTimer = nil
         if let o = configObserver { NotificationCenter.default.removeObserver(o); configObserver = nil }
         lock.lock()
         running = false; failed = true
         pending.removeAll()
+        scheduledSeconds = 0
         lock.unlock()
         engineQueue.sync {
             node.stop()
@@ -339,14 +377,12 @@ package final class CarPlayAudioPlayer {
         converter = nil
         if let f = fileStream { AudioFileStreamClose(f) }
         fileStream = nil
-        if let d = opusDecoder { AudioConverterDispose(d) }
         opusDecoder = nil
         codecLock.unlock()
     }
 
     /// 有货就解一帧排给播放节点。decode 不能在锁内（AudioConverter 有自己的锁）。
     private func pump() {
-        ensureRunning()
         while true {
             lock.lock()
             guard running, !failed, let frame = pending.first else { lock.unlock(); return }
@@ -364,6 +400,14 @@ package final class CarPlayAudioPlayer {
             return
         }
         let frames = pcm.count / codec.channels
+        referenceSink?(pcm)
+        if codec.isOpus, !firstOpusLogged {
+            firstOpusLogged = true
+            var sum = 0.0; var peak: Float = 0
+            for s in pcm { sum += Double(s * s); peak = max(peak, abs(s)) }
+            let rms = (sum / Double(max(1, pcm.count))).squareRoot()
+            onLog?("下行 Opus：首帧 \(pcm.count) 样本，RMS \(String(format: "%.1f", 20 * log10(max(rms, 1e-7)))) dBFS，峰值 \(String(format: "%.1f", 20 * log10(max(Double(peak), 1e-7)))) dBFS")
+        }
         guard let buf = AVAudioPCMBuffer(pcmFormat: fmt, frameCapacity: AVAudioFrameCount(frames)) else { return }
         buf.frameLength = AVAudioFrameCount(frames)
         for c in 0..<codec.channels {
@@ -371,84 +415,50 @@ package final class CarPlayAudioPlayer {
             for f in 0..<frames { dst[f] = pcm[f * codec.channels + c] }
         }
         if let sink = renderSink, sink(buf) {
-            lock.lock(); played += 1; lock.unlock()
+            didPlay()
             return
         }
+        ensureRunning()
+        let duration = Double(frames) / Double(codec.rate)
+        lock.lock(); scheduledSeconds += duration; lock.unlock()
         let scheduled = engineQueue.sync { () -> Bool in
             guard isRunning(), engine.isRunning else { return false }
-            node.scheduleBuffer(buf)
+            node.scheduleBuffer(buf) { [weak self] in self?.didFinishBuffer(duration) }
             return true
         }
-        guard scheduled else { return }
-        lock.lock(); played += 1; lock.unlock()
+        guard scheduled else {
+            lock.lock(); scheduledSeconds = max(0, scheduledSeconds - duration); lock.unlock()
+            return
+        }
+        didPlay()
+    }
+
+    /// 記一幀已排播；Opus（Siri/電話/導航）每 50 幀≈1 秒寫一次，方便確認下行真的有聲音。
+    private func didPlay() {
+        lock.lock()
+        played += 1
+        let n = played
+        lock.unlock()
+        if codec.isOpus, n == 1 || n % 50 == 0 {
+            onLog?("下行 Opus：已排 \(n) 帧（\(codec.rate) Hz × \(codec.channels)）")
+        }
     }
 
     private var toldEmptyDecode = false
     private var decodeFailures = 0
+    private var firstOpusLogged = false
 
-    private var opusDecoder: AudioConverterRef?
+    private var opusDecoder: OpusDecoder?
 
-    /// 一个裸 Opus 包 → 交错 Float32（单声道）。CoreAudio 自带 Opus 解码。
+    /// 一个裸 Opus 包 → 交错 Float32（单声道）。CoreAudio 的 AudioConverter 对裸 Opus
+    /// 解出来是全 0（实机验证），所以这里用 libopus。
     private func decodeOpus(_ frame: Data) -> [Float] {
         codecLock.lock(); defer { codecLock.unlock() }
         if opusDecoder == nil {
-            var inFmt = AudioStreamBasicDescription(
-                mSampleRate: Double(codec.rate), mFormatID: AudioFormatID(0x6F707573),
-                mFormatFlags: 0, mBytesPerPacket: 0, mFramesPerPacket: 0, mBytesPerFrame: 0,
-                mChannelsPerFrame: 1, mBitsPerChannel: 0, mReserved: 0)
-            var outFmt = AudioStreamBasicDescription(
-                mSampleRate: Double(codec.rate), mFormatID: kAudioFormatLinearPCM,
-                mFormatFlags: kAudioFormatFlagIsFloat | kAudioFormatFlagIsPacked,
-                mBytesPerPacket: 4, mFramesPerPacket: 1, mBytesPerFrame: 4,
-                mChannelsPerFrame: 1, mBitsPerChannel: 32, mReserved: 0)
-            var conv: AudioConverterRef?
-            guard AudioConverterNew(&inFmt, &outFmt, &conv) == noErr else {
-                onLog?("Opus 解码器建不起来"); return []
-            }
-            opusDecoder = conv
+            opusDecoder = OpusDecoder(sampleRate: codec.rate, channels: 1)
+            if opusDecoder == nil { onLog?("libopus 解码器建不起来") }
         }
-        guard let conv = opusDecoder, !frame.isEmpty else { return [] }
-        let capacity = max(4096, codec.rate / 5)   // 200ms 余量
-        let pcmPtr = UnsafeMutablePointer<Float>.allocate(capacity: capacity)
-        defer { pcmPtr.deallocate() }
-        var abl = AudioBufferList(
-            mNumberBuffers: 1,
-            mBuffers: AudioBuffer(mNumberChannels: 1, mDataByteSize: UInt32(capacity * 4), mData: pcmPtr))
-        var packets: UInt32 = UInt32(capacity)
-        var state = OpusInput(data: nil, bytes: 0, consumed: false, desc: nil)
-        let status: OSStatus = frame.withUnsafeBytes { raw in
-            state.data = UnsafeMutableRawPointer(mutating: raw.baseAddress)
-            state.bytes = raw.count
-            let desc = UnsafeMutablePointer<AudioStreamPacketDescription>.allocate(capacity: 1)
-            defer { desc.deallocate() }
-            desc.pointee = AudioStreamPacketDescription(
-                mStartOffset: 0, mVariableFramesInPacket: 0, mDataByteSize: UInt32(raw.count))
-            state.desc = desc
-            let proc: AudioConverterComplexInputDataProc = { _, ioNum, ioData, ioDesc, ctx in
-                let st = ctx!.assumingMemoryBound(to: OpusInput.self)
-                if st.pointee.consumed || ioNum.pointee == 0 { ioNum.pointee = 0; return noErr }
-                st.pointee.consumed = true
-                ioNum.pointee = 1
-                ioData.pointee.mNumberBuffers = 1
-                ioData.pointee.mBuffers.mNumberChannels = 1
-                ioData.pointee.mBuffers.mDataByteSize = UInt32(st.pointee.bytes)
-                ioData.pointee.mBuffers.mData = st.pointee.data
-                if let d = ioDesc { d.pointee = st.pointee.desc! }
-                return noErr
-            }
-            return AudioConverterFillComplexBuffer(conv, proc, &state, &packets, &abl, desc)
-        }
-        guard status == noErr, abl.mBuffers.mDataByteSize > 0 else { return [] }
-        let frames = Int(abl.mBuffers.mDataByteSize) / 4
-        return Array(UnsafeBufferPointer(start: pcmPtr, count: frames))
-    }
-
-    /// C 回调不能捕获上下文：Opus 包指针/长度/已取标记放这里
-    private struct OpusInput {
-        var data: UnsafeMutableRawPointer?
-        var bytes: Int
-        var consumed: Bool
-        var desc: UnsafeMutablePointer<AudioStreamPacketDescription>?
+        return opusDecoder?.decode(frame) ?? []
     }
 
     /// 一帧裸 AAC → 交错的 Float32：套 ADTS 头交给 AudioFileStream，它吐出的包逐个解。
@@ -576,6 +586,108 @@ package final class CarPlayAudioPlayer {
 
 // MARK: - 一路音频流的接收（两个 UDP 口 + 解密 + 丢给播放器）
 
+/// Opus 下行的小型 jitter buffer（對應 MacPlay 的 rtpjitterbuffer）：
+/// 依 RTP 時間戳排序，等 60ms 再按序交給解碼器；網路抖動時不至於讓 TTS/通話斷斷續續。
+package final class OpusJitterBuffer {
+    private let queue: DispatchQueue
+    private let latencySamples: UInt32
+    private let frameSamples: UInt32
+    private let emit: (Data) -> Void
+    var onFirstRelease: ((UInt32) -> Void)?
+
+    private var packets: [UInt32: Data] = [:]
+    private var nextSample: UInt32?
+    private var latestSample: UInt32 = 0
+    private var timer: DispatchSourceTimer?
+    private var released = false
+    private var lastPushNs: UInt64 = DispatchTime.now().uptimeNanoseconds
+
+    package init(queue: DispatchQueue, latencyMs: Int, sampleRate: Int = 48000, frameSamples: UInt32 = 960,
+                 emit: @escaping (Data) -> Void) {
+        self.queue = queue
+        self.latencySamples = UInt32(max(1, sampleRate * latencyMs / 1000))
+        self.frameSamples = frameSamples
+        self.emit = emit
+    }
+
+    package func push(sample: UInt32, payload: Data) {
+        if let next = nextSample {
+            if Int32(bitPattern: sample &- next) < 0 { nextSample = sample }
+        } else {
+            nextSample = sample
+        }
+        if Int32(bitPattern: sample &- latestSample) > 0 { latestSample = sample }
+        packets[sample] = payload
+        lastPushNs = DispatchTime.now().uptimeNanoseconds
+        startTimer()
+    }
+
+    private func startTimer() {
+        guard timer == nil else { return }
+        let t = DispatchSource.makeTimerSource(queue: queue)
+        t.schedule(deadline: .now(), repeating: .milliseconds(10))
+        t.setEventHandler { [weak self] in self?.tick() }
+        t.resume()
+        timer = t
+    }
+
+    private func tick() {
+        guard var current = nextSample else { return }
+        // 有連續封包時等 latency 再放；串流停下來時把尾巴放完，不要在佇列裡留到逾時。
+        let idleNs = DispatchTime.now().uptimeNanoseconds &- lastPushNs
+        let target = idleNs > 100_000_000 ? latestSample : latestSample &- latencySamples
+        var iterations = 0
+        while Int32(bitPattern: target &- current) >= 0, iterations < 128 {
+            iterations += 1
+            if let packet = packets.removeValue(forKey: current) {
+                if !released {
+                    released = true
+                    onFirstRelease?(current)
+                }
+                emit(packet)
+                current = current &+ frameSamples
+            } else {
+                // 缺包：最多等 3 幀；超過就跳到下一個有資料的時間戳，避免整個流卡住。
+                let candidates = packets.keys.filter { Int32(bitPattern: $0 &- current) > 0 }
+                if let next = candidates.min(by: {
+                    Int32(bitPattern: $0 &- current) < Int32(bitPattern: $1 &- current)
+                }), Int32(bitPattern: next &- current) <= Int32(bitPattern: frameSamples * 3) {
+                    current = next
+                } else {
+                    current = current &+ frameSamples
+                }
+            }
+        }
+        nextSample = current
+    }
+
+    package func close() {
+        queue.async { [weak self] in
+            self?.timer?.cancel()
+            self?.timer = nil
+            self?.packets.removeAll()
+        }
+    }
+
+    /// TEARDOWN 時把 buffer 裡的尾巴全部按序送出，交給播放器 drain，不要丟掉。
+    package func flushAll() {
+        queue.sync {
+            self.timer?.cancel()
+            self.timer = nil
+            let keys = self.packets.keys.sorted()
+            for key in keys {
+                guard let packet = self.packets[key] else { continue }
+                if !self.released {
+                    self.released = true
+                    self.onFirstRelease?(key)
+                }
+                self.emit(packet)
+            }
+            self.packets.removeAll()
+        }
+    }
+}
+
 final class CarPlayAudioStream {
     struct Origin { let firstSample: UInt32; let atNs: UInt64 }
 
@@ -588,32 +700,69 @@ final class CarPlayAudioStream {
     private let queue: DispatchQueue
     private let decryptor: AudioStreamDecryptor
     private let player: CarPlayAudioPlayer?
+    private let jitter: OpusJitterBuffer?
     /// 手機要麥克風時（type 100 的 SETUP 帶 dataPort）由會話建立；流關閉時一起停
     private let mic: MicUplink?
     private let data: UDPSocket
     private let control: UDPSocket
     private var packets = 0, decrypted = 0, rejected = 0
     private var dumped = 0
+    /// 第一個下行包從哪個位址來：用來判斷手機的音訊走 IPv4 還是 IPv6，
+    /// 麥克風上行要跟著走同一個位址族。
+    private var loggedSource = false
     var onLog: ((String) -> Void)?
 
     var dataPort: UInt16 { data.port }
     var controlPort: UInt16 { control.port }
 
     init(type: Int, connectionID: NSNumber?, key: Data, codec: CarPlayAudioPlayer.Codec,
+         rtpClockRate: Int = 48000,
          latencyMs: Int, canPlay: Bool, mic: MicUplink? = nil) throws {
         self.type = type; self.connectionID = connectionID
         self.mic = mic
-        self.latencyMs = latencyMs; self.sampleRate = codec.rate; self.channels = codec.channels
+        self.latencyMs = (codec.isOpus && latencyMs <= 0) ? 60 : latencyMs
+        // sampleRate 給 /feedback 與日誌用；Opus 的 RTP 時鐘可能是 16/24/48k，
+        // 解碼器仍然輸出 48k（CarPlayAudioPlayer 的 codec.rate）。
+        self.sampleRate = codec.isOpus ? rtpClockRate : codec.rate
+        self.channels = codec.channels
         queue = DispatchQueue(label: "session.audio.\(type)")
         decryptor = AudioStreamDecryptor(key: key)
-        player = canPlay ? CarPlayAudioPlayer(codec: codec) : nil
+        let audioPlayer = canPlay ? CarPlayAudioPlayer(codec: codec) : nil
+        player = audioPlayer
         data = try UDPSocket(queue: queue, bufferBytes: 4096)
         control = try UDPSocket(queue: queue)
-        data.onDatagram = { [weak self] d, _, _ in self?.ingest(d) }
+        if let audioPlayer, codec.isOpus {
+            let buffer = OpusJitterBuffer(queue: queue, latencyMs: 60,
+                                          sampleRate: rtpClockRate,
+                                          frameSamples: UInt32(max(1, rtpClockRate / 50))) { payload in
+                audioPlayer.enqueue(payload: payload)
+            }
+            jitter = buffer
+            buffer.onFirstRelease = { [weak self] sample in
+                guard let self else { return }
+                self.origin = Origin(firstSample: sample, atNs: DispatchTime.now().uptimeNanoseconds)
+                self.onLog?("音频开始（\(self.sampleRate) Hz ×\(self.channels)，首采样 \(sample)，jitter 60ms）")
+            }
+        } else {
+            jitter = nil
+        }
+        data.onDatagram = { [weak self] d, host, port in
+            guard let self else { return }
+            if !self.loggedSource {
+                self.loggedSource = true
+                self.onLog?("音频来源 \(host):\(port)（type \(self.type)）")
+            }
+            self.ingest(d)
+        }
         // control 口只收不解析（RTCP/保活，照 MacPlay 直接排掉）
         player?.onLog = { [weak self] s in self?.onLog?(s) }
-        if let mic, mic.voiceProcessing {
+        if let mic {
+            // VPIO 成功時，下行要從麥克風引擎放（才有回聲參考）；VPIO 沒起來時
+            // playDownlink 回 false，播放器照舊用自己的引擎，SpeexDSP 只吃參考 PCM。
             player?.renderSink = { [weak mic] buf in mic?.playDownlink(buf) ?? false }
+            player?.referenceSink = { [weak mic] pcm in
+                mic?.feedReference(pcm, sampleRate: Double(codec.rate))
+            }
         }
     }
 
@@ -625,10 +774,16 @@ final class CarPlayAudioStream {
             return
         }
         decrypted += 1
-        if origin == nil {
-            origin = Origin(firstSample: sample, atNs: DispatchTime.now().uptimeNanoseconds)
-            if player != nil { onLog?("音频开始（\(sampleRate) Hz ×\(channels)，首采样 \(sample)）") }
-            else { onLog?("音频开始（type \(type)，此格式暂不出声）") }
+        if decrypted == 1 { mic?.flushPreRoll() }
+        if let jitter {
+            jitter.push(sample: sample, payload: Data(payload))
+        } else {
+            player?.enqueue(payload: Data(payload))
+            if origin == nil {
+                origin = Origin(firstSample: sample, atNs: DispatchTime.now().uptimeNanoseconds)
+                if player != nil { onLog?("音频开始（\(sampleRate) Hz ×\(channels)，首采样 \(sample)）") }
+                else { onLog?("音频开始（type \(type)，此格式暂不出声）") }
+            }
         }
         if ProcessInfo.processInfo.environment["HOMEPLAY_AUDIO_DUMP"] != nil, dumped < 50 {
             dumped += 1
@@ -639,7 +794,6 @@ final class CarPlayAudioStream {
                 fh.seekToEndOfFile(); fh.write(h); fh.write(Data(payload)); fh.closeFile()
             }
         }
-        player?.enqueue(payload: Data(payload))
         if decrypted % 2000 == 0 {
             onLog?("音频心跳：收到 \(packets)、解开 \(decrypted)（type \(type)，\(sampleRate) Hz）｜\(player?.snapshot ?? "无播放器")")
         }
@@ -648,25 +802,50 @@ final class CarPlayAudioStream {
     /// 導航／Siri 插話時壓低媒體流（只有 102 會被呼叫）
     func duck(_ volume: Float, over seconds: Double) { player?.ramp(to: volume, over: seconds) }
 
-    func close() {
-        mic?.stop()
+    func close(drain: Bool = true) {
         data.onDatagram = nil
         data.close(); control.close()
-        player?.stop()
+        if drain { jitter?.flushAll() } else { jitter?.close() }
+        if let mic, mic.isPrewarm {
+            // 會話級預熱引擎：停上行、保留 VPIO/播放器。TTS 尾巴可以繼續播，
+            // 下一條 speechRecognition 直接在同一個引擎上 configure。
+            mic.stopUplink()
+            if mic.downlinkRendersThroughMic {
+                player?.stop()
+            } else if drain, let player, player.queuedSeconds > 0.02 {
+                // VPIO 沒起來時，出聲的是 CarPlayAudioPlayer；它也要先把 TTS 尾巴播完。
+                player.stopAfterDrain(player.queuedSeconds)
+            } else {
+                player?.stop()
+            }
+            return
+        }
+        let queued = max(player?.queuedSeconds ?? 0, mic?.downlinkQueuedSeconds ?? 0)
+        if drain, queued > 0.02 {
+            // 系統 Siri 的 _ttsQueueDidEmpty / delaySessionEndForTTS：
+            // TTS 還沒播完就不要把音訊引擎拆掉。
+            onLog?("TTS 队列还有 \(String(format: "%.2f", queued)) 秒，等播完再收（系统 Siri 行为）")
+            mic?.stopAfterDrain(queued)
+            player?.stopAfterDrain(queued)
+        } else {
+            mic?.stop()
+            player?.stop()
+        }
     }
 }
 
 /// SETUP 请求里的 audioFormat 位 → 用什么解码。无线媒体是 AAC-LC（0x400000=44.1k / 0x800000=48k 立体声）；
-/// Opus 是导航/ Siri 的低延迟单声道（位 0x10000000..0x40000000），PCM 只出现在有线。
-/// 返回 canPlay=false 表示这路先只占位不解（Opus 还没接解码器）。
+/// Opus 是导航/ Siri/ 电话的低延迟单声道。**Opus 下行固定 48k**（MacPlay cpStack：
+/// `clockRate: isOpus ? 48000 : sampleRate`）；0x10000000/0x20000000/0x40000000 是
+/// **麦克风上行**的编码率（16/24/48k），不是下行采样率。把下行也按 24k/16k 解会让 Siri/
+/// 对方的声音变慢、变调，/feedback 的播放时钟也会报错。
+/// PCM 只出现在有线。
 package func audioCodec(fromFormat fmt: Int) -> (codec: CarPlayAudioPlayer.Codec, canPlay: Bool) {
     let pcmTable: [Int: (Int, Int)] = [
         0x4: (8000, 1), 0x8: (8000, 2), 0x10: (16000, 1), 0x20: (16000, 2),
         0x40: (24000, 1), 0x80: (24000, 2), 0x100: (32000, 1), 0x200: (32000, 2),
         0x400: (44100, 1), 0x800: (44100, 2), 0x4000: (48000, 1), 0x8000: (48000, 2)]
-    if fmt & 0x40000000 != 0 { return (.opus(rate: 48000, channels: 1), true) }
-    if fmt & 0x20000000 != 0 { return (.opus(rate: 24000, channels: 1), true) }
-    if fmt & 0x10000000 != 0 { return (.opus(rate: 16000, channels: 1), true) }
+    if fmt & 0x70000000 != 0 { return (.opus(rate: 48000, channels: 1), true) }
     if fmt & 0x800000 != 0 { return (.aacLc(rate: 48000, channels: 2), true) }
     if fmt & 0x400000 != 0 { return (.aacLc(rate: 44100, channels: 2), true) }
     if let (rate, channels) = pcmTable[fmt] { return (.pcmBe(rate: rate, channels: channels), true) }

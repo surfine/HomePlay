@@ -303,6 +303,17 @@ struct CarPlayPane: View {
                     RowLabel(title: L("settings.carVideo", "在 CarPlay 播放视频"), subtitle: L("settings.carVideo.sub", "Mac 不会移动，视为一直停着"))
                 }
                 LabeledContent {
+                    Picker("", selection: Binding(get: { m.callGain }, set: { m.setCallGain($0) })) {
+                        ForEach([0.0, 3, 6, 9, 12, 15], id: \.self) { db in
+                            Text(String(format: "+%d dB", Int(db))).tag(db)
+                        }
+                    }
+                    .pickerStyle(.menu).labelsHidden().fixedSize()
+                } label: {
+                    RowLabel(title: L("settings.callVolume", "通话音量"),
+                             subtitle: L("settings.callVolume.sub", "与媒体音量分开；默认 +6 dB"))
+                }
+                LabeledContent {
                     Picker("", selection: Binding(get: { m.cornerStyle }, set: { v in
                         ConcentricCorners.style = v
                         m.refresh()

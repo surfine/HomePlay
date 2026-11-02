@@ -9,8 +9,8 @@ export const github = 'https://github.com/surfine/HomePlay';
 export const notice = `${github}/blob/main/NOTICE`;
 // 固定檔名 + releases/latest/download：以後出新版，官網的下載按鈕不用跟著改。
 export const releaseDownload = `${github}/releases/latest/download/HomePlay-macOS-arm64.zip`;
-// 2.0 測試版：pre-release 不算 latest，所以寫明 tag 與檔名；出 beta 3 時改這一行
-export const betaDownload = `${github}/releases/download/v2.0.0-beta.3/HomePlay-2.0-beta3-macOS-arm64.zip`;
+// 2.0 測試版：pre-release 不算 latest，所以寫明 tag 與檔名；出新 beta 時改這兩行
+export const betaDownload = `${github}/releases/download/v2.0.0-beta.4/HomePlay-2.0-beta4-macOS-arm64.zip`;
 
 const FACES = ['idle', 'happy', 'love', 'wink', 'thinking', 'annoyed', 'surprised', 'worried', 'sleepy', 'asleep'];
 const FINISHES = ['g4', 'silver', 'starlight', 'rose', 'gray'];
@@ -70,8 +70,8 @@ export const copy = {
     lede: "HomePlay 是 Mac 上的開源桌寵，長得像 HomeView。平常，它用一雙眼睛看著你；用力按一下螢幕，它就變成 iPhone 的 CarPlay。",
     viewSource: "看原始碼",
     download: "下載 App",
-    downloadNote: "v1.0.5，macOS 14 以上，Apple 晶片。有 Developer ID 簽名、通過 Apple 公證，解壓就能打開。",
-    heroNote: "v1.0.5 · macOS 14+ · Apple 晶片 · 已公證",
+    downloadNote: "v1.0.6，macOS 14 以上，Apple 晶片。有 Developer ID 簽名、通過 Apple 公證，解壓就能打開。",
+    heroNote: "v1.0.6 · macOS 14+ · Apple 晶片 · 已公證",
     heroLabel: "HomePlay 桌寵，目前的表情：{face}",
     faceNames: {
       idle: "平常",
@@ -379,9 +379,9 @@ export const copy = {
     moreTitle: "還有更多。",
     more20Eyebrow: "2.0 Preview",
     more20Title: "整套 HomeView，放上你的 Mac。",
-    more20Body: "主畫面和小工具、十一款錶面、十六個 App，還有會等你開口的助手 ClioTalk，也能認出家裡每個人。現在是 beta 3，<span class=\"nb\">免費下載。</span>",
+    more20Body: "主畫面和小工具、十一款錶面、十六個 App，還有會等你開口的助手 ClioTalk，也能認出家裡每個人。現在是 beta 4，<span class=\"nb\">免費下載。</span>",
     more20Link: "看 2.0 Preview",
-    more20Beta: "下載 2.0 beta 3",
+    more20Beta: "下載 2.0 beta 4",
     moreHistEyebrow: "長文",
     moreHistTitle: "小工具往事。",
     moreHistBody: "從 1984 年蘋果選單裡的計算機，講到今天的即時動態。六章，每章一件可以動手玩的展品；每個事實<span class=\"nb\">都有出處。</span>",
@@ -433,8 +433,8 @@ export const copy = {
     lede: "HomePlay 是 Mac 上的开源桌宠，长得像 HomeView。平时，它用一双眼睛看着你；用力按一下屏幕，它就变成 iPhone 的 CarPlay。",
     viewSource: "看源代码",
     download: "下载 App",
-    downloadNote: "v1.0.5，macOS 14 及以上，Apple 芯片。有 Developer ID 签名、通过 Apple 公证，解压就能打开。",
-    heroNote: "v1.0.5 · macOS 14+ · Apple 芯片 · 已公证",
+    downloadNote: "v1.0.6，macOS 14 及以上，Apple 芯片。有 Developer ID 签名、通过 Apple 公证，解压就能打开。",
+    heroNote: "v1.0.6 · macOS 14+ · Apple 芯片 · 已公证",
     heroLabel: "HomePlay 桌宠，当前的表情：{face}",
     faceNames: {
       idle: "平常",
@@ -742,9 +742,9 @@ export const copy = {
     moreTitle: "还有更多。",
     more20Eyebrow: "2.0 Preview",
     more20Title: "整套 HomeView，放上你的 Mac。",
-    more20Body: "主屏幕和小组件、十一款表盘、十六个 App，还有会等你开口的助手 ClioTalk，也能认出家里每个人。现在是 beta 3，<span class=\"nb\">免费下载。</span>",
+    more20Body: "主屏幕和小组件、十一款表盘、十六个 App，还有会等你开口的助手 ClioTalk，也能认出家里每个人。现在是 beta 4，<span class=\"nb\">免费下载。</span>",
     more20Link: "看 2.0 Preview",
-    more20Beta: "下载 2.0 beta 3",
+    more20Beta: "下载 2.0 beta 4",
     moreHistEyebrow: "长文",
     moreHistTitle: "小工具往事。",
     moreHistBody: "从 1984 年苹果菜单里的计算机，讲到今天的实时活动。六章，每章一件可以动手玩的展品；每个事实<span class=\"nb\">都有出处。</span>",
@@ -796,8 +796,8 @@ export const copy = {
     lede: "HomePlay is an open-source desk pet for the Mac that looks like HomeView. Most of the time it watches you with a pair of eyes. Press the screen firmly, and it becomes your iPhone’s CarPlay.",
     viewSource: "View source",
     download: "Download the app",
-    downloadNote: "v1.0.5, macOS 14 or later, Apple silicon. Signed with a Developer ID and notarized by Apple, so you can unzip it and open it.",
-    heroNote: "v1.0.5 · macOS 14+ · Apple silicon · Notarized",
+    downloadNote: "v1.0.6, macOS 14 or later, Apple silicon. Signed with a Developer ID and notarized by Apple, so you can unzip it and open it.",
+    heroNote: "v1.0.6 · macOS 14+ · Apple silicon · Notarized",
     heroLabel: "HomePlay desk pet, current expression: {face}",
     faceNames: {
       idle: "Idle",
@@ -1105,9 +1105,9 @@ export const copy = {
     moreTitle: "There’s more.",
     more20Eyebrow: "2.0 Preview",
     more20Title: "The whole HomeView, on your Mac.",
-    more20Body: "A home screen with widgets, eleven faces, sixteen apps, and ClioTalk, an assistant that waits for you to ask. It recognizes each person in the house too. Now in beta 3, free to download.",
+    more20Body: "A home screen with widgets, eleven faces, sixteen apps, and ClioTalk, an assistant that waits for you to ask. It recognizes each person in the house too. Now in beta 4, free to download.",
     more20Link: "See the 2.0 Preview",
-    more20Beta: "Download 2.0 beta 3",
+    more20Beta: "Download 2.0 beta 4",
     moreHistEyebrow: "Long read",
     moreHistTitle: "A history of widgets.",
     moreHistBody: "From the Calculator in the 1984 Apple menu to today’s Live Activities. Six chapters, one playable exhibit each, and a source for every fact.",
