@@ -291,11 +291,22 @@ ControlCipher 封幀、nonce 對照 ScreenStream 向量、32B 頭、篡改／長
   連娛樂流（102/AAC）都不 SETUP，音樂只在手機出聲。宣告 Opus 後手機立刻下
   `SETUP 音訊 102（media，AAC-LC 48000×2）`，心跳 `received/decoded` 與 `played` 持續增長，
   聲音從 Mac 目前輸出裝置（內建揚聲器）出來。
-  **Opus 低延遲流（導航/Siri/電話）**：CoreAudio 自帶 Opus 編解碼（`AudioConverter`），
-  下行 Opus 已解碼出聲；麥克風上行也已接通——手機為 type 100 的 SETUP 帶 `dataPort` 時，
-  接收器抓 Mac 輸入裝置 → 重採樣到協商的 Opus 率（16/24/48k）→ 20ms 幀編碼 →
+  **Opus 低延遲流（導航/Siri/電話）**：CoreAudio 的 `AudioConverter` 對裸 Opus 包解出來是全 0
+  （真機驗證），所以下行改用 libopus（`Sources/Session/OpusCodec.swift`）。麥克風上行也已接通——
+  手機為 type 100 的 SETUP 帶 `dataPort` 時，接收器抓 Mac 輸入裝置 → 重採樣到協商的 Opus 率
+  （16/24/48k，RTP 時鐘依 fmt 的 0x10000000/0x20000000/0x40000000 位）→ 20ms 幀編碼 →
   照 MacPlay `mic/src/lib.rs` 封 RTP（12B 頭、PT=100、SSRC=0）+ ChaCha20-Poly1305
   （AAD=header[4..12]，nonce=4 零字節+8B 小端計數）→ UDP 發到手機的資料口。
+  **回音消除（2026-11-02 真機）**：電話與 Siri 的 100 流會開 AVAudioEngine 的語音處理
+  （VPIO：回音消除＋降噪）。VPIO 的回聲參考是同一台引擎的輸出，所以下行要先接好
+  `player → DynamicsProcessor → PeakLimiter → mainMixer → outputNode`（立體聲 client 格式），
+  再開 input/output 的 voice processing；**不能在 `setVoiceProcessingEnabled` 之前呼叫
+  `engine.prepare()`**（會回 -10849），播放圖反過來接則會回 -10875。照這個順序，Studio Display
+  這種麥克風與揚聲器是兩個 CoreAudio device、輸出又是 8 聲道的組合也能起來。
+  真的起不來時（裝置對無法合成、藍牙/AirPlay 切換）會退到 SpeexDSP 的參考訊號 AEC
+  （16 kHz，300 ms 濾波器），再不行才用原始麥克風；日誌會明說現在是哪一種。
+  通話音量可在設定 › CarPlay 單獨調整（`CallAudioSettings`，預設 +6 dB，接在
+  DynamicsProcessor 的 OverallGain，後面由 PeakLimiter 防破音）。
   Siri 可用 `{"type":"siri"}`（requestSiri buttonDown/Up）從桌寵/腳本觸發，說「Hey Siri」也行；
   桌寵選單「叫 Siri（F5）」與全域 F5 都會發這條。全域 F5/捏合縮放需要「輸入監控」權限
   （系統設定 › 隱私與安全性 › 輸入監控 勾上 HomePlay）——沒有權限時先點一下桌寵再捏也能縮放。

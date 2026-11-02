@@ -70,20 +70,68 @@ func runAudioTests() -> Int {
     expect(adtsHeader(frameLength: 557, rate: 48000, channels: 2) == [0xff, 0xf1, 0x4c, 0x80, 0x46, 0x9f, 0xfc],
            "ADTS header 48k stereo len 564")
 
-    // audioFormat 位选解码器（无线媒体 AAC-LC，48k / 44.1k；Opus 占位；PCM 直解）
+    // audioFormat 位选解码器（无线媒体 AAC-LC，48k / 44.1k；Opus 下行固定 48k；PCM 直解）
     do {
         let a48 = audioCodec(fromFormat: 0x800000)
         expect(a48.canPlay && a48.codec.rate == 48000 && a48.codec.channels == 2, "AAC-LC 48k stereo chosen for 0x800000")
         let a44 = audioCodec(fromFormat: 0x400000)
         expect(a44.canPlay && a44.codec.rate == 44100, "AAC-LC 44.1k chosen for 0x400000")
-        // Opus 用 CoreAudio 自帶的解碼器（Siri/導航/電話的低延遲流）
+        // Opus 用 CoreAudio 自帶的解碼器（Siri/導航/電話的低延遲流）。
+        // 下行固定 48k；0x10000000/0x20000000/0x40000000 是麥克風上行率（MacPlay cpStack）。
         let opus24 = audioCodec(fromFormat: 0x20000000)
-        expect(opus24.canPlay && opus24.codec.isOpus && opus24.codec.rate == 24000 && opus24.codec.channels == 1,
-               "Opus 24k mono playable via CoreAudio")
+        expect(opus24.canPlay && opus24.codec.isOpus && opus24.codec.rate == 48000 && opus24.codec.channels == 1,
+               "Opus downlink stays 48k when the mic rate is 24k")
+        let opus16 = audioCodec(fromFormat: 0x10000000)
+        expect(opus16.canPlay && opus16.codec.isOpus && opus16.codec.rate == 48000,
+               "Opus downlink stays 48k when the mic rate is 16k")
         let opus48 = audioCodec(fromFormat: 0x40000000)
         expect(opus48.canPlay && opus48.codec.isOpus && opus48.codec.rate == 48000, "Opus 48k playable")
         let pcm = audioCodec(fromFormat: 0x8000)
         expect(pcm.canPlay && pcm.codec.rate == 48000 && pcm.codec.channels == 2 && !pcm.codec.isAAC, "PCM 48k stereo passes through")
+
+        // libopus 往返：CoreAudio 的 AudioConverter 对裸 Opus 解出来是全 0（真机验证），
+        // 所以下行必须走 libopus。編一幀 440Hz 正弦再解回来，確認不是靜音。
+        if let enc = OpusEncoder(sampleRate: 24000, channels: 1, bitrate: 48000, frameMs: 20),
+           let dec = OpusDecoder(sampleRate: 24000, channels: 1) {
+            var tone = [Float](repeating: 0, count: 480)
+            for i in 0..<tone.count {
+                tone[i] = 0.5 * sin(2 * .pi * 440 * Float(i) / 24000)
+            }
+            let packet = enc.encode(tone)
+            let decoded = dec.decode(packet)
+            let rms = (decoded.reduce(0.0) { $0 + Double($1 * $1) } / Double(max(1, decoded.count))).squareRoot()
+            expect(!packet.isEmpty && decoded.count > 0 && rms > 0.01,
+                   "libopus round-trip encodes and decodes a 440Hz tone")
+        } else {
+            expect(false, "libopus encoder/decoder can be created")
+        }
+
+        // Opus jitter buffer（對應 MacPlay rtpjitterbuffer）：亂序送 3 包，應按時間戳播出。
+        do {
+            let q = DispatchQueue(label: "test.jitter")
+            let lock = NSLock()
+            var out: [UInt8] = []
+            let jb = OpusJitterBuffer(queue: q, latencyMs: 20) { data in
+                lock.lock(); out.append(data[0]); lock.unlock()
+            }
+            jb.push(sample: 960, payload: Data([1]))
+            jb.push(sample: 0, payload: Data([0]))
+            jb.push(sample: 1920, payload: Data([2]))
+            Thread.sleep(forTimeInterval: 0.2)
+            lock.lock(); let order = out; lock.unlock()
+            expect(order == [0, 1, 2], "jitter buffer reorders packets by RTP timestamp")
+            jb.close()
+        }
+
+        // SpeexDSP 回聲消除：App 的電話/Siri 上行用它；先確認 C 橋接與 20ms 幀能跑。
+        if let aec = EchoCanceller(sampleRate: 16000, frameMs: 20, filterMs: 100) {
+            let frame = [Int16](repeating: 0, count: 320)
+            aec.playback(frame)
+            let out = aec.capture(frame)
+            expect(out.count == 320, "SpeexDSP AEC processes a 20ms frame")
+        } else {
+            expect(false, "SpeexDSP AEC can be created")
+        }
 
         // 麦克风上行包（对照 MacPlay mic/src/lib.rs）：0x80、PT、seq/timestamp 大端、SSRC=0、
         // 密文+tag、小端 nonce 尾 8 字节；AAD=header[4..12]。

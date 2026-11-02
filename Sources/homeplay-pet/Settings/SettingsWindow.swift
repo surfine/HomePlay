@@ -15,6 +15,7 @@ final class SettingsModel: ObservableObject {
     @Published var loginAvailable = false
     @Published var autoConnect = false
     @Published var carVideo = CarVideoSetting.allowed
+    @Published var callGain = 6.0
     @Published var cornerStyle = ConcentricCorners.style
     @Published var cornerInset = ConcentricCorners.appliedInset
     @Published var alwaysOnTop = true
@@ -53,6 +54,7 @@ final class SettingsModel: ObservableObject {
         loginItem = s.loginItem; loginAvailable = s.loginAvailable
         autoConnect = s.autoConnect; alwaysOnTop = s.alwaysOnTop
         carVideo = CarVideoSetting.allowed
+        callGain = (UserDefaults.standard.object(forKey: "HomePlayCallGainDb") as? Double) ?? 6
         cornerStyle = ConcentricCorners.style
         cornerInset = ConcentricCorners.appliedInset
         language = PetLanguage.chosen?.rawValue ?? "system"
@@ -64,6 +66,13 @@ final class SettingsModel: ObservableObject {
         var p: [PermissionKind: PermissionStatus] = [:]
         for k in PermissionKind.allCases { p[k] = PermissionCenter.status(k) }
         permissions = p
+    }
+
+    /// 通话音量：和媒体分开，存 UserDefaults 并即时送给接收器。
+    func setCallGain(_ db: Double) {
+        callGain = db
+        UserDefaults.standard.set(db, forKey: "HomePlayCallGainDb")
+        app?.sendCallGain(db)
     }
 
     /// 走菜单同一条路（PetView 的 @objc 动作），之后刷新

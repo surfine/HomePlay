@@ -23,6 +23,19 @@ Authentication material:
   supply your own identity.pk8 + certificate.p7b; its origin and legality are the
   user's responsibility. Tools never print identity contents.
 
+Bundled libopus headers: Sources/COpus/include/opus.h, opus_defines.h and opus_types.h
+  are from libopus 1.6.1, Copyright (c) Xiph.Org Foundation and contributors,
+  BSD-3-Clause. The build links libopus (brew install opus); the library is not
+  modified. CarPlay's Opus downlink is decoded with libopus because CoreAudio's
+  AudioConverter returns silence for raw Opus packets on macOS 27.
+
+Bundled SpeexDSP headers: Sources/CSpeex/include/speex_echo.h and its type headers
+  are from SpeexDSP 1.2.1, Copyright (c) 2002-2008 Jean-Marc Valin, Copyright (c)
+  2003-2008 Commonwealth Scientific and Industrial Research Organisation (CSIRO),
+  and Xiph.Org Foundation contributors, BSD-3-Clause. The build links libspeexdsp
+  (brew install speexdsp); the library is not modified. It provides the fallback
+  acoustic echo canceller when AVAudioEngine voice processing cannot initialize.
+
 Bundled font: ChicagoFLF (Sources/homeplay-pet/Resources/Fonts/ChicagoFLF.ttf), a
   recreation of Susan Kare's Chicago by Robin Casady. Its license field states:
   "I created ChicagoFLF and CheckboxFLF. You are free to use them as you wish. I

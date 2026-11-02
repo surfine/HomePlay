@@ -628,10 +628,27 @@ enum Wireless {
     /// 桌寵的 Siri 鍵與電話鍵。`{"type":"siri"}` 是按一下；帶 `"action":"down"/"up"` 是按住說話。
     /// `{"type":"telephony","command":"answer"|"decline"|"hangup"}` → 電話 HID（hookSwitch／drop）。
     static func phoneControl(_ text: String, session s: CarPlaySession) {
+        if text.contains("\"type\":\"audio\"") {
+            if let data = text.data(using: .utf8),
+               let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+               obj["command"] as? String == "callGain",
+               let db = (obj["db"] as? NSNumber)?.floatValue {
+                CallAudioSettings.setGain(db)
+                note("通话音量 \(db) dB")
+            }
+            return
+        }
         if text.contains("\"type\":\"siri\"") {
             let action = SiriAction.parse(text)
             note("触发 Siri（requestSiri \(action)）")
             s.requestSiri(action)
+        }
+        if text.contains("\"type\":\"knob\"") {
+            if text.contains("\"command\":\"back\"") {
+                note("桌宠 Esc → CarPlay 返回（旋钮 back）")
+                s.sendKnob(KnobState(back: true))
+            }
+            return
         }
         if let b = HID.telephonyButton(forPetMessage: text) {
             note("桌宠电话键 → HID \(b)")
