@@ -4291,50 +4291,6 @@
         }
       }
     },
-    "status.overlay.slow": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Unlock iPhone, check Bluetooth, and use the same Wi-Fi as this Mac"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "确认 iPhone 已解锁、蓝牙已开、和这台 Mac 在同一 Wi-Fi"
-          }
-        },
-        "zh-Hant": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "確認 iPhone 已解鎖、藍牙已開、和這台 Mac 在同一 Wi-Fi"
-          }
-        }
-      }
-    },
-    "status.overlay.slowNamed": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Can’t reach “%@”? Unlock it, check Bluetooth and the same Wi-Fi"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "连不上「%@」？确认 iPhone 已解锁、蓝牙已开、同一 Wi-Fi"
-          }
-        },
-        "zh-Hant": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "連不上「%@」？確認 iPhone 已解鎖、藍牙已開、同一 Wi-Fi"
-          }
-        }
-      }
-    },
     "status.overlay.switchHint": {
       "localizations": {
         "en": {
@@ -10359,28 +10315,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "解鎖 iPhone，CarPlay 提示出現時點「連接」"
-          }
-        }
-      }
-    },
-    "status.help.consent.chip": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "No prompt? Settings › General › CarPlay"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "没看到提示？设置 › 通用 › CarPlay"
-          }
-        },
-        "zh-Hant": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "沒看到提示？設定 › 一般 › CarPlay"
           }
         }
       }

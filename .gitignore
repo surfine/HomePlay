@@ -21,3 +21,6 @@ Helpers/HomeBridge/*.xcodeproj/
 Helpers/HomeBridge/build/
 Helpers/HomeBridge/Src/Info.plist
 Helpers/HomeBridge/Src/*.entitlements
+promo/2.0-beta1/en/
+promo/2.0-beta1/zh/
+promo/2.0-beta1/preview-*.jpg

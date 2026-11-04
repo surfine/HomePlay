@@ -54,7 +54,8 @@ MacPlay（同類接收器，Rust）的效能相關條目集中在連線韌性與
 
 ## 還沒做、可再往下挖（2026-11-04 核對）
 
-- ~~臉部靜態層快取（壁紙＋玻璃底）只重畫眼睛與文字，可再省一半。~~ **已做**：pocket 靜態層（`Faces/PocketFace.swift`）、island 文字層（`IslandOptions.swift`）、2026 島背景＋數字層（`Faces/IslandFace.swift`）。其餘八款錶面仍整幅重畫，要再省可補同款靜態層（機制已驗證，收益待測）。
+- ~~臉部靜態層快取（壁紙＋玻璃底）只重畫眼睛與文字，可再省一半。~~ **已做**：pocket 靜態層（`Faces/PocketFace.swift`）、island 文字層（`IslandOptions.swift`）、2026 島背景＋數字層（`Faces/IslandFace.swift`）、calendar 月曆格＋大數字（`Faces/CalendarFace.swift`，分鐘粒度）。
+- ~~其餘錶面補同款靜態層。~~ **2026-11-04 analog（Typograph）試點實測為負收益，已回滾**：同條件 `--bench`（512²、閒置）直接畫 faceMs≈2.1–2.9 ms，換成靜態層（98% 快取命中）反而 4.3–7.3 ms——analog 的「靜態」只有純色底＋五條字形路徑＋一行日期，本來就便宜；每次渲染多付一張 512² 圖像合成（drawUpright＋高插值）比直接畫更貴。pocket/calendar 有收益是因為靜態部分是多層玻璃＋高斯模糊＋月曆網格。**結論：靜態層只對「靜態部分貴」的錶面值得，推廣前逐款估靜態部分成本**（weather 有多層玻璃可候選；modular/flow 有秒級動畫本就要整幅重畫）。
 - 直播時若來源 60 fps 而顯示器 60 Hz，可考慮把渲染與解碼對齊（目前已是直通）。
 - ~~`maxrss` 仍含 SceneKit／Metal 著色器與紋理；進一步可把未使用的錶面貼圖改成按需生成。~~ **大半過時**：現在只有當前 `--style` 會 render（`Face.swift` 的 render switch），不用的錶面根本不畫。
 
