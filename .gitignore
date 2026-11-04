@@ -4,6 +4,18 @@
 .DS_Store
 dist/
 
+# agent 任務狀態／工作區筆記
+.statem/
+.jspace/
+.claude/
+.zcode/
+
+# 宣傳片工程的可再生產物：依賴、渲染輸出、中間素材（源碼 src/、scripts/、配置入庫）
+promo/node_modules/
+promo/out/
+promo/rebuild-*/
+promo/onetake/
+
 # HomePlay Home 幫手：xcodegen 產生
 Helpers/HomeBridge/*.xcodeproj/
 Helpers/HomeBridge/build/

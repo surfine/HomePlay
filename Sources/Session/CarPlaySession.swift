@@ -34,6 +34,9 @@ final class ControlCipherSealer: MessageSealer {
 
 package final class CarPlaySession {
     package private(set) var config: CarPlaySessionConfig
+    /// F1/在场信号：手机此刻是否已通过 pair-verify（live 连接且已加密）。
+    /// 只读投影，不发事件；HomePlay 接收器轮询或回调后对外广播。
+    package var phoneAuthenticated: Bool { live?.authenticated ?? false }
     /// 自动匹配/重按发现手机后回填地址（CtrlProbe 每次探测时读 config）
     package func setPhoneBluetoothAddress(_ address: String) {
         config.phoneBluetoothAddress = address

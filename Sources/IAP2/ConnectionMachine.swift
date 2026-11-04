@@ -826,7 +826,6 @@ package struct ConnectionMachine: Sendable {
 
     // MARK: - 小工具
 
-    private func isPaired(_ address: String) -> Bool { env.paired.contains { Self.norm($0) == address } }
     private func isNearby(_ address: String) -> Bool { env.nearby.contains { Self.norm($0) == address } }
     package static func norm(_ address: String) -> String { PairingRules.normalize(address) }
 }

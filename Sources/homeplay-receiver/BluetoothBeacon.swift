@@ -3,6 +3,7 @@
 // 类设备值只维持 120 秒，系统会自动恢复；我们在 60 秒时续一次。SDP 记录标成非持久，进程退出即消失。
 import Foundation
 import IOBluetooth
+import IOKit
 
 final class BluetoothBeacon: NSObject {
     var log: ((String) -> Void)?

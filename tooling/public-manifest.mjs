@@ -34,7 +34,19 @@ export const excludePaths = [
   { path: "docs/plan.md", reason: "內部計畫與授權決定紀錄，含本機路徑與身份相關定案" },
   { path: "docs/publishing.md", reason: "發布流程與私有倉庫的內容說明，屬內部營運文件" },
   { path: "docs/handoff-audio.md", reason: "內部交接文件（音訊攻堅紀錄）" },
+  { path: "docs/reference/", reason: "Apple 原始 PDF（CarPlay 開發者指南、開發者計畫協議）供內部查證引用；版權屬 Apple，不進公開倉庫，單檔也超過公開單檔上限" },
+  { path: "docs/homeview-day-one-developers.md", reason: "內部查證筆記，引用 docs/reference/ 的 Apple 原文與內部快照規則；公開版研究筆記另見 docs/homeview-study.md" },
+  { path: "docs/homeview-third-party-and-design-notes.md", reason: "內部研發判讀：引用 v2 檔案行號、合規矩陣缺口與未公開的下一步排序" },
+  { path: "docs/iphone-continuity-feasibility.md", reason: "私有 API 可行性研究與本機取證，含 Apple 未公開的類名與 Mach service 名" },
+  { path: "docs/homeview-platform.md", reason: "HomeView 研究統合版：引用 docs/reference/ 的 Apple 原文、私有 API 與接收器協定細節、v1／v2 檔案行號與本機實測" },
   { path: "docs/history-2026-10-17.md", reason: "內部開發日誌，含身份取得過程與本機環境" },
+  { path: "docs/branch-archive-2026-11-02.md", reason: "分支清理的內部存檔：引用本機 .git 備份索引與未落地的 WIP 設計，屬內部研發紀錄" },
+  { path: "docs/first-pair-flow.md", reason: "首次配對流程的內部筆記，含配對狀態機與除錯步驟" },
+  { path: "docs/first-pair-test.md", reason: "首次配對的測試紀錄，含實機與時序觀察" },
+  { path: "Helpers/HomeBridge/", reason: "HomeKit 小幫手：靠開發者簽章（team DQ45KFVHJ8）與描述檔才能執行，本來就無法包進公開的公證版 App；原始碼暫不進公開快照" },
+  { path: "docs/hellogithub-submission.md", reason: "對外投稿的文案與策略，含審核風險判讀與身份段落的取捨，不隨原始碼公開" },
+  { path: "docs/plans/", reason: "內部規劃與合規矩陣（CarPlay Ultra 規劃、2.0 逐句合規、HPDS 設計系統），含未公開的下一步排序" },
+  { path: "promo/", reason: "宣傳片 Remotion 工程與素材（企劃見 docs/promo/ 同屬內部）；渲染產物可再生，不入公開倉庫" },
   { path: "site/dist/", reason: "建置產物" },
   { path: "site/.wrangler/", reason: "wrangler 本地快取（wrangler-account.json 含帳號信箱，曾誤提交過一次）" },
   { path: "site/node_modules/", reason: "依賴" },
@@ -81,5 +93,5 @@ export const forbiddenContentPatterns = [
   { name: "個人信箱", re: /[A-Za-z0-9._%+-]+@(gmail|icloud|me|outlook|hotmail|qq|163)\.com/i },
 ];
 
-/** 單檔大小上限（位元組）。超過的多半是誤收的影片或建置產物。 */
-export const maxFileBytes = 5 * 1024 * 1024;
+/** 單檔大小上限（位元組）。超過的多半是誤收的影片或建置產物；10MB 放行官網的 44s 演示片（8.4MB，f013cfc）。 */
+export const maxFileBytes = 10 * 1024 * 1024;

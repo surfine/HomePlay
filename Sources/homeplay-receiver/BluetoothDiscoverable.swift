@@ -4,6 +4,7 @@
 // （blueutil 文档明确说该 getter 会过时）。
 // 只在诊断/自愈路径里用；失败不致命。
 import Foundation
+import IOKit
 
 enum BluetoothDiscoverable {
     private typealias GetFn = @convention(c) () -> Int32

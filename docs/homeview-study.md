@@ -26,7 +26,7 @@
 - 頁面功能：Real 和 Drawing（線稿）兩種畫法、四個預設視角、自動導覽、聲音。
 - 拆解時，屏幕各層沿著視線往前疊開，底座各層上下拉開，和我們的做法一致。
 
-## 據此做的改動（`Sources/homeplay-pet/main.swift`）
+## 據此做的改動（`Sources/homeplay-pet/`：模型在 `HomeViewModel.swift`、屏幕幾何在 `Faces/ScreenGeometry.swift`）
 
 | 項目 | 之前 | 現在 |
 |---|---|---|
@@ -74,9 +74,9 @@ USDZ 用 Model I/O 解析節點樹、SceneKit 正交渲染四視圖後量測（�
 - 顏色：銀、星光、玫瑰粉、太空灰（G4 白是我們的致敬彩蛋，真機沒有）
 - 其他：500→0.3 nits、接近感應給更多資訊、12MP Center Stage ƒ/2.4、四麥克風、底座下射低音＋雙被動輻射器
 
-### 據此改的（main.swift / Wireless.swift / NowPlaying.swift）
+### 據此改的（`Wireless.swift` 會話宣告／`PetDisplay.swift` 屏幕幾何／`NowPlaying.swift`）
 
 - 接收器：流 1200→**1088**（真機分辨率）、物理尺寸 155→**125 mm**（＝220 ppi）
 - 屏幕平面：13.4／圓角 1.6 → **13.15／1.475**（邊框 0.875＝真機 0.84 按我們面板換算；同心家族不變）
-- 玻璃邊暗角層幾何同步 13.15／1.475
+- 玻璃邊暗角層幾何同步 13.15／1.475（該層已於 2026-10-19 隨 d1b2b75 拆除）
 - 新增媒體控制：「正在播放」膠囊點一下＝播放／暫停、在膠囊上滾＝上一首／下一首（AppleScript，控正在顯示的那家）

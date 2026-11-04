@@ -72,7 +72,7 @@ CarPlay 新類別（EV 充電、停車、快速點餐）與數位車鑰匙的導
 | 觀察熱狀態／低電量，主動降載 | WWDC25 216 | **已落地**：serious/low-power 降到 30/8 fps；critical 降到 6 fps，並暫停 Flow 氛圍動畫 |
 | HEVC UI 串流（保留 H.264 相容） | WWDC23 10150 | **真機驗證通過（v0.3.0）**：根因是 `/info` 宣告了 `hevcInfo`，但會話 SETUP 的 `enabledFeatures` 少了 `hevc`，手機見前後矛盾，RECORD 後立即 TEARDOWN。修正後 1088×1088 真機 HEVC 出畫、寵物端 61fps 解碼零重建。`HOMEPLAY_HEVC=0` 可回退 H.264。 |
 | main buffered audio（~2 分鐘緩衝） | WWDC23 10150 | **已落地**：type 102 走 AAC-LC + `/feedback` 播放位置/延遲；接收佇列留 6000 幀（約 2.3 分鐘）接住手機預送，不按實時速度丟 |
-| 非矩形螢幕的 safe area 語義 | WWDC23 10150 | **已改回 Apple 規範（v0.2.0）**：safeArea＝最大內接矩形（1.475/13.15 換算，1088 寬約 36 px），`safeAreaDrawOutside` 保留讓壁紙鋪到邊；玻璃邊暗角仍在，承接圓角視覺 |
+| 非矩形螢幕的 safe area 語義 | WWDC23 10150 | **已改回 Apple 規範（v0.2.0）**：safeArea＝最大內接矩形（1.475/13.15 換算，1088 寬約 36 px），`safeAreaDrawOutside` 保留讓壁紙鋪到邊；玻璃邊暗角已拆除（2026-10-19，d1b2b75），圓角視覺由 `CornerStyle` 三檔承接 |
 | 狀態列位置／明暗外觀同步 | WWDC23 10150 | **計畫**：`DisplayConfig` 尚無對應欄位；要先確認協議支援再送 |
 | 短暫斷線不關 TCP socket、偏好 5 GHz | WWDC23 10150 | **已核對**：控制連線不因短暫斷流主動關閉；只由 TEARDOWN 或 15 秒完全無控制訊息/畫面結束。IPv6 備用回連與每次重新讀信道已加；5 GHz 由 iPhone／系統決定，接收端不強制 |
 | 幀時間戳做音畫同步 | WWDC24 10111 | **計畫**：目前靠 `/feedback` 回報播放位置；PTS 對齊是下一步 |
@@ -106,7 +106,7 @@ CarPlay 新類別（EV 充電、停車、快速點餐）與數位車鑰匙的導
    - Standard 800×480（2x）
    - Widescreen 1920×720（3x）
    - **Portrait 900×1200（3x）**
-   方屏（1:1）不在清單裡，這解釋了為什麼 iOS 會把介面排成居中卡片。若要更貼近原生排版，可考慮宣告接近 3:4 的豎屏；代價是左右留黑。我們目前用 GPU 縮放裁掉壁紙邊（預設 100%，選單可選 115–150%），不改宣告、不影響可點區域。
+   方屏（1:1）不在清單裡，這解釋了為什麼 iOS 會把介面排成居中卡片。若要更貼近原生排版，可考慮宣告接近 3:4 的豎屏；代價是左右留黑。（早先的 GPU 縮放裁邊實驗已於 2026-10-19 隨 d1b2b75 拆除；方屏宣告保持原樣，畫面幾何由 `PetDisplay` 推導、`CornerStyle` 三檔呈現。）
 3. **Now Playing 模板**：連上 CarPlay 就要隨時能填內容（系統可能為了顯示 Now Playing 而啟動 App）。這是 iPhone 端的責任；接收器側對應的是把音訊與觸控通道維持可用，我們已具備。
 
 其餘章節（templates、entitlements、widgets、Live Activities、navigation panels/route sharing）都是 CarPlay App 的實作規範，接收器不適用。
@@ -124,6 +124,8 @@ CarPlay 新類別（EV 充電、停車、快速點餐）與數位車鑰匙的導
 | **drawUIOutsideSafeArea** | 背景（壁紙）可以畫到 viewArea 邊，互動內容仍留在 safeArea | true |
 
 推導只有一條：螢幕平面寬 13.15、圓角 1.475（與面板同心）→ 圓角像素 r = 1088×1.475/13.15 ≈ 122 → 最大內接矩形的內縮 = r·(1−1/√2) ≈ 36。`BPlist.areaDict` 把 insets 換算成 width/height/origin 後寫進 `/info`；啟動日誌會印出三者的實際矩形，方便對照。
+
+**（以下兩段是歷史記錄：v0.2.7/v0.2.8 的出血縮放與滿版外延已於 2026-10-19 隨 d1b2b75 拆除——`unzoomUV`、`HOMEPLAY_BLEED_EDGE`、140/160/180% 檔位在原始碼中已不存在，現行幾何由 `PetDisplay` 推導、`CornerStyle` 三檔呈現。）**
 
 **出血縮放是呈現層的事，不動宣告**：GPU 只裁顯示畫面；觸控用同一個縮放反算（`unzoomUV`），所以 1.6× 出血時點按仍然落在正確的畫面座標（自檢已覆蓋中心、左緣與可見區外）。
 

@@ -260,3 +260,29 @@ package final class Iap2AccessoryCore {
             .uppercased().replacingOccurrences(of: "-", with: ":")
     }
 }
+
+/// 三个配件端（蓝牙／USB／隧道）的共用转发面：回调像以前一样直接挂在配件上，实际状态都在 core 里。
+/// 各传输类只声明 conformance，逐字重复的转发收在这份默认实现里。
+package protocol Iap2AccessoryForwarding: AnyObject {
+    var core: Iap2AccessoryCore { get }
+}
+
+extension Iap2AccessoryForwarding {
+    package var onLog: ((String) -> Void)? {
+        get { core.onLog } set { core.onLog = newValue }
+    }
+    package var onPhase: ((Iap2AccessoryCore.Phase) -> Void)? {
+        get { core.onPhase } set { core.onPhase = newValue }
+    }
+    package var onMessage: ((Iap2Csm.Frame) -> [Iap2Csm.Frame])? {
+        get { core.onMessage } set { core.onMessage = newValue }
+    }
+    package var onArtwork: ((UInt8, Data) -> Void)? {
+        get { core.onArtwork } set { core.onArtwork = newValue }
+    }
+    package var onFinished: ((Int) -> Void)? {
+        get { core.onFinished } set { core.onFinished = newValue }
+    }
+    package var phase: Iap2AccessoryCore.Phase { core.phase }
+    package var finished: Bool { core.finished }
+}

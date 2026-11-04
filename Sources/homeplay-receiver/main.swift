@@ -21,6 +21,7 @@ import CoreMedia
 import AppKit
 import CoreWLAN
 import IOBluetooth
+import IOKit
 import Session
 
 import Wire

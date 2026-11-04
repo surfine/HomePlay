@@ -75,12 +75,6 @@ extension Notification.Name {
 
 final class HomeLink: @unchecked Sendable {
     static let shared = HomeLink()
-    /// 這台 Mac 有沒有裝「HomePlay Home」小幫手（~/Applications 或 /Applications）；快照示範模式當作有
-    static var helperInstalled: Bool {
-        if Face.demoData { return true }
-        let fm = FileManager.default
-        return [NSHomeDirectory() + "/Applications", "/Applications"].contains { fm.fileExists(atPath: $0 + "/HomePlay Home.app") }
-    }
 
     // 主執行緒
     private(set) var snapshot = HomeSnapshot.empty
@@ -112,10 +106,6 @@ final class HomeLink: @unchecked Sendable {
 
     func set(characteristic: String, value: Any, completion: ((Bool, String?) -> Void)? = nil) {
         send(["op": "set", "characteristic": characteristic, "value": value], completion)
-    }
-
-    func runScene(id: String, completion: ((Bool, String?) -> Void)? = nil) {
-        send(["op": "scene", "id": id], completion)
     }
 
     // MARK: 連線迴圈（背景執行緒）

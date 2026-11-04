@@ -3,7 +3,7 @@ import Foundation
 // USB iAP2 配件端：lockdown 开出 carkit 流（Iap2Usbmuxd.swift），通芯交给 Iap2AccessoryCore。
 // 与蓝牙版同一套协议核心——识别、MFi、会话消息全部一致，只是传输换成了 usbmuxd。
 
-package final class Iap2UsbAccessory: @unchecked Sendable {
+package final class Iap2UsbAccessory: Iap2AccessoryForwarding, @unchecked Sendable {
     package let core: Iap2AccessoryCore
     package let device: Usbmuxd.Device
     private let stream: any Usbmuxd.MuxByteStream
@@ -22,24 +22,7 @@ package final class Iap2UsbAccessory: @unchecked Sendable {
         core.onDrain = { [weak self] bytes in self?.stream.send(bytes) }
     }
 
-    // 转发：调用方（Wireless）和蓝牙版同一套接口
-    package var onLog: ((String) -> Void)? {
-        get { core.onLog } set { core.onLog = newValue }
-    }
-    package var onPhase: ((Iap2AccessoryCore.Phase) -> Void)? {
-        get { core.onPhase } set { core.onPhase = newValue }
-    }
-    package var onMessage: ((Iap2Csm.Frame) -> [Iap2Csm.Frame])? {
-        get { core.onMessage } set { core.onMessage = newValue }
-    }
-    package var onArtwork: ((UInt8, Data) -> Void)? {
-        get { core.onArtwork } set { core.onArtwork = newValue }
-    }
-    package var onFinished: ((Int) -> Void)? {
-        get { core.onFinished } set { core.onFinished = newValue }
-    }
-    package var phase: Iap2AccessoryCore.Phase { core.phase }
-    package var finished: Bool { core.finished }
+    // 回调转发面（onLog/onPhase/onMessage/onArtwork/onFinished/phase/finished）在 Iap2AccessoryForwarding
 
     /// 停止：关掉 carkit 流，让手机看到正常断开（不留"配件还在会话里"的残留）。
     package func close() { core.finish(0) }

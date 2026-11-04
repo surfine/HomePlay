@@ -1,0 +1,649 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>錶面與眼睛檢討</title>
+<style>
+:root{
+  --bg:#f5f5f7; --card:#fff; --ink:#1d1d1f; --ink2:#6e6e73; --line:rgba(0,0,0,.08);
+  --accent:#0071e3; --bad:#d70015; --good:#248a3d; --chip:rgba(0,0,0,.05);
+}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){
+  --bg:#000; --card:#161617; --ink:#f5f5f7; --ink2:#a1a1a6; --line:rgba(255,255,255,.1);
+  --accent:#2997ff; --bad:#ff453a; --good:#30d158; --chip:rgba(255,255,255,.07);
+}}
+:root[data-theme="dark"]{ --bg:#000; --card:#161617; --ink:#f5f5f7; --ink2:#a1a1a6; --line:rgba(255,255,255,.1);
+  --accent:#2997ff; --bad:#ff453a; --good:#30d158; --chip:rgba(255,255,255,.07); }
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);
+  font:17px/1.6 -apple-system,BlinkMacSystemFont,"SF Pro Text","PingFang TC",system-ui,sans-serif;
+  -webkit-font-smoothing:antialiased}
+main{max-width:1120px;margin:0 auto;padding:56px 16px 120px}
+h1{font-size:clamp(34px,5vw,56px);line-height:1.07;letter-spacing:-.02em;margin:0 0 12px;font-weight:700}
+h2{font-size:clamp(26px,3.4vw,36px);line-height:1.15;letter-spacing:-.015em;margin:88px 0 10px;font-weight:700}
+h3{font-size:21px;margin:36px 0 8px;letter-spacing:-.01em}
+p{margin:0 0 14px;max-width:760px}
+.lede{font-size:21px;color:var(--ink2);max-width:820px}
+.meta{color:var(--ink2);font-size:14px;margin-bottom:28px}
+.note{font-size:14px;color:var(--ink2)}
+.card{background:var(--card);border-radius:22px;padding:24px;border:1px solid var(--line)}
+.verdict{display:grid;gap:14px;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));margin-top:28px}
+.verdict .card b{display:block;font-size:15px;color:var(--ink2);font-weight:600;margin-bottom:4px}
+.verdict .card span{font-size:19px;line-height:1.4;font-weight:600}
+table{width:100%;border-collapse:collapse;font-size:15px;margin:14px 0}
+th,td{text-align:left;padding:10px 12px;border-bottom:1px solid var(--line);vertical-align:top}
+th{color:var(--ink2);font-weight:600;font-size:13px;text-transform:none}
+td.k{white-space:nowrap;font-weight:600}
+.tw{overflow-x:auto;background:var(--card);border-radius:18px;border:1px solid var(--line);padding:4px 8px}
+.pair{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin:18px 0 8px}
+.pair figure,.grid figure{margin:0}
+.pair img,.grid img{width:100%;display:block;border-radius:12%/12%;background:#222;aspect-ratio:1}
+figcaption{font-size:13px;color:var(--ink2);margin-top:8px;text-align:center}
+.crit{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:12px;margin:10px 0 0}
+.crit div{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:14px 16px;font-size:15px}
+.crit b{display:block;font-size:13px;margin-bottom:2px}
+.crit .x b{color:var(--bad)} .crit .o b{color:var(--good)}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:22px;margin-top:22px}
+.tile{width:100%;aspect-ratio:1;display:block;border-radius:12%;overflow:hidden;
+  box-shadow:0 1px 2px rgba(0,0,0,.08),0 12px 32px rgba(0,0,0,.12)}
+.tag{display:inline-block;font-size:12px;font-weight:600;padding:2px 8px;border-radius:99px;background:var(--chip);margin-right:4px}
+.tag.e{background:rgba(0,113,227,.12);color:var(--accent)}
+/* 眼睛示範 */
+.stage{display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,.9fr);gap:22px;align-items:start;margin-top:22px}
+.ctl{display:flex;flex-wrap:wrap;gap:8px;margin:10px 0 16px}
+.ctl button{font:inherit;font-size:14px;border:1px solid var(--line);background:var(--card);color:var(--ink);
+  padding:6px 13px;border-radius:99px;cursor:pointer;transition:transform .12s ease-out}
+.ctl button:active{transform:scale(.96)}
+.ctl button[aria-pressed="true"]{background:var(--ink);color:var(--bg);border-color:transparent}
+.lbl{font-size:13px;color:var(--ink2);font-weight:600;margin-top:6px}
+code{font:13px/1.4 ui-monospace,"SF Mono",Menlo,monospace;background:var(--chip);padding:1px 5px;border-radius:5px}
+ol,ul{max-width:800px;padding-left:22px} li{margin:4px 0}
+@media (max-width:760px){ .stage{grid-template-columns:1fr} .pair{grid-template-columns:1fr 1fr;gap:8px} }
+@media (prefers-reduced-motion:reduce){ .ctl button{transition:none} }
+</style>
+</head>
+<body>
+<main>
+
+<h1>錶面與眼睛檢討</h1>
+<p class="lede">拿 apple.com／homeview 上的 13 款官方錶面，逐一對照 HomePlay 目前的 9 款。結論是：材質和版式都還差一截，最大的問題是那顆眼睛膠囊。</p>
+<p class="meta">2026-10-24 · 設計稿 v3 · 官方對照圖在 <code>faces-v3/ref/</code>（只放本機，不提交、不發布）</p>
+
+<div class="verdict">
+  <div class="card"><b>最該改</b><span>黑色眼睛膠囊拿掉，換成兩顆浮在桌布上的液態玻璃眼。</span></div>
+  <div class="card"><b>玻璃字</b><span>我們的數字其實是「描邊」；官方的是「實心霜玻璃」，比我們白、厚、粗。</span></div>
+  <div class="card"><b>眼睛放哪</b><span>每款都放，但各自長在錶面裡：位置、大小、跟誰互動，依錶面而定；材質一律液態玻璃。</span></div>
+  <div class="card"><b>補齊陣容</b><span>新增天氣、行事曆、浮雕指針、黑、Home Modular（HomeKit，見第八節）；Island 併進 Portraits。</span></div>
+</div>
+
+<!-- ============================================================ -->
+<h2>一、陣容對照</h2>
+<p>官方共 13 款。Snoopy 有授權問題不做；Home Modular 要接 HomeKit，可行路線見第八節。</p>
+<div class="tw"><table>
+<tr><th>官方錶面</th><th>HomePlay 目前</th><th>這一版怎麼做</th><th>眼睛</th></tr>
+<tr><td class="k">Portraits ×2</td><td>Island、Photos（兩款）</td><td>合成一款 Portraits。有照片就把主體摳到數字前面，沒照片就用桌布。日期和「重按連上」都拿掉</td><td><span class="tag e">躲在主體後面</span></td></tr>
+<tr><td class="k">Memories</td><td>無</td><td>Photos 回憶：全幅照片，右下角放標題和年份</td><td><span class="tag e">左下角，與標題對稱</span></td></tr>
+<tr><td class="k">Modular</td><td>Modular</td><td>重新排成 2×2 網格；眼睛只佔其中一格</td><td><span class="tag e">一格</span></td></tr>
+<tr><td class="k">Weather</td><td>無</td><td>新增</td><td><span class="tag e">溫度旁，望向天空</span></td></tr>
+<tr><td class="k">Calendar</td><td>無</td><td>新增</td><td><span class="tag e">月份與時間之間</span></td></tr>
+<tr><td class="k">Home Modular</td><td>無</td><td>新增：溫控、場景、對講、門鎖、燈，紫色玻璃磚；HomeKit 接法見第八節</td><td><span class="tag e">一塊磚</span></td></tr>
+<tr><td class="k">Flow</td><td>Flow</td><td>改成融合的水珠字；其中兩顆小水珠就是眼睛</td><td><span class="tag e">兩顆水珠</span></td></tr>
+<tr><td class="k">Typograph</td><td>Analog</td><td>改名 Typograph；膠囊換成角落的玻璃眼</td><td><span class="tag e">右下角，透出數字</span></td></tr>
+<tr><td class="k">浮雕指針（粉）</td><td>無</td><td>新增</td><td><span class="tag e">6 點位置，同色玻璃</span></td></tr>
+<tr><td class="k">Black</td><td>床頭（紅）</td><td>白天全黑；夜間降到 0.3 nit 時才顯示暗紅時間</td><td><span class="tag e">只剩邊光；夜裡闔眼</span></td></tr>
+<tr><td class="k">Snoopy ×2</td><td>—</td><td>不做（授權）</td><td>—</td></tr>
+<tr><td class="k">（HomePlay 自有）</td><td>Pocket、Growth、System 6</td><td>新增「眼睛」錶面，當桌寵預設。Pocket 併進 Modular；Growth 保留但重排；System 6 保留 1-bit 像素眼</td><td><span class="tag e">主角</span></td></tr>
+</table></div>
+
+<!-- ============================================================ -->
+<h2>二、逐款檢討</h2>
+<p>左邊是官方，右邊是 HomePlay 目前用 <code>HOMEPLAY_FACE_PNG</code> 匯出的平面錶面。</p>
+
+<h3>Portraits ／ Island</h3>
+<div class="pair">
+  <figure><img src="ref/tile_portrait_sky.png" alt="官方 Portraits"><figcaption>官方 Portraits</figcaption></figure>
+  <figure><img src="now/island.png" alt="HomePlay Island"><figcaption>HomePlay Island</figcaption></figure>
+</div>
+<div class="crit">
+  <div class="x"><b>材質</b>我們的數字是一條 1–2 px 的亮白描邊，裡面偏灰暗，讀起來像「空心字」。官方是整塊實心的霜玻璃：裡面比背景亮約兩成，邊緣是一圈 6–10 px 的柔光，沒有硬描邊。</div>
+  <div class="x"><b>字重與尺寸</b>我們的筆畫只有字寬的約 7%；官方約 16%（Compressed Semibold 左右）。官方的數字頂到上緣，佔畫面 6%–59% 高；我們的置中，佔 10%–80%，所以人臉一定被擋住。</div>
+  <div class="x"><b>多餘元素</b>日期、黑色眼睛膠囊、「重按連上 iPhone」三樣，官方都沒有。錶面上不該放操作說明。</div>
+  <div class="o"><b>保留</b>主體摳圖（Vision）、數字壓在人後面的層次，方向是對的。</div>
+</div>
+
+<h3>Photos ／ Memories</h3>
+<div class="pair">
+  <figure><img src="ref/tile_memories.png" alt="官方 Memories"><figcaption>官方 Memories</figcaption></figure>
+  <figure><img src="now/photos.png" alt="HomePlay Photos"><figcaption>HomePlay Photos</figcaption></figure>
+</div>
+<div class="crit">
+  <div class="x"><b>主角錯位</b>照片錶面的主角應該是照片。我們上面壓了日期、整排描邊數字，右下還有一顆眼睛膠囊，四層東西在搶畫面。</div>
+  <div class="o"><b>改法</b>分成兩款：Portraits（數字在人後面）和回憶（全幅照片加右下標題「夏天 2024」）。兩款都不放眼睛。</div>
+</div>
+
+<h3>Modular</h3>
+<div class="pair">
+  <figure><img src="ref/tile_modular.png" alt="官方 Modular"><figcaption>官方 Modular</figcaption></figure>
+  <figure><img src="now/modular.png" alt="HomePlay Modular"><figcaption>HomePlay Modular</figcaption></figure>
+</div>
+<div class="crit">
+  <div class="x"><b>網格被打破</b>眼睛膠囊浮在上下兩排中間，不屬於任何一格。</div>
+  <div class="x"><b>字重不一</b>「24」用 Heavy，「100%」卻是細字。官方的「1」和「54°」都是 Heavy，小字是 Semibold，只有兩級。</div>
+  <div class="x"><b>像 App 圖示</b>藍色 CarPlay 方塊看起來是 App 圖示，不是小工具。官方左下是正在播放：封面、曲名、玻璃膠囊「Play」。</div>
+  <div class="o"><b>改法</b>2×2 網格：左上日期、右上指針、左下 iPhone 正在播放、右下一格「眼睛」（電量移進眼睛格下方的一行小字）。</div>
+</div>
+
+<h3>Flow</h3>
+<div class="pair">
+  <figure><img src="ref/tile_flow.png" alt="官方 Flow"><figcaption>官方 Flow</figcaption></figure>
+  <figure><img src="now/flow.png" alt="HomePlay Flow"><figcaption>HomePlay Flow</figcaption></figure>
+</div>
+<div class="crit">
+  <div class="x"><b>像貼紙</b>我們是 SF Rounded Heavy 加白描邊、平塗漸層，讀起來是「貼紙」。官方的數字被吹成鼓起的水珠，筆畫彼此融合，沒有描邊。裡面是強烈折射的粉藍漩渦，旁邊還有幾顆衛星小水珠。</div>
+  <div class="o"><b>改法</b>先做 metaball 融合，再用系統玻璃管線（SystemGlass 的 SDF）上材質。其中兩顆衛星水珠帶瞳孔，就是眼睛，跟著人移動。</div>
+</div>
+
+<h3>Typograph ／ Analog</h3>
+<div class="pair">
+  <figure><img src="ref/tile_typograph.png" alt="官方 Typograph"><figcaption>官方 Typograph</figcaption></figure>
+  <figure><img src="now/analog.png" alt="HomePlay Analog"><figcaption>HomePlay Analog</figcaption></figure>
+</div>
+<div class="crit">
+  <div class="o"><b>最接近</b>數字疊壓、綠底、白指針都做到了。</div>
+  <div class="x"><b>要改</b>右下的眼睛膠囊壓到指針掃過的範圍。秒針要更細，而且要貫穿全高。</div>
+</div>
+
+<h3>其餘三款（HomePlay 自有）</h3>
+<div class="pair" style="grid-template-columns:repeat(3,1fr)">
+  <figure><img src="now/pocket.png" alt=""><figcaption>Pocket</figcaption></figure>
+  <figure><img src="now/growth.png" alt=""><figcaption>Growth</figcaption></figure>
+  <figure><img src="now/bedside.png" alt=""><figcaption>床頭</figcaption></figure>
+</div>
+<div class="crit">
+  <div class="x"><b>Pocket</b>內容跟 Modular 重複，電量卡又跟背景的玻璃材質不一致。併進 Modular。</div>
+  <div class="x"><b>Growth</b>點陣環是好點子，但中間又放一顆眼睛膠囊。拿掉膠囊，讓陪伴天數當主角。</div>
+  <div class="x"><b>床頭</b>紅色霓虹細字有光暈，太刺眼，夜裡反而不平和。改成「黑」錶面，夜間才浮出暗紅、無光暈的時間，下面那顆暗紅膠囊也拿掉。</div>
+</div>
+
+<!-- ============================================================ -->
+<h2>三、玻璃字規格</h2>
+<p>同一片天空上，左邊照目前的做法畫，右邊照官方的做法畫（瀏覽器近似，App 裡用 SystemGlass 管線實作）。</p>
+<div class="pair">
+  <figure><svg class="tile" id="specOld" viewBox="0 0 600 600"></svg><figcaption>目前：描邊、灰心、細</figcaption></figure>
+  <figure><svg class="tile" id="specNew" viewBox="0 0 600 600"></svg><figcaption>建議：實心霜玻璃、柔邊、粗、頂到上緣</figcaption></figure>
+</div>
+<div class="tw"><table>
+<tr><th>參數</th><th>目前</th><th>官方（目測）</th><th>建議值</th></tr>
+<tr><td class="k">填充</td><td>透明偏灰，比背景暗</td><td>比背景亮約 20%，飽和度略升</td><td><code>blur 28pt</code>、<code>lighten +0.20</code>、<code>saturate 1.35</code></td></tr>
+<tr><td class="k">邊緣</td><td>1–2 px 白描邊</td><td>沒有描邊，6–10 px 柔光斜面</td><td>左上內亮 0.85、右下內暗 0.18，寬度是筆畫的 9%</td></tr>
+<tr><td class="k">折射</td><td>幾乎沒有</td><td>雲在邊緣明顯偏移</td><td>SDF 法線位移，邊緣最大 14 px</td></tr>
+<tr><td class="k">字重</td><td>筆畫約字寬 7%</td><td>約 16%</td><td>SF Pro <code>wdth 30</code>、<code>wght 590</code></td></tr>
+<tr><td class="k">位置</td><td>置中，10%–80% 高</td><td>頂到上緣，6%–59% 高，左右滿版</td><td>上緣留 5%，字高 53%</td></tr>
+<tr><td class="k">投影</td><td>有</td><td>幾乎沒有</td><td>拿掉；靠斜面表現厚度</td></tr>
+</table></div>
+
+<!-- ============================================================ -->
+<h2>四、眼睛檢討</h2>
+<p>官方 13 款錶面裡沒有一款有眼睛，也沒有島。眼睛是 HomePlay 自己加的，也是它的靈魂，所以每款都要有；問題在於現在是「貼上去」，不是「長出來」。</p>
+<div class="pair" style="grid-template-columns:repeat(3,1fr)">
+  <figure><img src="now/island.png" alt=""><figcaption>擋住時間</figcaption></figure>
+  <figure><img src="now/photos.png" alt=""><figcaption>擋住主體</figcaption></figure>
+  <figure><img src="now/modular.png" alt=""><figcaption>打破網格</figcaption></figure>
+</div>
+<div class="crit">
+  <div class="x"><b>1. 黑膠囊是硬體挖孔</b>它把 Dynamic Island 的不透明黑塊搬上了錶面。HomeView 的視覺語言是「玻璃浮在桌布上」，而黑膠囊是整個畫面裡最重的東西，搶走了時間的主角位。</div>
+  <div class="x"><b>2. 材質不同語系</b>👀 照的是 Apple Color Emoji 的擬物畫風：棕金虹膜、枕形陰影。放在玻璃數字旁邊，看起來像貼紙。</div>
+  <div class="x"><b>3. 每款都貼同一顆</b>位置、大小、樣子每款都一樣，像蓋上去的印章：照片款擋到臉、Modular 打破網格、Typograph 壓到指針、床頭夜裡也亮著。眼睛要每款都在，就得每款各自設計它住在哪。</div>
+  <div class="x"><b>4. 結構上離不開黑底</b><code>drawEye</code> 的眼皮和笑眼都是「塗黑」遮出來的（<code>g.setFillColor(.black)</code>），所以只能活在黑膠囊裡。要改成玻璃，眼皮必須改成「眼睛形狀本身變形」。</div>
+  <div class="x"><b>5. 尺寸一律</b>膠囊固定佔畫面寬 41%，不管在哪款錶面上。</div>
+</div>
+
+<h2>五、液態玻璃眼</h2>
+<p>沒有容器，兩顆眼睛直接浮在桌布上，跟數字是同一種玻璃。眼白是乳白的霜玻璃，會放大並柔化後面的桌布；瞳孔是一顆深色的實心玻璃珠，左上一顆高光，右下透出一點桌布色的焦散光。眨眼、笑、睏都由玻璃形狀本身變形完成，不再靠塗黑。</p>
+<div class="stage">
+  <div>
+    <svg class="tile" id="eyeStage" viewBox="0 0 600 600" style="touch-action:none"></svg>
+    <p class="note" style="margin-top:10px">把游標移到圖上，瞳孔會跟著看。</p>
+  </div>
+  <div>
+    <div class="lbl">表情</div>
+    <div class="ctl" id="exprBtns"></div>
+    <div class="lbl">桌布</div>
+    <div class="ctl" id="bgBtns"></div>
+    <div class="tw"><table>
+      <tr><th>層</th><th>做法</th></tr>
+      <tr><td class="k">眼白</td><td>桌布 ×1.22 放大（透鏡）、<code>blur 6</code>、<code>lighten +0.58</code>；淺色桌布自動壓到 +0.30</td></tr>
+      <tr><td class="k">邊緣</td><td>與數字同一組斜面參數，再加一圈 1 px 內亮線</td></tr>
+      <tr><td class="k">瞳孔</td><td>深色玻璃珠 <code>#0b0d14</code> 92%；右下透出桌布主色 35% 的焦散光；左上高光 95%</td></tr>
+      <tr><td class="k">厚度</td><td>底下一層 <code>y+6 blur 10</code> 18% 的接觸陰影（只給眼睛，數字不用）</td></tr>
+      <tr><td class="k">眼皮</td><td>眼睛形狀本身被切：上緣弧線、下緣直線、笑眼弯月；形狀改了，SDF 就跟著重算</td></tr>
+      <tr><td class="k">動態</td><td>眨眼 110 ms 闔、160 ms 張；表情切換用彈簧（阻尼 1.0、響應 0.35 s）；看人用彈簧（阻尼 0.85、響應 0.25 s）</td></tr>
+    </table></div>
+  </div>
+</div>
+
+<h3>每款錶面的眼睛</h3>
+<p>原則：眼睛永遠是液態玻璃，不加容器；它住在錶面既有的空位或元素裡，不擋時間、不擋人臉、不打破網格；指針永遠畫在眼睛上面。</p>
+<div class="tw"><table>
+<tr><th>錶面</th><th>住在哪</th><th>大小（眼高／畫面高）</th><th>會做什麼</th></tr>
+<tr><td class="k">眼睛（新，預設）</td><td>畫面中央偏下，時間在上方</td><td>27%</td><td>全部表情；看人、眨眼</td></tr>
+<tr><td class="k">Portraits</td><td>數字下方、主體後面，被人擋住一部分</td><td>12%</td><td>從人身後探出來看你；人靠近時往上冒一點</td></tr>
+<tr><td class="k">回憶</td><td>左下角，與右下標題對稱</td><td>7%</td><td>換照片時眨一下</td></tr>
+<tr><td class="k">Modular</td><td>網格右下一格</td><td>13%</td><td>格子底下一行電量</td></tr>
+<tr><td class="k">Home Modular</td><td>一塊玻璃磚</td><td>11%</td><td>開關燈時望向那塊磚</td></tr>
+<tr><td class="k">Flow</td><td>兩顆衛星水珠</td><td>6%</td><td>隨水流漂，靠近時游過來</td></tr>
+<tr><td class="k">天氣</td><td>大溫度右側</td><td>9%</td><td>望向天空；晴天瞇眼、下雨擔心</td></tr>
+<tr><td class="k">行事曆</td><td>月份與時間之間</td><td>5%</td><td>看著今天；有行程時眨一下</td></tr>
+<tr><td class="k">Typograph</td><td>右下角，玻璃透出底下的大數字</td><td>9%</td><td>指針經過時跟著轉頭</td></tr>
+<tr><td class="k">浮雕指針</td><td>6 點位置，與底色同色的玻璃</td><td>8%</td><td>秒針經過時眨眼</td></tr>
+<tr><td class="k">黑／夜間</td><td>中央，只剩邊光和瞳孔高光</td><td>12%</td><td>白天微光；夜間闔眼成兩道暗紅弧線</td></tr>
+<tr><td class="k">Growth</td><td>點陣環中央</td><td>14%</td><td>每點亮一格開心一下</td></tr>
+<tr><td class="k">System 6</td><td>選單列下的視窗裡，1-bit 像素</td><td>10%</td><td>時代風格，不用玻璃</td></tr>
+</table></div>
+
+<!-- ============================================================ -->
+<h2>六、新陣容樣稿</h2>
+<p>以下是瀏覽器裡的近似稿，用來定版式、比例和材質；App 裡的玻璃用 SystemGlass 管線實作。時間一律 10:09，日期是 2026 年 10 月 24 日（週六）。</p>
+<div class="grid" id="faces"></div>
+
+<!-- ============================================================ -->
+<h2>七、實作順序</h2>
+<ol>
+  <li><b>玻璃眼</b>：新增 <code>Faces/GlassEyes.swift</code>，把眼睛形狀（含眼皮切口）畫成遮罩，餵給 SystemGlass 的 SDF。瞳孔另外畫一層。<code>FaceParams</code> 拿掉 <code>cw/ch</code>（膠囊），<code>top/bot/smile/tilt</code> 改成形狀參數。只在表情過渡時才重算 SDF（30 fps），靜止時用快取。</li>
+  <li><b>放置 API</b>：每款錶面回答 <code>eyeSlot</code>（位置、眼高、層級：在主體前或後、在指針下），照上表；拿掉所有錶面裡的膠囊。</li>
+  <li><b>玻璃字</b>：調 Portraits 的字重、位置和填充（照第三節）；拿掉日期和「重按連上」。「重按連上」改成第一次啟動或人靠近時的一次性提示。</li>
+  <li><b>新錶面</b>：眼睛、天氣、行事曆、浮雕指針、黑，再重做 Modular 和 Flow；Pocket 併進 Modular。Home Modular 等第八節的路線定了再做。</li>
+  <li><b>驗證</b>：每款錶面匯出 1× 和 2× 平面圖，跟官方並排；<code>homeplay-pet --selftest</code>；bench 閒置 CPU 不超過目前值。</li>
+</ol>
+<p class="note">天氣用 WeatherKit 需要開發者帳號的權限；不行的話改用 Open-Meteo（免金鑰）。行事曆用 EventKit，要先申請權限。</p>
+
+
+<!-- ============================================================ -->
+<h2>八、在 Mac 上接 HomeKit</h2>
+<p>結論：第一方 HomeKit 在 Mac 上只有 Mac Catalyst 版本，而且一定要帶 <code>com.apple.developer.homekit</code> 權限和描述檔。我們用 Developer ID 公開發布的 HomePlay.app 本身帶不了這個權限；可行的做法是另外做一個小幫手 App，再把家庭狀態交給桌寵。</p>
+<h3>本機實測（macOS 27.0.1）</h3>
+<div class="tw"><table>
+<tr><th>試法</th><th>結果</th></tr>
+<tr><td class="k">原生 AppKit 連結 HomeKit</td><td>做不到。SDK 只在 <code>System/iOSSupport</code> 有 HomeKit（Catalyst 專用），原生 macOS 目標無法 import</td></tr>
+<tr><td class="k">Catalyst，不帶權限</td><td>能啟動（要有 <code>NSHomeKitUsageDescription</code>，否則 TCC 直接中止）。<code>authorizationStatus=5</code>，但 <code>homes=0</code>，delegate 不回呼：拿不到任何資料</td></tr>
+<tr><td class="k">Catalyst，帶權限，ad-hoc 簽名</td><td>一啟動就被 AMFI 殺掉（exit 137）：受限權限需要描述檔</td></tr>
+<tr><td class="k">Catalyst，Xcode 自動簽名（團隊 DQ45KFVHJ8）</td><td>卡在「這台 Mac 還沒註冊到開發者帳號」。註冊會改到你的帳號，<b>等你同意</b>才會做</td></tr>
+<tr><td class="k">Developer ID 發布</td><td>社群回報：Mac Catalyst 的 Developer ID 描述檔不提供 HomeKit（App Groups、Shared with You 也一樣），只有 App Store 和開發描述檔可以</td></tr>
+</table></div>
+<h3>路線比較</h3>
+<div class="tw"><table>
+<tr><th>路線</th><th>誰能用</th><th>讀狀態</th><th>控制</th><th>代價</th></tr>
+<tr><td class="k">A. 開發簽名的 Catalyst 小幫手</td><td>註冊過的 Mac（帳號每年 100 台）</td><td>即時（HMAccessoryDelegate）</td><td>✓</td><td>只有你和註冊過的機器能跑；描述檔一年要續</td></tr>
+<tr><td class="k">B. App Store 上架「HomePlay 家庭」</td><td>所有人</td><td>即時</td><td>✓</td><td>要過審核：本身要有像樣的家庭儀表板，避免被判定成功能太少（4.2）。與 HomePlay 用同團隊 App Group 交換資料</td></tr>
+<tr><td class="k">C. 捷徑橋接（<code>/usr/bin/shortcuts</code>）</td><td>所有人，免權限</td><td>慢（每次 0.5–1 s），配件要在捷徑裡選好</td><td>✓（「控制家庭」動作）</td><td>使用者要匯入並設定一個捷徑</td></tr>
+<tr><td class="k">D. 私有 API（<code>homed</code> XPC）</td><td>只有關掉 SIP 和 AMFI 的 Mac</td><td>✓</td><td>✓</td><td><code>com.apple.homekit.private-spi-access</code> 這類權限只放行 Apple 簽名；一般使用者跑不了，不能發布</td></tr>
+<tr><td class="k">E. 經 CarPlay 叫 iPhone 的 Siri</td><td>所有連上 iPhone 的人</td><td>✗</td><td>✓（用合成語音說「打開客廳燈」）</td><td>慢、Siri 會唸回覆；只能當最後的退路</td></tr>
+</table></div>
+<p><b>建議</b>：先做 A，讓你自己的機器馬上看到真實的 Home Modular（溫控、燈、門鎖的即時狀態）。同時把 B 當公開版本準備，C 給沒有小幫手的人當退路。小幫手和桌寵之間走本機 XPC，資料只有房間、配件名稱和狀態，不離開這台 Mac。私有 API 這條我實際查過，結論是做不到可以給別人用的版本，所以不採用。</p>
+<p class="note">來源：<a href="https://developer.apple.com/forums/thread/651207">Apple 論壇：Unable to export HomeKit app on Mac Catalyst</a>、<a href="https://mjtsai.com/blog/2021/03/16/mac-apis-that-require-provisioning-profiles">mjtsai：Mac APIs that Require Provisioning Profiles</a>、<a href="https://developer.apple.com/forums/thread/656271">App Groups not available for Mac Catalyst Developer ID</a>。實測程式在 scratchpad 的 <code>hk/</code>。</p>
+</main>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+<defs>
+  <filter id="frost" x="-5%" y="-5%" width="110%" height="110%" color-interpolation-filters="sRGB">
+    <feGaussianBlur stdDeviation="9"/>
+    <feComponentTransfer>
+      <feFuncR type="linear" slope=".82" intercept=".2"/><feFuncG type="linear" slope=".82" intercept=".2"/><feFuncB type="linear" slope=".82" intercept=".22"/>
+    </feComponentTransfer>
+    <feColorMatrix type="saturate" values="1.35"/>
+  </filter>
+  <filter id="milk" x="-5%" y="-5%" width="110%" height="110%" color-interpolation-filters="sRGB">
+    <feGaussianBlur stdDeviation="5"/>
+    <feComponentTransfer>
+      <feFuncR type="linear" slope=".42" intercept=".58"/><feFuncG type="linear" slope=".42" intercept=".58"/><feFuncB type="linear" slope=".42" intercept=".6"/>
+    </feComponentTransfer>
+    <feColorMatrix type="saturate" values="1.2"/>
+  </filter>
+  <filter id="bevel" x="-10%" y="-10%" width="120%" height="120%" color-interpolation-filters="sRGB">
+    <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+    <feOffset in="b" dx="5" dy="6" result="sDown"/>
+    <feComposite in="SourceAlpha" in2="sDown" operator="out" result="hlA"/>
+    <feFlood flood-color="#fff" flood-opacity=".85"/><feComposite in2="hlA" operator="in" result="hl"/>
+    <feOffset in="b" dx="-4" dy="-5" result="sUp"/>
+    <feComposite in="SourceAlpha" in2="sUp" operator="out" result="dkA"/>
+    <feFlood flood-color="#0a1030" flood-opacity=".16"/><feComposite in2="dkA" operator="in" result="dk"/>
+    <feGaussianBlur in="SourceAlpha" stdDeviation="1.1" result="b1"/>
+    <feComposite in="SourceAlpha" in2="b1" operator="arithmetic" k2="1" k3="-1" result="rimA"/>
+    <feFlood flood-color="#fff" flood-opacity=".7"/><feComposite in2="rimA" operator="in" result="rim"/>
+    <feMerge><feMergeNode in="dk"/><feMergeNode in="hl"/><feMergeNode in="rim"/></feMerge>
+  </filter>
+  <filter id="drop" x="-20%" y="-20%" width="140%" height="160%">
+    <feGaussianBlur in="SourceAlpha" stdDeviation="10"/><feOffset dy="7"/>
+    <feComponentTransfer><feFuncA type="linear" slope=".2"/></feComponentTransfer>
+  </filter>
+  <filter id="goo" x="-10%" y="-10%" width="120%" height="120%">
+    <feGaussianBlur stdDeviation="11"/>
+    <feColorMatrix values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 26 -12"/>
+  </filter>
+  <filter id="soft"><feGaussianBlur stdDeviation="22"/></filter>
+  <filter id="soft8"><feGaussianBlur stdDeviation="8"/></filter>
+  <filter id="softE" x="-100%" y="-100%" width="300%" height="300%"><feGaussianBlur stdDeviation="4"/></filter>
+  <filter id="emboss" x="-5%" y="-5%" width="110%" height="110%">
+    <feGaussianBlur in="SourceAlpha" stdDeviation="2" result="b"/>
+    <feOffset in="b" dx="-3" dy="-3" result="u"/><feOffset in="b" dx="3" dy="3" result="d"/>
+    <feComposite in="SourceAlpha" in2="d" operator="out" result="hA"/>
+    <feFlood flood-color="#fff" flood-opacity=".7"/><feComposite in2="hA" operator="in" result="h"/>
+    <feComposite in="SourceAlpha" in2="u" operator="out" result="sA"/>
+    <feFlood flood-color="#7a3f48" flood-opacity=".45"/><feComposite in2="sA" operator="in" result="s"/>
+    <feMerge><feMergeNode in="s"/><feMergeNode in="h"/></feMerge>
+  </filter>
+</defs>
+</svg>
+
+<script>
+const NS = 'http://www.w3.org/2000/svg';
+let uid = 0;
+const id = p => `${p}${++uid}`;
+const DIGIT = 'system-ui,-apple-system,sans-serif';
+const ROUND = '"SF Pro Rounded",ui-rounded,-apple-system,system-ui,sans-serif';
+const TEXT = '-apple-system,"SF Pro Text","PingFang TC",system-ui,sans-serif';
+
+/* ---------- 桌布 ---------- */
+const BG = {
+  dusk: `<rect width="600" height="600" fill="url(#G_dusk)"/><g filter="url(#soft)"><ellipse cx="470" cy="120" rx="170" ry="140" fill="#f3c9a6" opacity=".55"/><ellipse cx="110" cy="520" rx="220" ry="120" fill="#7b5aa8" opacity=".7"/></g>`,
+  sky: `<rect width="600" height="600" fill="url(#G_sky)"/><g filter="url(#soft)" fill="#fff"><ellipse cx="90" cy="250" rx="140" ry="55" opacity=".85"/><ellipse cx="520" cy="330" rx="150" ry="60" opacity=".75"/><ellipse cx="300" cy="80" rx="240" ry="50" opacity=".55"/><ellipse cx="200" cy="470" rx="160" ry="40" opacity=".45"/></g>`,
+  flow: `<rect width="600" height="600" fill="#e8c6e8"/><g filter="url(#soft)"><ellipse cx="300" cy="300" rx="250" ry="230" fill="#ff7ec8"/><ellipse cx="250" cy="250" rx="190" ry="150" fill="#3a8cff" transform="rotate(-25 250 250)"/><ellipse cx="380" cy="380" rx="150" ry="120" fill="#7a6cff"/><ellipse cx="200" cy="420" rx="120" ry="90" fill="#ff9be0"/></g>`,
+  night: `<rect width="600" height="600" fill="url(#G_night)"/><g filter="url(#soft)"><ellipse cx="160" cy="140" rx="200" ry="150" fill="#2c4a7a" opacity=".8"/><ellipse cx="470" cy="470" rx="190" ry="150" fill="#5a2f6a" opacity=".7"/></g>`,
+  paper: `<rect width="600" height="600" fill="url(#G_paper)"/><g filter="url(#soft)"><ellipse cx="420" cy="180" rx="220" ry="150" fill="#ffd9b8" opacity=".7"/><ellipse cx="150" cy="460" rx="200" ry="130" fill="#c9dcff" opacity=".7"/></g>`,
+  purple: `<rect width="600" height="600" fill="#4b47d6"/><g opacity=".55" filter="url(#soft8)"><path d="M-40 420 L300 80 L380 160 L40 500Z" fill="#8b86ff"/><path d="M180 640 L640 180 L700 260 L260 720Z" fill="#6c66f0"/><path d="M-60 160 L160 -60 L230 10 L10 230Z" fill="#9f9bff"/></g>`,
+};
+const GRADS = `
+<linearGradient id="G_dusk" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#3d3a63"/><stop offset=".55" stop-color="#6b4f7d"/><stop offset="1" stop-color="#b07a86"/></linearGradient>
+<linearGradient id="G_sky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#8fb6e6"/><stop offset="1" stop-color="#3f86de"/></linearGradient>
+<linearGradient id="G_night" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#14192b"/><stop offset="1" stop-color="#1d1426"/></linearGradient>
+<linearGradient id="G_paper" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f4efe9"/><stop offset="1" stop-color="#e7e3ef"/></linearGradient>`;
+
+function svgInit(svg, bgKey){
+  const bid = id('bg');
+  svg.innerHTML = `<defs>${GRADS.replace(/id="G_/g, `id="${bid}G_`)}<g id="${bid}">${BG[bgKey].replace(/url\(#G_/g, `url(#${bid}G_`)}</g></defs><use href="#${bid}"/>`;
+  return bid;
+}
+function add(svg, html){ svg.insertAdjacentHTML('beforeend', html); }
+
+/* 玻璃：shape 是一段 SVG（白色填色），bg 是桌布 id。mag 是放大倍數（透鏡），cx/cy 是放大中心 */
+function glass(svg, bid, shape, {goo=false, mag=1.06, cx=300, cy=300, fill='frost', shadow=false}={}){
+  const m = id('m');
+  const sh = goo ? `<g filter="url(#goo)">${shape}</g>` : shape;
+  let out = `<defs><mask id="${m}" maskUnits="userSpaceOnUse" x="0" y="0" width="600" height="600">${sh}</mask></defs>`;
+  if (shadow) out += `<g filter="url(#drop)"><g mask="url(#${m})"><rect width="600" height="600" fill="#000"/></g></g>`;
+  out += `<g mask="url(#${m})"><use href="#${bid}" filter="url(#${fill})" transform="translate(${cx} ${cy}) scale(${mag}) translate(${-cx} ${-cy})"/></g>`;
+  out += `<g filter="url(#bevel)"><g mask="url(#${m})"><rect width="600" height="600" fill="#fff"/></g></g>`;
+  add(svg, out);
+}
+const T = (s, x, y, size, {w=600, fam=DIGIT, anchor='middle', stretch='', fill='#fff', ls=0, extra=''}={}) =>
+  `<text x="${x}" y="${y}" text-anchor="${anchor}" font-family='${fam}' font-weight="${w}" font-size="${size}" ${stretch?`style="font-variation-settings:'wdth' ${stretch}"`:''} letter-spacing="${ls}" fill="${fill}" ${extra}>${s}</text>`;
+
+/* ---------- 液態玻璃眼 ---------- */
+const EXPR = {
+  idle:     {rx:31, ry:45, sep:36, top:0,   bot:0,   tilt:0,    smile:0, ps:1,    pdy:0},
+  curious:  {rx:32, ry:47, sep:37, top:0,   bot:0,   tilt:0,    smile:0, ps:1.05, pdy:0},
+  happy:    {rx:31, ry:45, sep:36, top:0,   bot:0,   tilt:0,    smile:1, ps:0,    pdy:0},
+  focus:    {rx:31, ry:45, sep:36, top:.34, bot:.22, tilt:0,    smile:0, ps:1,    pdy:0},
+  sleepy:   {rx:31, ry:45, sep:36, top:.55, bot:0,   tilt:0,    smile:0, ps:1,    pdy:12},
+  surprised:{rx:33, ry:50, sep:38, top:0,   bot:0,   tilt:0,    smile:0, ps:.62,  pdy:0},
+  worried:  {rx:31, ry:45, sep:36, top:.3,  bot:0,   tilt:.38,  smile:0, ps:1,    pdy:14},
+  love:     {rx:31, ry:45, sep:36, top:0,   bot:0,   tilt:0,    smile:0, ps:1.2,  pdy:2, heart:1},
+};
+const EXPR_ZH = {idle:'平常', curious:'好奇', happy:'開心', focus:'專心', sleepy:'睏', surprised:'驚訝', worried:'擔心', love:'喜歡'};
+
+class GlassEyes {
+  constructor(svg, bid, {cx=300, cy=330, k=2.6, tint='#ff9be0', dark=false, opacity=1, ghost=false}={}){
+    Object.assign(this, {svg, bid, cx, cy, k, tint});
+    this.p = {...EXPR.idle, blink:1}; this.t = {...EXPR.idle}; this.expr = 'idle';
+    this.gx = 0; this.gy = 0; this.tgx = 0; this.tgy = 0;
+    this.m = id('em'); const fill = dark ? 'milk' : 'milk';
+    const g = document.createElementNS(NS, 'g'); svg.appendChild(g); this.root = g; if (opacity < 1) g.setAttribute('opacity', opacity);
+    g.innerHTML = `<defs><mask id="${this.m}" maskUnits="userSpaceOnUse" x="0" y="0" width="600" height="600"><g class="shape"></g></mask>
+        <radialGradient id="${this.m}p" cx=".42" cy=".38" r=".7"><stop offset="0" stop-color="#1c2030"/><stop offset=".7" stop-color="#0b0d14"/><stop offset="1" stop-color="#05060a"/></radialGradient></defs>
+      <g filter="url(#drop)"><g mask="url(#${this.m})"><rect width="600" height="600"/></g></g>
+      <g mask="url(#${this.m})">
+        <use class="lens" href="#${bid}" filter="url(#${fill})"/>
+        <g class="pupils"></g>
+      </g>
+      <g filter="url(#bevel)"><g mask="url(#${this.m})"><rect width="600" height="600" fill="#fff"/></g></g>`;
+    this.shape = g.querySelector('.shape'); this.pupils = g.querySelector('.pupils'); this.lens = g.querySelector('.lens');
+    this.lens.setAttribute('transform', `translate(${cx} ${cy}) scale(1.22) translate(${-cx} ${-cy})`);
+    this.nextBlink = performance.now() + 1800 + Math.random() * 2500;
+    if (ghost) this.lens.setAttribute('opacity', '.12');
+    this.draw();
+  }
+  set(expr){ this.expr = expr; this.t = {...EXPR[expr]}; }
+  look(nx, ny){ this.tgx = Math.max(-1, Math.min(1, nx)); this.tgy = Math.max(-1, Math.min(1, ny)); }
+  step(dt, now){
+    const a = 1 - Math.exp(-dt / 0.09);           // 表情：臨界阻尼近似
+    for (const key of Object.keys(this.t)) if (typeof this.t[key] === 'number') this.p[key] += ((this.t[key] ?? 0) - (this.p[key] ?? 0)) * a;
+    this.p.heart = this.t.heart ? 1 : 0;
+    const b = 1 - Math.exp(-dt / 0.06);
+    this.gx += (this.tgx - this.gx) * b; this.gy += (this.tgy - this.gy) * b;
+    // 眨眼：110 ms 闔、160 ms 張
+    if (now > this.nextBlink && this.expr !== 'happy') { this.blinkStart = now; this.nextBlink = now + 3200 + Math.random() * 3000; }
+    if (this.blinkStart) {
+      const t = now - this.blinkStart;
+      this.p.blink = t < 110 ? 1 - t / 110 : t < 270 ? (t - 110) / 160 : 1;
+      if (t >= 270) this.blinkStart = 0;
+    }
+    this.draw();
+  }
+  eyePath(side){
+    const {k, cx, cy} = this, p = this.p;
+    const rx = p.rx * k, ry = p.ry * k * (0.06 + 0.94 * easeOut(p.blink));
+    const ex = cx + side * p.sep * k * 1.0 + side * rx * 0.0, ey = cy;
+    return {ex, ey, rx, ry};
+  }
+  draw(){
+    const p = this.p, k = this.k;
+    let sh = '', pu = '';
+    for (const side of [-1, 1]) {
+      const {ex, ey, rx, ry} = this.eyePath(side);
+      const X = side < 0 ? ex - rx * 0.0 : ex;
+      const cxs = ex + side * (rx * 0.0);
+      const lidRot = `rotate(${(p.tilt * side * 180 / Math.PI).toFixed(2)} ${cxs} ${ey})`;
+      sh += `<ellipse cx="${cxs}" cy="${ey}" rx="${rx}" ry="${ry}" fill="#fff"/>`;
+      // 上眼皮：中間低兩側高的弧，切掉形狀本身
+      if (p.top > .005) { const line = ey - ry + 2 * ry * p.top, w = rx * 2.6, h = Math.max(ry * .6, 6);
+        sh += `<g transform="${lidRot}"><rect x="${cxs - rx*2}" y="${ey - ry*3}" width="${rx*4}" height="${(line - h/2) - (ey - ry*3)}" fill="#000"/><ellipse cx="${cxs}" cy="${line - h/2}" rx="${w/2}" ry="${h/2}" fill="#000"/></g>`; }
+      if (p.bot > .005) sh += `<rect x="${cxs - rx*2}" y="${ey + ry - 2*ry*p.bot}" width="${rx*4}" height="${ry*3}" fill="#000"/>`;
+      if (p.smile > .01) sh += `<ellipse cx="${cxs}" cy="${ey + ry * (1.55 - .75 * p.smile)}" rx="${rx * 1.5}" ry="${ry * 1.05}" fill="#000"/>`;
+      // 瞳孔：深色玻璃珠
+      const ps = p.ps * Math.max(0, Math.min(1, (p.blink - .45) / .3));
+      if (ps > .02) {
+        const ir = rx * .56 * ps;
+        const qx = cxs + this.gx * (rx - ir) * .8, qy = ey + (p.pdy * k * .5) + this.gy * (ry - ir) * .45;
+        if (p.heart > .5) {
+          const s = ir * 1.05;
+          pu += `<path d="M${qx} ${qy + s*.85} C ${qx - s*1.6} ${qy - s*.1}, ${qx - s*.7} ${qy - s*1.25}, ${qx} ${qy - s*.45} C ${qx + s*.7} ${qy - s*1.25}, ${qx + s*1.6} ${qy - s*.1}, ${qx} ${qy + s*.85}Z" fill="url(#${this.m}p)" opacity=".94"/>`;
+        } else {
+          pu += `<circle cx="${qx}" cy="${qy}" r="${ir}" fill="url(#${this.m}p)" opacity=".93"/>`;
+        }
+        pu += `<ellipse cx="${qx + ir*.32}" cy="${qy + ir*.42}" rx="${ir*.42}" ry="${ir*.26}" fill="${this.tint}" opacity=".42" filter="url(#softE)"/>`;
+        pu += `<ellipse cx="${qx - ir*.36}" cy="${qy - ir*.42}" rx="${ir*.26}" ry="${ir*.22}" fill="#fff" opacity=".95"/>`;
+        pu += `<circle cx="${qx + ir*.34}" cy="${qy + ir*.36}" r="${ir*.07}" fill="#fff" opacity=".6"/>`;
+      }
+    }
+    this.shape.innerHTML = sh; this.pupils.innerHTML = pu;
+  }
+}
+const easeOut = t => 1 - Math.pow(1 - Math.max(0, Math.min(1, t)), 2);
+const eyes = [];
+let last = performance.now();
+function loop(now){ const dt = Math.min(.05, (now - last) / 1000); last = now; eyes.forEach(e => e.step(dt, now)); requestAnimationFrame(loop); }
+const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+/* ---------- 第三節：玻璃字規格 ---------- */
+{
+  const o = document.getElementById('specOld'); svgInit(o, 'sky');
+  add(o, T('1009', 300, 470, 400, {w: 150, stretch: 62, fill: 'rgba(70,80,110,.28)', extra: 'stroke="#fff" stroke-width="2.4" stroke-opacity=".95"', ls: -6}));
+  const n = document.getElementById('specNew'); const b = svgInit(n, 'sky');
+  glass(n, b, T('1009', 300, 345, 440, {w: 640, stretch: 36, ls: -6}), {cx: 300, cy: 190});
+}
+
+/* ---------- 第五節：互動眼睛 ---------- */
+const stage = document.getElementById('eyeStage');
+let stageEyes;
+const BG_ZH = {dusk: '黃昏', sky: '天空', flow: '粉藍', night: '夜', paper: '淺色'};
+const TINT = {dusk: '#f3c9a6', sky: '#cfe6ff', flow: '#ff9be0', night: '#6d8cff', paper: '#ffd9b8'};
+function buildStage(bg){
+  if (stageEyes) eyes.splice(eyes.indexOf(stageEyes), 1);
+  const bid = svgInit(stage, bg);
+  add(stage, T('10:09', 300, 120, 64, {w: 600, fam: DIGIT, fill: bg === 'paper' ? 'rgba(0,0,0,.78)' : 'rgba(255,255,255,.92)'}));
+  stageEyes = new GlassEyes(stage, bid, {cx: 300, cy: 345, k: 3.1, tint: TINT[bg]});
+  stageEyes.set(curExpr); eyes.push(stageEyes);
+}
+let curExpr = 'idle';
+const eb = document.getElementById('exprBtns');
+for (const k of Object.keys(EXPR)) {
+  const btn = document.createElement('button'); btn.textContent = EXPR_ZH[k]; btn.setAttribute('aria-pressed', k === 'idle');
+  btn.onclick = () => { curExpr = k; stageEyes.set(k); eb.querySelectorAll('button').forEach(x => x.setAttribute('aria-pressed', x === btn)); };
+  eb.appendChild(btn);
+}
+const bb = document.getElementById('bgBtns');
+for (const k of Object.keys(BG_ZH)) {
+  const btn = document.createElement('button'); btn.textContent = BG_ZH[k]; btn.setAttribute('aria-pressed', k === 'dusk');
+  btn.onclick = () => { buildStage(k); bb.querySelectorAll('button').forEach(x => x.setAttribute('aria-pressed', x === btn)); };
+  bb.appendChild(btn);
+}
+buildStage('dusk');
+stage.addEventListener('pointermove', e => { const r = stage.getBoundingClientRect();
+  stageEyes.look(((e.clientX - r.left) / r.width - .5) * 2.2, ((e.clientY - r.top) / r.height - .58) * 2.2); });
+stage.addEventListener('pointerleave', () => stageEyes.look(0, 0));
+
+/* ---------- 第六節：樣稿 ---------- */
+const faces = document.getElementById('faces');
+function face(title, sub, tags, build){
+  const f = document.createElement('figure');
+  f.innerHTML = `<svg class="tile" viewBox="0 0 600 600"></svg><figcaption><b style="color:var(--ink)">${title}</b>　${tags}<br>${sub}</figcaption>`;
+  faces.appendChild(f); build(f.querySelector('svg'));
+}
+const W = 'rgba(255,255,255,.95)';
+function analog(svg, cx, cy, r, {ticks=true, nums=true, ink='#111', hand='#111', sec='#ff9f0a', minorInk}={}){
+  let s = '';
+  if (ticks) for (let i = 0; i < 60; i++) { const a = i * Math.PI / 30, L = i % 5 ? r * .06 : r * .1;
+    s += `<line x1="${cx + Math.sin(a)*(r-L)}" y1="${cy - Math.cos(a)*(r-L)}" x2="${cx + Math.sin(a)*r}" y2="${cy - Math.cos(a)*r}" stroke="${minorInk||ink}" stroke-width="${i%5?1.2:2.6}" stroke-linecap="round" opacity="${i%5?.55:.9}"/>`; }
+  if (nums) for (let i = 1; i <= 12; i++) { const a = i * Math.PI / 6;
+    s += T(i, cx + Math.sin(a) * r * .74, cy - Math.cos(a) * r * .74 + r * .085, r * .22, {w: 500, fam: DIGIT, fill: ink}); }
+  const hand2 = (deg, len, w, c, back = 0) => { const a = deg * Math.PI / 180;
+    return `<line x1="${cx - Math.sin(a)*back}" y1="${cy + Math.cos(a)*back}" x2="${cx + Math.sin(a)*len}" y2="${cy - Math.cos(a)*len}" stroke="${c}" stroke-width="${w}" stroke-linecap="round"/>`; };
+  s += hand2(304.5, r * .55, r * .07, hand) + hand2(54, r * .82, r * .055, hand) + hand2(180, r * .92, 1.6, sec, r * .14);
+  s += `<circle cx="${cx}" cy="${cy}" r="${r*.045}" fill="${sec}"/><circle cx="${cx}" cy="${cy}" r="${r*.018}" fill="#fff"/>`;
+  add(svg, s);
+}
+
+face('眼睛', '桌寵預設。時間在上，眼睛是主角。', '<span class="tag e">眼睛：主角</span>', svg => {
+  const b = svgInit(svg, 'dusk');
+  add(svg, T('週六 24', 300, 92, 30, {w: 600, fam: TEXT, fill: 'rgba(255,255,255,.75)'}));
+  glass(svg, b, T('10:09', 300, 220, 150, {w: 600}), {cy: 160});
+  const e = new GlassEyes(svg, b, {cx: 300, cy: 395, k: 2.3, tint: '#f3c9a6'}); eyes.push(e);
+  svg.addEventListener('pointermove', ev => { const r = svg.getBoundingClientRect(); e.look(((ev.clientX - r.left)/r.width - .5)*2.2, ((ev.clientY - r.top)/r.height - .66)*2.2); });
+  svg.addEventListener('pointerleave', () => e.look(0, 0));
+});
+
+face('Portraits', '數字頂到上緣；眼睛在數字下方、躲在主體後面探出來（此稿省略照片）。', '<span class="tag e">眼睛：主體後面</span>', svg => {
+  const b = svgInit(svg, 'sky');
+  glass(svg, b, T('1009', 300, 345, 440, {w: 640, stretch: 36, ls: -6}), {cy: 200});
+  const e = new GlassEyes(svg, b, {cx: 300, cy: 455, k: 1.15, tint: '#cfe6ff'}); eyes.push(e);
+});
+
+face('Flow', '融合的水珠字；兩顆衛星水珠就是眼睛。', '<span class="tag e">眼睛：水珠</span>', svg => {
+  const b = svgInit(svg, 'flow');
+  const digits = T('10', 300, 285, 250, {w: 800, fam: ROUND, ls: -10}) + T('09', 300, 530, 250, {w: 800, fam: ROUND, ls: -10});
+  glass(svg, b, digits + `<circle cx="95" cy="120" r="34" fill="#fff"/><circle cx="520" cy="470" r="26" fill="#fff"/>`, {goo: true, mag: 1.12, cy: 300});
+  const e = new GlassEyes(svg, b, {cx: 505, cy: 115, k: .95, tint: '#ff9be0'}); e.p.sep = e.t.sep = 30; eyes.push(e);
+  svg.addEventListener('pointermove', ev => { const r = svg.getBoundingClientRect(); e.look(((ev.clientX - r.left)/r.width - .84)*2.5, ((ev.clientY - r.top)/r.height - .2)*2.5); });
+});
+
+face('Modular', '2×2 網格；眼睛是右下那一格。', '<span class="tag e">眼睛：一格</span>', svg => {
+  const b = svgInit(svg, 'paper');
+  add(svg, `<rect width="600" height="600" fill="#93a8ad"/>`);
+  add(svg, T('週六 10月', 46, 92, 46, {w: 700, fam: TEXT, anchor: 'start', fill: '#fff'}));
+  add(svg, T('24', 40, 270, 200, {w: 800, anchor: 'start', fill: '#111', ls: -8}));
+  analog(svg, 445, 150, 112, {ink: '#111', hand: '#111', sec: '#e8e8e8'});
+  add(svg, `<rect x="46" y="345" width="124" height="124" rx="16" fill="url(#mpart)"/><defs><linearGradient id="mpart" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ffb36b"/><stop offset="1" stop-color="#e2557a"/></linearGradient></defs>`);
+  add(svg, T('正在播放', 46, 505, 22, {w: 700, fam: TEXT, anchor: 'start', fill: '#111'}) + T('iPhone 音樂', 46, 532, 19, {w: 500, fam: TEXT, anchor: 'start', fill: 'rgba(0,0,0,.55)'}));
+  add(svg, `<rect x="46" y="545" width="104" height="38" rx="19" fill="rgba(0,0,0,.12)"/>` + T('▶ 播放', 98, 571, 19, {w: 600, fam: TEXT, fill: '#111'}));
+  const bid2 = svgInit2(svg, b);
+  const e = new GlassEyes(svg, bid2, {cx: 425, cy: 445, k: 1.25, tint: '#ffd9b8'}); eyes.push(e);
+  add(svg, T('電量 100%・已接電源', 425, 552, 19, {w: 600, fam: TEXT, fill: 'rgba(0,0,0,.6)'}));
+});
+function scene(svg, inner){ // 平塗錶面：整個畫面當成桌布，眼睛才會透出底下的字
+  const bid = id('bg'); add(svg, `<defs><g id="${bid}">${inner}</g></defs><use href="#${bid}"/>`); return bid;
+}
+function svgInit2(svg){ // Modular 的平塗底當成桌布
+  const bid = id('bg'); add(svg, `<defs><g id="${bid}"><rect width="600" height="600" fill="#93a8ad"/></g></defs>`); return bid;
+}
+
+face('天氣', '大溫度用霜玻璃；眼睛在溫度右邊望向天空。', '<span class="tag e">眼睛：望天</span>', svg => {
+  const b = svgInit(svg, 'sky');
+  add(svg, T('☁︎ 晴時多雲', 40, 74, 26, {w: 600, fam: TEXT, anchor: 'start', fill: W}) + T('高 25° 低 19°', 40, 108, 24, {w: 600, fam: TEXT, anchor: 'start', fill: W}));
+  add(svg, T('10:09', 560, 92, 56, {w: 600, anchor: 'end', fill: W}));
+  glass(svg, b, T('22°', 205, 395, 280, {w: 500, ls: -6}), {cy: 300});
+  const e = new GlassEyes(svg, b, {cx: 500, cy: 345, k: .9, tint: '#cfe6ff'}); e.look(.2, -.9); eyes.push(e);
+  const items = [['17:21', '日落'], ['11 km/h', '風速'], ['76%', '濕度'], ['21', 'AQI']];
+  items.forEach(([v, l], i) => { const x = 85 + i * 143;
+    add(svg, `<circle cx="${x}" cy="468" r="13" fill="none" stroke="${W}" stroke-width="2.4"/>` + T(v, x, 522, 25, {w: 600, fam: TEXT, fill: W}) + T(l, x, 554, 23, {w: 600, fam: TEXT, fill: W})); });
+});
+
+face('行事曆', '月曆網格；眼睛坐在月份和時間之間，看著今天。', '<span class="tag e">眼睛：表頭</span>', svg => {
+  const b = scene(svg, `<rect width="600" height="600" fill="#ececee"/>`);
+  add(svg, T('24', 330, 500, 330, {w: 800, fill: '#ff4d4a', ls: -14, extra: 'opacity=".9"'}));
+  add(svg, T('2026年10月', 40, 76, 36, {w: 600, fam: TEXT, anchor: 'start', fill: '#f2433d'}) + T('10:09', 560, 76, 36, {w: 600, anchor: 'end', fill: '#f2433d'}));
+  '日一二三四五六'.split('').forEach((d, i) => add(svg, T(d, 62 + i * 79, 140, 30, {w: 600, fam: TEXT, fill: '#1a5ad8'})));
+  const start = [27,28,29,30,1,2,3]; let day = 0;
+  for (let r = 0; r < 6; r++) for (let c = 0; c < 7; c++) {
+    const n = r === 0 ? start[c] : (r * 7 + c - 3); const inMonth = !(r === 0 && c < 4) && n <= 31;
+    const v = r === 0 ? n : (n > 31 ? n - 31 : n); const x = 62 + c * 79, y = 200 + r * 64;
+    if (inMonth && v === 24) add(svg, `<circle cx="${x}" cy="${y - 11}" r="27" fill="#0d2a5c"/>` + T(v, x, y, 31, {w: 600, fill: '#fff'}));
+    else add(svg, T(v, x, y, 31, {w: 600, fill: inMonth ? '#1a5ad8' : 'rgba(26,90,216,.35)'}));
+  }
+  const e = new GlassEyes(svg, b, {cx: 358, cy: 62, k: .62, tint: '#ff4d4a'}); e.look(.6, .8); eyes.push(e);
+});
+
+face('Home Modular', '溫控、場景、對講、門鎖；眼睛住在右下那塊磚。資料來源見第八節。', '<span class="tag e">眼睛：一塊磚</span>', svg => {
+  const b = svgInit(svg, 'purple');
+  const tiles = [[24, 24, 352, 330, 40], [392, 24, 184, 184, 34], [392, 222, 184, 132, 30], [24, 370, 174, 206, 30], [212, 370, 174, 206, 30], [400, 370, 176, 206, 30]];
+  glass(svg, b, tiles.map(([x, y, w, h, r]) => `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${r}" fill="#fff"/>`).join(''), {mag: 1.03});
+  add(svg, T('24°', 200, 225, 150, {w: 600, fill: '#fff', ls: -4}) + T('溫控', 200, 290, 24, {w: 700, fam: TEXT, fill: '#fff'}) + T('客廳', 200, 320, 21, {w: 600, fam: TEXT, fill: 'rgba(255,255,255,.6)'}));
+  add(svg, `<path d="M74 300 l14 14 l14 -14" fill="none" stroke="#fff" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M298 314 l14 -14 l14 14" fill="none" stroke="#fff" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>`);
+  analog(svg, 484, 116, 74, {nums: false, ink: '#fff', hand: '#fff', sec: '#fff'});
+  add(svg, `<path d="M494 250 a22 22 0 1 0 14 34 a18 18 0 0 1 -14 -34z" fill="#fff"/>` + T('晚安', 484, 315, 21, {w: 700, fam: TEXT, fill: '#fff'}) + T('場景', 484, 340, 19, {w: 600, fam: TEXT, fill: 'rgba(255,255,255,.6)'}));
+  [['對講', '全家', 111], ['門鎖', '大門', 299]].forEach(([a, sub, x]) => {
+    add(svg, `<circle cx="${x}" cy="440" r="22" fill="none" stroke="#fff" stroke-width="3"/>` + T(a, x, 520, 22, {w: 700, fam: TEXT, fill: '#fff'}) + T(sub, x, 548, 19, {w: 600, fam: TEXT, fill: 'rgba(255,255,255,.6)'}));
+  });
+  const e = new GlassEyes(svg, b, {cx: 488, cy: 455, k: 1.0, tint: '#b9b6ff'}); eyes.push(e);
+  add(svg, T('HomePlay', 488, 548, 19, {w: 600, fam: TEXT, fill: 'rgba(255,255,255,.6)'}));
+});
+
+face('Typograph', '眼睛在右下角，玻璃透出底下的大數字；指針畫在眼睛上面。', '<span class="tag e">眼睛：角落</span>', svg => {
+  const b = scene(svg, `<rect width="600" height="600" fill="#3e9a5e"/>` + T('12', 300, 255, 300, {w: 400, fill: '#0a0a0a', ls: -18}) + T('9', 120, 420, 300, {w: 400, fill: '#0a0a0a'}) + T('3', 485, 420, 300, {w: 400, fill: '#0a0a0a'}) + T('6', 300, 590, 300, {w: 400, fill: '#0a0a0a'}) + T('週六 24', 34, 566, 26, {w: 700, fam: TEXT, anchor: 'start', fill: '#0a0a0a'}));
+  const e = new GlassEyes(svg, b, {cx: 500, cy: 520, k: .95, tint: '#7be3a0'}); e.look(-.7, -.6); eyes.push(e);
+  const c = 300, h = (deg, len, w) => { const a = deg * Math.PI / 180; return `<line x1="${c}" y1="${c}" x2="${c + Math.sin(a)*len}" y2="${c - Math.cos(a)*len}" stroke="#fff" stroke-width="${w}" stroke-linecap="round"/>`; };
+  add(svg, h(304.5, 150, 13) + h(54, 240, 10) + `<line x1="300" y1="0" x2="300" y2="600" stroke="#fff" stroke-width="1.6"/><circle cx="300" cy="300" r="9" fill="#fff"/><circle cx="300" cy="300" r="4" fill="#3e9a5e"/>`);
+});
+
+face('浮雕指針', '數字是同色浮雕；眼睛在 6 點的位置，也是同色玻璃。', '<span class="tag e">眼睛：6 點</span>', svg => {
+  let s = ''; [[12, 0], [1, 30], [2, 60], [3, 90], [4, 120], [5, 150], [7, 210], [8, 240], [9, 270], [10, 300], [11, 330]].forEach(([n, d]) => {
+    const a = d * Math.PI / 180; s += T(n, 300 + Math.sin(a) * 235, 300 - Math.cos(a) * 235 + 30, 86, {w: 300, fill: '#d9b0b4'}); });
+  const b = scene(svg, `<rect width="600" height="600" fill="#d9b0b4"/><g filter="url(#emboss)">${s}</g>`);
+  const e = new GlassEyes(svg, b, {cx: 300, cy: 500, k: .85, tint: '#ff7fb6'}); eyes.push(e);
+  const c = 300, h = (deg, len, w, col) => { const a = deg * Math.PI / 180; return `<line x1="${c}" y1="${c}" x2="${c + Math.sin(a)*len}" y2="${c - Math.cos(a)*len}" stroke="${col}" stroke-width="${w}" stroke-linecap="round"/>`; };
+  add(svg, `<g filter="url(#drop)">${h(304.5, 150, 14, '#000') + h(54, 230, 11, '#000')}</g>` + h(304.5, 150, 14, '#6a1f2b') + h(54, 230, 11, '#6a1f2b') + h(180, 270, 2.4, '#ff3fa4') + `<circle cx="300" cy="300" r="10" fill="#ff3fa4"/><circle cx="300" cy="300" r="4" fill="#fff"/>`);
+});
+
+face('黑／夜間', '白天只剩眼睛的邊光和高光；夜間 0.3 nit 闔眼，只浮出暗紅時間。', '<span class="tag e">眼睛：邊光</span>', svg => {
+  const b = scene(svg, `<rect width="600" height="600" fill="#000"/>`);
+  const e = new GlassEyes(svg, b, {cx: 300, cy: 300, k: 1.15, tint: '#3d4a7a', ghost: true}); eyes.push(e);
+});
+face('黑（夜間）', '夜裡闔眼：兩道暗紅弧線，時間在下面，沒有光暈。', '<span class="tag e">眼睛：闔眼</span>', svg => {
+  add(svg, `<rect width="600" height="600" fill="#000"/>` + T('10:09', 300, 400, 96, {w: 300, fill: '#5c120e'}));
+  add(svg, `<path d="M222 262 q36 26 72 0" fill="none" stroke="#5c120e" stroke-width="7" stroke-linecap="round"/><path d="M306 262 q36 26 72 0" fill="none" stroke="#5c120e" stroke-width="7" stroke-linecap="round"/>`);
+});
+
+if (!reduced) requestAnimationFrame(loop); else eyes.forEach(e => e.draw());
+</script>
+</body>
+</html>

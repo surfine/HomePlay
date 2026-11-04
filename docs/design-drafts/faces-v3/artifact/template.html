@@ -1,0 +1,268 @@
+<title>HomePlay 錶面 v3</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<style>
+/* 版式：單欄閱讀寬度，樣稿用自動欄數網格；字體一律系統 SF，因為主題本身就是 Apple 的錶面 */
+:root{
+  --bg:#f5f5f7; --surface:#ffffff; --ink:#1d1d1f; --ink-2:#6e6e73; --hair:rgba(29,29,31,.10);
+  --accent:#0a66d8; --accent-soft:rgba(10,102,216,.10); --bad:#c4251c; --good:#1f7a3a; --chip:rgba(29,29,31,.06);
+  --tile-shadow:0 1px 2px rgba(0,0,0,.08),0 14px 34px rgba(0,0,0,.14);
+  --display:"SF Pro Display",system-ui,-apple-system,"PingFang TC","Helvetica Neue",sans-serif;
+  --text:system-ui,-apple-system,"PingFang TC","Helvetica Neue",sans-serif;
+  --mono:ui-monospace,"SF Mono",Menlo,monospace;
+}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){
+  --bg:#0b0b0c; --surface:#18181a; --ink:#f5f5f7; --ink-2:#a1a1a6; --hair:rgba(245,245,247,.12);
+  --accent:#4ba3ff; --accent-soft:rgba(75,163,255,.14); --bad:#ff6a5f; --good:#4cd07d; --chip:rgba(245,245,247,.08);
+  --tile-shadow:0 1px 2px rgba(0,0,0,.5),0 14px 34px rgba(0,0,0,.5); color-scheme:dark }}
+:root[data-theme="dark"]{
+  --bg:#0b0b0c; --surface:#18181a; --ink:#f5f5f7; --ink-2:#a1a1a6; --hair:rgba(245,245,247,.12);
+  --accent:#4ba3ff; --accent-soft:rgba(75,163,255,.14); --bad:#ff6a5f; --good:#4cd07d; --chip:rgba(245,245,247,.08);
+  --tile-shadow:0 1px 2px rgba(0,0,0,.5),0 14px 34px rgba(0,0,0,.5); color-scheme:dark }
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font:17px/1.62 var(--text);-webkit-font-smoothing:antialiased;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+main{max-width:1120px;margin:0 auto;padding-block:56px 120px}
+h1,h2,h3{font-family:var(--display);text-wrap:balance;margin:0}
+h1{font-size:clamp(36px,5.4vw,60px);line-height:1.05;letter-spacing:-.025em;font-weight:700}
+h2{font-size:clamp(26px,3.2vw,36px);line-height:1.15;letter-spacing:-.018em;font-weight:700;margin-top:96px}
+h3{font-size:20px;letter-spacing:-.01em;margin-top:40px}
+p{margin:12px 0 0;max-width:68ch}
+.lede{font-size:20px;color:var(--ink-2);max-width:60ch}
+.eyebrow{font-size:13px;font-weight:600;letter-spacing:.06em;color:var(--ink-2)}
+.note{font-size:14px;color:var(--ink-2)}
+code{font:13px/1.4 var(--mono);background:var(--chip);padding:1px 6px;border-radius:6px}
+a{color:var(--accent)}
+.hero{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.05fr);gap:40px;align-items:center;margin-top:28px}
+.stage-wrap{display:flex;flex-direction:column;gap:14px;min-width:0}
+canvas.tile,img.tile{display:block;width:100%;max-width:100%;aspect-ratio:1;border-radius:10.5%;box-shadow:var(--tile-shadow);background:#2a2a2e}
+#stage{cursor:crosshair;touch-action:none}
+.chips{display:flex;flex-wrap:wrap;gap:8px}
+.chips button{font:inherit;font-size:14px;color:var(--ink);background:var(--surface);border:1px solid var(--hair);
+  padding:6px 14px;border-radius:999px;cursor:pointer;transition:transform .12s ease-out,background .15s}
+.chips button:active{transform:scale(.96)}
+.chips button[aria-pressed="true"]{background:var(--ink);color:var(--bg);border-color:transparent}
+.chips button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.ctl-label{font-size:12px;font-weight:600;color:var(--ink-2);letter-spacing:.04em}
+.points{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:12px;margin-top:28px}
+.points div{background:var(--surface);border:1px solid var(--hair);border-radius:18px;padding:16px 18px}
+.points b{display:block;font-size:13px;color:var(--ink-2);font-weight:600;margin-bottom:4px}
+.points span{font-size:17px;line-height:1.45;font-weight:600}
+.tw{overflow-x:auto;background:var(--surface);border:1px solid var(--hair);border-radius:18px;margin-top:18px}
+table{width:100%;border-collapse:collapse;font-size:15px;min-width:640px}
+th,td{text-align:left;padding:11px 14px;border-bottom:1px solid var(--hair);vertical-align:top}
+tr:last-child td{border-bottom:0}
+th{color:var(--ink-2);font-weight:600;font-size:13px}
+td.k{white-space:nowrap;font-weight:600}
+.tag{display:inline-block;font-size:12px;font-weight:600;padding:2px 9px;border-radius:999px;background:var(--accent-soft);color:var(--accent);white-space:nowrap}
+.review{display:grid;grid-template-columns:minmax(0,260px) minmax(0,1fr);gap:24px;margin-top:26px;align-items:start}
+.review .crit{display:grid;gap:10px;min-width:0}
+.crit div{background:var(--surface);border:1px solid var(--hair);border-radius:14px;padding:12px 15px;font-size:15px}
+.crit b{display:block;font-size:12.5px;margin-bottom:2px}
+.crit .x b{color:var(--bad)} .crit .o b{color:var(--good)}
+.pair{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-top:22px}
+figure{margin:0;min-width:0}
+figcaption{font-size:13px;color:var(--ink-2);margin-top:10px;line-height:1.5}
+figcaption b{color:var(--ink);font-weight:600}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:26px 22px;margin-top:26px}
+ol{max-width:72ch;padding-left:22px} li{margin:6px 0}
+.status{display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:600;color:var(--good)}
+.status::before{content:"";width:8px;height:8px;border-radius:50%;background:currentColor}
+@media (max-width:820px){ .hero{grid-template-columns:1fr} .review{grid-template-columns:1fr} .review img{max-width:320px} }
+@media (prefers-reduced-motion:reduce){ .chips button{transition:none} }
+</style>
+
+<main>
+<header>
+  <div class="eyebrow">HOMEPLAY · 設計稿 · 2026 年 10 月 24 日</div>
+  <div class="hero">
+    <div>
+      <h1>HomePlay 錶面 v3</h1>
+      <p class="lede">逐款對照 apple.com／homeview 上的 13 款官方錶面後，重畫了陣容。👀 維持 Apple Color Emoji 的樣子不變；裝著它的膠囊依年代換材質：純黑、黑透漸層、玻璃。</p>
+      <p class="note">右邊的錶面是在瀏覽器裡即時算出來的：玻璃由形狀算出高度圖，再做折射、霜化、色散和邊光，和 App 的 SystemGlass 管線同一套思路。👀 的取樣數值和 App 裡的 <code>drawEye</code> 相同。把游標移到上面，瞳孔會跟著看。</p>
+    </div>
+    <div class="stage-wrap">
+      <canvas id="stage" class="tile" width="600" height="600" aria-label="互動示範：眼睛錶面"></canvas>
+      <div class="ctl-label">膠囊</div>
+      <div class="chips" id="matBtns"></div>
+      <div class="ctl-label">表情</div>
+      <div class="chips" id="exprBtns"></div>
+      <div class="ctl-label">桌布</div>
+      <div class="chips" id="bgBtns"></div>
+    </div>
+  </div>
+  <div class="points">
+    <div><b>👀</b><span>維持 emoji 的眼白枕形陰影、棕到金的虹膜、大瞳孔和一顆高光。</span></div>
+    <div><b>膠囊</b><span>依錶面年代換材質：純黑、黑透漸層、玻璃；Siri 聆聽時外圈發光。</span></div>
+    <div><b>每款都有</b><span>膠囊放進每一款錶面，位置和大小依各錶面的空位設計。</span></div>
+    <div><b>System 6</b><span>原生 1-bit 解析度、網點桌布、條紋標題列、預設按鈕，照 1988 年的樣子。</span></div>
+  </div>
+</header>
+
+<section>
+<h2>膠囊依年代換材質</h2>
+<p>同一片天空、同一對 👀，四種膠囊。錶面預設「自動」，依該錶面所屬的年代挑材質；設定 › 外觀 › 膠囊也能固定成其中一種。</p>
+<div class="grid" id="mats"></div>
+<div class="tw"><table>
+<tr><th>材質</th><th>年代</th><th>做法</th><th>預設用在</th></tr>
+<tr><td class="k">純黑</td><td>2022 · Dynamic Island</td><td>不透明 <code>#000</code>，沒有邊光；在黑底上和背景融成一體</td><td>Modular、Typograph、黑、夜間</td></tr>
+<tr><td class="k">玻璃</td><td>2025 · Liquid Glass（iOS 26）</td><td>斜面為高的 34%、折射 13%、霜化 0.16、左上主光、右下次光、接觸陰影</td><td>眼睛（預設）、Portraits、Flow、天氣、Home Modular、浮雕指針</td></tr>
+<tr><td class="k">黑透漸層</td><td>2026 · iOS 27</td><td>背後霜化並壓暗，再疊一層中間 86% 黑、兩端 8% 的水平漸層</td><td>行事曆、Growth</td></tr>
+<tr><td class="k">Siri 聆聽</td><td>任何年代，按住 F5 時</td><td>黑透漸層，外圈加一道橙、粉、紫、藍的光</td><td>所有錶面，暫時切換</td></tr>
+<tr><td class="k">1-bit 按鈕</td><td>1988 · System 6</td><td>圓角框，外面再一圈 3 px 粗框（預設按鈕）；👀 是 1-bit 點陣</td><td>AI System 6 系列</td></tr>
+</table></div>
+</section>
+
+<section>
+<h2>新陣容</h2>
+<p>12 款錶面都用同一套管線畫出。時間一律 10:09，日期是 2026 年 10 月 24 日（週六）。版式、字級和位置照官方錶面逐項量測，再換成我們的內容；標籤是該錶面預設的膠囊材質。</p>
+<div class="grid" id="faces"></div>
+</section>
+
+<section>
+<h2>AI System 6 系列</h2>
+<p>原生 1-bit：先在 150 或 300 點見方的畫布上逐點畫，門檻化成純黑白，再以整數倍放大，不做任何反鋸齒。每個細節都對應當年的介面。</p>
+<div class="grid" id="sys6"></div>
+<div class="tw"><table>
+<tr><th>細節</th><th>當年的樣子</th><th>這裡的做法</th></tr>
+<tr><td class="k">桌布</td><td>50% 灰網點（黑白相間的點）</td><td>2×2 圖樣平鋪</td></tr>
+<tr><td class="k">選單列</td><td>20 點高、底下 1 點黑線；Chicago 12</td><td>左上用 1-bit 👀 當系統選單圖示，取代蘋果標誌</td></tr>
+<tr><td class="k">視窗</td><td>標題列 6 道橫紋、左上關閉框、標題兩側留白；右下 1 點陰影</td><td>照做</td></tr>
+<tr><td class="k">按鈕</td><td>圓角框；預設按鈕外加一圈 3 點粗框</td><td>膠囊就是預設按鈕，👀 放在裡面</td></tr>
+<tr><td class="k">字體</td><td>選單和標題用 Chicago，內文用 Geneva 9／12</td><td>樣稿暫用本機 Geneva 門檻化；App 會隨包 ChicagoFLF，作者聲明為公有領域，下載前會先問你</td></tr>
+<tr><td class="k">桌上附件</td><td>Alarm Clock：時間、日期、三個切換圖示</td><td>放大成一款錶面</td></tr>
+<tr><td class="k">開機</td><td>笑臉 Mac，接著是「Welcome to Macintosh.」雙框對話盒</td><td>笑臉 Mac 的螢幕裡換成 👀，文字改成 Welcome to HomePlay.</td></tr>
+<tr><td class="k">關於</td><td>About the Finder：版本與記憶體長條</td><td>長條改成 iPhone 電量、陪伴天數和 CarPlay</td></tr>
+<tr><td class="k">語言</td><td>英文介面</td><td>維持英文；繁中介面要到 System 7 的中文語言套件才有</td></tr>
+</table></div>
+</section>
+
+<section>
+<h2>👀 與膠囊的規格</h2>
+<div class="tw"><table>
+<tr><th>部位</th><th>做法</th><th>數值（以膠囊高 h 為單位）</th></tr>
+<tr><td class="k">膠囊</td><td>寬高比與 App 相同</td><td>420 × 156，即寬 = 2.69 h，圓角 h/2</td></tr>
+<tr><td class="k">眼白</td><td>中間純白，沿邊一圈枕形內陰影，邊上落到 0.58 灰，沒有描邊</td><td>眼高 0.81 h、寬高比 1 : 1.45、兩眼中心相距 0.65 h</td></tr>
+<tr><td class="k">虹膜</td><td>上半棕、下三分之一轉金（底光）；外緣一圈極細深棕</td><td>半徑為眼寬的 54%；<code>#5a2a00</code> → <code>#e2ab00</code></td></tr>
+<tr><td class="k">瞳孔與高光</td><td>深棕大瞳孔，邊緣微微柔開；左上一顆大高光</td><td>瞳孔佔虹膜 64%、<code>#291201</code>；高光半徑 30%</td></tr>
+<tr><td class="k">預設視線</td><td>和 emoji 一樣往左下看；有人時跟著人</td><td>水平 −13、垂直 +6（App 的原始單位）</td></tr>
+<tr><td class="k">眼皮</td><td>眼睛形狀本身被切掉，不靠塗黑，所以在玻璃和漸層膠囊上也成立</td><td>上緣弧線、下緣直線、笑眼彎月、擔心時往外斜 0.38 rad</td></tr>
+<tr><td class="k">動態</td><td>彈簧，可隨時打斷</td><td>眨眼 110 ms 闔、160 ms 張；表情：阻尼 1.0、響應 0.35 s</td></tr>
+</table></div>
+<h3>每款錶面的膠囊</h3>
+<div class="tw"><table>
+<tr><th>錶面</th><th>住在哪</th><th>寬／畫面寬</th><th>預設材質</th></tr>
+<tr><td class="k">眼睛（預設）</td><td>中央偏下，時間在上方</td><td>50%</td><td>玻璃</td></tr>
+<tr><td class="k">Portraits</td><td>數字下方、照片主體後面</td><td>28%</td><td>玻璃</td></tr>
+<tr><td class="k">回憶</td><td>左下角，與右下標題對稱</td><td>22%</td><td>玻璃</td></tr>
+<tr><td class="k">Modular</td><td>網格右下一格</td><td>32%</td><td>純黑</td></tr>
+<tr><td class="k">Home Modular</td><td>右下一塊玻璃磚</td><td>22%</td><td>玻璃</td></tr>
+<tr><td class="k">Flow</td><td>左上，像一顆漂著的水珠</td><td>25%</td><td>玻璃</td></tr>
+<tr><td class="k">天氣</td><td>大溫度右側，望向天空</td><td>25%</td><td>玻璃</td></tr>
+<tr><td class="k">行事曆</td><td>月份與時間之間</td><td>20%</td><td>黑透漸層</td></tr>
+<tr><td class="k">Typograph</td><td>右下角，指針從上面掃過</td><td>25%</td><td>純黑</td></tr>
+<tr><td class="k">浮雕指針</td><td>6 點的位置</td><td>23%</td><td>玻璃</td></tr>
+<tr><td class="k">黑</td><td>中央</td><td>43%</td><td>純黑</td></tr>
+<tr><td class="k">黑（夜間）</td><td>中央，闔眼、暗紅</td><td>—</td><td>純黑</td></tr>
+<tr><td class="k">Growth</td><td>點陣環中央</td><td>38%</td><td>黑透漸層</td></tr>
+<tr><td class="k">System 6 系列</td><td>預設按鈕</td><td>依視窗</td><td>1-bit 按鈕</td></tr>
+</table></div>
+</section>
+
+<section>
+<h2>玻璃字：描邊和實心的差別</h2>
+<p>同一片天空。左邊照目前的做法：亮白描邊、裡面偏灰、筆畫細。右邊照官方：實心霜玻璃，裡面比背景亮，邊緣是柔和的斜面光，沒有硬描邊。</p>
+<div class="pair">
+  <figure><canvas class="tile" id="specOld" width="600" height="600"></canvas><figcaption><b>目前</b>　描邊、灰心、筆畫約字寬 7%</figcaption></figure>
+  <figure><canvas class="tile" id="specNew" width="600" height="600"></canvas><figcaption><b>建議</b>　實心霜玻璃、柔邊、筆畫約 16%、頂到上緣</figcaption></figure>
+</div>
+<div class="tw"><table>
+<tr><th>參數</th><th>目前</th><th>官方（目測）</th><th>建議值</th></tr>
+<tr><td class="k">填充</td><td>透明偏灰，比背景暗</td><td>比背景亮約 20%，飽和略升</td><td>霜化 0.7、往背景亮色提 0.28、飽和 1.25</td></tr>
+<tr><td class="k">邊緣</td><td>1–2 px 白描邊</td><td>沒有描邊，6–10 px 柔光斜面</td><td>斜面 14 px、左上主光、右下次光</td></tr>
+<tr><td class="k">折射</td><td>幾乎沒有</td><td>雲在邊緣明顯偏移</td><td>距離場法線位移，邊緣最多 12 px，0.06 色散</td></tr>
+<tr><td class="k">字重與寬度</td><td>Light、標準寬</td><td>Semibold、Compressed</td><td>SF Pro <code>wdth 36</code>、<code>wght 640</code></td></tr>
+<tr><td class="k">位置</td><td>置中，佔 10%–80% 高</td><td>頂到上緣，佔 6%–59% 高，左右滿版</td><td>上緣留 5%，字高 53%</td></tr>
+<tr><td class="k">投影</td><td>有</td><td>幾乎沒有</td><td>拿掉；靠斜面表現厚度</td></tr>
+</table></div>
+</section>
+
+<section>
+<h2>逐款檢討</h2>
+<p>左邊是 HomePlay 目前的錶面。官方截圖受版權保護，只放在本機的對照版，這裡改用文字描述。</p>
+<div class="review"><img class="tile" src="{{NOW_island}}" alt="目前的 Island 錶面"><div class="crit">
+  <div class="x"><b>Island 對 Portraits：材質</b>我們的數字是一條細白描邊包著灰心，讀起來是空心字；官方是整塊實心霜玻璃。</div>
+  <div class="x"><b>字重與位置</b>官方用 Compressed Semibold，頂到上緣，人站在數字前面。我們的字細，而且置中，一定會擋到臉。</div>
+  <div class="x"><b>多餘元素</b>日期和「重按連上 iPhone」官方都沒有，操作說明不該印在錶面上。膠囊壓在數字正中央，擋住了時間。</div>
+</div></div>
+
+<div class="review"><img class="tile" src="{{NOW_modular}}" alt="目前的 Modular 錶面"><div class="crit">
+  <div class="x"><b>Modular：網格被打破</b>膠囊浮在兩排中間，不屬於任何一格；應該住進其中一格。</div>
+  <div class="x"><b>字重不一</b>「24」用 Heavy，「100%」卻是細字。官方只有兩級：大字 Semibold／Heavy，小字 Semibold。</div>
+  <div class="x"><b>像 App 圖示</b>藍色 CarPlay 方塊是 App 圖示的語言，不是小工具。官方左下是正在播放：封面、曲名、灰色膠囊「Play」。</div>
+</div></div>
+
+<div class="review"><img class="tile" src="{{NOW_flow}}" alt="目前的 Flow 錶面"><div class="crit">
+  <div class="x"><b>Flow：像貼紙</b>我們用 SF Rounded Heavy 加白描邊和平塗漸層。官方的數字被吹成鼓起的水珠，0 沒有字腔，旁邊還有衛星小水珠。水珠內部會強烈折射背後的粉藍漩渦。</div>
+</div></div>
+
+<div class="review"><img class="tile" src="{{NOW_analog}}" alt="目前的 Analog 錶面"><div class="crit">
+  <div class="o"><b>Analog 對 Typograph：最接近</b>數字疊壓、綠底、白指針都做到了。</div>
+  <div class="x"><b>要改</b>膠囊要退到角落，指針從它上面掃過。指針要做成 Apple 的樣式：細頸接粗桿、帶一點陰影。秒針要更細，並貫穿全高。</div>
+</div></div>
+
+<div class="review"><img class="tile" src="{{NOW_bedside}}" alt="目前的床頭錶面"><div class="crit">
+  <div class="x"><b>床頭：太刺眼</b>紅色霓虹細字有光暈，夜裡反而不平和。改成「黑」錶面：夜間闔眼，只浮出暗紅、無光暈的時間。</div>
+</div></div>
+
+<div class="review"><img class="tile" src="{{NOW_pocket}}" alt="目前的 Pocket 錶面"><div class="crit">
+  <div class="x"><b>Pocket：和 Modular 重複</b>電量卡又和背景的玻璃材質不一致。併進 Modular。</div>
+</div></div>
+
+<h3>膠囊的三個問題</h3>
+<div class="tw"><table>
+<tr><th>問題</th><th>說明</th></tr>
+<tr><td class="k">只有一種材質</td><td>不管哪個年代的錶面都是同一顆不透明黑膠囊。玻璃年代的錶面配純黑，像把舊零件裝到新機器上。</td></tr>
+<tr><td class="k">每款貼同一顆</td><td>位置、大小每款都一樣：Island 擋到時間、照片款擋到臉、Modular 打破網格、Typograph 壓在指針的路上。</td></tr>
+<tr><td class="k">眼皮靠塗黑</td><td>程式裡的眼皮和笑眼是用黑色塗出來的，只能活在黑膠囊裡。要換成玻璃或漸層，眼皮得改成把眼睛形狀切掉。</td></tr>
+</table></div>
+</section>
+
+<section>
+<h2>Home Modular 和 HomeKit</h2>
+<p><span class="status">已在這台 Mac 實測打通</span></p>
+<p>macOS 上的 HomeKit 只開放給 Mac Catalyst App，而且要帶 <code>com.apple.developer.homekit</code> 權限和描述檔；用 Developer ID 公開發布的 HomePlay.app 本身帶不了這個權限。所以另外做一個背景小幫手「HomePlay Home」，用開發簽名讀家庭，再透過本機 socket 把狀態交給桌寵。資料不會離開這台 Mac。</p>
+<div class="tw"><table>
+<tr><th>試法</th><th>結果</th></tr>
+<tr><td class="k">原生 AppKit 連結 HomeKit</td><td>做不到：SDK 只在 iOSSupport 裡有 HomeKit（Catalyst 專用）</td></tr>
+<tr><td class="k">Catalyst，不帶權限</td><td>能啟動，但一個家庭都讀不到</td></tr>
+<tr><td class="k">Catalyst，帶權限，ad-hoc 簽名</td><td>一啟動就被 AMFI 殺掉：受限權限一定要有描述檔</td></tr>
+<tr><td class="k">Catalyst，開發簽名（已註冊這台 Mac）</td><td><b>成功</b>：讀到「我的家」27 個配件、名稱和連線狀態</td></tr>
+<tr><td class="k">Developer ID 發布</td><td>社群回報：Mac Catalyst 的 Developer ID 描述檔不提供 HomeKit</td></tr>
+</table></div>
+<div class="tw"><table>
+<tr><th>路線</th><th>誰能用</th><th>狀態</th></tr>
+<tr><td class="k">開發簽名的小幫手</td><td>註冊在團隊下的 Mac（每年 100 台）</td><td><b>已完成</b>：即時讀到 27 個配件、7 個房間、7 個場景，可訂閱變化；桌寵端已能連線，尚未接到錶面</td></tr>
+<tr><td class="k">App Store 上架小 App</td><td>所有人</td><td>公開版的路；要過審核，本身得有像樣的家庭介面</td></tr>
+<tr><td class="k">捷徑橋接</td><td>所有人，免權限</td><td>退路：較慢，要使用者匯入捷徑</td></tr>
+<tr><td class="k">私有 API</td><td>只有關掉 SIP 的 Mac</td><td>不採用：無法給一般使用者</td></tr>
+</table></div>
+</section>
+
+<section>
+<h2>實作順序</h2>
+<ol>
+  <li><b>眼皮改成切形</b>：<code>drawEye</code> 的眼皮和笑眼改用裁切，不再塗黑；👀 的畫法不變。</li>
+  <li><b>膠囊材質</b>：新增純黑、黑透漸層、玻璃三種材質和 Siri 聆聽外光，玻璃走 SystemGlass 管線。設定 › 外觀加一個「膠囊」選項：自動／純黑／黑透漸層／玻璃。</li>
+  <li><b>放置</b>：每款錶面回報膠囊的位置、寬度、材質和層級（在主體前或後、在指針下），照上表。</li>
+  <li><b>玻璃字</b>：Portraits 改用 Compressed Semibold、頂到上緣，拿掉日期和「重按連上」；後者改成第一次啟動時的一次性提示。</li>
+  <li><b>新錶面</b>：眼睛、天氣、行事曆、浮雕指針、黑、Growth，並重做 Modular、Flow、Typograph；Pocket 併進 Modular。</li>
+  <li><b>System 6 系列</b>：Finder、Alarm Clock、Welcome、About 四款，原生 1-bit 繪製；隨包 ChicagoFLF（下載前先問你）。</li>
+  <li><b>Home Modular</b>：接上 HomePlay Home 小幫手的即時狀態。</li>
+  <li><b>驗證</b>：每款錶面匯出 1× 和 2× 平面圖，在本機跟官方並排；跑 <code>homeplay-pet --selftest</code>；閒置 CPU 不得高於目前。</li>
+</ol>
+</section>
+</main>
+
+<script>
+{{ENGINE}}
+</script>
