@@ -153,6 +153,16 @@ if CommandLine.arguments.contains("--selftest") {
     var fired = false; fct.onTimerDone = { fired = true }
     _ = fct.tick(101); check(fct.timerActive && !fired, "计时器还没到")
     _ = fct.tick(102.1); check(!fct.timerActive && fired, "计时器到点叫一下")
+    // 天氣靜態層：同一段內容「直接畫進主畫布」與「離屏緩存圖再合成」必須逐字節一致（無資料的破折號狀態，確定性）
+    do {
+        let fw = Face(); fw.frozen = true
+        let wd = Date(timeIntervalSince1970: 1_790_000_060), wfull = CGRect(x: 0, y: 0, width: 1024, height: 1024)
+        func wpng(_ img: CGImage) -> Data { NSBitmapImageRep(cgImage: img).representation(using: .png, properties: [:])! }
+        let woff = makeImage(512, 512) { c in c.scaleBy(x: 0.5, y: 0.5); fw.drawWeatherStatic(c, nil, wd) }
+        let wdirect = makeImage(512, 512) { c in c.scaleBy(x: 0.5, y: 0.5); fw.drawWeatherStatic(c, nil, wd) }
+        let wviaCache = makeImage(512, 512) { c in c.scaleBy(x: 0.5, y: 0.5); fw.drawUpright(c, woff, in: wfull) }
+        check(wpng(wdirect) == wpng(wviaCache), "天气静态层：缓存合成＝直接画")
+    }
     // 壁纸色票：整点对上、之间插值、绕过午夜
     let noon = Face.palette(hour: 12, aqua: false), dayTop = Face.RGB(0x1d4a57)
     check(abs(noon.top.r - dayTop.r) < 1e-6 && abs(noon.top.b - dayTop.b) < 1e-6, "12 点＝白天色票")

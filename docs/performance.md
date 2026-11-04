@@ -55,8 +55,10 @@ MacPlay（同類接收器，Rust）的效能相關條目集中在連線韌性與
 ## 還沒做、可再往下挖（2026-11-04 核對）
 
 - ~~臉部靜態層快取（壁紙＋玻璃底）只重畫眼睛與文字，可再省一半。~~ **已做**：pocket 靜態層（`Faces/PocketFace.swift`）、island 文字層（`IslandOptions.swift`）、2026 島背景＋數字層（`Faces/IslandFace.swift`）、calendar 月曆格＋大數字（`Faces/CalendarFace.swift`，分鐘粒度）。
-- ~~其餘錶面補同款靜態層。~~ **2026-11-04 analog（Typograph）試點實測為負收益，已回滾**：同條件 `--bench`（512²、閒置）直接畫 faceMs≈2.1–2.9 ms，換成靜態層（98% 快取命中）反而 4.3–7.3 ms——analog 的「靜態」只有純色底＋五條字形路徑＋一行日期，本來就便宜；每次渲染多付一張 512² 圖像合成（drawUpright＋高插值）比直接畫更貴。pocket/calendar 有收益是因為靜態部分是多層玻璃＋高斯模糊＋月曆網格。**結論：靜態層只對「靜態部分貴」的錶面值得，推廣前逐款估靜態部分成本**（weather 有多層玻璃可候選；modular/flow 有秒級動畫本就要整幅重畫）。
+- ~~其餘錶面補同款靜態層。~~ **2026-11-04 兩款試點把邊界畫清了**：analog（Typograph）實測為負收益、已回滾——直接畫 faceMs≈2.1–2.9 ms，靜態層（98% 命中）反而 4.3–7.3 ms，因為它的「靜態」只有純色底＋五條字形＋一行日期，本來就便宜，整圖合成（drawUpright＋高插值）比直接畫貴。**weather 實測正收益、已落地**：直接畫 faceMs≈12.6–13.8 ms（玻璃大溫度＋陰影文字＋SF Symbol 都貴），靜態層（分鐘/資料版本/語言/像素比為 key，眨眼/視線驅動的渲染走合成）降到 **2.6–3.1 ms，約 4.8 倍**；selftest 釘了「快取合成＝直接畫」逐字節等價。**結論：靜態層只對「靜態部分貴」的錶面值得（pocket/island/calendar/weather 已覆蓋）；modular/flow 有秒級動畫本就整幅重畫，black/growth/photos 的靜態部分便宜，不必做。**
 - 直播時若來源 60 fps 而顯示器 60 Hz，可考慮把渲染與解碼對齊（目前已是直通）。
+- ~~H264Sink 鏈路每幀 3–4 次全幅拷貝（ScreenStream 解密緩衝→H264Sink 切 NAL→annexB 重組→Wire 打包）~~ **銷賬（2026-11-05，掛起不做）**：機制確定，但改動在解密資料面（原地切 NAL/直發），等價性驗證需要真機 60fps 流，無頭門禁覆蓋不到；收益也未經測量。留待下一次真機調試窗口順手做，不預先改造。
+- ~~AirPlayWatch 每 2s 的 CGWindowListCopyWindowInfo 全屏窗口清單~~ **銷賬（2026-11-05，不做）**：單次量級極小（一次窗口枚舉，utility 佇列）；除非 idle 帳裡出現可歸因到它的毫秒級差異，否則不值得為它加測量代碼。
 - ~~`maxrss` 仍含 SceneKit／Metal 著色器與紋理；進一步可把未使用的錶面貼圖改成按需生成。~~ **大半過時**：現在只有當前 `--style` 會 render（`Face.swift` 的 render switch），不用的錶面根本不畫。
 
 ## 2026-10-19 能效第二輪（待機 8.4% → 4.7%）

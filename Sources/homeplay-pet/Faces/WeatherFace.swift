@@ -42,6 +42,9 @@ private struct WeatherCache {
     var version = -1
 }
 nonisolated(unsafe) private var weatherCache = WeatherCache()
+/// 靜態層（天空＋狀況/時間文字＋玻璃大溫度＋四格）：分鐘／資料版本／語言／像素比變了才重畫；
+/// 膠囊（眼睛）每幀畫在其上。analog 試點證明靜態層只對「靜態部分貴」的錶面值得——weather 的玻璃＋陰影正是。
+nonisolated(unsafe) private var weatherStaticCache: (key: String, image: CGImage)?
 
 extension Face {
     private static func weatherText(_ code: Int) -> String {
@@ -77,6 +80,27 @@ extension Face {
         src.activate { [weak self] in self?.forceDirty = true }
         let d = src.data
         let date = Self.displayDate
+        let full = CGRect(x: 0, y: 0, width: 1024, height: 1024)
+        let key = "w-static|\(Int(date.timeIntervalSince1970 / 60))|\(src.version)|\(L10n.language.rawValue)|\(Int(renderPixelScale * 100))|\(Self.weatherImperial)"
+        if let c = weatherStaticCache, c.key == key {
+            drawUpright(g, c.image, in: full); Face.cacheHits += 1
+        } else {
+            let sc = renderPixelScale, px = Int((1024 * sc).rounded())
+            let img = makeImage(px, px) { c in
+                if sc != 1 { c.scaleBy(x: sc, y: sc) }
+                self.drawWeatherStatic(c, d, date)
+            }
+            weatherStaticCache = (key, img)
+            drawUpright(g, img, in: full); Face.cacheMisses += 1
+        }
+
+        // 膠囊：在溫度右邊（寬約 256）；眼睛的朝向由表情決定，不另畫
+        faceEyeLook = CGPoint(x: -5, y: -14); defer { faceEyeLook = nil }   // 望向天空
+        drawIsland(g, at: CGPoint(x: 815, y: 447), scale: 256 / (420 * 1.4), liveAt: CGPoint(x: 815, y: 447), now: now)
+    }
+
+    /// 靜態層：天空＋狀況/時間文字＋玻璃大溫度＋底下四格。selftest 拿它驗「快取合成＝直接畫」。
+    func drawWeatherStatic(_ g: CGContext, _ d: WeatherData?, _ date: Date) {
         let night = Self.isNight(d, date)
         let sky = WeatherSky.of(code: d?.code ?? 2)
         let imperial = Self.weatherImperial
@@ -128,10 +152,6 @@ extension Face {
         drawLiquidGlass(g, [shape], key: "weather|\(skyKey)|\(big)", clear: weatherCache.clear, frosted: weatherCache.frosted,
                         system: SystemGlassParams(refractionHeight: 1.0, refractionAmount: -4.3, blurRadius: 9, highlight: 0.55, white: 1.0, black: 0.0,
                                                   saturation: 1.3, fill: night ? 0.14 : 0.36, rim: 1.0, keyAmount: 0.9, fillAmount: 0.5, ringShadow: 0.25))
-
-        // 膠囊：在溫度右邊（寬約 256）；眼睛的朝向由表情決定，不另畫
-        faceEyeLook = CGPoint(x: -5, y: -14); defer { faceEyeLook = nil }   // 望向天空
-        drawIsland(g, at: CGPoint(x: 815, y: 447), scale: 256 / (420 * 1.4), liveAt: CGPoint(x: 815, y: 447), now: now)
 
         // 底下四格
         let aqiSym = NSImage(systemSymbolName: "aqi.medium", accessibilityDescription: nil) != nil ? "aqi.medium" : "circle.dotted"
