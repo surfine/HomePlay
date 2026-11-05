@@ -62,6 +62,9 @@ final class HomeApp: PetApp {
     private var clock: Double { CACurrentMediaTime() }
 
     private var snap: HomeSnapshot { Self.demo ? demoSnap : HomeLink.shared.snapshot }
+    /// 家庭警報橪幅的命中範圍（畫的時候更新；nil＝沒橪幅）
+    var alertRect: CGRect?
+    private var alertVersion = 0
     private var state: HomeAppState {
         switch Self.forcedView {
         case "nohelper": return .noHelper
@@ -248,6 +251,7 @@ final class HomeApp: PetApp {
     }
 
     func tick(_ now: Double) -> Bool {
+        if alertVersion != HomeAlerts.version { alertVersion = HomeAlerts.version; dirty = true }   // HomeView 對齊 #3：警報有變化就重畫
         let t = clock
         var redraw = dirty; dirty = false
         if HPComponents.needsFrame(now) { redraw = true }
@@ -418,6 +422,11 @@ final class HomeApp: PetApp {
     }
 
     func handleTap(_ pt: CGPoint, face: Face, now: Double) -> Bool {
+        // HomeView 對齊 WP5：點警報橪幅＝收掉這則（HomeAlerts）
+        if let r = alertRect, r.insetBy(dx: -8, dy: -8).contains(pt), let a = HomeAlerts.active.first {
+            HomeAlerts.dismiss(a); alertRect = nil; face.forceDirty = true; return true
+        }
+        alertRect = nil
         let st = state
         if st == .noHelper {
             guard HomeShortcut.available else {
@@ -564,6 +573,9 @@ final class HomeApp: PetApp {
         let rv = face.reveal
         if rv > 0.5, lastReveal <= 0.5 { schedule.refresh() }
         lastReveal = rv
+        // HomeView 對齊 WP5：家庭警報橫幅（煙霧/CO/CO₂/水漏/門窗；Shell/HomeAlerts.swift）——
+        // 畫在最上層：頁面畫完才畫（之前先畫橫幅、整頁蓋過去就看不到）；攝影機、家庭狀態那幾條提早 return 的路也照樣蓋上
+        defer { if !HomeAlerts.active.isEmpty { drawAlertBanner(g, face, now: now) } else { alertRect = nil } }
         switch state {
         case .noHelper:
             g.setFillColor(HPComponents.bg.cgColor); g.fill(rect); AppUI.title(g, face, title); drawNoHelper(g, face)
@@ -1051,5 +1063,28 @@ enum HomeCamArt {
             let vg = CGGradient(colorsSpace: cs, colors: [srgb(0x000000, 0).cgColor, srgb(0x000000, 0.45).cgColor] as CFArray, locations: [0.55, 1])!
             g.drawRadialGradient(vg, startCenter: CGPoint(x: CGFloat(w) / 2, y: CGFloat(h) / 2), startRadius: 0, endCenter: CGPoint(x: CGFloat(w) / 2, y: CGFloat(h) / 2), endRadius: 400, options: [])
         }
+    }
+}
+
+
+// MARK: - 家庭警報橫幅（HomeView 對齊 WP5：官方文案；紅底白字、點一下收掉）
+
+extension HomeApp {
+    func drawAlertBanner(_ g: CGContext, _ face: Face, now: Double) {
+        guard let a = HomeAlerts.active.first else { return }
+        let r = CGRect(x: 64, y: 1024 - 96 - 152, width: 896, height: 152)
+        // beta 5（拍板）：底色永遠不透明（白字對比穩定、底下的磚不透出來），脈動只改紅的深淺（1.6 s 一次；減少動態效果不脈動）
+        let dim: CGFloat = ClockKit.reduceMotion ? 0 : CGFloat(0.12 * (1 - cos((now - a.at) * 2 * .pi / 1.6)))
+        let red = HPTokens.red.blended(withFraction: dim, of: .black) ?? HPTokens.red
+        g.setFillColor(red.cgColor)   // 要設在 g 上：NSColor.setFill() 只改 NSGraphicsContext，這裡會沿用上一個填色（白）
+        g.addPath(CGPath(roundedRect: r, cornerWidth: 44, cornerHeight: 44, transform: nil)); g.fillPath()
+        face.drawSymbol(g, a.kind.symbol, in: CGRect(x: r.minX + 40, y: r.midY - 30, width: 60, height: 60), color: .white)
+        let tf = AppUI.font(44, .semibold)
+        // 畫布左上原點：標題在上（基線 midY − 8）、說明在下（基線 midY + 42）
+        face.drawLeft(g, a.kind.title, font: tf, x: r.minX + 128, y: r.midY - 8, color: .white)
+        face.drawLeft(g, Face.clipped(HomeAlerts.body(a), AppUI.font(34), r.width - 200), font: AppUI.font(34), x: r.minX + 128, y: r.midY + 42, color: NSColor.white.withAlphaComponent(0.85))
+        HPAX.note(g, r, .button, "\(a.kind.title) \(HomeAlerts.body(a))", shape: .rounded(44))
+        // 點一下收掉這則（handleTap 裡命中這個矩形就 dismiss）
+        alertRect = r
     }
 }

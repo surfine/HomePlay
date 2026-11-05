@@ -5,7 +5,7 @@ import IOBluetooth
 // 可变状态只在主队列读写，IOBluetooth 回调一律跳主队列再碰状态。
 // locateAuto 自动匹配：已配对设备里谁带 iAP2 服务（iPhone 的签名）就连谁，当前已连接的优先。
 
-package final class Iap2BluetoothAccessory: NSObject, IOBluetoothRFCOMMChannelDelegate, @unchecked Sendable {
+package final class Iap2BluetoothAccessory: NSObject, IOBluetoothRFCOMMChannelDelegate, Iap2AccessoryForwarding, @unchecked Sendable {
     package let core: Iap2AccessoryCore
     /// RFCOMM 打开超时（秒）；0 关闭。照 MacPlay 的 15s。
     /// 手机愿意回时都在 1 秒内（2026-10-22 真机）；15 秒（MacPlay 值）只是在拉长每次被忽略的代价。
@@ -25,24 +25,7 @@ package final class Iap2BluetoothAccessory: NSObject, IOBluetoothRFCOMMChannelDe
         core.onDrain = { [weak self] bytes in self?.write(bytes) }
     }
 
-    // 转发：调用方（Wireless/探针）像以前一样挂在配件上
-    package var onLog: ((String) -> Void)? {
-        get { core.onLog } set { core.onLog = newValue }
-    }
-    package var onPhase: ((Iap2AccessoryCore.Phase) -> Void)? {
-        get { core.onPhase } set { core.onPhase = newValue }
-    }
-    package var onMessage: ((Iap2Csm.Frame) -> [Iap2Csm.Frame])? {
-        get { core.onMessage } set { core.onMessage = newValue }
-    }
-    package var onArtwork: ((UInt8, Data) -> Void)? {
-        get { core.onArtwork } set { core.onArtwork = newValue }
-    }
-    package var onFinished: ((Int) -> Void)? {
-        get { core.onFinished } set { core.onFinished = newValue }
-    }
-    package var phase: Iap2AccessoryCore.Phase { core.phase }
-    package var finished: Bool { core.finished }
+    // 回调转发面（onLog/onPhase/onMessage/onArtwork/onFinished/phase/finished）在 Iap2AccessoryForwarding
 
     // MARK: 找设备
 

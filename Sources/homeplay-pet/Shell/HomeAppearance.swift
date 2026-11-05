@@ -68,10 +68,12 @@ enum HomeAppearance: String, CaseIterable, Codable {
         if forced == nil { UserDefaults.standard.set(a.rawValue, forKey: key) }
         Shell.homeLayer = nil
     }
-    /// 染色的色：自己選過就用那個；沒選過就從桌布取（跟 iOS 一樣先建議桌布的色相）
+    /// 染色的色：自己選過就用那個；沒選過先取作用中 Look 的 secondary（Look 四層 token 的強調層），
+    /// 沒選 Look 再從桌布取（跟 iOS 一樣先建議桌布的色相）
     static var tintHex: UInt32? { forcedTint ?? storedTint }
     static var tintColor: NSColor {
         if let h = tintHex { return srgb(h) }
+        if HPLook.wasSelected { return HPLook.current.secondary_color }   // HomeView 對齊：選了 Look 就用它的 secondary 當建議
         let hue = Shell.homeHue ?? 0.58
         return NSColor(hue: hue, saturation: 0.55, brightness: 0.95, alpha: 1)
     }

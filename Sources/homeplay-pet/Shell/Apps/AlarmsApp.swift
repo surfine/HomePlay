@@ -217,8 +217,8 @@ final class AlarmsApp: PetApp {
     static let shared = AlarmsApp()
     let id = "alarms"
     var title: String { L("app.alarms", "闹钟") }
-    let icon = AppIcon(color: srgb(0xff9f0a), symbol: "alarm.fill")
-    static let accent = srgb(0xff9f0a)
+    let icon = AppIcon(color: HPTokens.orange, symbol: "alarm.fill")   // HomeView 對齊：accent＝#FF8D28 系統橘
+    static let accent = HPTokens.orange   // HomeView 對齊：Alarms AccentColor 實測＝systemOrange #FF8D28
 
     private var scroll = AppScroll()
     /// 列的位置（id → 彈簧；換位置時從當下的值與速度接著走）、新增的時刻、刪掉還在收的列
@@ -473,21 +473,24 @@ final class AlarmsApp: PetApp {
         // 2.0 時鐘：鬧鐘圖示外三圈往外擴、淡掉的脈動（週期 1.6 s、錯開 0.53 s）；減少動態效果時只留一圈靜止的光暈
         let ic = CGRect(x: 512 - 100, y: 250, width: 200, height: 200)
         let since = now - AlarmCenter.shared.ringStartedAt
+        // HomeView 對齊後續 #5：官方響鈴動畫有 orange／white 兩份——這裡照動效變體解析（夜間紅＝白、增加對比＝更清楚、晃得少）
+        let v = HPMotionVariant.current(black: face.nightRed)
+        let ripple = HPMotionVariant.tint(HPMotionVariant.Base.orange, v), amp = HPMotionVariant.amplitude(v)
         if ClockKit.reduceMotion {
-            g.setFillColor(AppUI.orange.withAlphaComponent(0.18).cgColor); g.fillEllipse(in: ic.insetBy(dx: -30, dy: -30))
+            g.setFillColor(ripple.withAlphaComponent(0.18).cgColor); g.fillEllipse(in: ic.insetBy(dx: -30, dy: -30))
         } else {
             for k in 0..<3 {
                 let ph = ((since + Double(k) * 1.6 / 3) / 1.6).truncatingRemainder(dividingBy: 1)
                 let e = CGFloat(1 - pow(1 - ph, 2.2))                     // 一開始快、後來慢（像聲波）
-                let grow = 10 + 120 * e
-                g.setFillColor(AppUI.orange.withAlphaComponent(0.28 * (1 - e)).cgColor)
+                let grow = 10 + 120 * amp * e
+                g.setFillColor(ripple.withAlphaComponent(0.28 * (1 - e)).cgColor)
                 g.fillEllipse(in: ic.insetBy(dx: -grow, dy: -grow))
             }
         }
         // 圖示輕輕搖（鬧鐘在響）：±4°，6 Hz，每 1.6 s 搖 0.5 s
         let shake: CGFloat = ClockKit.reduceMotion ? 0 : {
             let t = since.truncatingRemainder(dividingBy: 1.6)
-            return t < 0.5 ? CGFloat(sin(t * 6 * 2 * .pi)) * 4 * .pi / 180 * CGFloat(1 - t / 0.5) : 0
+            return t < 0.5 ? CGFloat(sin(t * 6 * 2 * .pi)) * 4 * amp * .pi / 180 * CGFloat(1 - t / 0.5) : 0
         }()
         g.saveGState()
         g.translateBy(x: ic.midX, y: ic.midY); g.rotate(by: shake); g.translateBy(x: -ic.midX, y: -ic.midY)
@@ -499,7 +502,7 @@ final class AlarmsApp: PetApp {
         let label = a.label.isEmpty ? L("alarm.default", "闹钟") : a.label
         AppUI.center(face, g, label, AppUI.fitted(label, size: 48, weight: .semibold, maxWidth: 760), cx: 512, y: 680, AppUI.orange)
         // 兩顆圓鈕在響鈴那一刻 materialize 長出來
-        let k = ClockKit.reduceMotion ? 1 : CGFloat(min(1, max(0, Spring.smooth.value(from: 0, to: 1, velocity: 0, t: CGFloat(max(0, since - 0.15))).x)))
+        let k = ClockKit.reduceMotion ? 1 : CGFloat(min(1, max(0, Spring.smooth.value(from: 0, to: 1, velocity: 0, t: CGFloat(max(0, since - 0.15) / HPMotionVariant.durationScale(v))).x)))
         if k >= 0.99 {
             HPComponents.actionButton(g, face, Self.snoozeRect, symbol: "zzz", role: .glass, label: String(format: L("alarm.snooze", "稍后 %d 分钟"), Int(AlarmCenter.snoozeMinutes)))
             HPComponents.actionButton(g, face, Self.stopRect, symbol: "xmark", role: .stop, label: L("alarm.stop", "停止"))

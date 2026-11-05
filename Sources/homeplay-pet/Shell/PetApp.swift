@@ -97,6 +97,7 @@ enum AppRegistry {
         RemindersApp.shared,
         MusicApp(),
         PodcastsApp(),
+        RecipesApp.shared,    // HomeView 對齊 WP5：Now Cooking 獨立 app，不再藏在 Safari 後面
         HomeApp.shared,
         MessagesApp.shared,
         FaceTimeApp.shared,   // 2.0 第四輪 #10
@@ -105,10 +106,9 @@ enum AppRegistry {
         SafariApp.shared,
         ClioTalkApp.shared,
         SettingsApp(),
-        RecipesApp.shared,    // 2.0 P10：食譜併進 Safari（跟官方一樣）——留著當 Safari 的烹飪畫面，深連結、ClioTalk、拖放照舊走 "recipes"
     ]
-    /// 2.0 P10：不上主畫面與 App 資料庫的（食譜＝Safari 的烹飪畫面）
-    static let hidden: Set<String> = ["recipes"]
+    /// 不上主畫面與 App 資料庫的（目前空；食譜已回到獨立 Now Cooking——HomeView 對齊 WP5）
+    static let hidden: Set<String> = []
     /// 主畫面、App 資料庫、編輯時能放的 App
     static var visible: [PetApp] { all.filter { !hidden.contains($0.id) } + AppProviders.apps(viewer: PersonHome.viewerID) }   // 2.0 Web App：加上這個人的（Shell/AppPlatform）
     static func app(_ id: String) -> PetApp? { all.first { $0.id == id } ?? AppProviders.app(id) }

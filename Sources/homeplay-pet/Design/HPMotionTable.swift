@@ -30,6 +30,30 @@ struct HPTransition {
     var settle: Double { Double(spring.response) * 0.76 }
 }
 
+/// 返回手勢的手感參數（官方返回手勢；真實值未實測，是推斷）。真機校準後改 HPMotion.T.backSwipe 就生效；
+/// 臨時試手感用 HOMEPLAY_BACKSWIPE="frac=0.5,vel=800"（只影響這次執行，不寫偏好）
+struct BackSwipeTuning: Equatable {
+    /// 沒拖過門檻時，至少要拖到門檻的幾成才算輕掃（0…1）
+    var minFraction: CGFloat
+    /// 輕掃的釋放速度門檻（pt/s，向返回方向為正）
+    var flickVelocity: CGFloat
+
+    /// 照 ClockLook.parse 的寫法：key=value 逗號分隔；不認得的鍵、不合法的值（frac 不在 0…1、vel ≤ 0）忽略，沿用 base
+    static func parse(_ s: String, base: BackSwipeTuning) -> BackSwipeTuning {
+        var t = base
+        for kv in s.split(separator: ",") {
+            let p = kv.split(separator: "=").map { $0.trimmingCharacters(in: .whitespaces) }
+            guard p.count == 2, let v = Double(p[1]), v.isFinite else { continue }
+            switch p[0] {
+            case "frac" where v > 0 && v <= 1: t.minFraction = CGFloat(v)
+            case "vel" where v > 0: t.flickVelocity = CGFloat(v)
+            default: break
+            }
+        }
+        return t
+    }
+}
+
 extension HPMotion {
     /// 參數表。README「Motion」的表格就是這一張（改了要一起改）
     enum T {
@@ -116,6 +140,9 @@ extension HPMotion {
         static let listMove = HPTransition(name: "list", spring: Spring(damping: 1, response: 0.30), stagger: 0.035, source: "Mark View R10／R11")
         static let listInsert = HPTransition(name: "list", spring: Spring(damping: 1, response: 0.30), delay: 0.12, source: "Mark View R11：讓位 70% 才進場")   // l10n-ignore：依據／自檢說明，不是介面文字
         static let listDelete = HPTransition(name: "list", spring: .settling(0.08), source: "Mark View P3：離場加速、比進場短")   // l10n-ignore：依據／自檢說明，不是介面文字
+
+        // MARK: 返回手勢（距離＋釋放速度；推斷值，真機校準後改這裡）
+        static let backSwipe = BackSwipeTuning(minFraction: 0.45, flickVelocity: 900)
 
         static let all: [HPTransition] = [appOpen, appContent, appClose, appCloseContent, tileExpand, pageSlide, blurFade, keyboard, facePage, homeFace, toFace, pill,
                                           controlCenter, sheet, takeoverZoom, takeoverFade, clioDrip, clioLine, clioThink, liveActivity, sourceSplit, digitOut, digitIn, numeric, widgetUpdate,

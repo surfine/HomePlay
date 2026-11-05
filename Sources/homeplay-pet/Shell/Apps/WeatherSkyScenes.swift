@@ -199,15 +199,19 @@ extension WeatherSkyScene {
         case .clear:
             break
         case .partlyCloudy:
+            // HomeView 對齊 WP5：高雲族的冰晶雲（Cirrus／Cirrostratus）在高空帶——八雲屬補齊
             l.clouds = [CloudLayer(family: "Cumulus_SingleM", variants: 15, count: 3, width: 0.55, yBand: 0.12...0.5, opacity: 0.7 * dim + 0.25, speed: 0.004, light: lit, shade: shade(l.middle)),
-                        CloudLayer(family: "Cumulus_SingleL", variants: 10, count: 3, width: 0.85, yBand: 0.2...0.7, opacity: 0.85 * dim + 0.15, speed: 0.007, light: lit, shade: shade(l.middle))]
+                        CloudLayer(family: "Cumulus_SingleL", variants: 10, count: 3, width: 0.85, yBand: 0.2...0.7, opacity: 0.85 * dim + 0.15, speed: 0.007, light: lit, shade: shade(l.middle)),
+                        puffs("Cirrus_SingleL", 10, n: 2, width: 0.9, y: 0.05...0.22, opacity: 0.4, light: 1.0, speed: 0.012),
+                        puffs("Cirrostratus_SingleS", 9, n: 2, width: 1.2, y: 0.06...0.3, opacity: 0.28, light: 0.95, speed: 0.008)]
             l.stars *= 0.6
         case .cloudy, .windy:
             overcast((0x6d7c92, 0x8796ab, 0xa9b5c4), (0x323640, 0x4a4e5a, 0x575b67), (0x16181f, 0x23262f, 0x30333d))
             // 實測北京卡片：暗底上有大塊、亮 +40 左右的雲團——雲毯打底，大朵積雲拉開明暗
             l.clouds = [blanket("Stratus_Blanket", 8, y: 0.15...0.55, opacity: 0.9, light: 0.45),
                         blanket("Altostratus_Blanket", 8, y: 0.35...0.8, opacity: 0.6, light: 0.6),
-                        puffs("Cumulus_SingleL", 10, n: 5, width: 1.35, y: 0.1...0.8, opacity: 0.9, light: 0.9)]
+                        puffs("Cumulus_SingleL", 10, n: 5, width: 1.35, y: 0.1...0.8, opacity: 0.9, light: 0.9),
+                        puffs("Wispy_Single", 6, n: 3, width: 0.8, y: 0.04...0.28, opacity: 0.3, light: 0.9, speed: 0.014)]   // HomeView 對齊 WP5：Wispy 捲絲雲
             if kind == .windy { l.wind = 0.55; l.clouds = l.clouds.map { var c = $0; c.speed *= 5; return c } }
         case .fog, .haze:
             if kind == .fog { overcast((0x8f9aa8, 0xa6aeb9, 0xbfc5cc), (0x4b4f5b, 0x5d616c, 0x70737d), (0x1e2129, 0x2b2e36, 0x3a3d45)) }

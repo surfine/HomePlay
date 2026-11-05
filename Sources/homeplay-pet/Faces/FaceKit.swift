@@ -74,13 +74,6 @@ enum FaceType {
         cache[key] = f
         return f
     }
-
-    private static func monoDigits(_ f: NSFont) -> NSFont {
-        let d = f.fontDescriptor.addingAttributes([.featureSettings: [[
-            NSFontDescriptor.FeatureKey.typeIdentifier: kNumberSpacingType,
-            NSFontDescriptor.FeatureKey.selectorIdentifier: kMonospacedNumbersSelector]]])
-        return NSFont(descriptor: d, size: f.pointSize) ?? f
-    }
 }
 
 /// 一串字的字形外框（畫布座標：左上原點、y 朝下），基線在 y = 0、起筆在 x = 0

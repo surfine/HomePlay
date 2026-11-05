@@ -9,7 +9,7 @@
 import AppKit
 
 enum ShellInput {
-    enum Kind: Equatable { case tap, edgeTop(cc: Bool), edgeBottom, cc(slider: ControlCenter.Tile?), clio }
+    enum Kind: Equatable { case tap, edgeTop(cc: Bool), edgeBottom, edgeLeft, contentBack, cc(slider: ControlCenter.Tile?), clio }
     nonisolated(unsafe) static var passThrough = false
     nonisolated(unsafe) static var replayed = false
     nonisolated(unsafe) static var claimed = false
@@ -19,6 +19,8 @@ enum ShellInput {
     nonisolated(unsafe) static var uvOverride: CGPoint?
     /// 2.0 R14：控制中心跟手——拖曳的最近兩個取樣（時間、進度），放手時算速度
     nonisolated(unsafe) static var ccSamples: [(t: Double, p: CGFloat)] = []
+    /// HomeView 對齊：返回手勢的拖動取樣（時間、x），放手算釋放速度
+    nonisolated(unsafe) static var backSamples: [(t: Double, x: CGFloat)] = []
     nonisolated(unsafe) static var ccDragFrom: CGFloat = 0
     /// 2.0 P10（HV-SPECS-65）：這次打開 ClioTalk 是從頂端往下滑——直接開始聽（不先出文字框）
     nonisolated(unsafe) static var swipeListen = false
@@ -140,6 +142,25 @@ extension PetView {
         } else if Shell.far { Shell.far = false; face.forceDirty = true }
         // 遠距：沒人靠近一分鐘，主畫面與 App 淡回錶面（遠看在顯示正在進行的事時不回）
         if open, !farOngoing, now - Shell.lastActive > Shell.idleTimeout { shellNavigate(.idle); PersonalGate.hint = nil; Shell.homeEditing = false; Shell.widgetGallery = false }   // P02：回錶面就離開編輯模式
+        // HomeView 對齊 WP3（Shell/DisplayStage.swift）：三段顯示——活躍 → Ambient 海報（錶面）→ 休眠（壓暗）。
+        // 回錶面那一刻記 ambientSince；之後按設定（20 秒/自動/永不）入睡。被動觀察：人靠近只醒回海報，意圖輸入才回活躍。
+        let stage = Shell.displayStage(now: now, face: face, near: mood.near)
+        if stage == .sleep {
+            if Shell.ambientSince == nil { Shell.ambientSince = now }
+            if !Shell.displayAsleep { Shell.displayAsleep = true; face.forceDirty = true }
+        } else {
+            // 海報重畫節奏：有活動卡（計時器倒數）每秒，否則每分鐘（日期/時間跳動）；
+            // 後續 #6 輪播：換張的那一刻一定重畫，0.4 s 交叉淡化期間每幀
+            if Shell.ambientPosterActive {
+                let want = face.shellActivities(now).isEmpty ? 60.0 : 1.0
+                let next = AmbientPoster.untilNextChange(face.ambientPosterKinds, elapsed: now - (Shell.ambientSince ?? now), reduceMotion: Motion.reduceMotion)
+                if next == 0 { face.forceDirty = true }
+                else if now - Shell.ambientRepaintAt >= want || next < 1.0 / 30 { Shell.ambientRepaintAt = now; face.forceDirty = true }
+            }
+            if stage == .ambient, Shell.ambientSince == nil { Shell.ambientSince = now }   // 進入海報期的起點（.idle 導覽在上面已做）
+            if stage == .interactive, Shell.ambientSince != nil { Shell.ambientSince = nil }   // 意圖輸入：直接回活躍
+            if Shell.displayAsleep { Shell.displayAsleep = false; face.forceDirty = true }   // 人靠近或回活躍：先把壓暗撤掉
+        }
         if face.style != Shell.lastStyle { Shell.lastStyle = face.style; Shell.lastPageAt = now }
     }
 
@@ -152,6 +173,7 @@ extension PetView {
         if S.passThrough { return false }
         S.replayed = false; S.claimed = false; S.down = nil
         guard !shellBlocked, !face.onboardingActive, !face.inOverview, !PermissionPrimer.visible else { return false }
+        if Shell.appMorph != nil { return true }   // HomeView 對齊 WP4：開合 App 的轉場期間不吃新觸控
         Shell.lastActive = CACurrentMediaTime()
         let at = e.locationInWindow
         switch Shell.nav.overlay {
@@ -169,7 +191,8 @@ extension PetView {
         if uv.y < 0.13 && uv.x > 0.70 { kind = .edgeTop(cc: true) }
         else if uv.y < 0.12 && uv.x > 0.32 && uv.x < 0.68 { kind = .edgeTop(cc: false) }
         else if uv.y > 0.90 && uv.x > 0.2 && uv.x < 0.8 { kind = .edgeBottom }
-        else if Shell.nav.screen.coversFace { kind = .tap }
+        else if uv.x < 0.09 && uv.y > 0.18 && uv.y < 0.86 { kind = .edgeLeft }   // HomeView 對齊 WP4：螢幕邊緣右滑＝返回
+        else if Shell.nav.screen.coversFace { kind = uv.x < 0.25 ? .contentBack : .tap }   // HomeView 對齊 WP4：App 內容區左側右滑＝返回
         else { kind = nil }
         facePageArm(e, uv: uv)   // 2.0：錶面上螢幕裡橫拖＝跟手換頁（Shell/FacePaging.swift）；邊緣手勢與轉身體照舊
         guard let kind else { return false }
@@ -203,20 +226,25 @@ extension PetView {
         case .clio:
             if let p = shellPoint(uv), ClioTalkPanel.drag(x: p.x, y: p.y) { face.forceDirty = true }   // 2.0 live glass：拖出取消
             return true
-        case .tap, .edgeTop, .edgeBottom:
+        case .tap, .edgeTop, .edgeBottom, .edgeLeft, .contentBack:
             if S.claimed {
                 if case .edgeTop(true) = d.kind { ccTrack(-dy / ccDragSpan) }   // 2.0 R14：控制中心 1:1 跟著往下拉
                 if case .edgeTop(false) = d.kind, -dy > ShellInput.trigger { shellSwipeListen() }   // 2.0 P10：拉過門檻就開始聽，不等放手
+                if case .edgeLeft = d.kind { S.backSamples.append((e.timestamp, e.locationInWindow.x)); if S.backSamples.count > 6 { S.backSamples.removeFirst(S.backSamples.count - 6) } }   // HomeView 對齊：取樣算釋放速度
+                if case .contentBack = d.kind { S.backSamples.append((e.timestamp, e.locationInWindow.x)); if S.backSamples.count > 6 { S.backSamples.removeFirst(S.backSamples.count - 6) } }
                 return true
             }
             if hypot(dx, dy) < ShellInput.slop { return true }
             HPGlass.pressUp(); face.forceDirty = true
             let vertical = abs(dy) > abs(dx) * 1.2
+            let horizontal = dx > 0 && dx > abs(dy) * 1.2   // HomeView 對齊 WP4：往右橫拖＝返回手勢（左緣或內容區左側）
             switch d.kind {
             case .edgeTop where vertical && dy < 0, .edgeBottom where vertical && dy > 0:
                 S.claimed = true
                 if case .edgeTop(true) = d.kind { ccBeginDrag(); ccTrack(-dy / ccDragSpan) }
                 return true
+            case .edgeLeft where horizontal, .contentBack where horizontal:
+                S.claimed = true; return true   // 拖動中只接住，放手指距離決定回不回
             default:
                 if FacePaging.drag != nil, Shell.nav.screen == .face { return true }   // 2.0：錶面上先等 10 pt 決定是不是橫拖換頁
                 shellReplayDown(d.event); return false              // 不是外殼的手勢：交回去轉身體
@@ -255,8 +283,23 @@ extension PetView {
         case .edgeBottom:
             if claimed {
                 if dy > ShellInput.trigger {
-                    if case .app = Shell.nav.screen { shellNavigate(.back) } else { shellNavigate(.up) }
+                    // 拍板（2026-11-05）：App 內返回只走官方兩種（左緣右滑／內容左滑）——底緣上滑只做「往上」導覽
+                    shellNavigate(.up)
                 }
+                return true
+            }
+        case .edgeLeft:   // HomeView 對齊 WP4：左緣右滑——距離過門檻、或快速輕掃（BackSwipe）＝返回
+            if claimed {
+                let v = BackSwipe.releaseVelocity(S.backSamples, now: e.timestamp)
+                S.backSamples = []
+                if BackSwipe.shouldBack(distance: dx, velocity: v, threshold: ShellInput.trigger) { shellNavigate(.back) }
+                return true
+            }
+        case .contentBack:   // HomeView 對齊 WP4：App 內容左側右滑；門檻較高但輕掃同樣成立
+            if claimed {
+                let v = BackSwipe.releaseVelocity(S.backSamples, now: e.timestamp)
+                S.backSamples = []
+                if BackSwipe.shouldBack(distance: dx, velocity: v, threshold: ShellInput.trigger * 1.6) { shellNavigate(.back) }
                 return true
             }
         case .tap: break

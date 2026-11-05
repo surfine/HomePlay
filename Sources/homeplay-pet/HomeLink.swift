@@ -309,6 +309,7 @@ final class HomeLink: @unchecked Sendable {
     private func apply(_ s: HomeSnapshot) {
         setConnected(true)
         HomeActivity.shared.note(old: snapshot, new: s, now: Date())   // 2.0 home-1：可達性的變化記進家庭動態
+        if HomeAlerts.note(old: snapshot, new: s, now: CACurrentMediaTime()) { NotificationCenter.default.post(name: .homeAlertFired, object: nil) }   // HomeView 對齊後續 #3：家庭警報（Shell/HomeAlerts.swift）
         snapshot = s
         onSnapshot?(s)
         NotificationCenter.default.post(name: .homeLinkSnapshot, object: s)

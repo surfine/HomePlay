@@ -2406,7 +2406,6 @@ enum Wireless {
             }
         }
         var pairAttempt: Date = .distantPast
-        var pairInFlight = false
         var pairingHandoffInFlight = false
         var pairingHandoffTimeout: DispatchWorkItem?
         var pairingAttemptedSerials = Set<String>()   // 每台 USB 设备在这段插线里只自动让位配对一次
@@ -2430,79 +2429,6 @@ enum Wireless {
             return Iap2Csm.carPlayStartSessionWired(
                 ipAddresses: [fe80], port: UInt32(o.controlPort),
                 deviceIdentifier: mac, publicKey: store.identity.pairingId, sourceVersion: "950.7.1")
-        }
-
-        func beginPairingHandoff(_ address: String) {
-            // 0x4E0E 通常早于控制会话 live；插线配对不需要等画面，拿到地址就让 USB 让位。
-            guard !pairingHandoffInFlight, let device = activeUSB else {
-                pairInFlight = false
-                return
-            }
-            pairingHandoffInFlight = true
-            pairingAttemptedSerials.insert(device.serial)
-            let pairing = Wireless.handoffPayload("pairing")
-            Wireless.setHandoffHint(pairing)
-            if let pairing { server.broadcastText(pairing) }
-            note("插线配对：结束 USB，让手机蓝牙恢复后发配对请求")
-            func done() {
-                pairingHandoffInFlight = false
-                pairingHandoffTimeout?.cancel(); pairingHandoffTimeout = nil
-                Wireless.setHandoffHint(nil)
-                feed(.suspend(.cablePairing, false))
-            }
-            let safety = DispatchWorkItem {
-                guard pairingHandoffInFlight else { return }
-                stopPairingGuide()
-                Wireless.setPairingHint(nil)
-                note("插线配对 200 秒未完成：回退 USB CarPlay（本段插线不再自动尝试）")
-                if let text = Wireless.handoffPayload("failed") { server.broadcastText(text) }
-                done()
-            }
-            pairingHandoffTimeout = safety
-            DispatchQueue.main.asyncAfter(deadline: .now() + 200, execute: safety)
-            feed(.suspend(.cablePairing, true))   // 状态机收掉 USB 链路、暂停主动连线
-            DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
-                guard pairingHandoffInFlight else { return }
-                if let text = Wireless.bluetoothPairingPayload(phase: "request", timeout: 60, host: hostName) { server.broadcastText(text) }
-                BondAssist.onConfirmCode = { code in
-                    // 数字本身不是秘密（两边都显示），记日志方便对照
-                    note("蓝牙配对：数字比对 \(code)，等 iPhone 上点「配对」")
-                    if let text = Wireless.bluetoothPairingPayload(phase: "confirm", code: code, timeout: 30, host: hostName) { server.broadcastText(text) }
-                }
-                // 呼叫逾时（0x4）多半是手机藍牙在 USB 结束后还没恢复：等 3 秒再叫一次（真机 2026-10-24 10:13）
-                func pairOnce(retry: Bool, _ then: @escaping (Bool, String) -> Void) {
-                    BondAssist.pair(address: address) { ok, detail in
-                        if !ok, retry, detail == "0x4", pairingHandoffInFlight {
-                            note("插线配对：叫不到手机（0x4），3 秒后再叫一次")
-                            if let text = Wireless.bluetoothPairingPayload(phase: "retry", timeout: 63, host: hostName) { server.broadcastText(text) }
-                            DispatchQueue.main.asyncAfter(deadline: .now() + 3) { pairOnce(retry: false, then) }
-                        } else {
-                            then(ok, detail)
-                        }
-                    }
-                }
-                pairOnce(retry: true) { ok, detail in
-                    pairInFlight = false
-                    guard pairingHandoffInFlight, activeUSB?.serial == device.serial else { return }
-                    if ok {
-                        Wireless.setPairingHint(nil)
-                        Wireless.persistPhone(address)
-                        if let text = Wireless.currentPhonePayload(address: address) { server.broadcastText(text) }
-                        server.broadcastText(#"{"type":"pairingDone"}"#)
-                        publishPhones(force: true)
-                        note("插线配对完成：重开 USB，走 Wi-Fi 会话（线可继续插着充电）")
-                        if let text = Wireless.handoffPayload("done") { server.broadcastText(text) }
-                        done()
-                    } else {
-                        note("插线配对没成（\(detail)）：转到蓝牙配对引导")
-                        // 0x4 叫不到手机；0x2／60s 没确认＝手机上没点「配对」
-                        let reason = detail == "0x4" ? "noResponse" : (detail == "0x2" || detail.contains("没确认")) ? "notConfirmed" : "other"
-                        if let text = Wireless.bluetoothPairFailedPayload(reason: reason) { server.broadcastText(text) }
-                        done()
-                        startPairingGuide("插线配对没确认", forNewDevice: true)
-                    }
-                }
-            }
         }
 
         /// 首插配对：有线会话里手机报它的蓝牙地址（0x4E0E 参数 0），没配对就发起（手机上点一下）。

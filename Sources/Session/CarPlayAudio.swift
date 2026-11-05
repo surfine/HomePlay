@@ -279,24 +279,6 @@ package final class CarPlayAudioPlayer {
         engineQueue.sync { recoverEngineOnQueue() }
     }
 
-    /// 自检用：排一小段静音，走真实的 scheduleBuffer 路径
-    package func playSilence(seconds: Double) {
-        guard let fmt = format else { return }
-        let frames = AVAudioFrameCount(Double(codec.rate) * seconds)
-        guard let buf = AVAudioPCMBuffer(pcmFormat: fmt, frameCapacity: frames) else { return }
-        buf.frameLength = frames
-        engineQueue.sync {
-            guard isRunning() else { return }
-            ensureRunningOnQueue()
-            guard engine.isRunning else { return }
-            node.scheduleBuffer(buf)
-        }
-    }
-
-    /// 自检用：在调用线程上解一帧，返回浮点数（诊断是线程还是引擎的问题）
-    package func diagnose(_ frame: Data) -> Int {
-        decode(frame).count
-    }
 
     /// 诊断快照（心跳日志用）
     package var snapshot: String {

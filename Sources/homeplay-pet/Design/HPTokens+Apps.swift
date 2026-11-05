@@ -56,6 +56,9 @@ extension HPTokens {
         static let labelBaseline: CGFloat = 646
         /// 控制（＋、停止、其他計時器、✕、時間）平常藏起來，畫面跟官方一樣只有錶盤；點一下浮出，閒置這麼久再收
         static let chromeIdle: Double = 5
+        // HomeView 對齊（Timers 實測）：響鈴狀態的暖棕底＋淺灰覆蓋——家庭暖色警示，不是 iOS 紅
+        static let firingBackground = srgb(HVTruth.Timers.firingBackground)   // #5B3B0F
+        static let firingOverlay = srgb(HVTruth.Timers.firingOverlay)         // #CCCCCC
     }
 
     // MARK: 家庭（官方 home-light.png）
@@ -261,6 +264,16 @@ extension HPTokens {
         /// 最長錄 30 秒（跟 HomePod 對講差不多的長度）
         static let maxSeconds = 30.0
         static let holdThreshold = 0.35
+        // HomeView 對齊（Intercom 實測）：對講進行中的琥珀 #FFA800
+        static let activeBackground = srgb(HVTruth.Intercom.activeBackground)
+    }
+
+    // MARK: 鬧鐘 Widget（HomeView 對齊：Alarms 實測）
+    enum AlarmsWidget {
+        /// Widget 背景＝深灰 #1C1C1E（systemGray6 深色）
+        static let background = srgb(HVTruth.Alarms.widgetBackground)
+        /// Widget 強調＝暖金 #E6A651
+        static let accent = srgb(HVTruth.alarmWidgetAccent)
     }
     /// Safari：底部三件分開的玻璃（‹ 圓鈕、網址膠囊、› 圓鈕；iOS 27 safari-scrolled），跟左上返回鈕上下對稱
     enum Safari {

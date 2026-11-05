@@ -204,7 +204,7 @@ final class IntercomApp: PetApp {
         let recording = audio.recording || demo == "talking"
         let levels = demo == "talking" ? (0..<T.bars).map { CGFloat(0.25 + 0.6 * abs(sin(Double($0) * 0.7))) } : audio.levels
         HPComponents.levelRing(g, center: T.talkCenter, inner: T.ringInner, outer: T.ringOuter,
-                               levels: recording ? levels : [], color: recording ? AppUI.orange : AppUI.tertiary)
+                               levels: recording ? levels : [], color: recording ? T.activeBackground : AppUI.tertiary)   // HomeView 對齊：進行中＝琥珀 #FFA800
         HPComponents.actionButton(g, face, talkRect, symbol: recording ? "waveform" : "mic.fill", role: .mic,
                                   label: nil)
         HPAX.note(g, talkRect, .button, recording ? L("intercom.a11y.send", "送出对讲") : L("intercom.a11y.talk", "开始对讲"), shape: .circle)
@@ -300,7 +300,7 @@ enum P10AppsSelfTest {
               "尋找：真的只有這台 Mac，其他是示範資料")   // l10n-ignore
         check(OfficialIcons.names["findmy"] == "findmy" && OfficialIcons.names["safari"] == "safari" && OfficialIcons.fallback["safari"] != nil,
               "圖示：尋找、Safari 有官網圖示可退")   // l10n-ignore
-        check(["findmy", "intercom", "safari"].allSatisfy { id in AppRegistry.visible.contains { $0.id == id } } && AppRegistry.visible.count <= 16,
-              "內建 App：尋找、對講、Safari 都在，App 資料庫 4×4 放得下")   // l10n-ignore
+        check(["findmy", "intercom", "safari", "recipes"].allSatisfy { id in AppRegistry.visible.contains { $0.id == id } } && AppRegistry.visible.count <= 32,
+              "內建 App：尋找、對講、Safari、烹飪都在，App 資料庫（可捲動、4×4×2 頁）放得下")   // l10n-ignore
     }
 }

@@ -32,6 +32,8 @@ export const excludePaths = [
   { path: "Sources/homeplay-pet/Resources/apple-homeview.usdz", reason: "Apple 的 HomeView USDZ，僅隨 App 發佈，不進公開原始碼倉庫" },
   { path: "README.md", reason: "私有版 README 描述自帶身份與自用約定；公開版用 tooling/public-overlay/README.md 代替" },
   { path: "docs/plans/", reason: "2.0 內部工作計畫與稽核紀錄（含本機路徑、官方圖對照的出處），不公開" },
+  { path: "docs/hv-reference/", reason: "私有參考資料（色板/文案/App 清單），僅留在私有倉庫（2026-11-05 拍板）" },
+  { path: "tooling/check-hv-truth.py", reason: "對照私有參考資料的檢查腳本，資料不公開、腳本也不公開" },
   { path: "docs/plan.md", reason: "內部計畫與授權決定紀錄，含本機路徑與身份相關定案" },
   { path: "docs/publishing.md", reason: "發布流程與私有倉庫的內容說明，屬內部營運文件" },
   { path: "docs/handoff-audio.md", reason: "內部交接文件（音訊攻堅紀錄）" },

@@ -187,15 +187,6 @@ package final class MicUplink {
         queue.async { [weak self] in self?.startOnQueue() }
     }
 
-    /// Siri 按鍵按下到 SETUP 之間抓到的預卷；在 start() 之後排進同一條佇列，
-    /// 所以 UDP/encoder 已建好才送出。這段是原始麥克風音訊，跳過 AEC（Siri 剛開始聽）。
-    package func prependAudio(_ samples: [Float], sampleRate: Double) {
-        queue.async { [weak self] in
-            guard let self, !self.stopped, !samples.isEmpty else { return }
-            self.resampleAndEncode(samples, inputRate: sampleRate)
-        }
-    }
-
     /// 會話級預熱麥克風收到 SETUP：換金鑰/埠/編碼率，補發最近 1 秒預卷。
     package func configure(key: Data, payloadType: Int, host: String, port: UInt16,
                            wireCodec: WireCodec, sampleRate: Int, channels: Int,

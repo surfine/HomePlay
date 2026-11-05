@@ -54,22 +54,6 @@ package enum CornerMaskProtocol {
         let minimum = bodyDiag   // 至少要躲開圓角：最大內接矩形
         return Int((max(minimum, R - m) * Double(widthPx)).rounded())
     }
-
-    /// 產生一張左上角遮罩（8 位元灰階 PNG，亮＝保留）：圓角半徑 r（像素），邊長 side
-    package static func makeMask(radius r: Double, side: Int) -> Data? {
-        var px = [UInt8](repeating: 0, count: side * side)
-        for y in 0..<side { for x in 0..<side {
-            let dx = max(0, r - (Double(x) + 0.5)), dy = max(0, r - (Double(y) + 0.5))
-            px[y * side + x] = UInt8((max(0, min(1, r - (dx * dx + dy * dy).squareRoot() + 0.5)) * 255).rounded())
-        } }
-        guard let ctx = CGContext(data: &px, width: side, height: side, bitsPerComponent: 8, bytesPerRow: side,
-                                  space: CGColorSpaceCreateDeviceGray(), bitmapInfo: CGImageAlphaInfo.none.rawValue),
-              let img = ctx.makeImage() else { return nil }
-        let out = NSMutableData()
-        guard let dst = CGImageDestinationCreateWithData(out as CFMutableData, "public.png" as CFString, 1, nil) else { return nil }
-        CGImageDestinationAddImage(dst, img, nil)
-        return CGImageDestinationFinalize(dst) ? out as Data : nil
-    }
 }
 
 /// 圓角策略（設定 › CarPlay › 圓角）

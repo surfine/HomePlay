@@ -198,6 +198,8 @@ struct AppearancePane: View {
                 }
             }
             HomeAppearanceSection()   // 2.0 P02：主畫面外觀（Settings/HomeAppearanceSection.swift）
+            LookSection()             // HomeView 對齊 WP2：12 種 Look 挑選器（Settings/DisplaySection.swift）
+            DisplaySection()          // HomeView 對齊 WP3：熄屏與環境海報（Settings/DisplaySection.swift）
             SharedAlbumsSection()     // 2.0 P10：共享相簿當照片來源（Settings/SharedAlbumsSection.swift）
             ScreenAccessibilitySection()   // 2.0 P05：畫面文字大小、用鍵盤操作畫面
         }

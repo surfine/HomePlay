@@ -35,15 +35,6 @@ enum PetLanguage: String, CaseIterable {
         case .zhHant: return Locale(identifier: "zh_Hant_TW")
         }
     }
-
-    /// 選單裡顯示的名字：每種語言用它自己的寫法，誰看到都認得出來。
-    var nativeName: String {
-        switch self {
-        case .en: return "English"
-        case .zhHans: return "简体中文"
-        case .zhHant: return "繁體中文"
-        }
-    }
 }
 
 enum L10n {

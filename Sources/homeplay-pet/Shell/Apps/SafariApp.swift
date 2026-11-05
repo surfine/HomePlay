@@ -537,7 +537,7 @@ final class SafariApp: PetApp {
             self.goCooking()
         }
     }
-    private func goCooking() { (NSApp.delegate as? AppDelegate)?.view?.shellOpenApp("recipes") }
+    private func goCooking() { RecipesApp.shared.enteredFromSafari = true; (NSApp.delegate as? AppDelegate)?.view?.shellOpenApp("recipes") }   // HomeView 對齊 WP5：標記入口，最外層返回回 Safari
 
     private func showAddress() {
         guard let v = (NSApp.delegate as? AppDelegate)?.view, popover?.isShown != true else { return }
@@ -655,8 +655,8 @@ enum SafariSelfTest {
         check(abs(c.x - 100) < 0.01 && abs(c.y - 100) < 0.01, "Safari：畫布座標換成網頁座標（÷2÷放大）")   // l10n-ignore
         check(SafariApp.demoHTML().contains("application/ld+json") && RecipeParser.parse(html: SafariApp.demoHTML(), sourceURL: "https://cooking.example.com/x") != nil,
               "Safari：示範網頁拆得出食譜（開始烹飪走本機解析）")   // l10n-ignore
-        check(AppRegistry.app("recipes") != nil && !AppRegistry.visible.contains { $0.id == "recipes" } && AppRegistry.visible.contains { $0.id == "safari" },
-              "Safari：食譜併進 Safari（深連結還在、主畫面與資料庫沒有食譜）")   // l10n-ignore
+        check(AppRegistry.app("recipes") != nil && AppRegistry.visible.contains { $0.id == "recipes" } && AppRegistry.visible.contains { $0.id == "safari" },
+              "Safari：食譜回到獨立 Now Cooking（深連結還在、主畫面與資料庫看得到）")   // l10n-ignore
         let f = HPTokens.Safari.self
         check(f.back.width >= 88 && f.field.height >= 88 && f.field.minX > f.back.maxX && f.forward.minX > f.field.maxX && abs(f.back.midX - (1024 - f.forward.midX)) < 0.5,
               "Safari：底部三件玻璃左右對稱、點按範圍 ≥ 88")   // l10n-ignore

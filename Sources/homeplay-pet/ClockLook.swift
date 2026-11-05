@@ -56,7 +56,9 @@ struct ClockLook: Equatable, Codable {
 
     enum Swatch: String, CaseIterable, Codable {
         case auto, white, cyan, blue, lavender, purple, pink, orange, yellow, green
-        /// 色相（0…1）；auto 跟著壁紙、white 沒有色相
+        // HomeView 對齊：彩色數字版 Look 的實測 numerals 色（色票不走色相內插，直接用官方值）
+        case blueOrange, neonBlue, orangePurple, redBlue
+        /// 色相（0…1）；auto 跟著壁紙、white 沒有色相；Look 色票不走色相
         var hue: CGFloat? {
             switch self {
             case .auto, .white: return nil
@@ -68,6 +70,17 @@ struct ClockLook: Equatable, Codable {
             case .orange: return 0.07
             case .yellow: return 0.14
             case .green: return 0.36
+            case .blueOrange, .neonBlue, .orangePurple, .redBlue: return nil
+            }
+        }
+        /// Look 色票對應的 Look 名（HVTruth 實測）
+        var lookName: String? {
+            switch self {
+            case .blueOrange: return "Blue-Orange"
+            case .neonBlue: return "Neon-Blue"
+            case .orangePurple: return "Orange-Purple"
+            case .redBlue: return "Red-Blue"
+            default: return nil
             }
         }
         var title: String {
@@ -82,6 +95,11 @@ struct ClockLook: Equatable, Codable {
             case .orange: return L("clockLook.color.orange", "橙色")
             case .yellow: return L("clockLook.color.yellow", "黄色")
             case .green: return L("clockLook.color.green", "绿色")
+            // Look 名是專有名詞，照原文顯示（Apple 不翻譯 Look 名）
+            case .blueOrange: return "Blue-Orange"
+            case .neonBlue: return "Neon-Blue"
+            case .orangePurple: return "Orange-Purple"
+            case .redBlue: return "Red-Blue"
             }
         }
     }
@@ -122,11 +140,14 @@ struct ClockLook: Equatable, Codable {
 
     var key: String { "\(font.rawValue)|\(Int(weight * 100))|\(swatch.rawValue)|\(Int(tone * 100))|\(glass)" }
 
-    /// 實際顏色：auto 用壁紙的平均色（提亮、加一點飽和）
+    /// 實際顏色：auto 用壁紙的平均色（提亮、加一點飽和）；Look 色票＝實測 numerals 色（不吃 tone）
     func color(wallpaper: NSColor?) -> NSColor {
         let t = CGFloat(max(0, min(1, tone)))
         switch swatch {
         case .white: return NSColor(white: 0.78 + 0.22 * t, alpha: 1)
+        case .blueOrange, .neonBlue, .orangePurple, .redBlue:
+            if let n = swatch.lookName, let l = HVTruth.look(n) { return l.numerals_color }
+            return .white
         case .auto:
             let c = (wallpaper ?? NSColor(calibratedHue: 0.62, saturation: 0.3, brightness: 0.8, alpha: 1)).usingColorSpace(.sRGB) ?? .white
             return NSColor(calibratedHue: c.hueComponent, saturation: min(1, max(0.12, c.saturationComponent) * (0.4 + 0.9 * t)),

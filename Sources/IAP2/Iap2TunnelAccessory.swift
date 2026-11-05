@@ -6,7 +6,7 @@ import Foundation
 // 照 MacPlay livi_sock.rs run_tunnel：隧道上重新跑一遍完整 bring-up（marker → SYNC → 识别 → 认证），
 // 链路参数 zero-ack／出窗 4／控制会话 v2（Iap2Link.Synchronization.local 已是这组）。
 
-package final class Iap2TunnelAccessory: @unchecked Sendable {
+package final class Iap2TunnelAccessory: Iap2AccessoryForwarding, @unchecked Sendable {
     package let core: Iap2AccessoryCore
     private let sendBytes: ([UInt8]) -> Void
     private var started = false
@@ -21,24 +21,7 @@ package final class Iap2TunnelAccessory: @unchecked Sendable {
         core.onDrain = { [weak self] bytes in self?.sendBytes(bytes) }
     }
 
-    // 转发：调用方（Wireless）和蓝牙／USB 版同一套接口
-    package var onLog: ((String) -> Void)? {
-        get { core.onLog } set { core.onLog = newValue }
-    }
-    package var onPhase: ((Iap2AccessoryCore.Phase) -> Void)? {
-        get { core.onPhase } set { core.onPhase = newValue }
-    }
-    package var onMessage: ((Iap2Csm.Frame) -> [Iap2Csm.Frame])? {
-        get { core.onMessage } set { core.onMessage = newValue }
-    }
-    package var onArtwork: ((UInt8, Data) -> Void)? {
-        get { core.onArtwork } set { core.onArtwork = newValue }
-    }
-    package var onFinished: ((Int) -> Void)? {
-        get { core.onFinished } set { core.onFinished = newValue }
-    }
-    package var phase: Iap2AccessoryCore.Phase { core.phase }
-    package var finished: Bool { core.finished }
+    // 回调转发面（onLog/onPhase/onMessage/onArtwork/onFinished/phase/finished）在 Iap2AccessoryForwarding
 
     /// 开跑（主线程）：发 marker＋SYNC，之后 250ms 心跳驱动重发。手机还没连上数据口也先发——
     /// MacPlay 在 RECORD 时就起链路，由手机来连；SYNC 每 500ms 重发直到被 ACK。

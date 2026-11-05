@@ -111,7 +111,8 @@ extension Face {
             let blurred = ci.clampedToExtent().applyingGaussianBlur(sigma: Double(old.width) / 1024 * 22).cropped(to: ci.extent)
             frosted = Self.transitionCI.createCGImage(blurred, from: ci.extent) ?? old
         } else { frosted = old }
-        faceTransition = (old, frosted, CACurrentMediaTime())
+        faceTransition = (old, frosted, CACurrentMediaTime(), islandRect)   // HomeView 對齊後續 #4：記下舊膠囊位置＝Portal 的共享元素
+        portalCoreFrom = capsuleCore   // 後續 #7：橫滑也要的膠囊本體（確切矩形）
         Self.deblurFrom = nil
         if dir != 0 { Self.toFaceDeblur = false }
     }
@@ -163,10 +164,29 @@ extension Face {
         let full = CGRect(x: 0, y: 0, width: 1024, height: 1024)
         g.saveGState()
         if sliding {
-            g.translateBy(x: -CGFloat(Self.pageDir) * pageShift * x, y: 0)
+            // 後續 #7（共享元素轉場）：膠囊錨在屏上，兩頁各自在自己的座標裡把膠囊補成背景，頂層畫一顆屏幕上的膠囊
+            let from = portalCoreFrom.flatMap { PortalSlide.valid($0) ? $0 : nil }
+            let to = capsuleCoreBuilding.flatMap { PortalSlide.valid($0) ? $0 : nil }
+            let newTx = PortalSlide.newShift(dir: Self.pageDir, x: x, shift: pageShift)
+            let oldTx = PortalSlide.oldShift(dir: Self.pageDir, x: x, shift: pageShift)
+            let handoff = from.map { PortalSlide.handoff(from: $0, to: to, x: x) } ?? 1
+            if from != nil, let to, handoff > 0.001, let shot = g.makeImage() {   // 新頁（在 newTx）：拿這一幀畫好的新頁補；交棒時淡掉露出新膠囊
+                g.saveGState(); g.setAlpha(handoff)
+                portalPatch(g, shot, hole: PortalSlide.hole(to), tx: newTx)
+                g.restoreGState()
+            }
+            g.translateBy(x: oldTx, y: 0)
             g.addPath(continuousRoundedRect(full, radius: Screen.cornerRadius)); g.clip()
             drawUpright(g, t.sharp, in: full)
+            if let from { portalPatch(g, t.sharp, hole: PortalSlide.hole(from), tx: 0) }   // 舊頁：自己座標裡的洞
             g.restoreGState()
+            if let from, handoff > 0.001 {   // 頂層：舊幀的膠囊原樣（像素一致）錨在屏上；隨進度滑到新頁膠囊的位置，到位時無縫交棒
+                let a = PortalSlide.anchor(from: from, to: to, x: x)
+                g.saveGState(); g.setAlpha(handoff)
+                g.addPath(CGPath(roundedRect: a, cornerWidth: a.height / 2, cornerHeight: a.height / 2, transform: nil)); g.clip()
+                if let crop = PortalSlide.crop(t.sharp, from) { drawUpright(g, crop, in: a) }
+                g.restoreGState()
+            }
             return
         }
         if Self.toFaceDeblur {   // 動效包：回錶面——舊畫面一格內拿掉，新錶面的模糊版蓋在上面淡掉（＝從 45 px 模糊變清楚）
@@ -187,7 +207,119 @@ extension Face {
             g.setAlpha(fade * (1 - fog)); drawUpright(g, t.sharp, in: full)
             g.setAlpha(fade * fog); drawUpright(g, t.frosted, in: full)
         }
+        // HomeView 對齊後續 #4：舊錶面在 👀 膠囊處「開門」——膠囊位置挖穿，
+        // 新錶面的膠囊透出來＝共享元素的連續性；膠囊留在原地不動，周圍的世界換掉。
+        if let island = t.islandFrom, island.width > 8, island.height > 8 {
+            g.setBlendMode(.clear)
+            let r = island.insetBy(dx: -2, dy: -2)
+            g.addPath(CGPath(roundedRect: r, cornerWidth: r.height / 2, cornerHeight: r.height / 2, transform: nil))
+            g.fillPath()
+            g.setBlendMode(.normal)
+        }
         g.restoreGState()
+    }
+}
+
+extension Face {
+    /// 後續 #7：把一頁上的膠囊「挖掉」——img 是這一頁（畫布座標，頁平移 tx），用洞上方與下方同一頁的兩條背景蓋在洞上。
+    /// 兩條各縮成 12×1（上一列、下一列）再放大：洞裡是上下底色之間的漸層，不複製旁邊的字（beta 5 拍板：上下取樣平均，單取一條會留色斑）
+    fileprivate func portalPatch(_ g: CGContext, _ img: CGImage, hole: CGRect, tx: CGFloat) {
+        let src = PortalSlide.patchSources(hole)
+        func strip(_ r: CGRect?) -> CGImage? {
+            guard let r, let part = PortalSlide.cropPart(r.offsetBy(dx: tx, dy: 0), imageWidth: img.width, imageHeight: img.height) else { return nil }
+            return img.cropping(to: part.pixels)
+        }
+        guard let top = strip(src.above) ?? strip(src.below), let bottom = strip(src.below) ?? strip(src.above) else { return }
+        let crop = makeImage(12, 2) { c in
+            self.drawUpright(c, top, in: CGRect(x: 0, y: 0, width: 12, height: 1))
+            self.drawUpright(c, bottom, in: CGRect(x: 0, y: 1, width: 12, height: 1))
+        }
+        g.saveGState()
+        let h = hole.offsetBy(dx: tx, dy: 0)
+        g.addPath(CGPath(roundedRect: h, cornerWidth: h.height / 2, cornerHeight: h.height / 2, transform: nil)); g.clip()
+        drawUpright(g, crop, in: h)
+        g.restoreGState()
+    }
+}
+
+/// 後續 #7：橫滑換頁的 Portal（共享元素＝👀 膠囊）純邏輯——頁平移、洞、錨點、裁切換算（自檢釘住）
+enum PortalSlide {
+    /// 膠囊夠大才做（太小＝沒畫膠囊或收起來了）
+    static func valid(_ r: CGRect) -> Bool { r.width > 8 && r.height > 8 && r.width >= r.height }
+    /// 新頁從旁邊推進來：x＝0 在一整頁外、x＝1 到位
+    static func newShift(dir: Int, x: CGFloat, shift: CGFloat) -> CGFloat { CGFloat(dir) * shift * (1 - x) }
+    /// 舊頁往另一邊推出去
+    static func oldShift(dir: Int, x: CGFloat, shift: CGFloat) -> CGFloat { -CGFloat(dir) * shift * x }
+    /// 洞：比膠囊本體大一圈（玻璃膠囊轉場中的外圈、陰影、描邊一起拿掉；實測 12% 會留一圈黑邊），兩端半圓
+    static func hole(_ core: CGRect) -> CGRect { core.insetBy(dx: -core.height * 0.3, dy: -core.height * 0.3) }
+    /// 補洞用的背景條：緊貼洞的上方、下方各一條細條（高＝洞高 8%、至少 4；取太厚會把旁邊的字平均進來成灰塊）；超出畫布的那條不取（nil）
+    static func patchSources(_ hole: CGRect, side: CGFloat = 1024) -> (above: CGRect?, below: CGRect?) {
+        let h = max(4, hole.height * 0.08)
+        let above = CGRect(x: hole.minX, y: hole.minY - h, width: hole.width, height: h)
+        let below = CGRect(x: hole.minX, y: hole.maxY, width: hole.width, height: h)
+        return (above.minY >= 0 ? above : nil, below.maxY <= side ? below : nil)
+    }
+    /// 屏幕上的膠囊錨點：從舊位置隨進度走到新頁的膠囊（取消時 x 回 0＝自然歸位）；新頁沒有膠囊或差太遠（> 一個膠囊高）就停在舊位置
+    static func anchor(from: CGRect, to: CGRect?, x: CGFloat) -> CGRect {
+        guard let to, lerps(from: from, to: to) else { return from }
+        let k = max(0, min(1, x))
+        func l(_ a: CGFloat, _ b: CGFloat) -> CGFloat { a + (b - a) * k }
+        return CGRect(x: l(from.minX, to.minX), y: l(from.minY, to.minY), width: l(from.width, to.width), height: l(from.height, to.height))
+    }
+    /// 交棒：兩顆膠囊對得上（anchor 會滑過去）＝屏上那顆一路不透明；對不上（差太遠、新頁沒膠囊）＝最後 30% 淡出、新頁的膠囊淡入，
+    /// 不在轉場結束那一格瞬移
+    static func lerps(from: CGRect, to: CGRect?) -> Bool { to.map { abs($0.midY - from.midY) <= from.height } ?? false }
+    static func handoff(from: CGRect, to: CGRect?, x: CGFloat) -> CGFloat {
+        if lerps(from: from, to: to) { return 1 }
+        let t = max(0, min(1, (x - 0.7) / 0.3))
+        return 1 - t * t * (3 - 2 * t)
+    }
+    /// 畫布矩形 → 圖上的像素矩形（圖是 1024 畫布照像素比渲染、左上原點）；超出圖的部分裁掉，canvas 回傳對應的那一塊
+    static func cropPart(_ r: CGRect, imageWidth w: Int, imageHeight h: Int) -> (pixels: CGRect, canvas: CGRect)? {
+        let sc = CGFloat(w) / 1024
+        guard sc > 0 else { return nil }
+        let px = CGRect(x: r.minX * sc, y: r.minY * sc, width: r.width * sc, height: r.height * sc).integral
+            .intersection(CGRect(x: 0, y: 0, width: w, height: h))
+        guard !px.isNull, px.width >= 1, px.height >= 1 else { return nil }
+        return (px, CGRect(x: px.minX / sc, y: px.minY / sc, width: px.width / sc, height: px.height / sc))
+    }
+    /// 整塊在圖內才裁（屏幕上的膠囊要完整）
+    static func crop(_ img: CGImage, _ r: CGRect) -> CGImage? {
+        guard let p = cropPart(r, imageWidth: img.width, imageHeight: img.height), abs(p.canvas.width - r.width) < 2, abs(p.canvas.height - r.height) < 2 else { return nil }
+        return img.cropping(to: p.pixels)
+    }
+}
+
+enum PortalSlideSelfTest {
+    static func run(_ check: (Bool, String) -> Void) {
+        let shift: CGFloat = 1024 + Face.pageGap
+        check(PortalSlide.newShift(dir: 1, x: 0, shift: shift) == shift && PortalSlide.newShift(dir: 1, x: 1, shift: shift) == 0
+              && PortalSlide.oldShift(dir: 1, x: 0.5, shift: shift) == -shift / 2 && PortalSlide.oldShift(dir: -1, x: 0.5, shift: shift) == shift / 2,
+              "Portal 橫滑：新頁從一整頁外推到位、舊頁往反方向推出")   // l10n-ignore
+        let core = CGRect(x: 400, y: 60, width: 224, height: 80)
+        let hole = PortalSlide.hole(core)
+        check(hole.contains(core) && abs(hole.height - core.height * 1.6) < 1e-6 && abs(hole.midX - core.midX) < 1e-6,
+              "Portal 橫滑：洞包住膠囊本體、外擴一圈 30%")   // l10n-ignore
+        let ps = PortalSlide.patchSources(PortalSlide.hole(core.offsetBy(dx: 0, dy: 300)))
+        let mh = PortalSlide.hole(core.offsetBy(dx: 0, dy: 300))
+        check(ps.above.map { abs($0.maxY - mh.minY) < 1e-6 } == true && ps.below.map { abs($0.minY - mh.maxY) < 1e-6 } == true,
+              "Portal 橫滑：補洞取樣＝緊貼洞的上方與下方兩條、不重疊")   // l10n-ignore
+        check(PortalSlide.patchSources(CGRect(x: 0, y: 2, width: 100, height: 40)).above == nil
+              && PortalSlide.patchSources(CGRect(x: 0, y: 982, width: 100, height: 40)).below == nil, "Portal 橫滑：超出畫布的那一條不取")   // l10n-ignore
+        let to = core.offsetBy(dx: 40, dy: 10)
+        check(PortalSlide.anchor(from: core, to: to, x: 0) == core && PortalSlide.anchor(from: core, to: to, x: 1) == to
+              && abs(PortalSlide.anchor(from: core, to: to, x: 0.5).minX - 420) < 1e-6, "Portal 橫滑：膠囊錨在屏上，隨進度交棒到新頁的膠囊")   // l10n-ignore
+        check(PortalSlide.anchor(from: core, to: core.offsetBy(dx: 0, dy: 400), x: 0.8) == core && PortalSlide.anchor(from: core, to: nil, x: 0.8) == core,
+              "Portal 橫滑：新頁膠囊差太遠或沒有＝停在舊位置")   // l10n-ignore
+        let p = PortalSlide.cropPart(CGRect(x: 1000, y: 10, width: 100, height: 20), imageWidth: 512, imageHeight: 512)
+        check(p?.pixels == CGRect(x: 500, y: 5, width: 12, height: 10) && p.map { abs($0.canvas.width - 24) < 1e-6 } == true
+              && PortalSlide.cropPart(CGRect(x: 1100, y: 0, width: 50, height: 50), imageWidth: 512, imageHeight: 512) == nil,
+              "Portal 橫滑：畫布→像素換算照像素比、超出圖的部分裁掉")   // l10n-ignore
+        check(!PortalSlide.valid(CGRect(x: 0, y: 0, width: 4, height: 4)) && PortalSlide.valid(core), "Portal 橫滑：沒有膠囊就不做")   // l10n-ignore
+        let far = core.offsetBy(dx: 0, dy: 700)
+        check(PortalSlide.handoff(from: core, to: to, x: 0.95) == 1 && PortalSlide.handoff(from: core, to: far, x: 0.5) == 1
+              && PortalSlide.handoff(from: core, to: far, x: 0.85) < 1 && PortalSlide.handoff(from: core, to: far, x: 1) == 0 && PortalSlide.handoff(from: core, to: nil, x: 1) == 0,
+              "Portal 橫滑：膠囊對不上時最後 30% 交叉淡化交棒、不瞬移")   // l10n-ignore
     }
 }
 

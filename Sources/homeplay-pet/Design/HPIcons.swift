@@ -9,7 +9,7 @@ import CoreText
 
 enum HPIcons {
     enum Kind: String, CaseIterable {
-        case alarms, timers, worldClock, calendar, facetime, home, intercom, messages, music, podcasts, reminders, settings, weather, findMy, safari, clioTalk
+        case alarms, timers, worldClock, calendar, facetime, home, intercom, messages, music, podcasts, reminders, settings, weather, findMy, safari, clioTalk, nowCooking
     }
 
     /// App id → 圖示（外殼知道是哪個 App 時先用這個；FaceTime、對講由 App 包加進 AppRegistry，id 是 "facetime"、"intercom"）
@@ -31,6 +31,7 @@ enum HPIcons {
         case "settings": return .settings
         case "facetime": return .facetime
         case "intercom": return .intercom
+        case "recipes": return .nowCooking   // HomeView 對齊 WP5：Now Cooking 獨立 app
         default: return nil
         }
     }
@@ -48,6 +49,7 @@ enum HPIcons {
         case "message.fill", "message": return .messages
         case "music.note": return .music
         case "antenna.radiowaves.left.and.right", "podcasts": return .podcasts
+        case "fork.knife": return .nowCooking
         case "checklist": return .reminders
         case "gearshape.fill", "gearshape": return .settings
         case "cloud.sun.fill": return .weather
@@ -79,6 +81,7 @@ enum HPIcons {
         case .weather: return (srgb(0x569BFA), srgb(0x3771D2))
         case .findMy: return (srgb(0x5DD56C), srgb(0x2FB146))
         case .clioTalk: return (srgb(0x2E2C38), srgb(0x111116))
+        case .nowCooking: return (srgb(0xB6B5BA), srgb(0x8E8E93))   // 實測 AccentColor＝systemGray
         }
     }
     /// 白底的圖示（App 資料庫、淺色主畫面上要一圈很淡的邊才看得出輪廓）
@@ -120,6 +123,7 @@ enum HPIcons {
         case .findMy: drawFindMy(g, u)
         case .safari: drawSafari(g, u)
         case .clioTalk: drawClioTalk(g, u)
+        case .nowCooking: drawNowCooking(g, u)
         }
         g.endTransparencyLayer()
         g.restoreGState()
@@ -143,6 +147,7 @@ enum HPIcons {
         case .weather: return NSColor(srgbRed: 0.05, green: 0.2, blue: 0.5, alpha: 0.35)
         case .settings: return NSColor(white: 0.15, alpha: 0.4)
         case .findMy: return NSColor(srgbRed: 0.05, green: 0.4, blue: 0.1, alpha: 0.35)
+        case .nowCooking: return NSColor(white: 0.15, alpha: 0.4)
         case .clioTalk: return NSColor(white: 0, alpha: 0.5)
         case .calendar, .home, .intercom, .reminders, .safari: return NSColor(white: 0, alpha: 0.12)
         }
@@ -287,6 +292,26 @@ enum HPIcons {
         p.closeSubpath()
         return p
     }
+    // MARK: 烹飪（Now Cooking：鍋——旋鈕、鍋蓋、鍋身、兩邊鍋耳；官方 systemGray 底上的奶白鍋）
+    private static func drawNowCooking(_ g: CGContext, _ u: Unit) {
+        // 旋鈕
+        fill(g, ellipse(u.circle(0.5, 0.175, 0.036)), glyphShade, glyph)
+        // 鍋蓋：扁橢圓
+        fill(g, ellipse(CGRect(x: u.p(0.30, 0).x, y: u.p(0, 0.25).y, width: u.s * 0.40, height: u.s * 0.095)), glyph, glyphShade)
+        // 鍋身：圓角矩形（上緣一條亮線）
+        let body = continuousRoundedRect(u.rect(0.255, 0.335, 0.49, 0.31), radius: u.s * 0.055)
+        fill(g, body, glyph, glyphShade)
+        stroke(g, CGPath(roundedRect: u.rect(0.255, 0.335, 0.49, 0.31), cornerWidth: u.s * 0.055, cornerHeight: u.s * 0.055, transform: nil), u.s * 0.012, srgb(0xE8DCCB))
+        // 鍋耳：兩邊短桿
+        for fx: CGFloat in [0.19, 0.81] {
+            let ear = CGMutablePath()
+            ear.move(to: u.p(fx < 0.5 ? 0.255 : 0.745, 0.44)); ear.addLine(to: u.p(fx, 0.44))
+            stroke(g, ear, u.s * 0.052, glyphShade)
+        }
+        // 鍋裡的一條湯線（陰面色）
+        stroke(g, { let l = CGMutablePath(); l.move(to: u.p(0.31, 0.52)); l.addLine(to: u.p(0.69, 0.52)); return l }(), u.s * 0.038, srgb(0xE4D3BE))
+    }
+
     private static func drawHome(_ g: CGContext, _ u: Unit) {
         // 煙囪（在屋頂後面）
         fill(g, continuousRoundedRect(u.rect(0.735, 0.2, 0.085, 0.2), radius: u.s * 0.015), srgb(0xF0923A))

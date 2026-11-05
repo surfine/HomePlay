@@ -4,16 +4,18 @@
 // 沒有 JSON-LD 食譜的網頁：顯示「這個網頁沒有食譜資料」；之後可以交給 ClioTalk 整理（見 clioFallback）。
 // 最近開過的 10 份食譜釘在本機（Application Support/HomePlay/recipes.json），不經任何伺服器。
 // 純邏輯在 RecipeParser.swift，輸入（拖放、貼上、選單）在 RecipeInput.swift。
-// 2.0 P10（使用者 2026-10-25）：跟官方一樣，食譜併進 Safari——這裡是 Safari 的烹飪畫面：不上主畫面，從 Safari 的「開始烹飪」、
-// 起始頁的「釘選的食譜」、拖放／貼上／ClioTalk 進來；最外層的返回回到 Safari（SafariApp.returnFromCooking）。
+// HomeView 對齊 WP5（2026-11-05）：實測 Now Cooking 是獨立 app——回到主畫面與 App 資料庫；Safari 的「開始烹飪」、
+// 起始頁「釘選的食譜」、拖放／貼上／ClioTalk 照舊進來；從 Safari 進來的最外層返回回 Safari（enteredFromSafari）。
 
 import AppKit
 
 final class RecipesApp: PetApp {
     static let shared = RecipesApp()
     let id = "recipes"
-    var title: String { L("app.recipes", "食谱") }
-    let icon = AppIcon(color: srgb(0x34c759), symbol: "fork.knife")
+    var title: String { L("app.nowcooking", "烹飪") }   // HomeView 對齊 WP5：Now Cooking 是獨立 app
+    let icon = AppIcon(color: HPTokens.gray, symbol: "fork.knife")   // 實測 AccentColor＝systemGray
+    /// 這次是不是從 Safari 的「開始烹飪」進來的：最外層返回回 Safari；獨立打開就照外殼回主畫面
+    var enteredFromSafari = false
 
     enum Screen: Equatable {
         case home                 // 沒有食譜：說明＋最近的食譜
@@ -86,14 +88,16 @@ final class RecipesApp: PetApp {
     var showsCloseButton: Bool { !ownsTopBar }
     var showsClock: Bool { !ownsTopBar }
     var backSymbol: String {
-        "chevron.left"   // 2.0 P10：最外層也是 ‹（回 Safari）
+        "chevron.left"   // 最外層也是 ‹（從 Safari 來就回 Safari）
     }
     func handleBack(now: Double) -> Bool {
         switch screen {
         case .ingredients, .step: go(.overview, now: now, kind: .blurFade); return true
         case .timer(let i): go(.step(i), now: now, kind: .blurFade); return true
         case .failed, .noRecipe: screen = .home; return true
-        default: SafariApp.returnFromCooking(); return true   // 2.0 P10：回 Safari
+        default:
+            if enteredFromSafari { SafariApp.returnFromCooking(); return true }   // Safari 深連結：回 Safari
+            return false   // HomeView 對齊 WP5：獨立 App，照外殼回主畫面／資料庫
         }
     }
 
@@ -172,6 +176,7 @@ final class RecipesApp: PetApp {
         if case .failed = screen { screen = .home }
         if case .noRecipe = screen { screen = .home }
         scroll = 0
+        enteredFromSafari = false   // 入口來源每次重算（Safari.goCooking 會再標記）
     }
 
     // MARK: 每幀

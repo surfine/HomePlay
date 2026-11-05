@@ -711,6 +711,7 @@ extension Face {
         if from == nil, SourceSwitcher.carPlayBehind(self) { drawSourceBadge(g, pill: r) }   // 2.0 align D：CarPlay 在背景
         let eyes = r.insetBy(dx: -12, dy: -10)
         islandRectBuilding = islandRectBuilding.map { $0.union(eyes) } ?? eyes
+        if capsuleCoreBuilding == nil { capsuleCoreBuilding = r }   // 後續 #7：橫滑 Portal 的共享元素
     }
 
     // MARK: 疊在最上面的：亮度、控制中心、ClioTalk（render 在錶面／外殼畫完後叫）
@@ -722,6 +723,11 @@ extension Face {
         drawPeopleSheet(g)   // 2.0: 「換人」（ClioTalk 那一層由 ClioTalkPanel 自己畫）
         if Shell.brightness < 0.999 {
             g.setFillColor(NSColor.black.withAlphaComponent((1 - Shell.brightness) * 0.85).cgColor)
+            g.fill(CGRect(x: 0, y: 0, width: 1024, height: 1024))
+        }
+        // HomeView 對齊 WP3：休眠階段——畫面壓到 12%（官方 Turn Off Display 的桌寵對應：人靠近/一有輸入就醒）
+        if Shell.displayAsleep {
+            g.setFillColor(NSColor.black.withAlphaComponent(1 - Shell.sleepBrightness).cgColor)
             g.fill(CGRect(x: 0, y: 0, width: 1024, height: 1024))
         }
     }

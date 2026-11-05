@@ -161,7 +161,7 @@ extension PetView {
         // 逐格看放手：HOMEPLAY_FACE_FLING="x,v"（Design/HPFrames.swift 把起點與速度交給彈簧），這裡只放開手指
         if ProcessInfo.processInfo.environment["HOMEPLAY_FACE_FLING"] != nil {
             Face.pageHold = nil; FacePaging.drag = nil
-            if let t = face.faceTransition { face.faceTransition = (t.sharp, t.frosted, CACurrentMediaTime()) }
+            if let t = face.faceTransition { face.faceTransition = (t.sharp, t.frosted, CACurrentMediaTime(), t.islandFrom) }
         }
     }
 
@@ -192,7 +192,7 @@ extension PetView {
         let progress = max(0, -CGFloat(dir) * x), pv = -CGFloat(dir) * v
         Face.pageHold = nil
         Face.pageStart = (progress, pv)
-        if let t = face.faceTransition { face.faceTransition = (t.sharp, t.frosted, now) }
+        if let t = face.faceTransition { face.faceTransition = (t.sharp, t.frosted, now, t.islandFrom) }
         if wantDir == 0 {
             // 退回：同一條彈簧走回 0，到了把原本的換回來
             Face.pageGoal = 0

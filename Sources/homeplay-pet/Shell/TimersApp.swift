@@ -19,7 +19,7 @@ final class TimersApp: PetApp {
     static let shared = TimersApp()
     let id = "timers"
     var title: String { L("app.timers", "计时器") }
-    let icon = AppIcon(color: srgb(0xff9f0a), symbol: "timer")
+    let icon = AppIcon(color: HPTokens.orange, symbol: "timer")   // HomeView 對齊：accent＝#FF8D28
 
     /// 正在大圈裡看的那組（nil＝最快到點的）
     var selected: Int?
@@ -40,7 +40,7 @@ final class TimersApp: PetApp {
     private var dialAcc: CGFloat = 0
     /// 減少動態效果時數字交叉淡化用：現在顯示的字、上一個字、換字的時刻
     private var dialText = "", dialPrevText = "", dialFadeAt = -1e9
-    static let accent = srgb(0xff9f0a)
+    static let accent = HPTokens.orange   // HomeView 對齊：Timers AccentColor 實測＝systemOrange #FF8D28
 
     /// 牆上時間（快照逐格：HOMEPLAY_CLOCK_T 凍結，見 ClockKit.wall）
     static var wallNow: Double { ClockKit.wall }
@@ -271,8 +271,12 @@ final class TimersApp: PetApp {
     /// 暫停（橘）↔ 繼續（綠）：同一顆玻璃，彈簧換色；舊符號縮小淡出、新符號從 0.6 彈到 1（SF Symbols 的 replace 效果）
     private func runButton(_ g: CGContext, _ face: Face, paused: Bool, presence k: CGFloat) {
         let r = Self.runButton
-        let m = CGFloat(Anim.track("timers.run", to: paused ? 1 : 0, spring: AppMotion.interactive))
-        let tint = HPTokens.orange.blended(withFraction: max(0, min(1, m)), of: HPTokens.green) ?? HPTokens.orange
+        // HomeView 對齊後續 #5：顏色與速度照「主題色 × 深淺 × 增加對比」解析（Design/HPMotionVariant.swift；錶盤永遠黑底）
+        let v = HPMotionVariant.current(black: face.nightRed).onDarkSurface()
+        let sp = AppMotion.interactive
+        let m = CGFloat(Anim.track("timers.run", to: paused ? 1 : 0, spring: Spring(damping: sp.damping, response: sp.response * CGFloat(HPMotionVariant.durationScale(v)))))
+        let run = HPMotionVariant.tint(HPMotionVariant.Base.orange, v), resume = HPMotionVariant.tint(HPMotionVariant.Base.green, v)
+        let tint = run.blended(withFraction: max(0, min(1, m)), of: resume) ?? run
         HPAX.note(g, r, .button, paused ? L("timer.resume", "继续") : L("timer.pause", "暂停"), shape: .circle)
         let s = (0.96 + 0.04 * k) * Press.scale(r), rr = s == 1 ? r : HPComponents.scaled(r, s)
         HPGlass.addCapsule(rr, tint: Press.brighten(tint, r), interactive: true, presence: k) { [weak face] c in
@@ -286,18 +290,22 @@ final class TimersApp: PetApp {
     /// 到點：整圈刻度橘色呼吸（1 Hz）、0:00、標籤；左下「重複」、右下「停止」
     private func renderDone(_ g: CGContext, _ face: Face, _ d: Done, now: Double) {
         typealias T = HPTokens.TimerFace
-        g.setFillColor(NSColor.black.cgColor); g.fill(CGRect(x: 0, y: 0, width: 1024, height: 1024))
+        // HomeView 對齊：響鈴狀態＝暖棕底 #5B3B0F＋淺灰 #CCCCCC（Timers 實測），不是純黑
+        g.setFillColor(T.firingBackground.cgColor); g.fill(CGRect(x: 0, y: 0, width: 1024, height: 1024))
         let e = now - d.at
-        let pulse: CGFloat = ClockKit.reduceMotion ? 1 : CGFloat(0.55 + 0.45 * cos(e * 2 * .pi))
-        Self.tickRing(g, lit: 0, color: T.tint, pulse: pulse)
+        // HomeView 對齊後續 #5：響鈴色與呼吸幅度走動效變體（增加對比＝呼吸淺一半、圓鈕收得快）
+        let v = HPMotionVariant.current(black: face.nightRed).onDarkSurface()
+        let amp = HPMotionVariant.amplitude(v), ring = HPMotionVariant.tint(HPMotionVariant.Base.orange, v)
+        let pulse: CGFloat = ClockKit.reduceMotion ? 1 : 1 - 0.45 * amp * CGFloat(1 - cos(e * 2 * .pi))
+        Self.tickRing(g, lit: 0, color: ring, pulse: pulse)
         let tf = FaceType.sf(T.timeSize, .medium, mono: false), big = timerClock(0)
-        face.drawCentered(g, big, font: tf, y: T.timeBaseline, color: .white)
+        face.drawCentered(g, big, font: tf, y: T.timeBaseline, color: T.firingOverlay)
         let lf = FaceType.sf(T.labelSize, .semibold, mono: false)
         let label = (d.label.isEmpty ? L("timer.done", "计时完成") : d.label).uppercased(with: Locale.current)
         face.drawCentered(g, Face.clipped(label, lf, 640), font: lf, y: T.labelBaseline, color: T.tint)
         HPAX.note(g, CGRect(x: 312, y: T.timeBaseline - tf.ascender, width: 400, height: tf.ascender + 24), .text, L("timer.done", "计时完成"), shape: .rounded(40))
         // 圓鈕照 materialize 長出來（到點那一刻）
-        let k = CGFloat(min(1, max(0, Spring.smooth.value(from: 0, to: 1, velocity: 0, t: CGFloat(e)).x)))
+        let k = CGFloat(min(1, max(0, Spring.smooth.value(from: 0, to: 1, velocity: 0, t: CGFloat(e / HPMotionVariant.durationScale(v))).x)))
         maskTicks(g, [HPTokens.backButton, Self.cancelButton, Self.runButton], k)
         HPComponents.actionButton(g, face, Self.cancelButton, symbol: "arrow.counterclockwise", role: .glass, presence: k)
         HPAX.note(g, Self.cancelButton, .button, L("timer.repeat", "重复"), shape: .circle)

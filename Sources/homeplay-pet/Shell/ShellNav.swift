@@ -219,6 +219,14 @@ enum ShellSelfTest {
         check(b.isEmpty && b.primary == nil, "計時器：停掉")
         MotionSelfTest.run(check)   // 2.0 R14：彈簧、投射、rubber band（Design/HPMotion.swift）
         HPSelfTest.run(check)       // HPDS（Design/）
+        HVTruthSelfTest.run(check)   // HomeView 對齊：Look 與狀態色實測值（Design/HVTruth.swift）
+        HPLookSelfTest.run(check)   // HomeView 對齊 WP2：Look 登記處（Shell/HPLook.swift）
+        HPMotionVariantSelfTest.run(check)   // HomeView 對齊後續 #5：動效變體解析層（Design/HPMotionVariant.swift）
+        DisplayStageSelfTest.run(check)   // HomeView 對齊 WP3：三段顯示狀態機（Shell/DisplayStage.swift）
+        AmbientPosterSelfTest.run(check)   // HomeView 對齊後續 #1／#6：Ambient 海報版面與輪播（Shell/AmbientPoster.swift；之前漏掛）
+        BackSwipeSelfTest.run(check)   // HomeView 對齊後續 #2／#8：返回手勢判定與手感參數（Shell/BackSwipe.swift；之前漏掛）
+        PortalSlideSelfTest.run(check)   // HomeView 對齊後續 #7：橫滑換頁的 Portal 純邏輯（Faces/ScreenGeometry.swift）
+        HomeAlertsSelfTest.run(check)   // HomeView 對齊 WP5／#3：家庭警報觸發、去重、快照轉移（Shell/HomeAlerts.swift；之前漏掛）
         let near = [CGRect(x: 0, y: 0, width: 88, height: 88), CGRect(x: 100, y: 0, width: 88, height: 88)], far = [near[0], CGRect(x: 120, y: 0, width: 88, height: 88)]
         check(HPGlass.needsMerge(near) && !HPGlass.needsMerge(far), "玻璃：相距小於 24 px 才融合")
         check(Shell.greeting(hour: 8).count >= 1 && Shell.greeting(hour: 8)[0] == Shell.greeting(hour: 8)[0].uppercased(), "主畫面：問候語全大寫")
