@@ -77,6 +77,8 @@ extension HPMotion {
                                             source: "v1 0:26.775→27.067（O-041）")
         /// v1 2:19.7→2:20.0：搜尋 → Now Playing 模糊交叉淡化約 290 ms（鍵盤先下滑 170 ms）
         static let blurFade = HPTransition(name: "music.page", spring: .settling(0.29), measured: 0.29, source: "v1 2:19.7→2:20.0")
+        /// 體驗追趕 P4：正在播放的控制權在 Mac 與 iPhone 之間交接——舊畫面模糊淡出、新來源接上（比換頁慢一拍，讓人看到「換了人在放」）
+        static let playbackHandoff = HPTransition(name: "nowplaying.handoff", spring: .settling(0.45), source: "推斷：系統播放交接先淡出再淡入（時長未實測）")   // l10n-ignore：依據說明，不是介面文字
         static let keyboard = HPTransition(name: "keyboard", spring: .settling(0.17), measured: 0.17, source: "v1 2:19.59→2:19.76")
 
         // MARK: 錶面
@@ -144,9 +146,13 @@ extension HPMotion {
         // MARK: 返回手勢（距離＋釋放速度；推斷值，真機校準後改這裡）
         static let backSwipe = BackSwipeTuning(minFraction: 0.45, flickVelocity: 900)
 
+        // MARK: 按住圖示（體驗追趕 P2；Design/HPIconPress.swift）：中心縮放＋周圍退後，按下 interactive、放開 snappy（推斷值）
+        static let iconPress = IconPressTuning(animator: .center, pressedScale: 0.90, neighborScale: 0.97, neighborAlpha: 0.82,
+                                               centerDim: 0.14, crossfadeDim: 0.28, down: .interactive, up: .snappy)
+
         static let all: [HPTransition] = [appOpen, appContent, appClose, appCloseContent, tileExpand, pageSlide, blurFade, keyboard, facePage, homeFace, toFace, pill,
                                           controlCenter, sheet, takeoverZoom, takeoverFade, clioDrip, clioLine, clioThink, liveActivity, sourceSplit, digitOut, digitIn, numeric, widgetUpdate,
-                                          materialize, press, listMove, listInsert, listDelete]
+                                          materialize, press, listMove, listInsert, listDelete, playbackHandoff]
     }
 
     /// 一般的 0…1 進度（ClioTalk、藥丸、數字）：彈簧從 0 走到 1；減少動態效果時 0.2 s 線性

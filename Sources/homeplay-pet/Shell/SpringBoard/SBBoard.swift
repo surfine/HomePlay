@@ -35,6 +35,7 @@ enum SBMotion {
 enum SBAction: Equatable {
     case editHome, removeItem(String), editWidget(String), editStack(String), rename(String), resize(String, SBWidgetSize)
     case addWidget, customize, editPages, addToHome(String), openApp(String)
+    case shareAirDrop   // 照片小工具正在看的那張用 AirDrop 傳出去
     case provider(String, String)   // 2.0 App 平台：提供者自己加的列（App id、verb；Shell/AppPlatform）
 }
 
@@ -92,6 +93,11 @@ struct SBOpenFolder {
     var renaming = false
     var from: CGRect
     var backdrop: CGImage?
+    /// 浮動資料夾（SBFloatyFolder.swift）：第幾頁、換頁動畫、手指橫拖中的位置、編輯模式拖著的 App
+    var page = 0
+    var pageAnim: MotionValue?
+    var pageDrag: CGFloat?
+    var drag: SBFolderDrag?
 }
 
 enum SB {
@@ -116,9 +122,10 @@ enum SB {
         }
         set { working = newValue }
     }
-    /// 存起來（訪客、認不出的人不存）
+    /// 存起來：存到 working 實際屬於的那個人（owner，讀排列時記下的），不是「現在」在看的人——
+    /// 編輯或拖曳途中換了人，working 還是前一位的，存到新觀看者名下會蓋掉他的排列。訪客、認不出的人（owner 是 nil）不存
     static func commit() {
-        if let v = PersonHome.viewerID, PersonHome.canEdit, forcedLayout == nil { SBStore.set(working, for: v) }
+        if case .some(.some(let id)) = owner, !Shell.guestMode, !OfficialDemo.on, forcedLayout == nil { SBStore.set(working, for: id) }
         Shell.homeLayer = nil
         pageCache.removeAll()
     }
@@ -129,7 +136,7 @@ enum SB {
         libraryScrollDragging = false; libraryScrollSamples = []
         libraryScroll = MotionValue("sbLibScroll", spring: SBMotion.settle, from: 0, to: 0, now: 0)
     }
-    /// 快照：--home-layout demo|pages|folder|stack|sizes（固定的示範排列，不讀也不寫存檔）
+    /// 快照：--home-layout demo|pages|folder|bigfolder|stack|sizes（固定的示範排列，不讀也不寫存檔）
     nonisolated(unsafe) static var forcedLayout: SBLayout? = {
         let a = CommandLine.arguments
         guard let i = a.firstIndex(of: "--home-layout"), i + 1 < a.count else { return nil }
@@ -155,13 +162,38 @@ enum SB {
     nonisolated(unsafe) static var pageDragValue: CGFloat = 0
 
     static func goToPage(_ p: Int, now: Double, velocity: CGFloat = 0, from start: CGFloat? = nil) {
-        let n = visiblePages.count
-        let to = max(0, min(n - 1, p))
+        let to = max(0, min(pageSlots - 1, p))
         let from = start ?? pagePosition(now)
         page = to
         pageDragging = false
         pagePos = MotionValue("sbpage", spring: SBMotion.page, from: from, to: CGFloat(to), velocity: velocity, now: now)
         anims.removeAll()
+        // App 資源庫這一格：翻到就是資源庫畫面（不走霧化過場，畫面已經跟著手滑過去了）；翻回來就是主畫面
+        if libraryReachable, to == librarySlot {
+            if Shell.nav.screen == .home { Shell.nav.screen = .library; libraryQuery = ""; librarySearching = false; menu = nil; Shell.peopleSheet = false }
+        } else if Shell.nav.screen == .library {
+            Shell.nav.screen = .home
+        }
+    }
+
+    // MARK: App 資源庫＝最後一頁再往後一格（照 iPhone；2026-11-06 拍板）
+
+    /// 編輯模式沒有資源庫這一格（iOS 也是）
+    static var libraryReachable: Bool { !editing }
+    /// 資源庫在頁序裡的位置（最後一頁的下一格）
+    static var librarySlot: Int { visiblePages.count }
+    /// 能翻到的格數：頁＋資源庫
+    static var pageSlots: Int { visiblePages.count + (libraryReachable ? 1 : 0) }
+    /// 資源庫往回翻：從資源庫這一格起算（↑ 或底緣上滑進來的也一樣，往右翻＝最後一頁）
+    static func armLibraryPaging(now: Double) {
+        page = librarySlot
+        pagePos = MotionValue("sbpage", spring: SBMotion.page, from: CGFloat(librarySlot), to: CGFloat(librarySlot), now: now)
+    }
+    /// 不在資源庫畫面卻停在資源庫那一格（Esc、膠囊回主畫面、拖 App 出來）：退回最後一頁
+    static func settleLibrarySlot() {
+        guard Shell.nav.screen != .library, page >= visiblePages.count, !pageDragging, pagePos.done(CACurrentMediaTime()) else { return }
+        page = visiblePages.count - 1
+        pagePos = MotionValue("sbpage", spring: SBMotion.page, from: CGFloat(page), to: CGFloat(page), now: 0)
     }
 
     // MARK: 編輯模式
@@ -181,6 +213,7 @@ enum SB {
         guard PersonHome.canEdit || forcedLayout != nil else { return }
         if !Shell.homeEditing { editSince = now }
         Shell.homeEditing = true; wasEditing = true
+        settleLibrarySlot()
         menu = nil
         let ids = Set(PeopleRegistry.shared.people.map(\.id))
         if !ids.isEmpty { SBStore.prune(keeping: ids) }
@@ -206,7 +239,9 @@ enum SB {
     nonisolated(unsafe) static var sheet: SBSheet? = CommandLine.arguments.contains("--widget-gallery") ? .gallery(kind: nil, stack: false, page: 0) : nil
     nonisolated(unsafe) static var folder: SBOpenFolder?
     nonisolated(unsafe) static var drag: SBDrag?
-    nonisolated(unsafe) static var pressedKey: String?
+    nonisolated(unsafe) static var pressedKey: String? {
+        didSet { if pressedKey != oldValue { if let k = pressedKey { HPIconPress.down(k) } else { HPIconPress.up() } } }   // 體驗追趕 P2：按壓動效
+    }
     nonisolated(unsafe) static var libraryQuery = ""
     nonisolated(unsafe) static var librarySearching = false
     // MARK: App 資料庫捲動（2.0 depth：第 17 個 App 起畫在螢幕外點不到；iOS 的資料庫可以捲）
@@ -217,8 +252,8 @@ enum SB {
 
     /// 內容比畫面高多少（px）；0＝不用捲（16 個內建 App 剛好四列）
     static var libraryMaxScroll: CGFloat {
-        let rows = (SBUI.libraryApps().count + 3) / 4
-        return max(0, SBUI.libraryTop + CGFloat(rows - 1) * SBUI.libraryRowPitch + SBUI.libraryRowHeight - (1024 - 30))
+        let last = SBUI.libraryLayout().cells.last?.minY ?? SBUI.libraryTop   // 分區標題也算進去（iPhone 分類）
+        return max(0, last + SBUI.libraryRowHeight - (1024 - 30))
     }
     static var libraryScrollNow: CGFloat { libraryScrollDragging ? libraryScrollDrag : libraryScroll.value(CACurrentMediaTime()) }
     /// 兩頭的橡皮筋（拖的時候用）
@@ -266,7 +301,7 @@ enum SB {
         if anims.values.contains(where: { !$0.x.done(now) || !$0.y.done(now) }) { return true }
         if !fades.isEmpty { return true }
         if let m = menu, !m.presence.done(now) { return true }
-        if let f = folder, !f.anim.done(now) { return true }
+        if let f = folder, !f.anim.done(now) || f.pageDrag != nil || f.drag != nil || (f.pageAnim.map { !$0.done(now) } ?? false) { return true }
         if stackAnim.values.contains(where: { !$0.done(now) }) { return true }
         if stackShown.values.contains(where: { CACurrentMediaTime() - $0 < 1.8 }) { return true }
         return false
@@ -294,7 +329,7 @@ enum SB {
     /// 項目的框左上角 → 最近的格子（夾在放得下的範圍）
     static func cell(forTopLeft p: CGPoint, span: (w: Int, h: Int), current: (col: Int, row: Int)? = nil) -> (col: Int, row: Int) {
         let isIcon = span.w == 1 && span.h == 1
-        let fx = (p.x + (isIcon ? 0 : 7) - originX(0)) / HPTokens.Home.columnPitch, fy = (p.y - originY(0)) / HPTokens.Home.rowPitch
+        let fx = (p.x + (isIcon ? 0 : 7) - originX(0)) / HPTokens.Home.columnPitch, fy = (p.y - originY(0)) / Shell.rowPitch
         var c = Int(fx.rounded()), r = Int(fy.rounded())
         // 遲滯：要越過兩格中線再多 15% 才換格（gridstack 的「重疊過半」、Launcher3 的 reorder radius 同一個用意）
         if let cur = current {
@@ -346,7 +381,12 @@ enum SB {
             case .stack: widgets.append((f, .sb(key)))
             case .folder(let fo):
                 apps.append((f, .sb(key)))
-                if let o = folder, o.id == fo.id { for (id, c) in zip(fo.apps.prefix(SBFolder.pageSize), SBUI.folderCells()) { inFolders.append((c, .app(id))) } }
+                if let o = folder, o.id == fo.id {   // 浮動資料夾：只有看得到的那一頁落在格子上，其他頁落在資料夾那一格
+                    let pages = SBFloaty.pages(fo.apps)
+                    for (pi, page) in pages.enumerated() {
+                        if pi == o.page { for (id, c) in zip(page, SBUI.folderCells()) { inFolders.append((c, .app(id))) } } else { inFolders += page.map { (f, .app($0)) } }
+                    }
+                }
                 else { inFolders += fo.apps.map { (f, .app($0)) } }
             case .spacer: break
             }
@@ -521,6 +561,7 @@ enum SB {
         if let f = folder, f.closing, f.anim.done(now) { folder = nil; dirty = true }
         for (k, v) in fades where now - v > HPMotion.reduceFade { fades[k] = nil; dirty = true }
         if drag != nil { dragUpdate(nil, now: now) }   // 停住不動時也要算 dwell（換位置、翻頁、資料夾）
+        if folder?.drag != nil { _ = folderDragUpdate(nil, now: now); dirty = true }   // 浮動資料夾：停在左右緣也要翻頁
         if Shell.nav.screen == .library {   // 2.0 depth：搜尋過濾後內容變短，捲動量跟著收回
             let m = libraryMaxScroll
             if !libraryScrollDragging, libraryScroll.to > m { libraryScroll.retarget(m, now: now); dirty = true }
@@ -536,6 +577,7 @@ enum SBDemo {
     static func w(_ id: String, _ k: SBWidgetKind, _ s: SBWidgetSize, _ cfg: [String: String] = [:]) -> SBWidget { SBWidget(id: id, kind: k, size: s, config: cfg) }
     static func layout(_ name: String) -> SBLayout? {
         var l = SBLayout.official
+        if name != "official" { l.pages = [l.pages[0]] }   // 示範排列只沿用第一頁（預設第二頁的 App 會跟示範的資料夾重複）
         switch name {
         case "official": break
         case "pages", "demo":
@@ -552,6 +594,9 @@ enum SBDemo {
                                  SBPage(items: [.widget(w("i", .findMy, .medium)), .widget(w("j", .photos, .medium))]),
                                  SBPage(items: [.widget(w("k", .batteries, .medium)), .widget(w("l", .podcasts, .medium))]),
                                  SBPage(items: [.widget(w("m", .worldClock, .medium)), .widget(w("n", .home, .medium))])])
+        case "desktop":   // SideShow 致敬：桌面小工具（--demo-desktop-widgets ok|denied|none 決定畫哪一種）
+            l = SBLayout(pages: [SBPage(items: [.widget(w("dw", .desktopWidgets, .medium)), .widget(w("dws", .desktopWidgets, .small)),
+                                                 .app("facetime"), .app("home"), .app("music"), .app("messages")])])
         case "stack":
             let stack = SBItem.stack(SBStack(id: "st", size: .small, widgets: [w("s1", .weather, .small), w("s2", .calendar, .small), w("s3", .photos, .small)], smartRotate: true))
             l = SBLayout(pages: [SBPage(items: [.app("facetime"), .app("home"), stack, .app("music"), .app("messages"), .app("alarms"), .app("calendar"), .app("podcasts"), .app("reminders")])])
@@ -559,6 +604,12 @@ enum SBDemo {
             var p = l.pages[0].items
             p.removeAll { $0 == .app("alarms") || $0 == .app("podcasts") }
             p.append(.folder(SBFolder(id: "fd", name: SBLayout.folderName(["alarms", "timers", "worldclock", "podcasts"]), apps: ["alarms", "timers", "worldclock", "podcasts", "findmy"])))
+            l.pages[0].items = p
+        case "bigfolder":   // 浮動資料夾：超過九個（兩頁）
+            var p = l.pages[0].items
+            let apps = ["alarms", "timers", "worldclock", "podcasts", "findmy", "intercom", "weather", "settings", "safari", "reminders", "calendar", "messages", "facetime"]
+            p.removeAll { if case .app(let a) = $0 { return apps.contains(a) }; return false }
+            p.append(.folder(SBFolder(id: "fd", name: SBLayout.folderName(apps), apps: apps.filter { AppRegistry.app($0) != nil })))
             l.pages[0].items = p
         default: return nil
         }

@@ -42,6 +42,7 @@ struct HomeCharacteristic: Codable, Equatable {
     var step: Double?
     var service: String? = nil      // 2.0 第六輪：所屬 HomeKit 服務的 id（多鍵開關要靠它分開；舊幫手沒有這欄）
     var serviceName: String? = nil  // 該服務的名稱
+    var valid: [Double]? = nil      // 功能補齊：有效值（溫控模式只支援其中幾種時；舊幫手沒有這欄）
 }
 
 struct HomeAccessory: Codable, Equatable {
@@ -94,6 +95,7 @@ extension Notification.Name {
     static let homeLinkSnapshot = Notification.Name("HomePlay.homeLink.snapshot")   // object: HomeSnapshot
     static let homeLinkChanged = Notification.Name("HomePlay.homeLink.changed")     // object: HomeChange
     static let homeLinkConnection = Notification.Name("HomePlay.homeLink.connection") // object: Bool
+    static let homeCameraFrame = Notification.Name("HomePlay.homeLink.cameraFrame")    // object: HomeCameraFrame（即時畫面的一格）
 }
 
 final class HomeLink: @unchecked Sendable {
@@ -138,7 +140,12 @@ final class HomeLink: @unchecked Sendable {
         send(["op": "set", "characteristic": characteristic, "value": value], completion)
     }
 
-    /// 2.0：要一張攝影機快照（JPEG 資料）。幫手端用 HMCameraSnapshotControl（未驗證，見 Helpers/HomeBridge/Src/HomeBridge.swift）
+    /// 即時畫面：on＝開／續約（幫手 30 秒沒續就自己收）、off＝收；畫面以 cameraFrame 事件推過來（.homeCameraFrame）
+    func cameraStream(id: String, on: Bool) {
+        send(["op": "cameraStream", "id": id, "on": on], nil)
+    }
+
+    /// 2.0：要一張攝影機快照（JPEG 資料）。幫手把快照放進藏起來的視窗、自己擷取（Helpers/HomeBridge/Src/HomeBridge.swift 的 CameraStage）
     func cameraSnapshot(id: String, completion: @escaping (Data?, String?) -> Void) {
         // 回呼在讀取執行緒上、緊接在 lastImage 設好之後被叫，所以這裡取到的一定是自己的那張
         sendRaw(["op": "cameraSnapshot", "id": id]) { [weak self] ok, err in
@@ -275,6 +282,7 @@ final class HomeLink: @unchecked Sendable {
         var type: String?
         var value: HomeValue?
         var image: String?
+        var id: String?
     }
 
     private func handle(_ line: Data) {
@@ -282,6 +290,10 @@ final class HomeLink: @unchecked Sendable {
         if let ev = e.event {
             if ev == "snapshot", let s = e.snapshot {
                 DispatchQueue.main.async { self.apply(s) }
+            } else if ev == "cameraFrame", let id = e.id, let b = e.image, let data = Data(base64Encoded: b),
+                      let src = CGImageSourceCreateWithData(data as CFData, nil), let img = CGImageSourceCreateImageAtIndex(src, 0, nil) {
+                // 即時畫面：讀取執行緒上先解好 JPEG，主執行緒只換圖
+                DispatchQueue.main.async { NotificationCenter.default.post(name: .homeCameraFrame, object: HomeCameraFrame(id: id, image: img)) }
             } else if ev == "changed", let a = e.accessory, let c = e.characteristic, let t = e.type {
                 let ch = HomeChange(accessory: a, characteristic: c, type: t, value: e.value)
                 DispatchQueue.main.async { self.apply(ch) }
@@ -419,4 +431,10 @@ func runHomeSet(name: String, on: Bool) -> Never {
     let now = link.snapshot.accessories.first { $0.id == a.id }?.characteristic("power")?.value?.bool
     print("home-set: 寫入 \(ok ? "成功" : "失敗") \(err ?? "")（\(ms) ms），重讀狀態 \(now.map { $0 ? "on" : "off" } ?? "?")")
     exit(ok ? 0 : 1)
+}
+
+/// 即時畫面的一格（幫手 cameraFrame 事件解好的圖）
+struct HomeCameraFrame {
+    let id: String
+    let image: CGImage
 }

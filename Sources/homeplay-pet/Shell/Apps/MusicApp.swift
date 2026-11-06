@@ -130,6 +130,13 @@ final class MusicApp: PetApp {
         hits = []; centerButtonShown = false
         // v2-music：資料庫是主人的（訪客模式、認不出、家人、訪客裝置都看不到）；正在播放照常
         if !MediaAccess.personal, MusicCatalogStore.shared.demo == nil || MediaAccess.simulate != nil {
+            // 2.0 家人檔案：家人設了自己的播放列表，就給他那一份（一列、點了就播）；其他資料庫內容照舊只給主人
+            if MediaAccess.simulate == nil, !RemotePrivacy.guestActive, let pl = FamilyProfiles.memberPrefs?.playlist, !pl.isEmpty {
+                let y = rowsCard(g, face, top: Self.top, rows: [("music.note.list", pl, L("music.member.sub", "你的播放列表"), "play.fill",
+                                                                 { [weak self] in self?.play(Item(kind: .playlist, name: pl)) })])
+                AppUI.center(face, g, L("music.member.note", "其他资料库内容只给这台 Mac 的主人"), AppUI.font(28), cx: 512, y: y + 64, AppUI.secondary)
+                AppUI.title(g, face, L("music.library", "资料库")); return
+            }
             AppUI.drawLock(g, face, title: L("music.library", "资料库")); AppUI.title(g, face, L("music.library", "资料库")); return
         }
         switch library {

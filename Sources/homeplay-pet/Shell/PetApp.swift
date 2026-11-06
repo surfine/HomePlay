@@ -97,14 +97,18 @@ enum AppRegistry {
         RemindersApp.shared,
         MusicApp(),
         PodcastsApp(),
+        SingApp.shared,       // 功能補齊：跟唱（全螢幕跟唱歌詞，沿用 LyricsStore）
         RecipesApp.shared,    // HomeView 對齊 WP5：Now Cooking 獨立 app，不再藏在 Safari 後面
         HomeApp.shared,
         MessagesApp.shared,
         FaceTimeApp.shared,   // 2.0 第四輪 #10
+        ContactsApp.shared,   // 功能補齊：通訊錄（一鍵 FaceTime）
         FindMyApp.shared,     // 2.0 P10：尋找、對講、Safari（HV-SPECS-88）
         IntercomApp.shared,
         SafariApp.shared,
+        GamesApp.shared,      // 功能補齊：這台 Mac 上的遊戲
         ClioTalkApp.shared,
+        CarPlayApp.shared,    // 2026-11-06：CarPlay 是主畫面上的一個 App（Shell/AppSwitcher.swift）
         SettingsApp(),
     ]
     /// 不上主畫面與 App 資料庫的（目前空；食譜已回到獨立 Now Cooking——HomeView 對齊 WP5）

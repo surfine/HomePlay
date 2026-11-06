@@ -68,6 +68,13 @@ enum ShellAccessibility {
                                        rect: CGRect(x: 112, y: 320, width: 800, height: 300), shape: .rounded(40)))
             }
             return out
+        case .switcher:   // App 切換器：藥丸（回主畫面）＋每張卡片一顆按鈕
+            if let p = pillItem(face: face, now: now) { out.append(p) }
+            for (i, id) in AppSwitcher.cards(face: face).enumerated() {
+                let r = AppSwitcher.cardRect(i)
+                guard r.maxX > 0, r.minX < 1024, let a = AppRegistry.app(id) else { continue }
+                out.append(ShellAXItem(id: "switcher.\(id)", kind: .chrome, role: .button, label: a.title, rect: r, shape: .rounded(Screen.cornerRadius * AppSwitcher.cardScale), press: .tap(center(r))))
+            }
         case .home, .library:
             if Shell.peopleSheet { return peopleSheetItems() }
             if let p = pillItem(face: face, now: now) { out.append(p) }
@@ -130,7 +137,7 @@ enum ShellAccessibility {
         let label: String
         switch Shell.nav.screen {
         case .app: label = L("a11y.pill.back", "返回上一层")
-        case .library: label = L("a11y.pill.home", "回到主屏幕")
+        case .library, .switcher: label = L("a11y.pill.home", "回到主屏幕")
         case .home: label = L("a11y.pill.face", "回到表盘")
         case .face: return nil
         }
@@ -321,7 +328,7 @@ final class ShellAXElement: NSAccessibilityElement {
     override func accessibilityValueDescription() -> String? { if case .slider = item.role { return item.value }; return nil }
     override func accessibilityMinValue() -> Any? { if case .slider = item.role { return NSNumber(value: 0) }; return nil }
     override func accessibilityMaxValue() -> Any? { if case .slider = item.role { return NSNumber(value: 1) }; return nil }
-    override func accessibilityHelp() -> String? { item.id == "face" ? L("a11y.help", "重按屏幕进入 CarPlay，右键打开菜单") : nil }
+    override func accessibilityHelp() -> String? { item.id == "face" ? L("a11y.help", "重按屏幕进出 CarPlay，右键打开菜单") : nil }
     override func isAccessibilityFocused() -> Bool { ShellFocus.id == item.id }
     override func accessibilityPerformPress() -> Bool { view?.shellAXPress(item) ?? false }
     override func accessibilityPerformIncrement() -> Bool { view?.shellAXStep(item, by: 0.1) ?? false }
@@ -442,6 +449,11 @@ enum ShellFocus {
     }()
 }
 
+extension ShellAccessibility {
+    /// 沒有焦點框時，哪些鍵會把它叫出來（「鍵盤導航」開著）：Tab 與方向鍵；空白鍵、Return 不叫（空白鍵＝👀）
+    static func summonsFocus(_ keyCode: UInt16) -> Bool { [48, 123, 124, 125, 126].contains(keyCode) }
+}
+
 extension PetView {
     /// 只在外殼蓋住錶面（主畫面、App、控制中心、ClioTalk）而且開了鍵盤操作時接手；邊上沒有下一個就交回原本的方向鍵
     func shellFocusKeyDown(_ e: NSEvent) -> Bool {
@@ -460,7 +472,10 @@ extension PetView {
             let n = items.count, d = e.modifierFlags.contains(.shift) ? -1 : 1
             move(to: cur.map { ($0 + d + n) % n } ?? (d > 0 ? 0 : n - 1)); return true
         case 123, 124, 125, 126:
-            guard let cur else { move(to: 0); return true }
+            guard let cur else {   // 沒有焦點框：方向鍵叫出來（同 Tab）
+                guard ShellAccessibility.summonsFocus(e.keyCode) else { return false }
+                move(to: 0); return true
+            }
             let it = items[cur]
             if case .slider = it.role, e.keyCode == 125 || e.keyCode == 126 {   // 滑桿：↑↓ 調值
                 shellAXStep(it, by: e.keyCode == 126 ? 0.1 : -0.1); return true
@@ -468,11 +483,14 @@ extension PetView {
             let dir: ShellAccessibility.Direction = [123: .left, 124: .right, 125: .down, 126: .up][e.keyCode]!
             if let n = ShellAccessibility.neighbor(from: it.rect, dir, in: items.map(\.rect)) { move(to: n); return true }
             return false
-        case 36, 76, 49:   // Return、Enter、空白鍵：打開
+        case 36, 76:   // Return、Enter：打開
             guard let cur else { return false }
             shellAXPress(items[cur]); return true
+        case 49:   // 空白鍵：焦點框顯示著（Tab 或方向鍵叫出來的）才按下焦點，同 macOS 鍵盤導覽；沒有焦點框＝👀（PetView.eyesKey），不叫出焦點框
+            guard ShellFocus.id != nil || ShellAccessibility.summonsFocus(e.keyCode), let cur else { return false }
+            shellAXPress(items[cur]); return true
         case 53:
-            ShellFocus.id = nil; face.forceDirty = true; return false   // Esc 照舊回上一層
+            ShellFocus.id = nil; face.forceDirty = true; return false   // Esc：收掉焦點框（空白鍵回到 👀），照舊回上一層
         default: return false
         }
     }

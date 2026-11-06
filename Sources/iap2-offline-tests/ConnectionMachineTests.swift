@@ -431,6 +431,56 @@ enum ConnectionMachineTests {
             expect(busy == [.rejectIncoming(address: B)], "13 a second incoming is rejected (one at a time)")
         }
 
+        // 15. 桌宠要收 AirDrop：暂停 CarPlay（关通道→断基带→收会话、不撤 SDP）；期间不重连、拒绝主动连入；到时或 resume 才恢复
+        do {
+            var s = MachineSim(paired: [A], nearby: [A], processAge: 300)
+            s.send(.start(preferred: A))
+            s.connectOK()
+            let g = s.gen
+            let fx = s.send(.pause(seconds: 60))
+            let order = fx.compactMap { f -> String? in
+                switch f {
+                case .pauseState(true, _, .pet): return "hold"
+                case .closeLink(g): return "close"
+                case .dropBaseband(A): return "baseband"
+                case .dropSession: return "session"
+                default: return nil
+                }
+            }
+            expect(order == ["hold", "close", "baseband", "session"], "15 pause: hold reconnects, close channel, drop baseband, then drop session (\(order))")
+            expect(!fx.contains(.republishSDP) && !fx.contains { $0.restart != nil } && !s.m.isLive && s.m.link == .idle, "15 pause never touches SDP or restarts")
+            expect(s.send(.sessionEnded(.ours)).isEmpty, "15 our own teardown is not reported twice")
+            expect(s.send(.incoming(A)) == [.rejectIncoming(address: A)], "15 incoming connection is rejected while paused")
+            expect(s.advance(30).filter(\.isOpen).isEmpty && s.send(.phonesChanged).isEmpty, "15 no reconnect while paused")
+            s.send(.sleep); s.send(.wake)
+            expect(s.advance(5).filter(\.isOpen).isEmpty, "15 waking up does not end the pause")
+            let back = s.send(.resume)
+            expect(back.contains(.pauseState(on: false, seconds: 0, reason: .resume)) && back.compactMap(\.opensBluetooth) == [A], "15 resume reconnects right away")
+            s.connectOK()
+            expect(s.log.contains { if case .log(let t) = $0 { return t.hasPrefix("暂停后重连成功") } else { return false } }, "15 logs how long the reconnect took")
+            expect(s.send(.resume).isEmpty, "15 a second resume does nothing")
+        }
+        // 15b. 接收器自己的保底：没人送 resume 也会到时恢复；延长从暂停开始算最多 180 秒
+        do {
+            var s = MachineSim(paired: [A], nearby: [A], processAge: 300)
+            s.send(.start(preferred: A))
+            s.connectOK()
+            s.send(.pause(seconds: 60))
+            s.advance(50)
+            let ext = s.send(.pause(seconds: 60))
+            expect(ext.contains(.pauseState(on: true, seconds: 60, reason: .extend)) && !ext.contains(.dropSession), "15b pausing again while paused extends")
+            expect(s.advance(59.5).filter(\.isOpen).isEmpty, "15b still paused before the extended deadline")
+            s.advance(0.5)
+            expect(s.m.pause == nil && s.m.link.isOpening, "15b timeout resumes and reconnects")
+            var t = MachineSim(paired: [A], nearby: [A], processAge: 300)
+            t.send(.start(preferred: A)); t.connectOK()
+            t.send(.pause(seconds: 1000))
+            for _ in 0..<5 { t.advance(30); t.send(.pause(seconds: 120)) }
+            expect(t.m.pause != nil, "15b extended to 150 s, still paused")
+            let end = t.advance(30.5)
+            expect(t.m.pause == nil && end.contains(.pauseState(on: false, seconds: 0, reason: .timeout)), "15b never longer than 180 s in total, even if asked for more")
+        }
+
         // 14. 性质测试：任何事件序列下最多一条在开；开之前一定先关旧的
         do {
             var rng = SplitMix(seed: 42)
@@ -449,7 +499,7 @@ enum ConnectionMachineTests {
                         .transportAvailable(gen: g), .controlConnected(.wifi), .sessionActive,
                         .sessionEnded([.phoneTeardown, .controlClosed, .silence, .ours][Int(rng.next() % 4)]),
                         .usbAttached(serial: "s", phone: B), .usbDetached, .incoming(A), .incoming(B),
-                        .displayChanged, .sleep, .wake, .restartDenied(.selfHeal),
+                        .displayChanged, .sleep, .wake, .restartDenied(.selfHeal), .pause(seconds: 60), .resume,
                         .linkUnavailable(gen: g, [.noService, .notPaired, .notFound][Int(rng.next() % 3)]),
                     ]
                     let fx: [ConnectionEffect]

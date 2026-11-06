@@ -105,8 +105,7 @@ enum PersonHome {
     static var viewerID: String? {
         if let v = viewerOverride { return v }
         if let d = Shell.demoPerson { return d.id }
-        let reg = PeopleRegistry.shared
-        return PersonalGate.avatarPerson(PersonalGate.inputs, people: reg.people, owner: reg.owner)?.id
+        return PersonalGate.avatarPerson(PersonalGate.inputs, people: FamilyProfiles.roster, owner: FamilyProfiles.owner)?.id
     }
     static func layout(for id: String?) -> HomeLayout {
         guard let id, let l = layouts[id] else { return .official }

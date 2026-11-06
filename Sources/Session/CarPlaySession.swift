@@ -129,10 +129,13 @@ package final class CarPlaySession {
     }
 
     /// 桌宠的 0..1 触控 → HID 报告
-    package func sendTouch(x: Double, y: Double, down: Bool) {
+    package func sendTouch(x: Double, y: Double, down: Bool) { sendTouches([(id: 0, x: x, y: y, down: down)]) }
+    /// 桌宠的 0..1 多点触控（最多 `HID.touchContacts` 指）→ HID 报告；依 id 分槽。两指以上的报告写进日志供探验
+    package func sendTouches(_ contacts: [(id: Int, x: Double, y: Double, down: Bool)]) {
         queue.async { [self] in
-            live?.event?.sendTouches([(id: 0, x: x, y: y, down: down)],
-                                     streamWidth: config.info.main.widthPixels, streamHeight: config.info.main.heightPixels)
+            guard let report = live?.event?.sendTouches(contacts, streamWidth: config.info.main.widthPixels,
+                                                         streamHeight: config.info.main.heightPixels) else { return }
+            if contacts.count > 1 { log("触控 \(contacts.count) 指 → " + report.map { String(format: "%02x", $0) }.joined()) }
         }
     }
     package func requestKeyframe() { queue.async { [self] in live?.event?.forceKeyFrame() } }
@@ -182,6 +185,16 @@ package final class CarPlaySession {
     /// 桌寵 Esc → CarPlay 旋鈕的「返回」（和真實車機的 Back 鍵同一個 HID）。
     package func sendKnob(_ state: KnobState) {
         queue.async { [self] in live?.event?.sendKnob(state) }
+    }
+    /// 叫 CarPlay 主螢幕開某個畫面（showUI＋主螢幕 uuid；副屏那條 showCluster 真機驗過同一個訊息）。沒有 live 會話就丟。
+    package func showMainUI(_ url: String, type: String = "showUI", withUUID: Bool = true) {
+        queue.async { [self] in
+            var params: [String: Any] = ["url": url]
+            if withUUID { params["uuid"] = CarPlayPlist.mainDisplayUUID }
+            guard let ev = live?.event, let b = try? BPlist.encode(["type": type, "params": params] as [String: Any]) else { return }
+            ev.sendCommand(b)
+            ev.forceKeyFrame(displayUUID: CarPlayPlist.mainDisplayUUID)
+        }
     }
     /// 桌寵的電話鍵（接聽＝hookSwitch、拒接／掛斷＝drop）→ CarPlay 電話 HID。沒有 live 會話就丟。
     package func sendTelephony(_ button: HID.TelephonyButton) {
@@ -240,8 +253,20 @@ package final class CarPlaySession {
 
     private func log(_ s: String) { onLog?(s) }
 
+    /// 暫停 CarPlay（桌寵要讓 iPhone 能用 AirDrop）：不叫手機回連、不收新的控制連線。_airplay 廣播照留——
+    /// 撤掉廣播或藍牙 SDP 之後手機可能再也不來（1.x 撤過 SDP：18 次逾時 0 次會話）。在控制佇列上改，跟 dropConnections 同順序
+    private var held = false
+    package func setHold(_ on: Bool) {
+        queue.async { [self] in
+            guard held != on else { return }
+            held = on
+            if on { probe?.stop(); probe = nil; log("暂停中：不叫手机回连、不接控制连接") }
+            else if live == nil { startProbe() }
+        }
+    }
+
     private func startProbe() {
-        guard config.probeForPhone, probe == nil else { return }
+        guard config.probeForPhone, probe == nil, !held else { return }
         let p = CtrlProbe(deviceId: config.info.deviceID, phoneBluetoothAddress: config.phoneBluetoothAddress)
         p.onLog = { [weak self] s in self?.log(s) }
         p.onEvent = { [weak self] e in self?.onProbeEvent?(e) }
@@ -250,6 +275,7 @@ package final class CarPlaySession {
 
     private func accept(_ c: NWConnection) {
         guard discovery != nil else { c.cancel(); return }   // 已 stop
+        if held { c.cancel(); log("暂停中：拒绝手机的控制连接"); return }
         let cc = ControlConnection(conn: c, session: self)
         conns[ObjectIdentifier(cc)] = cc
         log("控制连接来自 \(cc.peerHost)")

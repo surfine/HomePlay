@@ -132,11 +132,18 @@ enum HPGlass {
             tint: tint, interactive: interactive, union: union, presence: presence, content: content)
     }
     /// 2.0 iosglass：馬上畫這幾塊（不等這一幀的 flush；呼叫端接著在上面畫內容）。還沒畫的先收起來、畫完放回去
-    static func drawNow(_ g: CGContext, face: Face, _ paths: [CGPath], clear: Bool, backdrop: CGImage? = nil, container name: String? = nil) {
+    static func drawNow(_ g: CGContext, face: Face, _ paths: [CGPath], clear: Bool, backdrop: CGImage? = nil, container name: String? = nil, tint: NSColor? = nil) {
         let pending = items; items.removeAll()
-        let body = { for p in paths { add(p) { _ in } } }
+        let body = { for p in paths { add(p, tint: tint) { _ in } } }
         if let name { container(name, body) } else { body() }
         flush(g, face: face, clear: clear, backdrop: backdrop)
+        items = pending
+    }
+    /// 馬上畫 body 裡 add 的這一批（帶內容與 presence）；還沒畫的先收起來、畫完放回去——疊在最上層的卡片用（畫在這一幀的 flush 之後）
+    static func drawNowItems(_ g: CGContext, face: Face, clear: Bool = false, _ body: () -> Void) {
+        let pending = items; items.removeAll()
+        body()
+        flush(g, face: face, clear: clear)
         items = pending
     }
     /// 丟掉還沒畫的（換畫面、這一幀放棄）
@@ -203,7 +210,7 @@ enum HPGlass {
 
     /// 把收集到的形狀上玻璃、畫內容。clear：true＝媒體上的 Clear（照片、模糊錶面）；false/nil＝Regular。
     /// backdrop：給了就用它當背景（控制中心：霧化的底圖，磚一起位移），否則拍當下這一幀
-    /// shadows：false＝不畫外陰影（自適應的與 iOS 濾鏡的緣外那圈都不畫）；thicken：玻璃面再蓋一層極淡的填色（淺白 8%、深黑 10%），
+    /// shadows：false＝不畫外陰影（自適應的與 iOS 濾鏡的緣外那圈都不畫）；thicken：玻璃面再蓋一層極淡的填色（基準淺白 8%、深黑 10%，照打開那一刻的底下亮度微調；HPMaterial.ccThicken），
     /// 兩個都只給控制中心——二十幾塊模組的外陰影疊在 24 的縫裡是一片灰污，模組也要比一般控制實一點（2.0 align B）
     static func flush(_ g: CGContext, face: Face, clear: Bool? = nil, backdrop given: CGImage? = nil, now: Double = CACurrentMediaTime(),
                       shadows: Bool = true, thicken: Bool = false) {
@@ -301,7 +308,7 @@ enum HPGlass {
         if thicken, !materialOnly, !identity {
             for sh in shaped {
                 g.saveGState(); g.addPath(sh.path)
-                g.setFillColor(NSColor(white: sh.darkGlass ? 0 : 1, alpha: (sh.darkGlass ? 0.10 : 0.08) * sh.item.presence).cgColor)
+                g.setFillColor(NSColor(white: sh.darkGlass ? 0 : 1, alpha: HPMaterial.ccThicken(darkGlass: sh.darkGlass, luma: HPMaterial.ccLuma) * sh.item.presence).cgColor)
                 g.fillPath(); g.restoreGState()
             }
         }

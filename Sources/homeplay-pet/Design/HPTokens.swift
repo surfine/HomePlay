@@ -108,6 +108,12 @@ enum HPTokens {
         static func concentric(inset: CGFloat, minimum: CGFloat = 12) -> CGFloat { Screen.concentric(inset: inset, minimum: minimum) }
         /// 同心（父元件不是螢幕時）：父半徑 − 內距
         static func concentric(parent: CGFloat, padding: CGFloat, minimum: CGFloat = 12) -> CGFloat { max(minimum, parent - padding) }
+        /// 貼邊容器離螢幕四邊的最短距離（同心的 inset；角離兩邊不等時取近的那邊）
+        static func edgeInset(_ r: CGRect) -> CGFloat { max(0, min(r.minX, r.minY, Screen.side - r.maxX, Screen.side - r.maxY)) }
+        /// 同心（用容器實際的框算 inset，不再各處手寫 card.minX）：登記在 EdgeContainers，selftest 逐一驗
+        static func concentric(rect r: CGRect, minimum: CGFloat = 12) -> CGFloat { concentric(inset: edgeInset(r), minimum: minimum) }
+        /// continuousRoundedRect 實際畫出來的半徑（短邊不夠 2 × 1.53 r 時會被夾小）：巢狀同心的父半徑用這個
+        static func drawn(_ radius: CGFloat, in r: CGRect) -> CGFloat { max(0, min(radius, min(r.width, r.height) / 2 / 1.52866483)) }
         /// 膠囊：半徑＝高 ÷ 2
         static func capsule(_ r: CGRect) -> CGFloat { min(r.width, r.height) / 2 }
         /// inset grouped 卡片

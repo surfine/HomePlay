@@ -19,7 +19,7 @@ extension Face {
         } else {
             let date = Self.displayDate
             let photoID = photos.current.map { "\(ObjectIdentifier($0).hashValue)" } ?? "-"
-            let key = "\(Int(date.timeIntervalSince1970 / 60))|\(wallpaperGeneration)|\(Int((rv * 24).rounded()))|\(clockStyle.rawValue)|\(ClockLook.active.key)|\(bg.rawValue)|\(photoID)|\(Int(renderPixelScale * 100))|\(L10n.language.rawValue)"
+            let key = "\(Int(date.timeIntervalSince1970 / 60))|\(wallpaperGeneration)|\(Int((rv * 24).rounded()))|\(clockStyle.rawValue)|\(ClockLook.active.key)|\(HPLook.name)|\(HPNumeralGlass.current.reduceTransparency)\(HPNumeralGlass.current.reduceMotion)|\(bg.rawValue)|\(photoID)|\(Int(renderPixelScale * 100))|\(L10n.language.rawValue)"
             if let c = islandStaticCache, c.key == key {
                 drawUpright(g, c.image, in: full); layout = c.layout; Face.cacheHits += 1
             } else {

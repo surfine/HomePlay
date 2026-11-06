@@ -142,6 +142,8 @@ extension Face {
     }
     private var reduceMotion: Bool { Motion.reduceMotion }
     private var sliding: Bool { Self.pageDir != 0 && !reduceMotion }
+    /// 橫滑換頁的 Portal（膠囊錨在屏上）：先關（見 endFaceTransitionFrame）
+    static let slidePortal = false
     private var pageShift: CGFloat { 1024 + Self.pageGap }
     /// 新錶面畫之前：滑動＝新頁從旁邊推進來（先塗黑當頁縫）；否則以中心微微放大（臨界阻尼收斂到 1）
     func beginFaceTransitionFrame(_ g: CGContext, _ x: CGFloat) {
@@ -165,7 +167,9 @@ extension Face {
         g.saveGState()
         if sliding {
             // 後續 #7（共享元素轉場）：膠囊錨在屏上，兩頁各自在自己的座標裡把膠囊補成背景，頂層畫一顆屏幕上的膠囊
-            let from = portalCoreFrom.flatMap { PortalSlide.valid($0) ? $0 : nil }
+            // 2026-11-06 關掉：各錶面膠囊位置與材質不同（玻璃／黑），補洞在多數組合拖出糊帶、殘影，還每幀整幀拷貝超出 16.7 ms；
+            // iOS 的分頁是整頁一起走——共享元素只留在錶面↔主畫面的淡入（開門過場那條），等不必補洞的做法再開
+            let from = Self.slidePortal ? portalCoreFrom.flatMap { PortalSlide.valid($0) ? $0 : nil } : nil
             let to = capsuleCoreBuilding.flatMap { PortalSlide.valid($0) ? $0 : nil }
             let newTx = PortalSlide.newShift(dir: Self.pageDir, x: x, shift: pageShift)
             let oldTx = PortalSlide.oldShift(dir: Self.pageDir, x: x, shift: pageShift)

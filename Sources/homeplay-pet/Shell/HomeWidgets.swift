@@ -71,7 +71,8 @@ extension Shell {
         let px = max(64, Int((r.width * face.renderPixelScale).rounded()))
         let source = OfficialIcons.names[app.id] != nil ? (OfficialIcons.icon(app.id, px: px) != nil ? "official" : "hp") : "system"
         let tag = app.icon.calendarDate || app.id == "calendar" ? "\(source)|\(homeDayKey(Face.displayDate))" : source
-        let img = HomeIconVariant.image(id: app.id, tag: tag, px: px, appearance: a) {
+        let ga = HPIconGlass.enabled ? Double(HPIconGlass.current.glyphAlpha) : 0.94   // P0：玻璃圖示的主體照深淺／增加對比
+        let img = HomeIconVariant.image(id: app.id, tag: tag, px: px, appearance: a, glyphAlpha: ga) {
             makeImage(px, px) { c in
                 let k = CGFloat(px) / r.width
                 c.scaleBy(x: k, y: k)

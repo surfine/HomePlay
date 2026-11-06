@@ -16,12 +16,14 @@ enum ControlCenter {
     /// 模組種類（舊的名字照留：focus＝番茄鐘、volume＝聲音、brightness＝顯示器）
     enum Tile: String, CaseIterable, Codable {
         case wifi, bluetooth, nowPlaying, focusMode, home, brightness, volume
-        case darkMode, night, guest, timer, alarm, cameras, follow, carPlay, lockFace, focus, dnd, screenMirroring
+        case darkMode, night, guest, timer, alarm, cameras, follow, carPlay, lockFace, focus, dnd, screenMirroring, airDrop
+        case profile   // 2.0 家人檔案：切換家人（點了開頭像選單；People/FamilyProfiles.swift）
+        case airDropReceive   // 收 AirDrop：主人的 iPhone 在 CarPlay 會話中時暫停 CarPlay，讓它能用 AirDrop 傳過來（Shell/AirDrop/AirDropCarPlayPause.swift）
 
         /// 允許的大小（第一個以外可以在編輯模式換）
         var sizes: [CCSize] {
             switch self {
-            case .wifi, .bluetooth, .focusMode, .home: return [.s2x1, .s1x1]
+            case .wifi, .bluetooth, .focusMode, .home, .airDropReceive: return [.s2x1, .s1x1]
             case .nowPlaying: return [.s2x2, .s4x2, .s2x1]
             case .brightness, .volume: return [.s4x1, .s2x1]
             default: return [.s1x1, .s2x1]
@@ -30,20 +32,20 @@ enum ControlCenter {
         var defaultSize: CCSize { sizes[0] }
         var category: CCCategory {
             switch self {
-            case .wifi, .bluetooth, .screenMirroring: return .connectivity
+            case .wifi, .bluetooth, .screenMirroring, .airDrop, .airDropReceive: return .connectivity
             case .brightness, .darkMode, .night: return .display
             case .volume, .nowPlaying: return .sound
             case .focusMode, .dnd, .focus: return .focus
             case .home, .cameras: return .home
             case .timer, .alarm: return .clock
-            case .guest, .follow, .carPlay, .lockFace: return .homePlay
+            case .guest, .follow, .carPlay, .lockFace, .profile: return .homePlay
             }
         }
         /// 長按會長成大卡的模組
         var expands: Bool { [.wifi, .bluetooth, .focusMode, .home, .nowPlaying, .volume, .brightness].contains(self) }
         var isSlider: Bool { self == .volume || self == .brightness }
         /// 開關（有開／關兩種狀態）；其餘是按鈕（打開某個 App、播放）
-        var isToggle: Bool { ![.nowPlaying, .volume, .brightness, .timer, .alarm, .cameras, .screenMirroring, .home].contains(self) }
+        var isToggle: Bool { ![.nowPlaying, .volume, .brightness, .timer, .alarm, .cameras, .screenMirroring, .home, .profile].contains(self) }
     }
 
     // MARK: 版面（1024 畫布）：一格 128、格距 24（macOS 27 截圖量到的 128／24，換到我們的畫布不縮放）
@@ -60,6 +62,8 @@ enum ControlCenter {
     static let capsuleH: CGFloat = HPTokens.Size.cta
     /// 長按展開的大卡（整個格子區）
     static let expandedRect = CGRect(x: gridX, y: gridY, width: 6 * 128 + 5 * 24, height: gridH)
+    /// 展開的大卡貼著螢幕（左右離 68）：圓角跟螢幕同心，不沿用格子的 60
+    static var expandedRadius: CGFloat { HPTokens.Radius.concentric(rect: expandedRect) }
     /// 舊名（P04 自檢、ShellAccessibility 用）
     static var radius: CGFloat { squareRadius }
 
@@ -124,6 +128,7 @@ enum ControlCenter {
     /// 開著時每秒讀一次系統音量（別處改了也跟上）；系統狀態 2 秒一次；動畫還在動就要重畫
     static func tick(_ now: Double) -> Bool {
         var dirty = false
+        if CarPlayAirDropPause.shared.isPaused { dirty = true }   // 「收 AirDrop」的倒數（換秒由 AirDrop.tick 判斷，這裡開著控制中心就跟著畫）
         CCSystem.shared.refresh(now: now)
         if checkLongPress(now) { dirty = true }
         if now - lastVolumeRead > 1 {
@@ -192,10 +197,11 @@ enum ControlCenter {
         case .carPlay: return carPlayOn
         case .timer: return !Shell.timers.isEmpty || face.timerActive
         case .lockFace: return Shell.lockFace
+        case .airDropReceive: return CarPlayAirDropPause.shared.isPaused
         case .night: return Shell.manualNight
         case .alarm: return AlarmCenter.shared.alarms.contains { $0.enabled }
         case .home: return homeOnCount > 0
-        case .cameras, .nowPlaying, .volume, .brightness, .screenMirroring: return false
+        case .cameras, .nowPlaying, .volume, .brightness, .screenMirroring, .profile, .airDrop: return false   // AirDrop：開系統設定的按鈕，狀態歸系統
         }
     }
     static func title(_ t: Tile) -> String {
@@ -219,6 +225,9 @@ enum ControlCenter {
         case .night: return L("cc.night", "夜间")
         case .cameras: return L("cc.cameras", "摄像头")
         case .screenMirroring: return L("cc.screenMirroring", "屏幕镜像")
+        case .airDrop: return "AirDrop"
+        case .airDropReceive: return L("cc.airdropReceive", "收 AirDrop")
+        case .profile: return L("cc.profile", "家人")
         }
     }
     /// 第二行（膠囊、大卡用）：狀態或細節
@@ -239,6 +248,15 @@ enum ControlCenter {
         case .home:
             let n = homeOnCount
             return n == 0 ? nil : String(format: L("cc.home.onCount", "%d 个开着"), n)
+        case .airDrop:   // 按下開系統設定的 AirDrop 頁：照官方用語寫要選哪一個（系統自己 10 分鐘後收回）
+            return L("cc.airdrop.everyone10", "选“所有人（10 分钟）”")
+        case .airDropReceive:   // 暫停中＝倒數；會話中＝會做什麼；沒有會話＝什麼時候能用
+            if let p = CarPlayAirDropPause.shared.plan {
+                return String(format: L("cc.airdropReceive.left", "剩余 %@"), CarPlayAirDropPause.clock(p.remaining(CACurrentMediaTime())))
+            }
+            return SelfShare.carPlayActive ? L("cc.airdropReceive.hint", "暂停 CarPlay") : L("cc.airdropReceive.unavailable", "CarPlay 连着时可用")
+        case .profile:   // 目前這位家人（訪客＝「访客」）
+            return FamilyProfiles.currentID.flatMap { id in FamilyProfiles.roster.first { $0.id == id }?.name } ?? L("cc.profile.guest", "访客")
         default:
             return isOn(t, face: face) && t.isToggle ? L("cc.state.on", "打开") : nil
         }
@@ -267,25 +285,28 @@ enum ControlCenter {
         case .volume: return "speaker.wave.2.fill"
         case .brightness: return "sun.max.fill"
         case .screenMirroring: return "rectangle.on.rectangle"
+        case .airDrop: return AirDropShare.symbol
+        case .airDropReceive: return "iphone.and.arrow.forward"
+        case .profile: return "person.2.fill"
         }
     }
     /// 開著時符號的顏色（白圓上；照系統：連線藍、專注靛、家庭橘、計時橘…）
     static func accent(_ t: Tile) -> NSColor {
         switch t {
-        case .wifi, .bluetooth, .screenMirroring: return HPTokens.blue
+        case .wifi, .bluetooth, .screenMirroring, .airDrop, .airDropReceive: return HPTokens.blue
         case .focusMode, .dnd, .darkMode:
             if t == .focusMode, let a = CCSystem.shared.focus.active, let m = CCSystem.shared.focus.modes.first(where: { $0.id == a }) { return m.tint }
             return HPTokens.indigo
         case .home: return HPTokens.orange
         case .timer, .alarm, .focus: return HPTokens.orange
         case .night: return HPTokens.red
-        case .guest, .follow, .lockFace, .carPlay: return HPTokens.blue
+        case .guest, .follow, .lockFace, .carPlay, .profile: return HPTokens.blue
         case .cameras: return HPTokens.green
         case .nowPlaying, .volume, .brightness: return HPTokens.blue
         }
     }
 
-    /// 2.0 cc：要主人的模組（訪客、遠端訪客、沒認出主人）：家庭與攝影機照 PersonalGate.locks("home")，
+    /// 2.0 cc：要主人的模組（訪客、遠端訪客、沒認出主人）：家庭與攝影機照 PersonalGate.locks("home")、CarPlay 照 PersonalGate.locks("carplay")，
     /// 動到整台 Mac 的（Wi‑Fi、藍牙、專注模式、勿擾、螢幕鏡像）要主人。
     /// 遠端訪客（訪客的 iPhone／iPad 一分鐘內點過，RemotePrivacy.guestActive）：改狀態或露出個人資料的全部鎖住、不收點按——
     /// 只留聲音與顯示器滑桿（不露資料）、計時器與鬧鐘（訪客允許清單裡的 App）、播放中（使用者 2026-10-25：訪客可播放／暫停／切歌、看曲名；輸出與 AirPlay 仍鎖）
@@ -295,10 +316,13 @@ enum ControlCenter {
         if i.remoteGuest, !remoteGuestAllowed.contains(t) { return true }
         switch t {
         case .home, .cameras: return PersonalGate.locks("home", i) || !PersonalGate.allowed(i) && i.guestMode
-        case .wifi, .bluetooth, .focusMode, .dnd, .screenMirroring: return !PersonalGate.allowed(i)
+        case .wifi, .bluetooth, .focusMode, .dnd, .screenMirroring, .airDrop, .airDropReceive: return !PersonalGate.allowed(i)
+        case .carPlay: return PersonalGate.locks(CarPlayApp.id, i)   // 2026-11-07：CarPlay 跟訊息同級（主人的手機）
         default: return false
         }
     }
+    /// 現在按不了（不是鎖，是條件不到）：「收 AirDrop」只在主人的 iPhone 在 CarPlay 會話中（或已經暫停）時能按
+    static func unavailable(_ t: Tile) -> Bool { t == .airDropReceive && !CarPlayAirDropPause.shared.available }
     /// 遠端訪客在用：聲音大卡裡的輸出、AirPlay 鈕也不給（改的是整台 Mac 的輸出）
     static var outputsLocked: Bool { PersonalGate.inputs.remoteGuest }
     /// 訪客模式要關掉：關掉之後主人的門要開得了（不然訪客自己點一下就把訪客模式關了）

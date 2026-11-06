@@ -84,7 +84,7 @@ struct GeneralPane: View {
                 }
                 // 2.0 #8：歌词（LRCLIB）；默认开
                 Toggle(isOn: Binding(get: { LyricsStore.enabled }, set: { LyricsStore.enabled = $0; m.refresh() })) {
-                    RowLabel(title: L("settings.lyrics", "歌词"), subtitle: L("settings.lyrics.sub", "向 LRCLIB 查同步歌词：只送歌名、歌手和长度，存在这台 Mac 上"))
+                    RowLabel(title: L("settings.lyrics", "歌词"), subtitle: L("settings.lyrics.sub", "依序向 LRCLIB、酷狗、QQ 音乐查同步歌词：只送歌名、歌手和长度，存在这台 Mac 上"))
                 }
                 Toggle(isOn: Binding(get: { m.calendarOn && m.permissions[.calendar] == .granted }, set: { _ in m.perform("menuCalendarToggle") })) {
                     RowLabel(title: L("prefs.calendar.on", "读取日历"),
@@ -97,6 +97,9 @@ struct GeneralPane: View {
                 FooterButtons {
                     Button(L("menu.sayHello", "打个招呼")) { m.perform("menuSayHello") }   // 2.0 hello
                     Button(L("prefs.hints", "再看一次操作提示")) { m.perform("menuShowHints") }
+                    Button(L("settings.rerunSetup", "重新设置")) {   // 2.0 首次設定再走一次（Setup/SetupFlow.swift）
+                        m.app?.view.wakeFromPosterForGuide(); SetupFlow.start(); m.app?.view.face.forceDirty = true
+                    }
                 }
             }
             LiveActivitySettingsSection()   // 2.0 P03：每個 App 的 Live Activity 開關、訊息「顯示預覽」（Shell/LiveActivityStack.swift）
@@ -221,7 +224,7 @@ struct GesturesPane: View {
         [Gesture(scene: .pinch, title: L("settings.gesture.pinch.title", "缩放"), subtitle: L("settings.gesture.pinch", "双指张合")),
          Gesture(scene: .slide, title: L("settings.gesture.slide.title", "转动机身"), subtitle: L("settings.gesture.slide", "在机身上双指一起滑")),
          Gesture(scene: .three, title: L("settings.gesture.three.title", "搬窗口"), subtitle: L("settings.gesture.three", "三指拖移，CarPlay 显示时也行")),
-         Gesture(scene: .force, title: L("settings.gesture.force.title", "进入 CarPlay"), subtitle: L("settings.gesture.force", "重按屏幕"))]
+         Gesture(scene: .force, title: L("settings.gesture.force.title", "进出 CarPlay"), subtitle: L("settings.gesture.force", "重按屏幕"))]
     }
 
     var body: some View {
@@ -270,7 +273,8 @@ struct GesturesPane: View {
                     InfoRow(title: L("settings.gesture.apart", "两指轻点两下"), subtitle: L("settings.gesture.apart.sub", "拆开看看，再点两下组回来"))
                     InfoRow(title: L("settings.gesture.overview", "长按屏幕"), subtitle: L("settings.gesture.overview.sub", "打开表盘总览"))
                     InfoRow(title: L("settings.gesture.scroll", "滚轮或 ← →"), subtitle: L("settings.gesture.scroll.sub", "换表盘"))
-                    InfoRow(title: L("settings.gesture.keys", "键盘"), subtitle: L("settings.gesture.keys.sub", "空格暂停/继续 · F5 ClioTalk · 1–4 视角"))
+                    InfoRow(title: L("settings.gesture.keys", "键盘"), subtitle: L("settings.gesture.keys.sub", "空格：在 CarPlay 和主屏幕之间切换（同 👀）· F5 ClioTalk · 1–4 视角"))
+                    InfoRow(title: L("settings.gesture.carKeys", "CarPlay 显示时"), subtitle: L("settings.gesture.carKeys.sub", "方向键、Tab／⇧Tab、Return、Esc＝车上的旋钮：拨动、转动、按下、返回"))
                 }
             }
         }
@@ -362,6 +366,7 @@ struct CarPlayPane: View {
                 }
             }
             PhoneHandoffSection()   // 2.0 promo：從 iPhone 傳網頁（Settings/PhoneHandoffSection.swift）
+            SelfShareSection()      // CarPlay 連著時傳到 iPhone 改走訊息傳給自己：選帳號（Settings/SelfShareSection.swift）
         }
         .formStyle(.grouped)
     }

@@ -75,8 +75,11 @@ enum TwoFingerKind: String, Equatable {
 struct TwoFingerClassifier {
     /// 任一指离起点超过这么多（触控板归一化坐标，约 1.5 mm）才判定
     static let decideDistance: Double = 0.012
-    /// 指距变化至少是共同平移的这么多倍才算捏合
-    static let pinchRatio: Double = 1.2
+    /// 指距变化至少是共同平移的这么多倍才算捏合（2026-11-06 使用者：双指上下滑别误判成捏合——1.2 太松，起手手指略张开就被当缩放）
+    static let pinchRatio: Double = 2.0
+    /// 一指几乎不动（「锚」）时的比例：只有一指在走，指距变化最多＝它的位移、共同平移＝它的一半，2 倍永远到不了（只剩正好沿连线）。
+    /// 锚定时 1.2 倍＝移动那指的方向跟连线夹角在约 53° 以内就算捏合；两指一起走的上下滑仍用 2 倍
+    static let anchoredPinchRatio: Double = 1.2
 
     private(set) var kind: TwoFingerKind = .undecided
     private var ids: (Int32, Int32)?
@@ -106,9 +109,13 @@ struct TwoFingerClassifier {
         let separation = abs((v1.x - v0.x) * ax + (v1.y - v0.y) * ay)
         let common = (((v0.x + v1.x) / 2) * ((v0.x + v1.x) / 2) + ((v0.y + v1.y) / 2) * ((v0.y + v1.y) / 2)).squareRoot()
         let sameDirection = v0.x * v1.x + v0.y * v1.y > 0
-        // 捏合要指距真的变了（扭转时指距和平移都接近 0，不能算捏合）
-        if separation >= max(Self.pinchRatio * common, Self.decideDistance * 0.6) { kind = .pinch }
-        else if sameDirection || min(m0, m1) < Self.decideDistance * 0.35 { kind = .scroll }   // 一指几乎不动＋另一指横走：也算滑
+        let anchored = min(m0, m1) < Self.decideDistance * 0.35
+        // 捏合要指距真的变了（扭转时指距和平移都接近 0，不能算捏合）：两指都在走＝指距至少真的变了 1.5 mm；
+        // 一指当锚＝移动那指主要沿着连线（它走够 1.5 mm 时，沿连线的分量至少 0.9 mm）
+        let pinch = anchored ? separation >= max(Self.anchoredPinchRatio * common, Self.decideDistance * 0.6)
+                             : separation >= max(Self.pinchRatio * common, Self.decideDistance)
+        if pinch { kind = .pinch }
+        else if sameDirection || anchored { kind = .scroll }   // 一指几乎不动＋另一指横着连线走：也算滑
         else { kind = .twist }
         return kind
     }

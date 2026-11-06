@@ -18,7 +18,7 @@ struct ScreenAccessibilitySection: View {
             }
             Toggle(isOn: Binding(get: { keyboard }, set: { keyboard = $0; HPAccessibilitySettings.keyboardNavigation = $0 })) {
                 RowLabel(title: L("settings.keyboardNav", "键盘导航"),
-                         subtitle: L("settings.keyboardNav.sub", "方向键移动、Return 打开、Esc 返回；系统「键盘导航」打开时也会启用"))
+                         subtitle: L("settings.keyboardNav.sub", "Tab 或方向键叫出焦点框，方向键移动，Return 或空格打开，Esc 返回；系统「键盘导航」打开时也会启用"))
             }
         } header: {
             Text(L("settings.a11y", "辅助功能"))

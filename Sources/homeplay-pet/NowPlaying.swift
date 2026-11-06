@@ -233,24 +233,29 @@ final class NowPlayingPoller {
     /// 在播的优先，其次暂停的；记住选中的是哪家（控制就控它）
     private func publish() {
         guard timer != nil else { return }   // 已关掉：在途的结果丢弃
-        if PhoneNowPlayingBridge.shared.active { return }   // 手機來源優先
         // 2.0 #11：MediaRemote 有資料就用它（進度、倍速更準，也涵蓋播客等沒有 AppleScript 的 App）
+        var info: NowPlayingInfo?, bundle: String?
         if let m = MediaRemoteReader.shared.latest {
-            activeBundle = m.bundle.isEmpty ? activeBundle : m.bundle
-            face?.setNowPlaying(m.info()); return
+            info = m.info(); bundle = m.bundle.isEmpty ? activeBundle : m.bundle
+        } else {
+            let playing = Self.players.first { results[$0.bundle]?.playing == true }
+            if let c = playing ?? Self.players.first(where: { results[$0.bundle] != nil }) { info = results[c.bundle]; bundle = c.bundle }
         }
-        let playing = Self.players.first { results[$0.bundle]?.playing == true }
-        let chosen = playing ?? Self.players.first { results[$0.bundle] != nil }
-        if let c = chosen { activeBundle = c.bundle; face?.setNowPlaying(results[c.bundle]) }
-        else { activeBundle = nil; face?.setNowPlaying(nil) }
+        macPlaying = info?.playing == true
+        // 手機來源優先；2.0 家人檔案：目前這位家人偏好 Mac、而 Mac 正在播時先顯示 Mac（NowPlayingSource）
+        if NowPlayingSource.phoneShown { return }
+        activeBundle = bundle
+        face?.setNowPlaying(info)
     }
+    /// Mac 上有沒有在播（手機在前面時也照算，給來源偏好用）
+    private(set) var macPlaying = false
 
     /// 「正在播放」胶囊的控制：点一下＝播放／暂停，滚轮＝上一首／下一首。
     /// 只控当前显示的那家（Music 或 Spotify），同一个自动化授权，后台队列里发。
     private(set) var activeBundle: String?
     func control(_ c: MediaCommand) {
         // 手機正在播放時，媒體鍵先交給 CarPlay HID；沒有手機來源才控本機 Music/Spotify。
-        if PhoneNowPlayingBridge.shared.send(c) { return }
+        if NowPlayingSource.phoneShown, PhoneNowPlayingBridge.shared.send(c) { return }
         // 2.0 #11：MediaRemote 送得到就直接送給系統的正在播放（任何 App 都吃）
         if MediaRemoteReader.shared.latest != nil, MediaRemote.shared.canSend {
             let m: MRCommand = [.play: .play, .pause: .pause, .playPause: .togglePlayPause, .next: .nextTrack, .previous: .previousTrack][c] ?? .togglePlayPause
@@ -267,5 +272,17 @@ final class NowPlayingPoller {
         }
         let src = "tell application id \"\(b)\" to \(verb)"
         queue.async { NSAppleScript(source: src)?.executeAndReturnError(nil) }
+    }
+}
+
+/// 2.0 家人檔案：iPhone 與 Mac 同時有正在播放時顯示（也控制）哪一個。預設照舊 iPhone 優先；
+/// 目前這位家人選了「Mac 優先」、而 Mac 真的在播時才先顯示 Mac（People/FamilyProfiles.swift）
+enum NowPlayingSource {
+    static func phoneFirst(phoneActive: Bool, macPlaying: Bool, pref: MusicSourcePref) -> Bool {
+        guard phoneActive else { return false }
+        return !(pref == .mac && macPlaying)
+    }
+    static var phoneShown: Bool {
+        phoneFirst(phoneActive: PhoneNowPlayingBridge.shared.active, macPlaying: NowPlayingPoller.shared.macPlaying, pref: FamilyProfiles.musicSource)
     }
 }

@@ -298,7 +298,14 @@ extension PetView {
         case .timer: shellOpenApp("timers")
         case .alarm: shellOpenApp("alarms")
         case .lockFace: Shell.lockFace.toggle()
+        case .profile: shellNavigate(.back); Shell.peopleSheet = true   // 2.0 家人檔案：收起控制中心、開頭像選單
         case .night: Shell.manualNight.toggle()   // 第四輪：手動夜間
+        case .airDrop: AirDropGuest.shared.open()   // 訪客臨時接收（Shell/AirDrop/AirDropGuest.swift）：開系統的 AirDrop 設定，使用者自己選「所有人（10 分鐘）」
+        case .airDropReceive:   // 收 AirDrop：會話中＝暫停 CarPlay、收起控制中心看倒數卡；暫停中＝提早恢復
+            let p = CarPlayAirDropPause.shared
+            if p.isPaused { p.resume(.user) }
+            else if p.begin() { shellNavigate(.back) }
+            else { log("control center airDropReceive: no CarPlay session"); return }
         case .cameras: CameraGlance.open(from: self)   // 2.0 promo：攝影機全螢幕
         case .screenMirroring: CCSystem.openSettings(.displays)   // macOS 的螢幕鏡像輸出在顯示器設定裡；HomePlay 自己不能當 AirPlay 來源
         }

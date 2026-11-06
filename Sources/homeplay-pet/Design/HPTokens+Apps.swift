@@ -13,6 +13,8 @@ extension HPTokens {
         static let inset: CGFloat = 61
         /// 左上 ✕：直徑 90，圓心 (106, 106)
         static let backButton = CGRect(x: inset, y: inset, width: 90, height: 90)
+        /// 右上時間底下的 AirDrop 分享鈕（跟 ✕ 同直徑，右緣同 inset）
+        static var shareButton: CGRect { CGRect(x: 1024 - inset - 90, y: inset + 90 + 16, width: 90, height: 90) }
         /// ✕ 符號框＝直徑 × 0.5（字墨約 31 px）
         static let backSymbolScale: CGFloat = 0.5
         /// 右上時間：SF Pro semibold 38（數字高 27），右緣 1024 − 92、基線 119（跟 ✕ 圓心同一條水平中線）
@@ -283,6 +285,8 @@ extension HPTokens {
         static var back: CGRect { CGRect(x: cornerControlCenter - circle / 2, y: barCenterY - circle / 2, width: circle, height: circle) }
         static var forward: CGRect { CGRect(x: 1024 - cornerControlCenter - circle / 2, y: barCenterY - circle / 2, width: circle, height: circle) }
         static var field: CGRect { CGRect(x: back.maxX + gap, y: barCenterY - circle / 2, width: forward.minX - gap - back.maxX - gap, height: circle) }
+        /// AirDrop 分享鈕：浮在 › 圓鈕正上方（跟「開始烹飪」同一排）
+        static var share: CGRect { CGRect(x: forward.minX, y: field.minY - gap - circle, width: circle, height: circle) }
         /// 網頁畫在 👀 膠囊底下到螢幕底（工具列浮在網頁上）
         static let webTop: CGFloat = 150
         /// 網頁視圖的點數＝畫布 ÷ 2；字放大 1.5 倍（遠看：內文約 48 px）

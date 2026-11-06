@@ -292,6 +292,13 @@ final class ClioTalkController: NSObject, NSPopoverDelegate {
             tap(cmd == .keep ? .keep : .deeper)
             return
         }
+        // 2.0 家人檔案：「我是 X」＝換成 X 的檔案（在本機做掉，不送模型）。macOS 沒有公開的聲紋 API：這是自稱，跟點頭像選單同一個門
+        if let p = FamilyProfiles.voiceTarget(t, people: FamilyProfiles.roster) {
+            speaker.stop()
+            let r = FamilyProfiles.switchTo(p.id)
+            if let why = FamilyProfiles.blockedText(r) { voiceNotice = why; showInput(); return }
+            close(); return
+        }
         // 2.0 promo：烹飪畫面開著時，「下一步」「勾掉蛋」「開始計時」在本機做掉，不送模型（Shell/Apps/RecipeCooking.swift）
         if Shell.currentApp === RecipesApp.shared, let cmd = RecipeVoice.classify(t), RecipesApp.shared.handleVoice(cmd, now: CACurrentMediaTime()) {
             speaker.stop(); close(); return
@@ -591,7 +598,7 @@ struct ClioInputView: View {
 // MARK: - 右鍵選單
 
 extension PetView {
-    @objc func menuClioTalk() { ClioTalkController.shared.open(from: self) }
+    @objc func menuClioTalk() { surfaceFromCarPlay("menu ClioTalk"); ClioTalkController.shared.open(from: self) }
 }
 
 // MARK: - 畫在螢幕上

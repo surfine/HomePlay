@@ -145,18 +145,20 @@ enum HomeIconVariant {
     }
 
     /// make：畫出原本（淺色）的圖示；tag：來源（系統／官網／HPIcons、日期）變了就重算。light 不經過這裡
-    static func image(id: String, tag: String, px: Int, appearance a: HomeAppearance, tint: NSColor = HomeAppearance.tintColor, make: () -> CGImage) -> CGImage {
-        let key = "\(id)|\(tag)|\(a.cacheKey)|\(px)"
+    /// glyphAlpha：清透版主體的不透明度（P0 圖示玻璃照深淺／增加對比給；預設 0.94）
+    static func image(id: String, tag: String, px: Int, appearance a: HomeAppearance, tint: NSColor = HomeAppearance.tintColor,
+                      glyphAlpha: Double = 0.94, make: () -> CGImage) -> CGImage {
+        let key = "\(id)|\(tag)|\(a.cacheKey)|\(px)|\(Int(glyphAlpha * 100))"
         if let c = cache[key] { return c }
         let src = make()
-        let out = a == .light ? src : (derive(src, a, tint: tint) ?? src)
+        let out = a == .light ? src : (derive(src, a, tint: tint, glyphAlpha: glyphAlpha) ?? src)
         cache[key] = out; order.append(key)
         if order.count > 96 { cache[order.removeFirst()] = nil }
         return out
     }
 
     /// 純像素運算（selftest 直接驗）：RGBA premultiplied 8-bit
-    static func derive(_ src: CGImage, _ a: HomeAppearance, tint: NSColor) -> CGImage? {
+    static func derive(_ src: CGImage, _ a: HomeAppearance, tint: NSColor, glyphAlpha: Double = 0.94) -> CGImage? {
         let w = src.width, h = src.height
         guard w > 8, h > 8, let cs = CGColorSpace(name: CGColorSpace.sRGB),
               let ctx = CGContext(data: nil, width: w, height: h, bitsPerComponent: 8, bytesPerRow: w * 4, space: cs,
@@ -228,7 +230,7 @@ enum HomeIconVariant {
                     // 去飽和：主體依亮度轉白（暗主體在亮底上一樣當主體，用權重不用亮度）；底挖空給玻璃，留一層薄白
                     let gv = 0.82 + 0.18 * l
                     o = mix((1, 1, 1), (gv, gv, gv), wgt)
-                    oa = 0.10 * (1 - wgt) + 0.94 * wgt
+                    oa = 0.10 * (1 - wgt) + glyphAlpha * wgt
                 case .tinted:
                     let dk = (tc.0 * 0.22, tc.1 * 0.22, tc.2 * 0.22)
                     let fg = mix(tbc, (1, 1, 1), 0.25 * l)

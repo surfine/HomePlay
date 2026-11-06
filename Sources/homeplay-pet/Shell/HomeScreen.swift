@@ -44,12 +44,16 @@ enum Shell {
     nonisolated(unsafe) static var openedFrom: (id: String, rect: CGRect, screen: ShellScreen)?
     nonisolated(unsafe) static var pillFrom: (rect: CGRect, start: Double)?
     nonisolated(unsafe) static var pillT: CGFloat = 0          // 0 小藥丸 … 1 長成 Live Activity
+    /// 膠囊在 CarPlay 上往下拉：直播先收到背景、外殼畫卡片；這段時間 CarPlay App 留在導覽裡（不照舊跳回錶面）
+    nonisolated(unsafe) static var carPlayPeek = false
     nonisolated(unsafe) static var ccT: CGFloat = 0            // 控制中心出現的進度（ccAnim 的值；拖著時直接跟手）
     /// 2.0 R14：控制中心的彈簧（放手把速度交給它）；拖著時 ccDragging，ccT 1:1 跟著指標
     nonisolated(unsafe) static var ccAnim = MotionValue("cc", spring: .smooth, from: 0, to: 0, now: 0)
     nonisolated(unsafe) static var ccDragging = false
     /// 2.0 R3：主畫面的桌布＝剛才錶面的畫面模糊 30 px＋壓暗 20%
     nonisolated(unsafe) static var homeBackdrop: CGImage?
+    /// 最後一次拿來當桌布的錶面畫面（主畫面桌布從照片切回「跟著錶面」時用）
+    nonisolated(unsafe) static var lastFaceShot: CGImage?
     /// 2.0 R11：接管（門鈴、Handoff）：舊畫面放大 5%＋模糊 20 px、交叉淡化（影片 v2 00:31.80–00:32.30 量到 0.5 s）
     nonisolated(unsafe) static var takeover: (sharp: CGImage, blurred: CGImage, anim: MotionValue)?
     static let takeoverSpring = HPMotion.T.takeoverFade.spring   // 動效包：參數表（Design/HPMotionTable.swift）：先放大模糊 0.2 s、再交叉淡化
@@ -76,7 +80,8 @@ enum Shell {
     // 第五輪：照官方主畫面（home-screen-erica 正視校正）：圖示 152、左右邊距 99、欄距 225；首列頂 241、列距 240（HPTokens.Home）
     static let margin: CGFloat = HPTokens.Home.gridMargin, colW: CGFloat = HPTokens.Home.iconSide
     static let colGap: CGFloat = HPTokens.Home.columnPitch - HPTokens.Home.iconSide
-    static let gridTop: CGFloat = HPTokens.Home.gridTop, rowH: CGFloat = 218, rowGap: CGFloat = HPTokens.Home.rowPitch - 218
+    static let gridTop: CGFloat = HPTokens.Home.gridTop, rowH: CGFloat = 218
+    static let rowPitch: CGFloat = HPTokens.Home.rowPitch, rowGap: CGFloat = HPTokens.Home.rowPitch - 218
     static let iconSide: CGFloat = HPTokens.Home.iconSide
     static func cell(_ col: Int, _ row: Int, w: Int = 1, h: Int = 1) -> CGRect {
         CGRect(x: margin + CGFloat(col) * (colW + colGap), y: gridTop + CGFloat(row) * (rowH + rowGap),
@@ -272,8 +277,10 @@ enum Shell {
     static func ease(_ x: CGFloat) -> CGFloat { 1 - pow(1 - max(0, min(1, x)), 3) }
 
     /// 2.0 R3：錶面畫面 → 主畫面桌布（模糊＋壓暗，第五輪的值在 HPTokens.Home）；沒有畫面就清掉（退回漸層）
-    static func captureHomeBackdrop(_ img: CGImage?) {
-        guard let img else { homeBackdrop = nil; return }
+    static func captureHomeBackdrop(_ shot: CGImage?) {
+        if shot != nil { lastFaceShot = shot }
+        // 體驗追趕 P4-3：選了照片牆的照片就用照片（Shell/HomeWallpaper.swift），一樣走下面的模糊壓暗
+        guard let img = HomeWallpaper.source(faceShot: shot) else { homeBackdrop = nil; return }
         let ci = CIImage(cgImage: img)
         let k = Double(img.width) / 1024
         // 第五輪：σ 30 → 18、× 0.8 → 0.72（官方面板底下還看得到錶面的大數字柱形；HPTokens.Home）
@@ -357,7 +364,8 @@ enum Shell {
     /// 第四輪：--demo-official 的主畫面不顯示真名（示範名字 Erica，照官方主畫面的示範）；
     /// 第五輪：頭像用示範的 👀 人物（紫底長捲髮，對應官方紫底的 Memoji），不讀真的帳號頭像或聯絡人照片
     static var demoPerson: Person? {
-        OfficialDemo.on ? Person(id: "demo-erica", name: "Erica", colorIndex: 3, isOwner: true,   // l10n-ignore：示範人名
+        if FamilyProfiles.demo != nil { return FamilyProfiles.demoPeople[1] }   // 2.0 家人檔案快照：示範的 Marco（不讀真的名冊）
+        return OfficialDemo.on ? Person(id: "demo-erica", name: "Erica", colorIndex: 3, isOwner: true,   // l10n-ignore：示範人名
                                  avatar: HPAvatar.Style(background: 4, skin: 3, hair: HPAvatar.Hair.long.rawValue, hairColor: 0, face: HPAvatar.FaceShape.oval.rawValue),
                                  avatarSource: .eyes) : nil
     }
@@ -404,6 +412,7 @@ extension Face {
             if d != HPTokens.dark { HPTokens.dark = d; Shell.homeLayer = nil; dirty = true }
         }
         if let p = Shell.pillFrom, now - p.start >= Face.transitionDuration { Shell.pillFrom = nil }
+        if HomeIndicator.pull != nil || HomeIndicator.settle != nil || Face.capsuleGlide != nil || AppSwitcher.scrollAnim != nil { dirty = true }   // 膠囊跟手、放手、共享元素、切換器捲動
         // 藥丸：有 Live Activity 就長大
         let act = covers ? shellActivity(now) : nil
         let goal: CGFloat = act == nil ? 0 : 1
@@ -413,6 +422,7 @@ extension Face {
             dirty = true
         }
         if LiveActivityStack.tick(self, now) { dirty = true }   // 2.0 P03：展開的彈簧、音量條
+        if AirDrop.tick(now) { dirty = true }   // AirDrop 收件卡片的出入、訪客臨時接收到期（Shell/AirDrop/）
         if act != nil {
             let s = Int(Date().timeIntervalSince1970)
             if s != Shell.lastActivitySecond { Shell.lastActivitySecond = s; dirty = true }
@@ -506,15 +516,17 @@ extension Face {
                 if let a = Shell.currentApp, a.showsClock, !Shell.skipping("clock") { drawShellClock(g) }
             }
         }
+        drawIndicatorSettle(g, now)   // 👀 膠囊放手後：卡片縮回圖示／切換器那一格（Shell/HomeIndicator.swift）
         if !Shell.skipping("pill") { drawShellPill(g, now) }
     }
 
-    private func drawShellBase(_ g: CGContext, _ now: Double, screen: ShellScreen) {
+    func drawShellBase(_ g: CGContext, _ now: Double, screen: ShellScreen) {
         let full = CGRect(x: 0, y: 0, width: 1024, height: 1024)
         switch screen {
         case .home: drawHome(g, now, library: false)
         case .library: drawHome(g, now, library: true)
         case .app(let id): if let a = AppRegistry.app(id) { renderShellApp(a, g, full, now) }
+        case .switcher: drawSwitcher(g, now)   // App 切換器（Shell/AppSwitcher.swift）
         case .face: break
         }
     }
@@ -602,6 +614,7 @@ extension Face {
 
     private func drawHome(_ g: CGContext, _ now: Double, library: Bool) {
         if Shell.homeHue == nil { Shell.homeHue = Shell.hue(fromFace: nil, face: self) }
+        if Shell.homeBackdrop == nil, HomeWallpaper.photoPath != nil { Shell.captureHomeBackdrop(nil) }   // 體驗追趕 P4-3：照片桌布不必等錶面截圖
         drawSpringBoard(g, now, library: library)   // 2.0 SpringBoard：主畫面與 App 資料庫改由 Shell/SpringBoard/SBRender.swift 畫（P02 的靜態層留著不用）
     }
 
@@ -721,6 +734,8 @@ extension Face {
         drawTakeover(g, now)                        // 2.0 R11：接管的舊畫面放大、模糊、淡出
         if Shell.ccT > 0.001 { ControlCenter.draw(g, face: self, now: now) }
         drawPeopleSheet(g)   // 2.0: 「換人」（ClioTalk 那一層由 ClioTalkPanel 自己畫）
+        drawAirDropCard(g, now)   // AirDrop 收到的檔案：照片／連結／其他（Shell/AirDrop/AirDropCard.swift）
+        drawCarPlayAirDropCard(g, now)   // CarPlay 連著時：傳給自己的確認卡（Shell/AirDrop/AirDropCarPlayCard.swift）
         if Shell.brightness < 0.999 {
             g.setFillColor(NSColor.black.withAlphaComponent((1 - Shell.brightness) * 0.85).cgColor)
             g.fill(CGRect(x: 0, y: 0, width: 1024, height: 1024))

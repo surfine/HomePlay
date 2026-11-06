@@ -6,7 +6,7 @@
 //   選回 HomeView＝不動。減少動態效果：直接出現兩顆，沒有頸子。
 //   沒有 CarPlay 會話時，長按藥丸照舊展開第一個活動（LiveActivityStack）。
 // - 快照：--source home（角標）、--source carplay（兩顆拉開、選 CarPlay）；HOMEPLAY_ANIM=source.split:t 凍結在拉開的第 t 秒。
-// 「切過去」只動顯示源（AppDelegate.switchSource：不拆會話），跟硬按、空白鍵、Esc 同一條。
+// 「切過去」只動顯示源（AppDelegate.switchSource：不拆會話），跟硬按同一條（空白鍵＝👀：Shell/HomeIndicator.swift 的 eyesKey）。
 
 import AppKit
 

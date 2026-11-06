@@ -12,13 +12,15 @@ enum HPLook {
         UserDefaults.standard.string(forKey: defaultsKey) ?? HVTruth.looks[0].name
     nonisolated(unsafe) static var snapshotName: String?
 
-    static var name: String { snapshotName ?? storedName }
+    /// 2.0 家人檔案：目前是家人且選過 Look 就用他的，否則主人的（People/FamilyProfiles.swift）
+    static var name: String { snapshotName ?? FamilyProfiles.resolvedLook(member: FamilyProfiles.memberPrefs, global: storedName) }
     static var current: HVTruth.Look { HVTruth.look(name) ?? HVTruth.looks[0] }
     /// 使用者有沒有明確選過 Look（沒選＝預設 Blue-Orange，不驅動著色建議）
-    static var wasSelected: Bool { snapshotName != nil || UserDefaults.standard.string(forKey: defaultsKey) != nil }
+    static var wasSelected: Bool { snapshotName != nil || FamilyProfiles.memberLook != nil || UserDefaults.standard.string(forKey: defaultsKey) != nil }
 
     static func select(_ n: String, linkDigits: Bool = true) {
         guard let l = HVTruth.look(n) else { return }
+        if FamilyProfiles.selectLookForMember(n) { return }   // 目前是家人：存到他那一份，不動主人的 Look 與大數字
         storedName = n
         UserDefaults.standard.set(n, forKey: defaultsKey)
         // 拍板（2026-11-05）：Look 聯動大數字——彩色數字版換對應官方色票；材質版 Look 的數字是黑（淺底），

@@ -35,6 +35,11 @@ struct SystemGlassParams {
 
     /// 鎖定畫面時間／HomeView Portraits：NSGlassEffectView .clear 的參數
     static let portrait = SystemGlassParams()
+    /// 島／照片錶面的玻璃大數字：beta 1 的配方（2026-11-07 使用者：beta 1 的數字比現在晶瑩，換成 shader 後反而變霧）。
+    /// 透出來的背景糊開、面上一層淡白，邊緣折射與亮邊收斂；對照官網 beta 1 渲染 style-island.webp
+    static let portraitFrosted = SystemGlassParams(refractionHeight: 1.0, refractionAmount: -2.4, blurRadius: 14, highlight: 0.3,
+                                                   white: 1.0, black: 0.04, saturation: 1.15, fill: 0.24, rim: 0.7,
+                                                   keyAmount: 0.6, fillAmount: 0.35, ringShadow: 0.3)
     /// Flow 泡泡字：更厚、更亮、更飽和
     /// 2.0 R13：NSGlassEffectView 兩種 style 在 macOS 27 量到的 glassBackground（2026-10-24 拆 200×60 pt、圓角 30 的實例；
     /// 量測腳本 scratchpad/r2probe/probe.swift）。長度換到畫布：系統 60 pt 高的鈕對應我們 88 px 的觸控尺寸，k＝88/60

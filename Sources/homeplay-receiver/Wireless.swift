@@ -647,6 +647,7 @@ enum Wireless {
 
     /// 桌寵的 Siri 鍵與電話鍵。`{"type":"siri"}` 是按一下；帶 `"action":"down"/"up"` 是按住說話。
     /// `{"type":"telephony","command":"answer"|"decline"|"hangup"}` → 電話 HID（hookSwitch／drop）。
+    /// `{"type":"knob","command":"select|back|left|right|up|down|cw|ccw"}` → 旋鈕 HID（HID.knobState）。
     static func phoneControl(_ text: String, session s: CarPlaySession) {
         if text.contains("\"type\":\"audio\"") {
             if let data = text.data(using: .utf8),
@@ -663,10 +664,23 @@ enum Wireless {
             note("触发 Siri（requestSiri \(action)）")
             s.requestSiri(action)
         }
+        if text.contains("\"type\":\"openCarPlayApp\""),
+           let o = (try? JSONSerialization.jsonObject(with: Data(text.utf8))) as? [String: Any], let url = o["url"] as? String {
+            note("桌宠：CarPlay 开 App \(url)（requestUI）")
+            s.showMainUI(url, type: "requestUI", withUUID: false)   // 2026-11-06 真機：requestUI 不帶 uuid 才有效
+            return
+        }
+        if text.contains("\"type\":\"showUI\""),
+           let o = (try? JSONSerialization.jsonObject(with: Data(text.utf8))) as? [String: Any], let url = o["url"] as? String {
+            let kind = o["kind"] as? String ?? "showUI", uuid = o["uuid"] as? Bool ?? true
+            note("桌宠要 CarPlay 主画面开 \(url)（\(kind)\(uuid ? "＋uuid" : "")）")
+            s.showMainUI(url, type: kind, withUUID: uuid)
+            return
+        }
         if text.contains("\"type\":\"knob\"") {
-            if text.contains("\"command\":\"back\"") {
-                note("桌宠 Esc → CarPlay 返回（旋钮 back）")
-                s.sendKnob(KnobState(back: true))
+            if let k = HID.knobState(forPetMessage: text) {   // 桌宠键盘＝车上旋钮：方向键、Tab／⇧Tab、Return、Esc
+                note("桌宠旋钮 → \(text)")
+                s.sendKnob(k)
             }
             return
         }
@@ -998,7 +1012,7 @@ enum Wireless {
                 return
             }
             if text.contains("\"keyframe\"") { s.requestKeyframe() }
-            if let t = Touch.parse(text) { s.sendTouch(x: t.x, y: t.y, down: t.down) }
+            if let contacts = Touch.parse(text) { s.sendTouches(contacts) }
             if let b = mediaButton(text) { s.sendMedia(b) }
             phoneControl(text, session: s)
             carVideoFromPet(text, session: s)
@@ -1390,7 +1404,7 @@ enum Wireless {
                 return
             }
             if text.contains("\"keyframe\"") { s.requestKeyframe() }
-            if let t = Touch.parse(text) { s.sendTouch(x: t.x, y: t.y, down: t.down) }
+            if let contacts = Touch.parse(text) { s.sendTouches(contacts) }
             if let b = mediaButton(text) { s.sendMedia(b) }
             phoneControl(text, session: s)
             carVideoFromPet(text, session: s)
@@ -1904,6 +1918,22 @@ enum Wireless {
                 DispatchQueue.main.async { pairNewHandler?() }
                 return
             }
+            // 桌寵控制中心「收 AirDrop」：暫停 CarPlay seconds 秒讓 iPhone 能用 AirDrop（狀態機 R7；行程不退出、SDP 不撤）
+            if text.contains("\"type\":\"pauseCarPlay\"") {
+                let seconds = (json()?["seconds"] as? NSNumber)?.doubleValue ?? 60
+                DispatchQueue.main.async {
+                    note("桌宠要暂停 CarPlay \(Int(seconds)) 秒（收 AirDrop）")
+                    feed(.pause(seconds: seconds))
+                }
+                return
+            }
+            if text.contains("\"type\":\"resumeCarPlay\"") {
+                DispatchQueue.main.async {
+                    note("桌宠要恢复 CarPlay")
+                    feed(.resume)
+                }
+                return
+            }
             if text.contains("\"type\":\"forgetPhone\"") {
                 if let address = json()?["address"] as? String, !address.isEmpty {
                     DispatchQueue.main.async { forgetPhoneHandler?(address) }
@@ -1915,7 +1945,7 @@ enum Wireless {
                 return
             }
             if text.contains("\"keyframe\"") { note("桌宠要关键帧 → forceKeyFrame"); s.requestKeyframe() }
-            if let t = Touch.parse(text) { s.sendTouch(x: t.x, y: t.y, down: t.down) }
+            if let contacts = Touch.parse(text) { s.sendTouches(contacts) }
             if let b = mediaButton(text) { s.sendMedia(b) }
             phoneControl(text, session: s)
             carVideoFromPet(text, session: s)
@@ -2877,6 +2907,10 @@ enum Wireless {
                 }
             case .log(let text):
                 note(text)
+            case .pauseState(let on, let seconds, let reason):
+                // 桌寵要收 AirDrop：會話層也不叫手機回連、不收控制連線（廣播與 SDP 照留）；狀態告訴桌寵（倒數卡、到時收卡）
+                s.setHold(on)
+                server.broadcastText(#"{"type":"carPlayPause","state":"\#(on ? "paused" : "resumed")","seconds":\#(Int(seconds.rounded())),"reason":"\#(reason.rawValue)"}"#)
             }
         }
 
@@ -3272,14 +3306,8 @@ enum UsbNet {
 }
 
 enum Touch {
-    /// {"type":"touch","contacts":[{"id":0,"x":..,"y":..,"down":..}]} → 第一个触点
-    static func parse(_ text: String) -> (x: Double, y: Double, down: Bool)? {
-        guard let d = text.data(using: .utf8),
-              let o = try? JSONSerialization.jsonObject(with: d) as? [String: Any], o["type"] as? String == "touch",
-              let c = (o["contacts"] as? [[String: Any]])?.first,
-              let x = (c["x"] as? NSNumber)?.doubleValue, let y = (c["y"] as? NSNumber)?.doubleValue else { return nil }
-        return (min(1, max(0, x)), min(1, max(0, y)), (c["down"] as? Bool) ?? false)
-    }
+    /// {"type":"touch","contacts":[{"id":0,"x":..,"y":..,"down":..}, …]} → 全部触点（最多 HID.touchContacts 个，规则见 HID.touchContacts(forPetMessage:)）
+    static func parse(_ text: String) -> [(id: Int, x: Double, y: Double, down: Bool)]? { HID.touchContacts(forPetMessage: text) }
 }
 
 enum NetInfo {

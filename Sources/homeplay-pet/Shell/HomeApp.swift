@@ -6,7 +6,7 @@
 //   左下格狀鈕、右下黃色麥克風；雙向語音不支援，麥克風與喇叭是灰的並註明）。
 // - 沒裝「HomePlay Home」小幫手（公開版）：一張誠實的說明卡＋開 Mac「家庭」App 的按鈕。
 // 資料全來自 HomeLink（HomeKit 只有開發簽名的 Catalyst 小幫手拿得到）；純邏輯在 HomeAppModel.swift。
-// 快照旗標：--demo-home（示範資料）、--home-tab N|cameras、--home-camera N、--home-detail [light|thermostat|covering]、--home-view nohelper|connecting|empty
+// 快照旗標：--demo-home（示範資料）、--home-tab N|cameras、--home-camera N、--home-detail [light|thermostat|ac|covering]、--home-view nohelper|connecting|empty
 // 2.0 r2（R8，照影片 v1 01:50–01:52、v2 00:41–00:44）：大標題下一排小字房間分頁；3 欄正方磚（300、間距 20、圓角 50），
 //   圖示＋兩行標籤置中；開＝不透明白、關＝灰色半透明玻璃；溫控與攝影機快照可跨 2×2。點溫控（或長按燈／窗簾）
 //   從磚放大成滿版卡（臨界阻尼、無回彈），縮回同一塊磚；燈的滿版是黃色水位（滾輪／觸控板 1:1 跟手，拉過頭有阻力）。
@@ -50,6 +50,11 @@ final class HomeApp: PetApp {
     private var lastSecond = -1
     private var sceneFlash: (id: String, until: Double)?
     private var schedule = SnapshotSchedule()
+    /// 即時畫面：正在請幫手串流的那一路、上次續約、每一路最後一格的時間
+    private var liveID: String?
+    private var liveRenewAt = -100.0
+    private var liveFrameAt: [String: Double] = [:]
+    private var cameraFlagApplied = false
     private var images: [String: CGImage] = [:]
     private var demoImages: [String: CGImage] = [:]
     private var pendingWrite: (id: String, value: HomeValue, type: String)?
@@ -109,7 +114,7 @@ final class HomeApp: PetApp {
         if Self.args.contains("--home-detail") {
             let want = Self.arg("--home-detail") ?? "light"
             let all = HomeAppModel.groups(snap).flatMap(\.tiles)
-            let t: HomeTile? = want == "thermostat" ? all.first { $0.kind == .thermostat } : want == "covering" ? all.first { $0.kind == .covering }
+            let t: HomeTile? = want == "thermostat" ? all.first { $0.kind == .thermostat } : want == "ac" ? all.first { $0.kind == .thermostat && $0.activeID != nil } : want == "covering" ? all.first { $0.kind == .covering }
                 : all.first { $0.kind == .light && $0.brightnessID != nil && $0.on }
             if let t {
                 tab = 0
@@ -119,6 +124,11 @@ final class HomeApp: PetApp {
         guard !Self.demo, Self.forcedView == nil, HomeLink.helperInstalled else { return }
         HomeLink.shared.start()
         if observers.isEmpty {
+            observers.append(NotificationCenter.default.addObserver(forName: .homeCameraFrame, object: nil, queue: .main) { [weak self] n in
+                guard let self, let f = n.object as? HomeCameraFrame else { return }
+                self.images[f.id] = f.image; self.liveFrameAt[f.id] = self.clock; self.dirty = true
+                CameraTimeline.shared.add(f.id, f.image)   // 體驗追趕 P4：近況時間軸（至少隔 20 秒收一格）
+            })
             for n in [Notification.Name.homeLinkSnapshot, .homeLinkChanged, .homeLinkConnection] {
                 observers.append(NotificationCenter.default.addObserver(forName: n, object: nil, queue: .main) { [weak self] _ in self?.dirty = true })
             }
@@ -188,6 +198,17 @@ final class HomeApp: PetApp {
     // 攝影機全螢幕：底部三顆 150 px 圓鈕（紅黃兩顆靠中、格狀鈕貼右；影片 v1 O-84）
     private static let camY: CGFloat = 1024 - Screen.cornerRadius
     private static let camClose = HPComponents.actionRect(cx: 512 - 100, cy: camY)
+    /// 右上：完整畫面 ↔ 填滿（方形螢幕放 16:9／4:3 的取捨，每台記住）
+    private static let camFit = CGRect(x: 820, y: 124, width: 88, height: 88)
+    private static let camFillKey = "HomeCameraFill"
+    /// 這台要填滿（裁切）嗎；預設＝完整畫面（監控要看得到整個場景）
+    private func camFill(_ id: String) -> Bool { (UserDefaults.standard.dictionary(forKey: Self.camFillKey)?[id] as? Bool) ?? false }
+    private func toggleCamFill(_ id: String) {
+        var d = UserDefaults.standard.dictionary(forKey: Self.camFillKey) ?? [:]
+        d[id] = !camFill(id)
+        UserDefaults.standard.set(d, forKey: Self.camFillKey)
+        dirty = true
+    }
     private static let camMic = HPComponents.actionRect(cx: 512 + 100, cy: camY)
     private static let camGrid: CGRect = {
         let c = Screen.cornerCapsuleCenter(.bottomRight, width: HPComponents.actionSize, height: HPComponents.actionSize); return HPComponents.actionRect(cx: c.x, cy: c.y)
@@ -200,6 +221,10 @@ final class HomeApp: PetApp {
     private static let thermoDown = HPComponents.actionRect(cx: 150, cy: 520, size: HPTokens.Size.round)   // 2.0 align F：圓形主按鈕 120 → round 150
     private static let thermoUp = HPComponents.actionRect(cx: 874, cy: 520, size: HPTokens.Size.round)
     private static let thermoPower = CGRect(x: 512 - 150, y: 848 - HPTokens.Size.pill / 2, width: 300, height: HPTokens.Size.pill)   // 96 → pill 104，中心 848 不動
+    /// 功能補齊：溫控頁底下的模式列（跟開關鈕同一條中線 848；四段各 168）
+    private static let thermoModes = CGRect(x: 512 - 336, y: 848 - 48, width: 672, height: 96)
+    /// 模式列每一段的框（畫的時候更新，點按用）
+    private var modeHits: [(CGRect, HomeClimateMode)] = []
 
     // MARK: 選擇
 
@@ -266,6 +291,11 @@ final class HomeApp: PetApp {
         if pendingWrite == nil, !throttleOrigin.isEmpty, t - lastWrite > 1 { throttleOrigin = [:] }
         let st = state
         if st == .ready, !Self.demo, Self.forcedView == nil {
+            // 快照旗標 --home-camera N：真資料晚到（打開 App 時還沒有攝影機清單），到了再套一次
+            if !cameraFlagApplied, let c = Self.arg("--home-camera"), let i = Int(c) {
+                let cams = HomeAppModel.cameras(snap)
+                if i < cams.count { cameraID = cams[i].id; cameraFlagApplied = true }
+            }
             let p = page()
             // 第四輪：根頁上的攝影機磚也要快照（打開就要一張，到之前是佔位）
             let ids = cameraID.map { [$0] } ?? (p.onCameras || detail == nil ? p.cameras.map(\.id) : [])
@@ -273,13 +303,22 @@ final class HomeApp: PetApp {
                 schedule.began(id, now: t)
                 HomeLink.shared.cameraSnapshot(id: id) { [weak self] data, _ in
                     guard let self else { return }
-                    let ok = data != nil
-                    if let data, let img = NSImage(data: data)?.cgImage(forProposedRect: nil, context: nil, hints: nil) { self.images[id] = img }
-                    self.schedule.finished(id, ok: ok, now: self.clock)
+                    // 解得出圖才算拿到（以前「有資料」就算，解不出也會顯示「N 秒前」）
+                    let img = data.flatMap { NSImage(data: $0)?.cgImage(forProposedRect: nil, context: nil, hints: nil) }
+                    if let img, self.liveFrameAt[id].map({ self.clock - $0 < 3 }) != true { self.images[id] = img }   // 即時畫面在跑就別拿快照蓋回去
+                    if let img { CameraTimeline.shared.add(id, img) }   // 體驗追趕 P4：近況時間軸
+                    self.schedule.finished(id, ok: img != nil, now: self.clock)
                     self.dirty = true
                 }
             }
         }
+        // 即時畫面：單一攝影機頁（含門鈴接管）開著就請幫手串流——每 10 秒續約，幫手 30 秒沒續就收；離開這頁就關
+        let wantLive = st == .ready && !Self.demo && Self.forcedView == nil ? cameraID : nil
+        if wantLive != liveID {
+            if let old = liveID { HomeLink.shared.cameraStream(id: old, on: false) }
+            liveID = wantLive; liveRenewAt = -100
+        }
+        if let id = liveID, t - liveRenewAt > 10 { liveRenewAt = t; HomeLink.shared.cameraStream(id: id, on: true) }
         if cameraID != nil || page().onCameras {   // 「N 秒前」每秒更新
             let s = Int(t)
             if s != lastSecond { lastSecond = s; redraw = true }
@@ -460,7 +499,17 @@ final class HomeApp: PetApp {
             if detailClosing { return true }
             if HPComponents.hitBack(pt) { closeDetail(now: t); return true }
             if tile.kind == .thermostat {
-                if let a = tile.activeID, Self.thermoPower.insetBy(dx: -8, dy: -8).contains(pt) { commit(a, HomeValue(number: tile.on ? 0 : 1), type: "active"); return true }
+                // 功能補齊：模式（關／暖／冷／自動，照配件支援）與旋鈕（點弧上哪裡就設到那個溫度）
+                if let acc = snap.accessories.first(where: { $0.id == tile.id }) {
+                    for (r, m) in modeHits where r.insetBy(dx: -4, dy: -8).contains(pt) {
+                        for w in HomeClimate.writes(acc, m) { commit(w.id, w.value, type: w.type) }
+                        return true
+                    }
+                }
+                if let id = tile.targetTempID, let v = HomeClimate.value(at: pt, min: tile.tempMin, max: tile.tempMax, step: tile.tempStep) {
+                    commitThrottled(id, HomeValue(number: v), type: "targetTemp"); return true
+                }
+                if modeHits.isEmpty, let a = tile.activeID, Self.thermoPower.insetBy(dx: -8, dy: -8).contains(pt) { commit(a, HomeValue(number: tile.on ? 0 : 1), type: "active"); return true }
                 if let id = tile.targetTempID {
                     if Self.thermoDown.insetBy(dx: -10, dy: -10).contains(pt), let v = HomeAppModel.steppedTarget(tile, direction: -1) { commitThrottled(id, HomeValue(number: v), type: "targetTemp") }
                     else if Self.thermoUp.insetBy(dx: -10, dy: -10).contains(pt), let v = HomeAppModel.steppedTarget(tile, direction: 1) { commitThrottled(id, HomeValue(number: v), type: "targetTemp") }
@@ -478,6 +527,12 @@ final class HomeApp: PetApp {
         // 攝影機全螢幕
         if let cid = cameraID {
             if Self.camClose.insetBy(dx: -8, dy: -8).contains(pt) { HPComponents.navigateBack(); return true }
+            if Self.camFit.insetBy(dx: -10, dy: -10).contains(pt) { toggleCamFill(cid); return true }
+            // 體驗追趕 P4：近況時間軸——點一格看那一刻，點最右邊回到即時
+            if CameraTimeline.hitArea.contains(pt), let fr = CameraTimeline.shared.frames[cid], !fr.isEmpty {
+                CameraTimeline.shared.selected[cid] = CameraTimeline.pick(pt.x, times: fr.map(\.at), now: Date().timeIntervalSince1970, in: CameraTimeline.track)
+                dirty = true; return true
+            }
             // 2.0 home-1：同一個房間的燈、門鎖（iOS 家庭 App 攝影機畫面底下的相關配件）
             for (r, tile) in relatedLayout(cid) where r.insetBy(dx: -8, dy: -8).contains(pt) {
                 guard tile.reachable else { return true }
@@ -862,15 +917,47 @@ final class HomeApp: PetApp {
 
     private func thermoMode(_ t: HomeTile) -> Int { t.mode }   // 第四輪：溫控與冷暖氣都由 HomeAppModel 換算好
 
-    /// 溫控滿版（影片 v2 O115）：「制冷中／加热中」、超大目標數字、兩側淡色圓鈕、底下目前溫度與濕度
+    /// 溫控滿版（影片 v2 O115）：「制冷中／加热中」、目標數字、兩側淡色圓鈕、底下目前溫度與濕度
+    /// 功能補齊：可以設目標的配件多一圈旋鈕（點弧上設溫度、滾輪 ±1 步、0.5 度一格或照配件步進）；底下是模式列（關／暖／冷／自動，照配件支援），
+    /// 配件沒有可選的模式才退回開關鈕。只讀的（只有溫濕度的空調伴侶）照舊只顯示室內溫度。
     private func drawThermoContent(_ g: CGContext, _ face: Face, _ t: HomeTile) {
         let mode = thermoMode(t)
         let readOnly = t.targetTempID == nil && t.activeID == nil
-        let head = readOnly ? L("home.thermo.indoor", "室内温度") : mode == 2 ? L("home.thermo.cool", "制冷中") : mode == 1 ? L("home.thermo.heat", "加热中") : L("home.off", "关")
-        textCentered(g, face, head, font: HPComponents.sf(40, weight: .medium), cx: 512, y: 330, color: NSColor.white.withAlphaComponent(0.8))
+        let acc = snap.accessories.first(where: { $0.id == t.id })
+        let modes = acc.map(HomeClimate.modes) ?? HomeClimateModes(options: [], selected: nil)
+        let modeName: [HomeClimateMode: String] = [.off: L("home.off", "关"), .heat: L("home.climate.heat", "制热"),
+                                                   .cool: L("home.climate.cool", "制冷"), .auto: L("home.climate.auto", "自动")]
+        // 正在加熱／製冷就寫「…中」；沒在動就寫選的模式（自動待機時不會被誤寫成「關」）
+        let head = readOnly ? L("home.thermo.indoor", "室内温度") : mode == 2 ? L("home.thermo.cool", "制冷中") : mode == 1 ? L("home.thermo.heat", "加热中")
+            : (modes.selected.flatMap { modeName[$0] } ?? L("home.off", "关"))
         let big = (t.target ?? t.temp).map { HomeAppModel.tempText($0) } ?? "—"
-        textCentered(g, face, big, font: FaceType.sf(300, .light), cx: 512, y: 610, color: .white)
-        HPAX.note(g, CGRect(x: 240, y: 280, width: 544, height: 380), .text, head, value: big, shape: .rounded(24))   // 2.0 depth：VoiceOver
+        let dial = t.target != nil && t.targetTempID != nil
+        let ink = NSColor.white, dim = NSColor.white.withAlphaComponent(HPAccessibility.increaseContrast ? 0.5 : 0.28)
+        if dial, let target = t.target {
+            // 旋鈕：270° 的弧（底下留缺口），走過的那段亮白；目前溫度一個小點；目標一顆白色把手
+            let c = HomeClimate.center, r = HomeClimate.radius, lw: CGFloat = 24
+            let a0 = HomeClimate.startDeg * .pi / 180, sweep = HomeClimate.sweepDeg * .pi / 180
+            let f = HomeClimate.fraction(target, min: t.tempMin, max: t.tempMax)
+            g.saveGState(); g.setLineCap(.round); g.setLineWidth(lw)
+            g.setStrokeColor(dim.cgColor); g.addArc(center: c, radius: r, startAngle: a0, endAngle: a0 + sweep, clockwise: false); g.strokePath()
+            g.setStrokeColor(ink.cgColor); g.addArc(center: c, radius: r, startAngle: a0, endAngle: a0 + sweep * f, clockwise: false); g.strokePath()
+            g.restoreGState()
+            if let cur = t.temp {
+                let p = HomeClimate.point(HomeClimate.fraction(cur, min: t.tempMin, max: t.tempMax))
+                g.setFillColor((f >= HomeClimate.fraction(cur, min: t.tempMin, max: t.tempMax) ? srgb(0x000000).withAlphaComponent(0.35) : ink.withAlphaComponent(0.8)).cgColor)
+                g.fillEllipse(in: CGRect(x: p.x - 6, y: p.y - 6, width: 12, height: 12))
+            }
+            let k = HomeClimate.point(f)
+            g.saveGState(); g.setShadow(offset: CGSize(width: 0, height: 4), blur: 12, color: NSColor(white: 0, alpha: 0.3).cgColor)
+            g.setFillColor(ink.cgColor); g.fillEllipse(in: CGRect(x: k.x - 28, y: k.y - 28, width: 56, height: 56)); g.restoreGState()
+            HPAX.note(g, CGRect(x: c.x - r - 28, y: c.y - r - 28, width: 2 * r + 56, height: 2 * r + 56), .text, L("home.climate.target", "目标温度"), value: big, shape: .circle)
+            textCentered(g, face, head, font: HPComponents.sf(40, weight: .medium), cx: 512, y: 392, color: ink.withAlphaComponent(0.85))
+            textCentered(g, face, big, font: FaceType.sf(176, .light), cx: 512, y: 568, color: ink)
+        } else {
+            textCentered(g, face, head, font: HPComponents.sf(40, weight: .medium), cx: 512, y: 330, color: ink.withAlphaComponent(0.8))
+            textCentered(g, face, big, font: FaceType.sf(300, .light), cx: 512, y: 610, color: ink)
+            HPAX.note(g, CGRect(x: 240, y: 280, width: 544, height: 380), .text, head, value: big, shape: .rounded(24))   // 2.0 depth：VoiceOver
+        }
         if t.targetTempID != nil {
             HPAX.note(g, Self.thermoDown, .button, L("a11y.tempDown", "降低温度"), value: big, shape: .circle)
             HPAX.note(g, Self.thermoUp, .button, L("a11y.tempUp", "升高温度"), value: big, shape: .circle)
@@ -878,19 +965,37 @@ final class HomeApp: PetApp {
                 HPComponents.glassCircle(g, face, r, symbol: sym, ink: .white, scale: 0.34)
             }
         }
-        // 第四輪：冷暖氣的開關（HomeKit Active）
-        if t.activeID != nil {
+        // 模式列（自己畫的膠囊分段：底色是模式色，玻璃分段的黑字在橘、藍底上讀不清楚）；沒有可選的模式才用冷暖氣的開關鈕
+        modeHits = []
+        if !modes.options.isEmpty {
+            let track = Self.thermoModes, n = CGFloat(modes.options.count), inset: CGFloat = 8
+            let w = (track.width - 2 * inset) / n
+            g.setFillColor(NSColor(white: 0, alpha: HPAccessibility.reduceTransparency ? 0.4 : 0.18).cgColor)
+            g.addPath(HPComponents.capsulePath(track)); g.fillPath()
+            let bg = mode == 2 ? srgb(0x12a8f2) : mode == 1 ? srgb(0xff9500) : srgb(0x8e8e93)
+            for (i, m) in modes.options.enumerated() {
+                let r = CGRect(x: track.minX + inset + CGFloat(i) * w, y: track.minY + inset, width: w, height: track.height - 2 * inset)
+                let on = m == modes.selected, name = modeName[m] ?? ""
+                if on { g.setFillColor(ink.cgColor); g.addPath(HPComponents.capsulePath(r)); g.fillPath() }
+                let fnt = HPComponents.sf(32, weight: on ? .semibold : .medium)
+                textCentered(g, face, name, font: fnt, cx: r.midX, y: r.midY + fnt.capHeight / 2, color: on ? (bg.blended(withFraction: 0.35, of: .black) ?? bg) : ink)
+                HPAX.note(g, r, .radio(on), name)
+                modeHits.append((r, m))
+            }
+        } else if t.activeID != nil {
+            // 第四輪：冷暖氣的開關（HomeKit Active）
             HPComponents.glassButton(g, face, Self.thermoPower, t.on ? L("home.thermo.turnOff", "关闭") : L("home.thermo.turnOn", "打开"), symbol: "power")
         }
         var parts: [(String, String)] = []
         if let cur = t.temp { parts.append(("thermometer.medium", HomeAppModel.tempText(cur))) }
-        if let h = snap.accessories.first(where: { $0.id == t.id })?.characteristic("humidity")?.value?.number { parts.append(("humidity", "\(Int(h.rounded()))%")) }
+        if let h = acc?.characteristic("humidity")?.value?.number { parts.append(("humidity", "\(Int(h.rounded()))%")) }
         let f = HPComponents.sf(32, weight: .medium)
         let w = parts.reduce(CGFloat(0)) { $0 + 44 + Typo.width($1.1, f) } + CGFloat(max(0, parts.count - 1)) * 36
         var x = 512 - w / 2
+        let py: CGFloat = dial ? 618 : 690
         for (sym, s) in parts {
-            face.drawSymbol(g, sym, in: CGRect(x: x, y: 690, width: 34, height: 34), color: .white, weight: .semibold)
-            face.drawLeft(g, s, font: f, x: x + 44, y: 718, color: .white); x += 44 + Typo.width(s, f) + 36
+            face.drawSymbol(g, sym, in: CGRect(x: x, y: py, width: 34, height: 34), color: .white, weight: .semibold)
+            face.drawLeft(g, s, font: f, x: x + 44, y: py + 28, color: .white); x += 44 + Typo.width(s, f) + 36
         }
     }
 
@@ -926,6 +1031,8 @@ final class HomeApp: PetApp {
         }
         return images[cam.id]
     }
+    /// 這一路正在出即時畫面（3 秒內有新的一格）
+    private func isLive(_ id: String) -> Bool { liveFrameAt[id].map { clock - $0 < 3 } ?? false }
     private func ageText(_ cam: HomeCameraItem) -> String {
         if !Self.demo, schedule.noResponse(cam.id) { return L("home.noResponse", "无响应") }
         let age = Self.demo ? 4 : schedule.age(cam.id, now: clock)
@@ -933,12 +1040,13 @@ final class HomeApp: PetApp {
         return a < 2 ? L("home.cam.justNow", "刚刚") : String(format: L("home.cam.ago", "%d 秒前"), a)
     }
 
-    private func drawFrame(_ g: CGContext, _ face: Face, _ cam: HomeCameraItem, _ r: CGRect, radius: CGFloat) {
+    /// image：給了就畫這張（近況時間軸選的那一刻），否則畫最新的
+    private func drawFrame(_ g: CGContext, _ face: Face, _ cam: HomeCameraItem, _ r: CGRect, radius: CGFloat, fit: Bool = false, image: CGImage? = nil) {
         g.saveGState()
         g.addPath(continuousRoundedRect(r, radius: radius)); g.clip()
-        if !RemotePrivacy.guestActive, let img = cameraImage(cam) {   // 2.0 idle: 訪客裝置在用：攝影機只畫灰底
-            // 填滿（等比、置中裁切）
-            let iw = CGFloat(img.width), ih = CGFloat(img.height), k = max(r.width / iw, r.height / ih)
+        if !RemotePrivacy.guestActive, let img = image ?? cameraImage(cam) {   // 2.0 idle: 訪客裝置在用：攝影機只畫灰底
+            // 填滿（等比、置中裁切）；fit＝完整畫面（等比、整張放進去，上下留黑）
+            let iw = CGFloat(img.width), ih = CGFloat(img.height), k = fit ? min(r.width / iw, r.height / ih) : max(r.width / iw, r.height / ih)
             face.drawUpright(g, img, in: CGRect(x: r.midX - iw * k / 2, y: r.midY - ih * k / 2, width: iw * k, height: ih * k))
         } else {
             g.setFillColor(NSColor(white: 0.12, alpha: 1).cgColor); g.fill(r)
@@ -964,7 +1072,12 @@ final class HomeApp: PetApp {
     /// 底部紅 ✕（關閉）、黃麥克風（不支援雙向語音：灰掉）、玻璃格狀鈕（看全部攝影機）
     private func drawCameraPage(_ g: CGContext, _ face: Face, _ cam: HomeCameraItem) {
         g.setFillColor(NSColor.black.cgColor); g.fill(MediaUI.full)
-        drawFrame(g, face, cam, MediaUI.full, radius: Screen.cornerRadius)
+        let fill = camFill(cam.id)
+        let tl = CameraTimeline.shared, wall = Date().timeIntervalSince1970   // 體驗追趕 P4：近況時間軸
+        if tl.onUpdate == nil { tl.onUpdate = { [weak self] in self?.dirty = true } }
+        if Self.demo, let img = cameraImage(cam) { tl.seedDemo(cam.id, img, now: wall) }
+        let past = RemotePrivacy.guestActive ? nil : tl.image(cam.id)
+        drawFrame(g, face, cam, MediaUI.full, radius: Screen.cornerRadius, fit: !fill, image: past)
         if let grad = MediaUI.shade(0.55) {
             g.saveGState(); g.translateBy(x: 0, y: 300); g.scaleBy(x: 1, y: -1)   // 由下往上變黑＝頂部漸層
             g.drawLinearGradient(grad, start: CGPoint(x: 0, y: 0), end: CGPoint(x: 0, y: 300), options: [])
@@ -973,11 +1086,17 @@ final class HomeApp: PetApp {
         if let grad = MediaUI.shade(0.45) { g.drawLinearGradient(grad, start: CGPoint(x: 0, y: 700), end: CGPoint(x: 0, y: 1024), options: []) }
         let tf = HPComponents.fitted(cam.name, size: 40, weight: .semibold, maxWidth: 520)
         textCentered(g, face, cam.name, font: tf, cx: 512, y: 168, color: .white)
-        let sub = "\(L("home.cam.snapshot", "快照")) · \(ageText(cam))"
+        let pastAt = tl.selected[cam.id].flatMap { i in tl.frames[cam.id].flatMap { i < $0.count ? $0[i].at : nil } }
+        let sub = pastAt.map { "\(L("home.cam.snapshot", "快照")) · \(CameraTimeline.timeText($0))" }
+            ?? (isLive(cam.id) ? L("home.cam.live", "实时") : "\(L("home.cam.snapshot", "快照")) · \(ageText(cam))")
         textCentered(g, face, sub, font: HPComponents.sf(30, weight: .regular), cx: 512, y: 210, color: NSColor.white.withAlphaComponent(0.58))
         HPComponents.actionButton(g, face, Self.camClose, symbol: "xmark", role: .stop)
         HPComponents.actionButton(g, face, Self.camMic, symbol: "mic.slash.fill", role: .mic, enabled: false)
         HPComponents.glassCircle(g, face, Self.camGrid, symbol: "square.grid.2x2.fill", ink: .white, scale: 0.36, tint: HPComponents.mediaTint)
+        HPComponents.glassCircle(g, face, Self.camFit, symbol: fill ? "arrow.down.right.and.arrow.up.left" : "arrow.up.left.and.arrow.down.right",
+                                 ink: .white, scale: 0.4, tint: HPComponents.mediaTint)
+        HPAX.note(g, Self.camFit, .button, fill ? L("home.cam.showFull", "显示完整画面") : L("home.cam.fill", "填满屏幕"), shape: .circle)
+        if !RemotePrivacy.guestActive { tl.draw(g, face: face, id: cam.id, now: wall) }
         drawRelated(g, face, cam.id)   // 2.0 home-1：門鈴響了，開門燈、開鎖不必離開畫面
         let note = L("home.cam.noTalk", "目前不支持双向语音")
         textCentered(g, face, note, font: HPComponents.fitted(note, size: 26, weight: .regular, maxWidth: 360), cx: Self.camMic.midX, y: Self.camMic.minY - 24, color: NSColor.white.withAlphaComponent(0.7))
@@ -1070,20 +1189,25 @@ enum HomeCamArt {
 // MARK: - 家庭警報橫幅（HomeView 對齊 WP5：官方文案；紅底白字、點一下收掉）
 
 extension HomeApp {
+    /// 攝影機頁底下是 ✕／麥克風／格狀鈕：橫幅改放在標題下面，不蓋按鈕也不擋太多畫面
+    static func alertBannerRect(camera: Bool) -> CGRect { CGRect(x: 64, y: camera ? 232 : 1024 - 96 - 152, width: 896, height: 152) }
+    /// 圓角跟螢幕同心（左右離螢幕 64；152 高的連續圓角最多畫到約 50，見 EdgeContainers）
+    static func alertBannerRadius(_ r: CGRect) -> CGFloat { HPTokens.Radius.concentric(rect: r) }
+
     func drawAlertBanner(_ g: CGContext, _ face: Face, now: Double) {
         guard let a = HomeAlerts.active.first else { return }
-        let r = CGRect(x: 64, y: 1024 - 96 - 152, width: 896, height: 152)
+        let r = Self.alertBannerRect(camera: cameraID != nil), rad = Self.alertBannerRadius(r)
         // beta 5（拍板）：底色永遠不透明（白字對比穩定、底下的磚不透出來），脈動只改紅的深淺（1.6 s 一次；減少動態效果不脈動）
         let dim: CGFloat = ClockKit.reduceMotion ? 0 : CGFloat(0.12 * (1 - cos((now - a.at) * 2 * .pi / 1.6)))
         let red = HPTokens.red.blended(withFraction: dim, of: .black) ?? HPTokens.red
         g.setFillColor(red.cgColor)   // 要設在 g 上：NSColor.setFill() 只改 NSGraphicsContext，這裡會沿用上一個填色（白）
-        g.addPath(CGPath(roundedRect: r, cornerWidth: 44, cornerHeight: 44, transform: nil)); g.fillPath()
+        g.addPath(continuousRoundedRect(r, radius: rad)); g.fillPath()
         face.drawSymbol(g, a.kind.symbol, in: CGRect(x: r.minX + 40, y: r.midY - 30, width: 60, height: 60), color: .white)
         let tf = AppUI.font(44, .semibold)
         // 畫布左上原點：標題在上（基線 midY − 8）、說明在下（基線 midY + 42）
         face.drawLeft(g, a.kind.title, font: tf, x: r.minX + 128, y: r.midY - 8, color: .white)
         face.drawLeft(g, Face.clipped(HomeAlerts.body(a), AppUI.font(34), r.width - 200), font: AppUI.font(34), x: r.minX + 128, y: r.midY + 42, color: NSColor.white.withAlphaComponent(0.85))
-        HPAX.note(g, r, .button, "\(a.kind.title) \(HomeAlerts.body(a))", shape: .rounded(44))
+        HPAX.note(g, r, .button, "\(a.kind.title) \(HomeAlerts.body(a))", shape: .rounded(rad))
         // 點一下收掉這則（handleTap 裡命中這個矩形就 dismiss）
         alertRect = r
     }

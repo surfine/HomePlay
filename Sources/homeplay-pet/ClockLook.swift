@@ -185,13 +185,53 @@ extension GlyphShape {
 extension Face {
     /// 照「字體與顏色」畫一組大時間：玻璃（系統 Liquid Glass，可染色）或實線
     func drawClockDigits(_ g: CGContext, _ shapes: [GlyphShape], look: ClockLook, clear: CGImage?, frosted: CGImage?, alpha: CGFloat) {
-        let color = look.color(wallpaper: wallpaperTone(frosted))
+        let tone = wallpaperTone(frosted)
+        let color = look.color(wallpaper: tone)
         g.saveGState(); g.setAlpha(alpha)
-        if look.glass {
-            drawLiquidGlass(g, shapes, clear: clear, frosted: frosted, tint: look.glassTint > 0 ? color.withAlphaComponent(look.glassTint) : nil)
+        let env = HPNumeralGlass.current   // 體驗追趕 P1：減少透明度／動態效果、材質版 Look 都畫實色（Design/HPNumeralGlass.swift）
+        if HPNumeralGlass.usesGlass(look: look, materialLookLinked: HPNumeralGlass.materialLookLinked, reduceTransparency: env.reduceTransparency, reduceMotion: env.reduceMotion) {
+            let tint = HPNumeralGlass.tint(color, base: look.glassTint, luma: HPNumeralGlass.luma(tone), swatch: look.swatch)
+            // 先用 beta 1 的玻璃步驟（SystemGlass .portraitFrosted），系統零件不在才退回 shader
+            if !drawNumeralSystemGlass(g, shapes, clear: clear, tint: tint) {
+                drawLiquidGlass(g, shapes, clear: clear, frosted: frosted, tint: tint)
+            }
         } else {
             for s in shapes { fillShape(g, s, color, shadow: 0.18) }
         }
+        g.restoreGState()
+    }
+
+    /// beta 1 的大數字玻璃：SystemGlass（.portraitFrosted）合成背景＋玻璃，裁在字形裡，字外一圈柔和落影。回 false＝系統零件不可用
+    func drawNumeralSystemGlass(_ g: CGContext, _ shapes: [GlyphShape], clear: CGImage?, tint: NSColor?) -> Bool {
+        guard let clear, !shapes.isEmpty else { return false }
+        let path = CGMutablePath()
+        for s in shapes { path.addPath(s.path) }
+        // 數字一分鐘才變、背景同一張：合成結果按（字形、背景、染色、解析度）快取，換頁每幀不重算
+        let key = "\(shapes.map { "\($0.ink)" }.joined(separator: ";"))|\(ObjectIdentifier(clear).hashValue)|\(tint.map { "\($0)" } ?? "-")|\(Int(renderPixelScale * 100))"
+        let r: (image: CGImage, rect: CGRect)
+        if let hit = Self.numeralGlassCache, hit.key == key { r = (hit.image, hit.rect) } else {
+            var p = SystemGlassParams.portraitFrosted
+            p.tint = tint?.cgColor
+            guard let out = SystemGlass.shared.render(path: path, key: nil, scale: renderPixelScale, backdrop: clear, params: p) else { return false }
+            r = out
+            Self.numeralGlassCache = (key, out.image, out.rect)
+        }
+        numeralShadow(g, path)
+        g.saveGState(); g.addPath(path); g.clip()
+        drawUpright(g, r.image, in: r.rect)
+        g.restoreGState()
+        return true
+    }
+    nonisolated(unsafe) private static var numeralGlassCache: (key: String, image: CGImage, rect: CGRect)?
+
+    /// 字外一圈柔和落影（玻璃浮在背景上）：只畫在字形外面（beta 1 的 glassShadow）
+    private func numeralShadow(_ g: CGContext, _ path: CGPath) {
+        let ink = path.boundingBoxOfPath
+        g.saveGState()
+        g.addRect(CGRect(x: -100, y: -100, width: 1224, height: 1224)); g.addPath(path); g.clip(using: .evenOdd)
+        g.setShadow(offset: CGSize(width: 0, height: -ink.height * 0.012), blur: ink.height * 0.035,
+                    color: NSColor.black.withAlphaComponent(0.22).cgColor)
+        g.addPath(path); g.setFillColor(NSColor.black.withAlphaComponent(0.5).cgColor); g.fillPath()
         g.restoreGState()
     }
 

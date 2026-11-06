@@ -37,8 +37,9 @@ extension ControlCenter {
     nonisolated(unsafe) static var galleryScroll: CGFloat = 0
     nonisolated(unsafe) static var galleryContentH: CGFloat = 0
 
-    /// iOS 的 platter：暗色壓 38% 黑；淺色洗 28% 白（兩種都先霧化 σ30）
-    static func platter(dark: Bool) -> NSColor { dark ? NSColor.black.withAlphaComponent(0.38) : NSColor.white.withAlphaComponent(0.28) }
+    /// iOS 的 platter：基準暗色壓 38% 黑、淺色洗 28% 白（先霧化 σ30）；照打開那一刻底下的亮度微調（材質表 HPMaterial.ccPlatter）
+    static func platter(dark: Bool) -> NSColor { HPMaterial.ccPlatter(dark: dark, luma: HPMaterial.ccLuma) }
+    nonisolated(unsafe) private static var lumaSource: ObjectIdentifier?
 
     static func draw(_ g: CGContext, face: Face, now: Double) {
         let full = CGRect(x: 0, y: 0, width: 1024, height: 1024)
@@ -47,10 +48,12 @@ extension ControlCenter {
         // 底下的畫面：打開那一刻拍下來霧化（之後不必每幀模糊整面）
         if Shell.ccBackdrop == nil, let shot = g.makeImage() {
             let ci = CIImage(cgImage: shot)
-            let blurred = ci.clampedToExtent().applyingGaussianBlur(sigma: Double(shot.width) / 1024 * 30).cropped(to: ci.extent)
+            let blurred = ci.clampedToExtent().applyingGaussianBlur(sigma: Double(shot.width) / 1024 * Double(HPMaterial.CC.backdropBlur)).cropped(to: ci.extent)
             Shell.ccBackdrop = Face.ciContext.createCGImage(blurred, from: ci.extent)
             dimmedCache = nil
         }
+        // 體驗追趕 P3：底下的亮度只在換了底圖時取一次（打開那一幀），platter 與模組加厚層照它調深淺
+        if let b = Shell.ccBackdrop, lumaSource != ObjectIdentifier(b) { HPMaterial.ccLuma = HPMaterial.sampleLuma(b); lumaSource = ObjectIdentifier(b); dimmedCache = nil }
         g.saveGState()
         g.setAlpha(a)
         if let b = Shell.ccBackdrop { face.drawUpright(g, b, in: full) }
@@ -120,7 +123,7 @@ extension ControlCenter {
         let lock = locked(t)
         HPGlass.add(path, interactive: live && editK < 0.01, union: nil, presence: presence) { c in
             c.saveGState()
-            if lock { c.setAlpha(0.5) }
+            if lock || unavailable(t) { c.setAlpha(0.5) }   // 鎖著、或條件不到（「收 AirDrop」沒有 CarPlay 會話）
             drawModule(c, t, r, s, face: face, now: now)
             c.restoreGState()
             if lock {   // 鎖著：右上一顆小鎖（不只靠變淡）
@@ -428,8 +431,10 @@ extension ControlCenter {
     private static func drawPageDots(_ g: CGContext, pagePos: CGFloat, alpha: CGFloat) {
         let n = layout.pages.count + (editing ? 1 : 0)
         guard n > 1, alpha > 0.01 else { return }
-        // 2.0 align：頁點對齊格子的右緣（956），直徑與其它頁點一致（14）
-        let gapY: CGFloat = 26, x: CGFloat = gridX + 6 * cell + 5 * gap - HPTokens.Size.dot / 2
+        // 頁點放在格子右邊的留白正中（格子右緣 956 到畫布右緣之間），直徑與其它頁點一致（14）；
+        // 原本貼著格子右緣，會壓在最右欄模組的邊上只露半個，看不出還有下一頁（2026-11-06 使用者截圖）
+        let right = gridX + 6 * cell + 5 * gap
+        let gapY: CGFloat = 26, x: CGFloat = right + (1024 - right) / 2
         let y0 = gridY + gridH / 2 - CGFloat(n - 1) * gapY / 2
         for i in 0..<n {
             let cur = max(0, 1 - abs(CGFloat(i) - pagePos))

@@ -21,7 +21,8 @@ package enum SessionEndReason: Equatable, Sendable {
     case ours            // 我们自己收掉的（换手机、重开、睡眠）
 }
 
-package enum SuspendReason: Hashable, Sendable { case asleep, pairingGuide, cablePairing }
+/// userPause＝桌寵要求暫停 CarPlay（讓主人的 iPhone 能用 AirDrop；iOS 在 CarPlay 會話中不給用）
+package enum SuspendReason: Hashable, Sendable { case asleep, pairingGuide, cablePairing, userPause }
 
 package enum RestartKind: Equatable, Sendable {
     case young      // 刚起来的行程第一次连不上：再换一个新行程（真机规律，约 2 秒连上）
@@ -35,7 +36,7 @@ package enum StartKind: Equatable, Sendable {
 }
 
 package enum TimerID: Hashable, Sendable {
-    case retry, handoffResend, wifiHelp, wifiWait, wifiNudge, ncmPoll, silence, wakeOpen, cabledWait
+    case retry, handoffResend, wifiHelp, wifiWait, wifiNudge, ncmPoll, silence, wakeOpen, cabledWait, pauseEnd
 }
 
 package enum Hint: Equatable, Sendable {
@@ -70,6 +71,9 @@ package enum ConnectionEvent: Equatable, Sendable {
     case suspend(SuspendReason, Bool)
     case restartDenied(RestartKind)
     case timer(TimerID, token: Int)
+    /// 暫停 CarPlay seconds 秒（暫停中再送一次＝延長，從暫停開始算最多 pauseMax）；resume 提早恢復
+    case pause(seconds: TimeInterval)
+    case resume
 }
 
 package enum ConnectionEffect: Equatable, Sendable {
@@ -92,7 +96,11 @@ package enum ConnectionEffect: Equatable, Sendable {
     case publishPhones
     case notify(Hint)
     case log(String)
+    /// 暫停狀態變了：on＝暫停中（seconds＝還剩幾秒）。調用方據此擋住會話層的回連（不叫手機、不收控制連線）並告訴桌寵
+    case pauseState(on: Bool, seconds: TimeInterval, reason: PauseReason)
 }
+
+package enum PauseReason: String, Equatable, Sendable { case pet, extend, resume, timeout }
 
 /// 每次 handle 带入的外部事实；测试里直接伪造。
 package struct ConnectionEnvironment: Equatable, Sendable {
@@ -141,6 +149,8 @@ package struct ConnectionMachine: Sendable {
     package static let sdpTimeout: TimeInterval = 4
     package static let crashSettle: TimeInterval = 1
     package static let cabledWait: TimeInterval = 5
+    package static let pauseMin: TimeInterval = 5
+    package static let pauseMax: TimeInterval = 180   // 接收器自己的保底：桌寵沒送 resume（當掉、被殺）也最多停 3 分鐘
 
     package struct Target: Equatable, Sendable {
         package var address: String?     // nil＝线上那台、还没学到藍牙地址
@@ -209,6 +219,8 @@ package struct ConnectionMachine: Sendable {
     private var ncmSince: TimeInterval?
     private var started = false
     private var pairingHinted = false
+    package private(set) var pause: (since: TimeInterval, until: TimeInterval)?
+    private var resumedAt: TimeInterval?
 
     private var env = ConnectionEnvironment(now: 0, processAge: 0, paired: [])
     private var out: [ConnectionEffect] = []
@@ -249,6 +261,8 @@ package struct ConnectionMachine: Sendable {
         case .wake: onWake()
         case .suspend(let why, let on): onSuspend(why, on)
         case .restartDenied: retryAfterFailure()
+        case .pause(let seconds): onPause(seconds)
+        case .resume: onResume(.resume)
         case .timer(let id, let token):
             guard tokens[id] == token else { break }   // 已取消或被新计时器取代
             tokens[id] = nil
@@ -419,7 +433,7 @@ package struct ConnectionMachine: Sendable {
         let pinnedElsewhere = target?.why == .user && target?.address != address
             && env.now - (target?.since ?? 0) < Self.userPinned
         let busy = link != .idle || (isLive && liveOwner != address)
-        guard !busy, !pinnedElsewhere, !suspended.contains(.asleep), !suspended.contains(.cablePairing) else {
+        guard !busy, !pinnedElsewhere, !suspended.contains(.asleep), !suspended.contains(.cablePairing), !suspended.contains(.userPause) else {
             out.append(.rejectIncoming(address: address))
             return
         }
@@ -666,6 +680,10 @@ package struct ConnectionMachine: Sendable {
         cancel(.silence)
         if case .handoff(let kind, let address, let gen, _, _, _) = link { link = .up(kind, address: address, gen: gen) }
         out.append(.publishPhones)
+        if let r = resumedAt {
+            out.append(.log("暂停后重连成功：恢复后 \(String(format: "%.1f", env.now - r)) 秒会话开始"))
+            resumedAt = nil
+        }
     }
 
     private mutating func onSessionEnded(_ why: SessionEndReason) {
@@ -759,6 +777,49 @@ package struct ConnectionMachine: Sendable {
         }
     }
 
+    // MARK: - R7 桌寵要求暂停 CarPlay（让 iPhone 能用 AirDrop）
+
+    /// 照退出时的顺序收：先挡会话层回连 → 关通道 → 断基带 → 收会话。SDP 服务与藍牙广播不动
+    /// （1.x 撤过车机 SDP，撤完 iPhone 再也不接受通道）。暂停中不主动开连结、拒绝手机主动连入；到时或 resume 恢复。
+    private mutating func onPause(_ seconds: TimeInterval) {
+        let s = min(max(seconds, Self.pauseMin), Self.pauseMax)
+        if let p = pause {
+            let until = min(env.now + s, p.since + Self.pauseMax)
+            pause = (p.since, until)
+            set(.pauseEnd, after: until - env.now)
+            out.append(.pauseState(on: true, seconds: until - env.now, reason: .extend))
+            out.append(.log("CarPlay 暂停延长：还剩 \(Int((until - env.now).rounded())) 秒（已暂停 \(Int((env.now - p.since).rounded())) 秒，最多 \(Int(Self.pauseMax)) 秒）"))
+            return
+        }
+        pause = (env.now, env.now + s)
+        resumedAt = nil
+        let baseband = link.kind == .usb ? nil : (link.address ?? liveOwner)
+        let wasLive = isLive
+        out.append(.pauseState(on: true, seconds: s, reason: .pet))
+        closeCurrentLink()
+        if let a = baseband { out.append(.dropBaseband(address: a)) }
+        if wasLive { session = .none; pendingTransport = nil; out.append(.dropSession) }
+        if retryPending { retryPending = false; cancel(.retry) }
+        cancel(.wakeOpen)
+        cancel(.silence)
+        suspended.insert(.userPause)
+        set(.pauseEnd, after: s)
+        out.append(.publishPhones)
+        out.append(.log("CarPlay 暂停 \(Int(s.rounded())) 秒（桌宠要收 AirDrop）：\(wasLive ? "会话已收、" : "")通道已关\(baseband == nil ? "" : "、基带已断")；SDP 与蓝牙广播保留，期间不重连"))
+    }
+
+    private mutating func onResume(_ why: PauseReason) {
+        guard let p = pause else { return }
+        pause = nil
+        cancel(.pauseEnd)
+        suspended.remove(.userPause)
+        resumedAt = env.now
+        out.append(.pauseState(on: false, seconds: 0, reason: why))
+        out.append(.log("CarPlay 恢复（\(why == .timeout ? "到时" : "桌宠要求")）：暂停了 \(Int((env.now - p.since).rounded())) 秒，开始重连"))
+        resetRetry()
+        ensureLink()
+    }
+
     // MARK: - 计时器
 
     private mutating func onTimer(_ id: TimerID) {
@@ -766,6 +827,8 @@ package struct ConnectionMachine: Sendable {
         case .retry, .wakeOpen:
             retryPending = false
             ensureLink()
+        case .pauseEnd:
+            onResume(.timeout)
         case .handoffResend:
             onHandoffResend()
         case .wifiHelp:

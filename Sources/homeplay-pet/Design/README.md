@@ -80,7 +80,8 @@ HPDS 是 HomePlay 2 所有畫面共用的那一層：外殼、內建 App、ClioT
 | `screen` | ≈ 138 | 機身螢幕的連續曲率圓角（量自 usdz），所有同心圓角的根 |
 | `screenDiagonalInset` | ≈ 40.8 | 螢幕角在 45° 方向的內縮；官方圖量到約 40，遮罩沿用 |
 | `concentric(inset:)` | 138 − inset（≥ 12） | 靠近螢幕角的卡片、磚、面板 |
-| `concentric(parent:padding:)` | 父半徑 − 內距 | 父元件不是螢幕時 |
+| `concentric(rect:)` | 138 − 離螢幕四邊最近的距離 | 貼邊容器（卡片、橫幅、sheet、面板）一律用這個，並登記在 `EdgeContainers.swift`（selftest 驗） |
+| `concentric(parent:padding:)` | 父半徑 − 內距 | 父元件不是螢幕時；父半徑用 `drawn(_:in:)`（矮卡片的連續圓角會被夾小） |
 | `capsule(r)` | 高 ÷ 2 | 按鈕、膠囊列、分段 |
 | `group` | 52 | inset grouped 卡片 |
 | `tile` | 50 | 家庭磚（影片 49–50） |

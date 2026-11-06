@@ -125,7 +125,7 @@ enum SettingsSection: String, CaseIterable, Identifiable {
         case .appearance: return ["settings.facing", "settings.angle", "settings.finish", "settings.face"]
         case .gestures: return ["settings.gesture.pinch.title", "settings.gesture.slide.title", "settings.gesture.three.title", "settings.gesture.force.title",
                                 "settings.gesture.liveSlide", "settings.gesture.reset", "settings.gesture.apart", "settings.gesture.overview", "settings.gesture.keys"]
-        case .carplay: return ["prefs.plugConnect", "menu.iphone", "menu.pairNewPhone", "menu.wifiPassword", "handoff.header"]   // 2.0 promo
+        case .carplay: return ["prefs.plugConnect", "menu.iphone", "menu.pairNewPhone", "menu.wifiPassword", "handoff.header", "selfshare.header"]   // 2.0 promo
         case .home: return ["settings.home.title", "settings.home.name", "settings.home.openApp"]
         case .cliotalk: return ["clio.provider", "clio.key", "clio.fast", "clio.deep", "clio.section.data", "clio.cap", "clio.speak", "clio.f5", "clio.clear"]
         case .camera: return ["settings.follow.title", "settings.followRange", "settings.followPitch", "settings.roomLight.title"]

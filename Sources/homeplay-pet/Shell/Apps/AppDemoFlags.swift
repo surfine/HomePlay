@@ -32,6 +32,16 @@ extension Shell {
             if !args.contains("--app") { open("podcasts") }
             if let p = AppRegistry.app("podcasts") as? PodcastsApp { p.applyDemo(v, face: face) }
         }
+        // 功能補齊：--demo-sing [lyrics|word|plain|none|loading|idle]：跟唱的示範曲目與歌詞（Shell/Apps/SingApp.swift）
+        if let v = value("--demo-sing") {
+            if !args.contains("--app") { open("sing") }
+            SingApp.shared.applyDemo(v, face: face)
+        }
+        // SideShow：--demo-sideshow pair|devices：螢幕上的設定 › SideShow（記憶體假名冊，SideShow/SideShowSettings.swift）
+        if value("--demo-sideshow") != nil {
+            SideShowSettings.installDemo()
+            if !args.contains("--app") { open("settings") }
+        }
         if let u = value("--recipe-url") ?? nil, let url = URL(string: u) {   // 除錯：真的抓這個網址（用 HOMEPLAY_RECIPES_FILE 指到暫存檔，免得寫進真的「最近」）
             open("recipes")
             RecipesApp.shared.open(url, face: face)

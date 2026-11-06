@@ -54,6 +54,13 @@ enum HVTruth {
         static let activeBackground: UInt32 = 0xFFA800
     }
 
+    // MARK: - 圖示玻璃（體驗追趕 P0）
+    enum IconGlass {
+        /// 🟢 圖示底走系統玻璃、分淺深兩種樣式、相鄰的可成組融合（行為存在，位元組實測）
+        /// 🟡 融合門檻：外框距離 < 24 畫布單位（推斷；跟 HPGlass 融合提示同值，主畫面網格間距 73 不會融）
+        static let groupingGap: CGFloat = 24
+    }
+
     /// 家庭警報類別：煙霧／一氧化碳／二氧化碳／水漏／門窗安全
     static let alertKinds: [String] = ["smoke", "carbonMonoxide", "carbonDioxide", "leak", "security"]
 }

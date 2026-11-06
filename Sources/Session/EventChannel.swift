@@ -97,9 +97,13 @@ package final class EventChannel {
         if let b = try? CarPlayPlist.hidSendReport(uuid: uuid, report: report) { sendCommand(b) }
     }
 
-    /// 0..1 的触点，按流像素尺寸换成多点触控报告
-    package func sendTouches(_ contacts: [(id: Int, x: Double, y: Double, down: Bool)], streamWidth: Int, streamHeight: Int) {
-        sendHIDReport(uuid: HID.touchUID, report: HID.touchReport(normalized: contacts, streamWidth: streamWidth, streamHeight: streamHeight))
+    /// 0..1 的触点，按流像素尺寸换成多点触控报告；手指在哪一槽跨报告记住（`HID.TouchSlots`）。回传送出的报告
+    private var touchSlots = HID.TouchSlots()
+    @discardableResult
+    package func sendTouches(_ contacts: [(id: Int, x: Double, y: Double, down: Bool)], streamWidth: Int, streamHeight: Int) -> Data {
+        let report = touchSlots.report(normalized: contacts, streamWidth: streamWidth, streamHeight: streamHeight)
+        sendHIDReport(uuid: HID.touchUID, report: report)
+        return report
     }
 
     /// 旋钮：按下的状态之后紧跟一个全零的松开（momentary）

@@ -205,7 +205,7 @@ extension Face {
         HelloIntro.night = Shell.lowLight(self) && HelloIntro.clockOverride == nil
         HelloIntro.extras = HelloIntro.forceCycle ? HelloGreeting.cycle : (local ? HelloGreeting.local() : [])
         // 設定卡已經排著（第一次打開、--onboarding）：hello 寫完不收，當設定卡的背景
-        HelloIntro.leadsIntoSetup = Onboarding.armed && HelloIntro.clockOverride == nil
+        HelloIntro.leadsIntoSetup = (Onboarding.armed || SetupFlow.pending) && HelloIntro.clockOverride == nil
         HelloIntro.holdingSince = nil
         sayHello(now)
         if !HelloIntro.leadsIntoSetup { blinkSoon(after: HelloIntro.handoffStart + 0.25) }   // 交接時 👀 眨一下出場
@@ -233,17 +233,17 @@ extension Face {
         let hs = HelloIntro.handoffStart
         if let t = HPMotion.frozen("hello") {
             // 快照：凍在交接之後、又有設定卡排著＝拍「設定卡浮在 hello 背景上」那一格（t − 交接 秒之後）
-            guard HelloIntro.leadsIntoSetup, t >= hs, Onboarding.armed || Onboarding.active else { return t }
+            guard HelloIntro.leadsIntoSetup, t >= hs, Onboarding.holding else { return t }
             if HelloIntro.holdingSince == nil { HelloIntro.holdingSince = CACurrentMediaTime() - (t - hs) }
             return hs - 1e-3
         }
         if HelloIntro.leadsIntoSetup, helloStart >= 0 {
             if HelloIntro.holdingSince != nil {
-                if Onboarding.armed || Onboarding.active { return hs - 1e-3 }
+                if Onboarding.holding { return hs - 1e-3 }
                 // 設定卡收起了：從這一刻開始交接
                 HelloIntro.holdingSince = nil; HelloIntro.leadsIntoSetup = false
                 helloStart = now - hs; blinkSoon(after: 0.25)
-            } else if now - helloStart >= hs, Onboarding.armed || Onboarding.active {
+            } else if now - helloStart >= hs, Onboarding.holding {
                 HelloIntro.holdingSince = now
                 return hs - 1e-3
             }
@@ -389,5 +389,5 @@ enum HelloSelfTest {
 
 extension PetView {
     /// 右鍵選單「表盤 › 打個招呼」、設定「一般」底下的按鈕：再寫一次開機的 hello
-    @objc func menuSayHello() { face.beginHello(CACurrentMediaTime()) }
+    @objc func menuSayHello() { surfaceFromCarPlay("menu hello"); face.beginHello(CACurrentMediaTime()) }
 }

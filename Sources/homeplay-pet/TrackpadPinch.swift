@@ -65,6 +65,11 @@ final class TrackpadPinch {
         pinchCallbackLock.lock(); defer { pinchCallbackLock.unlock() }
         return pinchFingers == 2 && classifier.kind != .scroll
     }
+    /// 這半秒內觸控板上有過正好兩指（智慧縮放事件在兩下輕點之後才到，那時手指可能已經離開）
+    var recentTwoFingers: Bool {
+        pinchCallbackLock.lock(); defer { pinchCallbackLock.unlock() }
+        return CACurrentMediaTime() - lastTwoFingerAt < 0.5
+    }
     /// 是否拿到了触控板接触帧（私有框架不可用时为 false，三指判断要退回旧行为）。
     var available: Bool { !devices.isEmpty }
     /// 当前触控板上的手指数（任意线程可读）。
@@ -139,6 +144,7 @@ final class TrackpadPinch {
 /// 全都派到主线程纯属浪费：只在手指数真的变化时通知一次。
 private let pinchCallbackLock = NSLock()
 private var pinchFingers = -1
+private var lastTwoFingerAt = 0.0   // 最近一次觸控板上正好兩指（CACurrentMediaTime；智慧縮放用）
 private var classifier = TwoFingerClassifier()   // pinchCallbackLock 保护
 
 private func mtPinchCallback(device: Int32, data: UnsafeMutableRawPointer?, nFingers: Int32,
@@ -158,6 +164,7 @@ private func mtPinchCallback(device: Int32, data: UnsafeMutableRawPointer?, nFin
     pinchCallbackLock.lock()
     if pinchFingers != 2 { classifier.reset() }
     pinchFingers = 2
+    lastTwoFingerAt = CACurrentMediaTime()
     let before = classifier.kind
     let kind = classifier.feed(id0: a.identifier, x0: Double(a.normalized.position.x), y0: Double(a.normalized.position.y),
                                id1: b.identifier, x1: Double(b.normalized.position.x), y1: Double(b.normalized.position.y))

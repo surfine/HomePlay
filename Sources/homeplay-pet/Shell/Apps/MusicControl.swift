@@ -427,7 +427,7 @@ final class MediaInterruption {
         if ClioTalkController.shared.voice.active { r.insert(.assistant) }
         if AlarmCenter.shared.ringing != nil { r.insert(.alarm) }
         let face = (NSApp.delegate as? AppDelegate)?.view?.face
-        let mac = !PhoneNowPlayingBridge.shared.active
+        let mac = !NowPlayingSource.phoneShown
         let playing = mac && (face?.nowPlaying.info?.playing ?? false)
         let wasActive = !active.isEmpty
         let since = CACurrentMediaTime() - pausedAt

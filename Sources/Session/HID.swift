@@ -9,7 +9,7 @@ package struct HIDContact: Equatable {
     package init(id: Int, x: Double, y: Double, down: Bool) { self.id = id; self.x = x; self.y = y; self.down = down }
 }
 
-package struct KnobState {
+package struct KnobState: Equatable {
     package var select = false, home = false, back = false
     package var x = 0, y = 0, wheel = 0
     package init(select: Bool = false, home: Bool = false, back: Bool = false, x: Int = 0, y: Int = 0, wheel: Int = 0) {
@@ -37,6 +37,24 @@ package enum HID {
         if text.contains("\"command\":\"answer\"") { return .hookSwitch }
         if text.contains("\"command\":\"decline\"") || text.contains("\"command\":\"hangup\"") { return .drop }
         return nil
+    }
+
+    /// 桌寵的旋鈕鍵（CarPlay 畫面上的鍵盤）→ 一次旋鈕報告：`{"type":"knob","command":"select|back|left|right|up|down|cw|ccw"}`。
+    /// 方向＝搖桿 x／y ±1、cw／ccw＝wheel ±1、select／back＝按鍵；送法照 EventChannel.sendKnob（按下或脈衝之後緊跟全零的放開）。別的回 nil
+    package static func knobState(forPetMessage text: String) -> KnobState? {
+        guard let o = (try? JSONSerialization.jsonObject(with: Data(text.utf8))) as? [String: Any], o["type"] as? String == "knob",
+              let c = o["command"] as? String else { return nil }
+        switch c {
+        case "select": return KnobState(select: true)
+        case "back": return KnobState(back: true)
+        case "left": return KnobState(x: -1)
+        case "right": return KnobState(x: 1)
+        case "up": return KnobState(y: -1)
+        case "down": return KnobState(y: 1)
+        case "cw": return KnobState(wheel: 1)
+        case "ccw": return KnobState(wheel: -1)
+        default: return nil
+        }
     }
 
     // MARK: 描述符
@@ -90,14 +108,58 @@ package enum HID {
 
     // MARK: 报告
 
-    /// 两个手指槽，每槽 [槽号][touch 位][X u16 LE][Y u16 LE]，坐标是流像素。第 i 个触点占第 i 槽。
+    /// 两个手指槽，每槽 [槽号][touch 位][X u16 LE][Y u16 LE]，坐标是流像素。
+    /// 依触点 id 放槽（不连续记忆，每次都是新的一组）；要跨报告记住哪根手指在哪一槽用 `TouchSlots`。
     package static func touchReport(_ contacts: [HIDContact]) -> Data {
+        var slots = TouchSlots()
+        return slots.report(contacts)
+    }
+
+    /// 依触点 id 分槽、跨报告记住：第一指先放开时第二指留在原槽（手机才不会当成一指跳位）。
+    /// 每次传进来的是「这一刻所有手指」：按着的占槽；`down == false` 的送一次那一槽放开（保留最后坐标）后让出；
+    /// 上一份还按着、这一份没出现的也当放开。放开后不再有手指按着、而这一份放开了两槽以上时送全零报告（槽号保留）。
+    /// 只有一指的序列跟改之前逐字节相同。槽满时多出来的手指忽略。
+    package struct TouchSlots {
+        private var held: [HIDContact?] = Array(repeating: nil, count: HID.touchContacts)
+        package init() {}
+
+        package mutating func report(_ contacts: [HIDContact]) -> Data {
+            var out: [HIDContact?] = Array(repeating: nil, count: touchContacts)
+            var seen = Set<Int>()
+            var pending: [HIDContact] = []
+            // 已经有槽的 id 留在原槽
+            for c in contacts where !seen.contains(c.id) {
+                seen.insert(c.id)
+                if let i = held.firstIndex(where: { $0?.id == c.id }) { out[i] = c } else { pending.append(c) }
+            }
+            // 新的 id：自己的号码在范围内又空着就用，否则用最小的空槽；都满就忽略
+            func free(_ i: Int) -> Bool { out[i] == nil && held[i] == nil }
+            var rest: [HIDContact] = []
+            for c in pending {
+                if (0..<touchContacts).contains(c.id), free(c.id) { out[c.id] = c } else { rest.append(c) }
+            }
+            for c in rest { if let i = (0..<touchContacts).first(where: free) { out[i] = c } }
+            // 上一份按着、这一份没出现的：这一份送放开
+            for i in 0..<touchContacts where out[i] == nil {
+                if var h = held[i] { h.down = false; out[i] = h }
+            }
+            held = out.map { $0?.down == true ? $0 : nil }
+            if held.allSatisfy({ $0 == nil }), out.compactMap({ $0 }).count > 1 { return encode([]) }
+            return encode(out)
+        }
+
+        /// 0..1 的触点 + 流像素尺寸 → 报告
+        package mutating func report(normalized: [(id: Int, x: Double, y: Double, down: Bool)], streamWidth: Int, streamHeight: Int) -> Data {
+            report(normalized.map { HIDContact(id: $0.id, x: $0.x * Double(streamWidth), y: $0.y * Double(streamHeight), down: $0.down) })
+        }
+    }
+
+    private static func encode(_ slots: [HIDContact?]) -> Data {
         var r = [UInt8](repeating: 0, count: bytesPerFinger * touchContacts)
         for i in 0..<touchContacts {
             let off = i * bytesPerFinger
             r[off] = UInt8(i)
-            guard i < contacts.count else { continue }
-            let c = contacts[i]
+            guard i < slots.count, let c = slots[i] else { continue }
             r[off + 1] = c.down ? 1 : 0
             let x = axis(c.x), y = axis(c.y)
             r[off + 2] = UInt8(x & 0xff); r[off + 3] = UInt8(x >> 8)
@@ -110,7 +172,23 @@ package enum HID {
 
     /// 我们这边 0..1 的触点 + 流像素尺寸 → 报告（对应 cpStack.sendTouches）
     package static func touchReport(normalized: [(id: Int, x: Double, y: Double, down: Bool)], streamWidth: Int, streamHeight: Int) -> Data {
-        touchReport(normalized.map { HIDContact(id: $0.id, x: $0.x * Double(streamWidth), y: $0.y * Double(streamHeight), down: $0.down) })
+        var slots = TouchSlots()
+        return slots.report(normalized: normalized, streamWidth: streamWidth, streamHeight: streamHeight)
+    }
+
+    /// 桌寵的觸控訊息 → 0..1 的觸點（最多 `touchContacts` 個）：
+    /// `{"type":"touch","contacts":[{"id":0,"x":..,"y":..,"down":..}, …]}`。沒有 id 的用它在陣列裡的位置；
+    /// 缺 x 或 y 的觸點略過；一個能用的觸點都沒有回 nil。座標夾到 0...1，down 預設 false。
+    package static func touchContacts(forPetMessage text: String) -> [(id: Int, x: Double, y: Double, down: Bool)]? {
+        guard let o = (try? JSONSerialization.jsonObject(with: Data(text.utf8))) as? [String: Any], o["type"] as? String == "touch",
+              let list = o["contacts"] as? [[String: Any]] else { return nil }
+        var out: [(id: Int, x: Double, y: Double, down: Bool)] = []
+        for (i, c) in list.enumerated() {
+            guard out.count < touchContacts else { break }
+            guard let x = (c["x"] as? NSNumber)?.doubleValue, let y = (c["y"] as? NSNumber)?.doubleValue else { continue }
+            out.append((id: (c["id"] as? NSNumber)?.intValue ?? i, x: min(1, max(0, x)), y: min(1, max(0, y)), down: (c["down"] as? Bool) ?? false))
+        }
+        return out.isEmpty ? nil : out
     }
 
     package static func knobReport(_ s: KnobState) -> Data {

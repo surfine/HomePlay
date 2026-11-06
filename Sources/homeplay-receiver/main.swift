@@ -593,6 +593,7 @@ catch {
     }
     FileHandle.standardError.write("监听 \(port) 失败：\(error)\n".data(using: .utf8)!); exit(1)
 }
+server.onListenerEvent = { Wireless.note($0) }
 
 if sourceKind == "netinfo" {
     // 无线前的自检：这台 Mac 在局域网里的地址、Wi-Fi MAC、当前信道（信道可能要定位权限才读得到）

@@ -65,10 +65,13 @@ final class PetView: NSView {
     /// CarPlay 影片（停車時播影片）：播著的時候螢幕給它，CarPlay 畫面讓位（CarVideo.swift）
     let carVideo = CarVideoPlayer()
     var onTouch: ((Double, Double, Bool) -> Void)?
+    /// CarPlay 兩指（實驗旗標 CarPlayTwoFinger 開著才會呼叫；預設不接）：(id, x, y, down)
+    var onTouches: (([(Int, Double, Double, Bool)]) -> Void)?
     var onToggleLive: (() -> Void)?
-    /// 只換顯示源（HomeView ⇄ CarPlay），不拆會話：空格、Esc、重按都走這條
+    /// 只換顯示源（HomeView ⇄ CarPlay），不拆會話：重按、拉開兩顆選 CarPlay 走這條（空白鍵＝👀，見 eyesKey）
     var onSwitchSource: (() -> Void)?
-    var onCarPlayBack: (() -> Void)?   // beta 5（拍板，對齊 1.0.6）：CarPlay 畫面 Esc＝車機返回
+    /// CarPlay 畫面＝車上旋鈕（2026-11-07）：送 select／back／left／right／up／down／cw／ccw 給接收端（CarPlayKnobKeys）
+    var onCarPlayKnob: ((String) -> Void)?
     var onCancelConnect: (() -> Void)?   // 菜单「取消连线」
     /// 重按（Force Touch）＝进入 CarPlay；AppDelegate 负责拉起 receiver 并连接
     var onForceEnter: (() -> Void)?
@@ -273,7 +276,7 @@ final class PetView: NSView {
         setAccessibilityElement(true)
         setAccessibilityRole(.button)
         setAccessibilityLabel(L("a11y.pet", "HomePlay 桌宠"))
-        setAccessibilityHelp(L("a11y.help", "重按屏幕进入 CarPlay，右键打开菜单"))
+        setAccessibilityHelp(L("a11y.help", "重按屏幕进出 CarPlay，右键打开菜单"))
 
         render.frame = bounds
         render.autoresizingMask = [.width, .height]
@@ -370,6 +373,7 @@ final class PetView: NSView {
             let now = CACurrentMediaTime()
             self.mood.activity(now: now, hour: Calendar.current.component(.hour, from: Date()))
             if self.pomodoroAdvance(now) { return }
+            self.surfaceFromCarPlay("timer done")   // 到點／鬧鐘：CarPlay 在前面也要看得到「時間到了」
             self.mood.show(.surprised, for: 0.8, now: now); self.shake(now)
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) { [weak self] in self?.mood.show(.happy, for: 1.2, now: CACurrentMediaTime()) }
             log("timer done")
@@ -422,13 +426,13 @@ final class PetView: NSView {
         startHoverTimer()
         decoder.onImage = { [weak self] img in
             guard let self, self.showingVideo, !self.carVideo.active else { return }
-            self.model.setScreen(img)
+            self.model.setScreen(CarPlayChrome.shared.apply(img))   // 頂端那條帶疊上 👀 膠囊（CarPlayChrome.swift）
             self.videoFrameArrived()
         }
         // 零拷貝路（方畫面）：MTLTexture 直接當材質，不經任何像素轉換
         decoder.onTexture = { [weak self] tex, _, _ in
             guard let self, self.showingVideo, !self.carVideo.active else { return }
-            self.model.setScreen(texture: CornerFit.shared.apply(tex))   // 學圓角那一次連線才會縮放補黑，平常原樣
+            self.model.setScreen(texture: CarPlayChrome.shared.apply(CornerFit.shared.apply(tex)))   // 學圓角那一次連線才會縮放補黑，平常原樣；頂端那條帶疊上 👀 膠囊
             self.videoFrameArrived()
         }
         carVideo.onTexture = { [weak self] tex in
@@ -464,9 +468,15 @@ final class PetView: NSView {
                     }
                 }
                 self.showVideo(true)
-                self.model.setScreen(frame()); self.videoFrameArrived()
+                // HOMEPLAY_FAKE_LIVE_TEX=1：走零拷貝的紋理路（CornerFit → 膠囊疊加 → RealityKit），驗 GPU 那一段
+                let viaTexture = ProcessInfo.processInfo.environment["HOMEPLAY_FAKE_LIVE_TEX"] == "1"
+                func show(_ img: CGImage) {
+                    if viaTexture, let tex = CarPlayChrome.uploadForTest(img) { self.model.setScreen(texture: CarPlayChrome.shared.apply(CornerFit.shared.apply(tex))) }
+                    else { self.model.setScreen(CarPlayChrome.shared.apply(img)) }
+                }
+                show(frame()); self.videoFrameArrived()
                 if fps > 0 {
-                    let t = Timer(timeInterval: 1 / fps, repeats: true) { [weak self] _ in self?.model.setScreen(frame()); self?.videoFrameArrived() }
+                    let t = Timer(timeInterval: 1 / fps, repeats: true) { [weak self] _ in show(frame()); self?.videoFrameArrived() }
                     RunLoop.main.add(t, forMode: .common)
                 }
                 log("fake live \(fps) fps")
@@ -478,6 +488,7 @@ final class PetView: NSView {
         if timer == nil {
             timer = LoopClock(view: self, hz: 60) { [weak self] in self?.step() }
         }
+        installTouchGestures()   // 觸控螢幕與 Sidecar（Shell/TouchInput.swift）；滑鼠、觸控板不經過它們
     }
     required init?(coder: NSCoder) { fatalError() }
 
@@ -546,6 +557,7 @@ final class PetView: NSView {
 
     /// 直播進了一幀：不等主循環那拍，立刻掛回去出幀；主循環若已降到靜止的 12 Hz 也馬上回 60。
     private var lastVideoFrame: Double = -1
+    var lastVideoFrameAt: Double { lastVideoFrame }   // CarPlay 上的膠囊：畫面靜止時自己補一格（Shell/ShellInput.swift）
     private func videoFrameArrived() {
         lastVideoFrame = CACurrentMediaTime()
         requestFrame()
@@ -928,6 +940,7 @@ final class PetView: NSView {
         if ProductShot.on { model.setRig(pitch: ProductShot.rigPitch(tilt: Float(HomeViewModel.tilt)), yaw: 0); model.setAim(yaw: 0) }   // 2.0 device: 產品照螢幕扶正、不轉頭
 
         shellStep(now)   // 2.0: 遠距回錶面、CarPlay 優先（Shell/ShellInput.swift）
+        touchStep(now)   // 觸控：44 pt 判定區換算、展開的控制項、第一次的提示卡（Shell/TouchInput.swift）
         let expr = lockedFace ?? mood.current(now: now, hour: cachedHour)
         face.set(expr)
         face.followPointer = mood.near && lockedFace == nil
@@ -935,6 +948,7 @@ final class PetView: NSView {
         face.animateDetails = mood.near || now - lastNear <= 60 || face.needsSmooth(now)
         // 自適應幀率：有動作／直播跑 60，閒著 12（省 GPU 與電），睡著 1。
         // 臉上有變化（眨眼、瞄一眼、換錶面）時把 hot 窗口往後推，讓那幾幀仍以 60 跑順。
+        if showingVideo, let end = face.timerEnd, now >= end { surfaceFromCarPlay("face timer due") }   // 錶面計時器在 face.tick 裡到點，直播時 tick 停著
         if !showingVideo, !carVideo.active, let img = face.tick(now) {
             model.setScreen(img)
             // 只有眨眼、hello、引導、過場這種「要順」的動畫才維持 60fps；
@@ -1077,6 +1091,8 @@ final class PetView: NSView {
 
     private var batteryTimer: Timer?
     private var system6Pending = false, system6Token = 0
+    /// 觸控按在機身上：「戳一下」等放手確認是點按才算（Shell/TouchInput.swift 的 BodyPoke）
+    private var pendingPoke = false
     private var wheelAcc: CGFloat = 0, lastFaceSwitch = 0.0
     /// 换錶面（滚轮、← →、菜单）：记住选择，岛眨一下眼
     func setFaceStyle(_ st: FaceStyle, remember: Bool = true) {
@@ -1301,9 +1317,11 @@ final class PetView: NSView {
     private func watchPointer() {
         guard !occluded, let win = window, win.isVisible else { return }
         let now = CACurrentMediaTime()
-        let m = NSEvent.mouseLocation, f = win.frame
+        // 觸控沒有懸停也沒有游標：手指剛碰過＝人就在旁邊（游標可能停在別處）
+        let touched = TouchInput.recentlyTouched(now)
+        let m = TouchInput.fingerDown ? TouchInput.screenPoint : NSEvent.mouseLocation, f = win.frame
         let dx = max(f.minX - m.x, 0, m.x - f.maxX), dy = max(f.minY - m.y, 0, m.y - f.maxY)
-        let dist = hypot(dx, dy)
+        let dist = touched ? 0 : hypot(dx, dy)
         let gazeHere = gazeEnabled && gazePresent
         let gazeRecent = gazeEnabled && CACurrentMediaTime() - gazeLastSeen < 3
         mood.near = gazeHere || gazeRecent || dist <= 120
@@ -1331,6 +1349,7 @@ final class PetView: NSView {
         } else {
             face.pointer = CGPoint(x: (m.x - f.midX) / (f.width * 0.6), y: -(m.y - f.midY) / (f.height * 0.6))
         }
+        if let tp = touchGazePointer(now) { face.pointer = tp }   // 拍板 2：手指按著看手指，放開 1 秒後回到上面的平常
         var onStand = false
         if f.contains(m), drag == .none {
             let p = convert(win.convertPoint(fromScreen: m), from: nil)
@@ -1365,6 +1384,18 @@ final class PetView: NSView {
     func showVideo(_ on: Bool) {
         if on, posterActive { endPoster() }
         guard on != showingVideo else { return }
+        let now = CACurrentMediaTime()
+        if on {   // 共享元素：膠囊從剛才主畫面／錶面上的位置滑進 CarPlay 頂端那條帶
+            CarPlayChrome.shared.glide = (face.capsuleCore ?? Shell.pillRect(Shell.pillT), now)
+        } else {
+            if let shot = CarPlayChrome.shared.snapshot() { AppSwitcher.shots[CarPlayApp.id] = shot }   // 切換器卡片、下次打開的過場
+            CarPlayChrome.shared.reset()
+            // 不是 carPlayToHome 收的（到點、斷線、要在錶面上看結果的動作）：回錶面，膠囊從 CarPlay 那條帶滑回錶面上的位置
+            if !Shell.carPlayPeek, case .app(CarPlayApp.id) = Shell.nav.screen {
+                Shell.nav = ShellNav()
+                Face.capsuleGlide = (HomeIndicator.carPlayCapsule(inset: HomeIndicator.inset), now)
+            }
+        }
         showingVideo = on
         onVideoState?(on)
         // 直播时摄像头照常跑（跟随我在 CarPlay 里也转向你）；只有确实可见、没锁屏才恢复
@@ -1432,9 +1463,36 @@ final class PetView: NSView {
         return uv.y > 0.68 && uv.x > 0.04 && uv.x < 0.96
     }
 
+    // MARK: 觸控（Shell/TouchInput.swift 用；要碰這裡的私有狀態）
+
+    /// 落點分區：螢幕、機身、透明處
+    func touchRegion(_ p: NSPoint) -> TouchRegion { screenUV(p) != nil ? .screen : (hitsModel(p) ? .body : .none) }
+    func touchScreenUV(_ p: NSPoint) -> CGPoint? { screenUV(p) }
+    func touchVideoPoint(_ p: NSPoint) -> (Double, Double)? { videoPoint(p) }
+    /// 手指一碰：跟游標進到視窗一樣先把 3D 掛上、收掉海報
+    func touchWillBegin() {
+        let now = CACurrentMediaTime()
+        endPoster()
+        lastNear = now; hotUntil = now + 0.4
+        pointerInsideAt = now
+        if onDemand3D, !attached3D, !posterActive { attach3D() }
+    }
+    /// 已經送出去的按下安靜收掉（不轉、不當點按）
+    func touchCancelPointer() {
+        if drag == .touch { onTouch?(-1, -1, false) }
+        drag = .none; pressTarget = 1; rotLock.reset(); system6Pending = false; pendingPoke = false
+    }
+    /// 兩指拖機身：直接進「轉身體」，之後的拖動走原本的轉身體（單軸鎖、慣性、表情）
+    func touchBeginRotate(at p: NSPoint, timestamp: Double) {
+        drag = .rotate; last = p; rotateMoved = false; rotateTravel = 0; rotLock.reset(); touring = false
+        dragVel = 0; lastDragT = timestamp
+    }
+    func touchEndResize() { endResize() }
+
     // MARK: 鼠标
 
     override func mouseDown(with event: NSEvent) {
+        if TouchInput.dropsSystemEvent() { return }   // 系統從同一下觸控模擬出來的：觸控那邊已經處理（Shell/TouchInput.swift）
         endPoster()
         // 非激活面板收不到捏合/旋转这类手势事件：点一下就把 App 激活并把窗口立为 key
         // （makeKey 而不是只激活 App——面板只有成为 key window 才开始收手势）。
@@ -1447,6 +1505,10 @@ final class PetView: NSView {
             let probePoint = local(event)
             if let uv = screenUV(probePoint) { log(String(format: "click uv=(%.3f,%.3f)", uv.x, uv.y)) }
             else { log("click body hit=\(hitsModel(probePoint))") }
+        }
+        // 2.0 首次設定開著：屏幕上的點擊都歸它（Setup/SetupFlow.swift）；權限說明卡蓋在上面時讓給卡片
+        if SetupFlow.active, !PermissionPrimer.visible, !showingVideo, let uv = screenUV(local(event)) {
+            drag = .none; SetupFlow.press(x: uv.x * 1024, y: uv.y * 1024); face.forceDirty = true; return
         }
         // 权限说明卡在屏幕上时，屏幕上的点击都归卡片（按钮：继续／以后／打开系统设置）
         if PermissionPrimer.visible, !showingVideo {
@@ -1476,15 +1538,15 @@ final class PetView: NSView {
             return
         }
         if inResizeCorner(p) {
-            drag = .resize; winStart = window?.frame ?? .zero; mouseStart = NSEvent.mouseLocation; return
+            drag = .resize; winStart = window?.frame ?? .zero; mouseStart = pointerScreenLocation; return
         }
         // 系統三指拖動合成的滑鼠拖拽：觸控板上真的有三指時，整個桌寵都是搬視窗（直播屏幕也一樣）。
         // 拿不到觸控幀（私有框架不可用）就退回舊判斷：開了三指拖動就把拖拽當搬視窗。
-        let threeFingers = Self.systemThreeFingerDrag
+        let threeFingers = !TouchInput.synthesizing && Self.systemThreeFingerDrag   // 手指在螢幕上拖不是觸控板的三指拖
             && (TrackpadPinch.shared.available ? TrackpadPinch.shared.fingerCount >= 3 : true)
         if threeFingers {
             if !showingVideo, hitsModel(p) { pressTarget = 0.975 }
-            drag = .move; winStart = window?.frame ?? .zero; mouseStart = NSEvent.mouseLocation
+            drag = .move; winStart = window?.frame ?? .zero; mouseStart = pointerScreenLocation
             rotateMoved = false
             appendDiag("gesture.log", "three-finger drag (system) start")
             return
@@ -1508,21 +1570,30 @@ final class PetView: NSView {
         let now = CACurrentMediaTime()
         mood.activity(now: now, hour: Calendar.current.component(.hour, from: Date()))
         let onStand = hitsStand(p)
-        if hitsModel(p) { pressTarget = 0.975; if !onStand, mood.poke(now: now) { shake(now) } }
+        pendingPoke = false
+        if hitsModel(p) {
+            pressTarget = 0.975
+            if !onStand {
+                if BodyPoke.atDown(touch: TouchInput.synthesizing) { if mood.poke(now: now) { shake(now) } }
+                else { pendingPoke = true }   // 觸控：可能是捏合的第一根手指（第二根晚於 70 ms 才到），放手確認是點按才戳
+            }
+        }
         dragVel = 0; lastDragT = event.timestamp
         if event.clickCount == 2, hitsModel(p) { resetOrientation(); drag = .none; return }
         // 拖底座＝搬窗口（不用按 ⌘）；螢幕和鉸鏈以上照舊轉身體
         if onStand {
             touring = false
-            drag = .move; winStart = window?.frame ?? .zero; mouseStart = NSEvent.mouseLocation
+            drag = .move; winStart = window?.frame ?? .zero; mouseStart = pointerScreenLocation
             rotateMoved = false
             appendDiag("gesture.log", "stand drag start")
             return
         }
         drag = .rotate; last = p; rotateMoved = false; rotateTravel = 0; rotLock.reset(); touring = false
+        _ = touchArmsScreenDrag(at: p)   // 觸控、而且按在螢幕上：這一下的拖歸外殼（捲動），點按照舊（拍板 4）
     }
 
     override func mouseDragged(with event: NSEvent) {
+        if TouchInput.dropsSystemEvent() { return }
         lastNear = CACurrentMediaTime()
         hotUntil = CACurrentMediaTime() + 0.4
         if shellMouseDragged(event, uv: screenUV(local(event))) { return }   // 2.0
@@ -1530,12 +1601,13 @@ final class PetView: NSView {
         let p = local(event)
         switch drag {
         case .resize:
-            let now = NSEvent.mouseLocation
+            let now = pointerScreenLocation
             let w = max(Pet.minWidth, min(Pet.maxWidth, winStart.width + (now.x - mouseStart.x)))
             let h = w / Pet.aspect
             window?.setFrame(NSRect(x: winStart.minX, y: winStart.maxY - h, width: w, height: h), display: true)
             updateFaceScale()
         case .rotate:
+            if touchScreenDragged(event) { return }   // 觸控在螢幕上拖：捲動，不轉身體
             let dx = p.x - last.x, dy = p.y - last.y; last = p
             rotateTravel += abs(dx) + abs(dy)
             // 单轴锁：起手判主轴（左右＝偏航、上下＝俯仰），被锁的轴不动
@@ -1551,7 +1623,7 @@ final class PetView: NSView {
         case .touch:
             if let (x, y) = videoPoint(p) { onTouch?(x, y, true) }
         case .move:
-            let now = NSEvent.mouseLocation
+            let now = pointerScreenLocation
             let dx = now.x - mouseStart.x, dy = now.y - mouseStart.y
             if abs(dx) > 2 || abs(dy) > 2 { rotateMoved = true }
             guard let win = window else { return }
@@ -1562,7 +1634,19 @@ final class PetView: NSView {
     }
 
     override func mouseUp(with event: NSEvent) {
+        if TouchInput.dropsSystemEvent() { return }
         lastDragEndAt = CACurrentMediaTime()
+        if pendingPoke {   // 觸控在機身上的點按：放手才戳一下（滑鼠在按下時已經算過）
+            pendingPoke = false
+            let travel = hypot(TouchInput.screenPoint.x - TouchInput.downScreen.x, TouchInput.screenPoint.y - TouchInput.downScreen.y)
+            if BodyPoke.atRelease(pending: true, rotating: drag == .rotate, travel: travel), mood.poke(now: lastDragEndAt) { shake(lastDragEndAt) }
+        }
+        if SetupFlow.tracking {   // 2.0 首次設定（先於外殼：設定開著時外殼不收點按）
+            let uv = screenUV(local(event))
+            SetupFlow.release(x: uv.map { $0.x * 1024 }, y: uv.map { $0.y * 1024 })
+            drag = .none; face.forceDirty = true
+            return
+        }
         if shellMouseUp(event, uv: screenUV(local(event))) { drag = .none; pressTarget = 1; return }   // 2.0
         if PermissionPrimer.tracking {
             let uv = screenUV(local(event))
@@ -1577,6 +1661,7 @@ final class PetView: NSView {
             return
         }
         if overviewMouseUp(event, uv: screenUV(local(event))) { drag = .none; pressTarget = 1; system6Pending = false; return }
+        if drag == .rotate, touchScreenReleased(event) { drag = .none; pressTarget = 1; system6Pending = false; return }   // 觸控：螢幕上捲過了（沒捲＝點按，照下面）
         let p = local(event)
         switch drag {
         case .resize:
@@ -1621,7 +1706,7 @@ final class PetView: NSView {
             mood.show(.happy, for: 1.2, now: CACurrentMediaTime())   // 放下：笑一下
             // 拖機身是轉身體；一路拖到窗外（或拖很遠）兩次，多半其實想搬走它：提示一次怎麼搬
             if MoveHint.shouldOffer, let w = window,
-               moveHint.rotateDragEnded(now: CACurrentMediaTime(), leftWindow: !w.frame.contains(NSEvent.mouseLocation),
+               moveHint.rotateDragEnded(now: CACurrentMediaTime(), leftWindow: !w.frame.contains(pointerScreenLocation),
                                         travel: Double(rotateTravel), width: Double(w.frame.width)) {
                 MoveHint.show(near: w)
                 appendDiag("gesture.log", "move hint shown")
@@ -1851,6 +1936,7 @@ final class PetView: NSView {
     }
 
     override func magnify(with e: NSEvent) {
+        if TouchInput.dropsSystemEvent() { return }   // 觸控的捏合走 NSMagnificationGestureRecognizer（Shell/TouchInput.swift）
         endPoster()
         appendDiag("gesture.log", "local magnify mag=\(e.magnification) phase=\(e.phase.rawValue)")
         // 全局接触帧（TrackpadPinch）已经处理同一次捏合时别双倍缩放
@@ -1870,7 +1956,13 @@ final class PetView: NSView {
         // 结果缩放时身体也跟着转（2026-10-22）。转身体只用双指滑动／拖动。
         return
     }
-    override func smartMagnify(with e: NSEvent) { setApart(!isApart) }
+    /// 智慧缩放（触控板两指轻点两下）＝拆开／组回；Magic Mouse 的「单指轻点两下」也会送这个事件、很容易误触——
+    /// 拿得到接触帧时只认触控板上正好两指（2026-11-06 使用者：鼠标也别误触）
+    override func smartMagnify(with e: NSEvent) {
+        if TouchInput.dropsSystemEvent() { return }
+        if TrackpadPinch.shared.available, !TrackpadPinch.shared.recentTwoFingers { return }
+        setApart(!isApart)
+    }
     // 三指手势统一给「拖移窗口」（见 touchesBegan/Moved）。轻扫不再占用三指：
     // 转一圈用菜单「外观 › 自动环绕」，回正双击，拆开双指轻点两下。
 
@@ -1903,9 +1995,21 @@ final class PetView: NSView {
     override func touchesEnded(with event: NSEvent) { threeFinger = nil; pressTarget = 1 }
     override func touchesCancelled(with event: NSEvent) { threeFinger = nil; pressTarget = 1 }
     override func scrollWheel(with e: NSEvent) {
+        if TouchInput.dropsSystemScroll(e) { return }   // 系統把觸控的拖模擬成捲動：觸控那邊已經處理（手指按著時開始的那段連慣性一起丟）
         endPoster()
         lastNear = CACurrentMediaTime()
         hotUntil = CACurrentMediaTime() + 0.4
+        // 双指捏合／扭转与双指滑动分开（2026-11-06 使用者）：触控板上两指还没判定、或判成捏合／扭转时，
+        // 这些滚动事件谁都不给——以前只挡了转身体，主画面翻页、App 捲动、錶面换页、总览会在捏合时跟着动。
+        // 判成捏合的那一下，放手后的惯性也不给。
+        if e.hasPreciseScrollingDeltas, TrackpadPinch.shared.available {
+            if e.phase == .began { scrollWasPinch = false }
+            if e.momentumPhase.isEmpty, TrackpadPinch.shared.holdScroll {
+                if TrackpadPinch.shared.twoFingerKind != .undecided { scrollWasPinch = true }
+                return
+            }
+            if !e.momentumPhase.isEmpty, scrollWasPinch { return }
+        }
         if overviewScroll(e) { return }   // 总览里滚轮／触控板挑錶面，不转身体
         if shellScroll(e, uv: screenUV(local(e))) { return }   // 2.0: 錶面頭尾滾到主畫面、App 裡捲動
         // 「正在播放」胶囊上滚＝上一首／下一首；只在胶囊活跃时占用这条带，其余照旧（转身体／换錶面）
@@ -1973,6 +2077,8 @@ final class PetView: NSView {
         if e.phase == .began { log("gesture scroll-rotate") }
     }
 
+    /// 这一下双指是捏合／扭转（惯性滚动跟着丢）
+    private var scrollWasPinch = false
     /// 双指滑动的仲裁状态（见 GestureArbiter.swift）
     private(set) var scrollArb = ScrollArbiter()
     /// 起手点归谁：直播屏幕＝CarPlay；机身（逐零件碰撞盒）＝转身体；其余透明区＝不处理。
@@ -2040,13 +2146,14 @@ final class PetView: NSView {
     // 右键菜单：三组结构——状态动作｜宠物本身（表盘·计时器·拆装·外观）｜收尾（偏好·关于·结束）。
     // 长得快的放外面，难得碰的收子菜单；标题动态反映当前状态；菜单每次打开都重建。
     override func rightMouseDown(with event: NSEvent) {
+        if TouchInput.dropsSystemEvent() { return }   // 觸控的按住在機身上由 TouchInput 叫出同一份選單
         endPoster()
         let menu = buildContextMenu()
         var at = convert(event.locationInWindow, from: nil)
         // 菜单只在当前屏幕内展开：贴着屏幕底边时 macOS 会把后面几项折叠起来。
         // 下方放不下、上方放得下就向上展开（Mac 菜单的通常行为）。
         if let screen = window?.screen {
-            let mouse = NSEvent.mouseLocation
+            let mouse = TouchInput.synthesizing ? (window?.convertPoint(toScreen: event.locationInWindow) ?? NSEvent.mouseLocation) : NSEvent.mouseLocation
             let below = mouse.y - screen.visibleFrame.minY
             let above = screen.visibleFrame.maxY - mouse.y
             let h = menu.size.height
@@ -2088,7 +2195,7 @@ final class PetView: NSView {
     /// CarPlay 那一項：按真實狀態給動詞（直播中＝退出；已暫停＝繼續；重連中＝重新連接；連線中＝取消）。
     /// 右鍵選單與選單列共用這一份，兩處永遠一致
     var carPlayAction: (title: String, action: Selector, hint: String?, symbol: String) {
-        if showingVideo { return (L("menu.exitCarPlay", "退出 CarPlay"), #selector(menuToggleLive), L("menu.hint.liveToggle", "重按或空格"), "car.fill") }
+        if showingVideo { return (L("menu.exitCarPlay", "退出 CarPlay"), #selector(menuToggleLive), L("menu.hint.liveToggle", "重按或空格"), "car.fill") }   // 三個都落在主畫面（carPlayToHome）
         switch face.status {
         case .connecting: return (L("menu.cancelConnect", "取消连接"), #selector(menuCancelConnect), nil, "xmark.circle")
         case .pausedResume, .paused: return (L("menu.resumeCarPlay", "继续 CarPlay"), #selector(menuToggleLive), L("menu.hint.space", "空格"), "play.fill")
@@ -2198,6 +2305,11 @@ final class PetView: NSView {
 
         menu.addItem(.separator())
 
+        if face.style == .photos, !AirDropShare.items(photoFile: face.photos.currentFile).isEmpty || !SharedAlbums.selected.isEmpty {
+            let item = menuItem(SelfShare.photoMenuTitle, #selector(menuPhotoAirDrop), symbol: SelfShare.symbol)
+            if SelfShare.useMessages, #available(macOS 14.4, *) { item.subtitle = SelfShare.note }   // CarPlay 連著時改走訊息傳給自己，選單項下一行說明
+            menu.addItem(item)
+        }
         menu.addItem(menuItem(L("menu.clioTalk", "问 ClioTalk"), #selector(menuClioTalk), hint: L("menu.hint.f5", "F5"), symbol: "bubble.left.and.text.bubble.right"))   // 2.0
         menu.addItem(menuItem(L("menu.settings", "设置…"), #selector(menuSettings), key: ",", mods: .command, symbol: "gearshape"))
         // 2.0: 「关于 HomePlay」搬到菜单栏的 App 菜单第一项（installMainMenu），右键菜单不再放
@@ -2270,6 +2382,11 @@ final class PetView: NSView {
             }
         } catch { log("login item 失败：\(error.localizedDescription)") }
         log("login item \(svc.status == .enabled ? "on" : "off")")
+    }
+    /// 照片錶面正在看的那張用 AirDrop 傳出去：共享相簿的畫面送圖片，資料夾的送原檔
+    @objc private func menuPhotoAirDrop() {
+        let shared = SharedAlbums.selected.isEmpty ? nil : SharedAlbumFeed.shared.faceImage { }
+        SelfShare.share(shared.map { .image($0) } ?? face.photos.currentFile.map { .photoFile($0) })   // CarPlay 連著時改走訊息傳給自己
     }
     @objc private func menuPhotoFolder() {
         let panel = NSOpenPanel()
@@ -2346,6 +2463,7 @@ final class PetView: NSView {
     }
     @objc private func menuShowHints() { Onboarding.armed = false; Onboarding.active = false; face.armOnboarding() }
     @objc func menuFaceOverview() {
+        surfaceFromCarPlay("menu face overview")
         guard !showingVideo, !face.inOverview else { return }
         face.beginOverview()
         mood.show(.wink, for: 0.5, now: CACurrentMediaTime())
@@ -2357,8 +2475,14 @@ final class PetView: NSView {
         endPoster()
         defer { forceStage = event.stage }
         // 直播時點在屏幕上會是 .touch；這正是要退出的時候，不能把重按擋掉。
-        // 同一個手勢進出：沒畫面就進 CarPlay，有畫面就退出（空格仍是備用）。
+        // 同一個手勢進出：沒畫面就進 CarPlay，有畫面就退出到主畫面（同空白鍵、👀）。
         guard event.stage == 2, forceStage < 2, !face.inOverview, !FaceOverview.swallowUp else { return }
+        // 外殼的手勢拖到一半（膠囊下拉、換頁、控制中心、拖圖示）不進出 CarPlay；按著還沒動＝先把這一下安靜收掉（放手不再當點按）
+        switch ShellInput.forcePress(dragging: shellGestureDragging, pressing: ShellInput.down != nil || SBInputState.press != nil) {
+        case .ignore: log("force press ignored: shell gesture in progress"); return
+        case .cancelPressThenEnter: shellCancelGesture()
+        case .enter: break
+        }
         onForceEnter?()
     }
 
@@ -2513,8 +2637,12 @@ final class PetView: NSView {
         mood.show(.happy, for: 1.0, now: CACurrentMediaTime())
         log("menu finish \(raw)")
     }
+    /// 結果在桌寵畫面上的動作：CarPlay 在前面時先把桌寵叫出來（AppDelegate.surfacePet）
+    func surfaceFromCarPlay(_ reason: String) { (NSApp.delegate as? AppDelegate)?.surfacePet(reason) }
+
     @objc private func menuStyle(_ sender: NSMenuItem) {
         guard let raw = sender.representedObject as? String, let st = FaceStyle(rawValue: raw) else { return }
+        surfaceFromCarPlay("menu face style")
         setFaceStyle(st)
     }
     @objc private func menuTimer(_ sender: NSMenuItem) {
@@ -2553,6 +2681,8 @@ final class PetView: NSView {
         endPoster()
         if overviewKeyDown(event) { return }   // 总览里 Esc 只收起、Return 套用、← → 挑
         if face.sayingHello, [49, 36, 53].contains(event.keyCode), face.skipHello(CACurrentMediaTime()) { return }   // 2.0 hello：空格、Return、Esc 跳过
+        if SetupFlow.active, !PermissionPrimer.active, !event.modifierFlags.contains(.command), [36, 76].contains(event.keyCode),
+           SetupFlow.key(event.keyCode) { face.forceDirty = true; return }   // 2.0 首次設定：Return＝主要按鈕
         if shellKeyDown(event) { return }      // 2.0: Esc／↓ 回上一層、↑ 主畫面、C 控制中心
         if event.modifierFlags.contains(.command) {
             switch event.keyCode {
@@ -2565,15 +2695,22 @@ final class PetView: NSView {
             }
             return
         }
+        // CarPlay 畫面＝車上旋鈕：方向鍵＝搖桿、Tab／⇧Tab＝轉動、Return＝選取（Esc＝返回在下面那串裡；空白鍵＝👀）
+        if showingVideo, !carVideo.active, event.keyCode != 53,
+           let k = CarPlayKnobKeys.command(keyCode: event.keyCode, shift: event.modifierFlags.contains(.shift)) {
+            if !event.isARepeat || CarPlayKnobKeys.repeats(k) { onCarPlayKnob?(k) }   // 按住方向鍵、Tab 照 macOS 鍵重複一直送；Return 不重複
+            return
+        }
         switch event.keyCode {
         // Esc 只做「取消」，不再退出 App（退出是 ⌘Q／菜单）：先收提示，直播中就退出直播
         case 53:
             if event.isARepeat { return }
             if PermissionPrimer.active { PermissionPrimer.dismiss() }
+            else if SetupFlow.active { _ = SetupFlow.key(53); face.forceDirty = true }   // 2.0 首次設定：Esc＝上一頁
             else if ClioTalkController.shared.isOpen { ClioTalkController.shared.close() }   // 2.0: 收起 ClioTalk
             else if face.onboardingActive { face.dismissOnboarding(); FaceOverview.pressToken += 1 }
-            else if showingVideo { onCarPlayBack?() }   // 像車機的 Back 鍵，不退出 CarPlay（切回桌寵＝空格／選單）
-        case 49: onSwitchSource?()                    // 空格
+            else if showingVideo { onCarPlayKnob?("back") }   // 像車機的 Back 鍵，不退出 CarPlay（回 HomeView＝空白鍵／👀 下拉／選單）
+        case 49: if !event.isARepeat { eyesKey() }    // 空白鍵＝👀 的鍵盤版（焦點框顯示時由 shellFocusKeyDown 先按下焦點）
         case 18: setView(yaw: 0, pitch: 0.12, label: "front")      // 1 正面
         case 19: setView(yaw: .pi / 2, pitch: 0.18, label: "side") // 2 侧面
         case 20: setView(yaw: .pi, pitch: 0.15, label: "back")     // 3 背面

@@ -204,10 +204,10 @@ final class RecipesApp: PetApp {
             let dx = slide.offset(now)
             g.translateBy(x: dx, y: 0)
             g.setShadow(offset: .zero, blur: 40, color: NSColor(white: 0, alpha: 0.18).cgColor)
-            g.addPath(continuousRoundedRect(rect, radius: dx == 0 ? HPComponents.screenRadius : 102)); g.setFillColor(backdrop.cgColor); g.fillPath()
+            g.addPath(continuousRoundedRect(rect, radius: HPComponents.screenRadius)); g.setFillColor(backdrop.cgColor); g.fillPath()   // 整頁卡＝螢幕大小：跟螢幕同一個圓角（inset 0），滑完也不跳
             g.restoreGState()
             g.saveGState(); g.translateBy(x: dx, y: 0)
-            g.addPath(continuousRoundedRect(rect, radius: 102)); g.clip()
+            g.addPath(continuousRoundedRect(rect, radius: HPComponents.screenRadius)); g.clip()
         }
         g.setFillColor(backdrop.cgColor); g.fill(rect)
         switch screen {
@@ -328,6 +328,14 @@ final class RecipesApp: PetApp {
         if !sub.isEmpty {
             let sf = HPComponents.sf(C.subtitleSize, weight: .regular)
             HPComponents.vibrantText(g, face, Face.clipped(sub, sf, w), font: sf, x: x, y: C.subtitleBaseline)
+        }
+        let sh = HPTokens.Media.shareButton   // 傳到手機：AirDrop
+        HPAX.note(g, sh, .button, SelfShare.title, value: SelfShare.useMessages ? SelfShare.note : nil, shape: .circle)   // CarPlay 連著時改走訊息傳給自己
+        HPComponents.mediaDim(g, sh)
+        HPGlass.container("recipe.cover") {
+            HPGlass.addCapsule(sh, interactive: true) { [weak face] c in
+                face?.drawSymbol(c, SelfShare.symbol, in: CGRect(x: sh.midX - 22, y: sh.midY - 22, width: 44, height: 44), color: .white, weight: .medium)
+            }
         }
         let b = Self.overviewButtons
         HPGlass.container("recipe.cover") {
@@ -657,6 +665,7 @@ final class RecipesApp: PetApp {
             return false
         case .overview:
             if HPComponents.hitMediaBack(p) { HPComponents.navigateBack(); return true }
+            if hit(HPTokens.Media.shareButton) { SelfShare.share(recipe.map { .recipe($0) }); return true }
             let b = Self.overviewButtons
             if hit(b[0]) { go(.ingredients, now: now, kind: .blurFade); return true }
             if hit(b[1]) { go(.step(0), now: now, kind: .slideFromRight); return true }

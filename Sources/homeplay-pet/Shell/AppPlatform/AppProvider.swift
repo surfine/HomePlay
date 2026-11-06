@@ -42,7 +42,7 @@ extension AppProvider {
 
 enum AppProviders {
     /// 登記處（順序＝主畫面與資料庫裡排在內建 App 之後的順序）
-    nonisolated(unsafe) static var all: [AppProvider] = [WebAppProvider.shared]
+    nonisolated(unsafe) static var all: [AppProvider] = [WebAppProvider.shared, PhoneAppProvider.shared]   // 2026-11-06：iPhone 的 CarPlay App（PhoneApps.swift）
 
     static func app(_ id: String) -> PetApp? {
         for p in all { if let a = p.app(id) { return a } }

@@ -51,6 +51,7 @@ extension PetView {
 
     /// 右鍵選單「從剪貼簿開啟食譜」
     @objc func menuRecipeFromClipboard() {
+        surfaceFromCarPlay("menu recipe")
         guard let u = RecipesApp.url(from: .general) else {
             if !showingVideo, !carVideo.active {
                 RecipesApp.shared.showError(L("recipe.notURL", "剪贴板里没有网址"), face: face)

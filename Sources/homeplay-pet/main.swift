@@ -14,7 +14,7 @@ import Accelerate
 //   .build/release/homeplay-pet --size 260                   # 初始宽度（点）
 //   .build/release/homeplay-pet --face happy --snapshot a.png  # 锁定一张脸存快照
 // 操作：拖＝转动；⌘拖＝移动窗口；双击＝拆开／组回（直播时双击屏幕算点按，双击身体才拆）；
-// 拖右下角＝缩放（锁比例）；空格＝脸／直播切换；Esc 或右键＝退出。
+// 拖右下角＝缩放（锁比例）；空格＝👀（CarPlay ⇄ 主屏幕）；CarPlay 上方向键／Tab／Return／Esc＝车上旋钮；右键＝菜单。
 // 触控板：捏合＝放大缩小；两指旋转＝转身体；两指滑＝转动／俯仰；两指轻点两下＝拆开／组回。
 // Magic Mouse：单指滑＝转动／俯仰；单指轻点两下＝拆开／组回。普通滚轮＝缩放。
 
@@ -148,6 +148,8 @@ if let i = CommandLine.arguments.firstIndex(of: "--glass-calibrate"), i + 1 < Co
     print("--glass-calibrate needs macOS 27"); exit(2)
 }
 
+if CommandLine.arguments.contains("--probe-desktop-widgets") { DesktopWidgetProbe.run() }   // SideShow 致敬：印出桌面小工具視窗就結束（Shell/DesktopWidgets.swift）
+if CommandLine.arguments.contains("--sideshow-serve-test") { SideShowServeTest.run() }   // SideShow：只聽 127.0.0.1、假內容、記憶體名冊，給 curl 驗（SideShow/SideShowSelfTest.swift）
 if CommandLine.arguments.contains("--selftest") {
     // 纯函数自检：方屏 uv → 画面坐标（留黑扣掉）
     func near(_ a: (Double, Double)?, _ b: (Double, Double)) -> Bool {
@@ -489,6 +491,19 @@ if CommandLine.arguments.contains("--selftest") {
         check(run([(0.40, 0.50), (0.40, 0.50)], [(0.55, 0.50), (0.535, 0.50)]) == .pinch, "两指：一指不动另一指靠近＝捏合")
         check(run([(0.40, 0.50), (0.40, 0.488)], [(0.55, 0.50), (0.55, 0.512)]) == .twist, "两指：扭转＝都不做")
         check(run([(0.40, 0.50), (0.403, 0.50)], [(0.55, 0.50), (0.553, 0.50)]) == .undecided, "两指：没走够 1.5 mm 先不判")
+        check(run([(0.40, 0.50), (0.396, 0.486)], [(0.55, 0.50), (0.556, 0.487)]) == .scroll, "两指：往下滑时手指略张开＝还是滑动（不误判成捏合）")   // l10n-ignore
+        // 一指不动、另一指移动（2.0 改 2 倍后的回归）：沿连线偏 5°／15°／40° 都是捏合；跟连线差很多（往上下走）是滑动
+        check(run([(0.40, 0.50), (0.40, 0.50)], [(0.55, 0.50), (0.535, 0.5013)]) == .pinch
+              && run([(0.40, 0.50), (0.40, 0.50)], [(0.55, 0.50), (0.5355, 0.504)]) == .pinch
+              && run([(0.40, 0.50), (0.4005, 0.50)], [(0.55, 0.50), (0.535, 0.50)]) == .pinch
+              && run([(0.40, 0.50), (0.40, 0.50)], [(0.55, 0.50), (0.5385, 0.4904)]) == .pinch
+              && run([(0.40, 0.50), (0.40, 0.50), (0.40, 0.50), (0.40, 0.50)], [(0.55, 0.50), (0.545, 0.50), (0.54, 0.50), (0.535, 0.50)]) == .pinch,
+              "两指：一指不动、另一指斜着靠近（偏 5°／15°／40°、慢慢捏）＝捏合")   // l10n-ignore
+        check(run([(0.40, 0.50), (0.40, 0.50)], [(0.55, 0.50), (0.552, 0.485)]) == .scroll
+              && run([(0.40, 0.50), (0.401, 0.499)], [(0.55, 0.50), (0.55, 0.514)]) == .scroll
+              && run([(0.40, 0.50), (0.398, 0.485)], [(0.55, 0.50), (0.555, 0.486)]) == .scroll
+              && run([(0.40, 0.50), (0.4, 0.47)], [(0.55, 0.50), (0.553, 0.471)]) == .scroll,
+              "两指：上下滑（一指先走、手指略张开）仍是滑动，不误判成捏合")   // l10n-ignore
         var c = TwoFingerClassifier()
         _ = c.feed(id0: 1, x0: 0.4, y0: 0.5, id1: 2, x1: 0.55, y1: 0.5)
         _ = c.feed(id0: 2, x0: 0.565, y0: 0.5, id1: 1, x1: 0.385, y1: 0.5)   // 数组里换位：按 id 配对
@@ -499,14 +514,20 @@ if CommandLine.arguments.contains("--selftest") {
     // 來電卡：接收器 JSON → 卡片狀態與按鍵；F5 按住說話吸收重複的按下／放開
     do {
         let ring = PhoneCallInfo.parse(#"{"incoming":true,"name":"Alice","number":"+491701234567","state":"ringing","type":"call","uuid":"uuid-1"}"#)
-        check(ring?.isIncomingRing == true && ring?.title == "Alice" && ring?.actions == [.decline, .answer], "来电：响铃给拒接＋接听")
+        check(ring?.isIncomingRing == true && ring?.title(hidden: false) == "Alice" && ring?.actions == [.decline, .answer], "来电：响铃给拒接＋接听")
         check(ring?.subtitle(carrier: "o2").contains("+491701234567") == true, "来电：有名字时小字带号码")
         let active = PhoneCallInfo.parse(#"{"state":"active","type":"call","number":"110"}"#)
-        check(active?.actions == [.hangUp] && active?.title == "110" && active?.isIncomingRing == false, "来电：通话中只给挂断")
+        check(active?.actions == [.hangUp] && active?.title(hidden: false) == "110" && active?.isIncomingRing == false, "来电：通话中只给挂断")
         let idle = PhoneCallInfo.parse(#"{"state":"idle","type":"call"}"#)
         check(idle?.showsCard == false && idle?.actions.isEmpty == true, "来电：idle 收卡")
         check(PhoneCallInfo.parse(#"{"type":"nowplaying"}"#) == nil, "来电：别的消息不解析")
-        check(PhoneCallInfo(state: .ringing).title.isEmpty == false, "来电：没名字没号码也有标题")
+        check(PhoneCallInfo(state: .ringing).title(hidden: false).isEmpty == false, "来电：没名字没号码也有标题")
+        // 待決項拍板（2026-11-07）：訪客時只寫「來電」，不露名字、號碼、電信商；接聽／拒接照舊
+        if let r = ring {
+            let t = r.title(hidden: true), sub = r.subtitle(carrier: "o2", hidden: true)
+            check(t == L("call.state.ringing", "来电") && !t.contains("Alice") && sub.isEmpty && r.actions == [.decline, .answer],
+                  "来电：访客只显示「来电」，名字号码电信商都不露，接听拒接照旧")   // l10n-ignore
+        }
         check(CellularInfo.parse(#"{"carrier":"o2","signal":4,"type":"cellular"}"#) == CellularInfo(carrier: "o2", signal: 4), "电信商与讯号")
         var k = SiriHoldKey()
         check(k.press(now: 0) && !k.press(now: 0.01), "F5：重复的按下只算一次")
@@ -637,6 +658,10 @@ if CommandLine.arguments.contains("--pairing") { CarPlayOverlayState.needsPairin
 if CommandLine.arguments.contains("--pairing-success") { CarPlayOverlayState.pairingSucceededAt = CACurrentMediaTime(); CarPlayOverlayState.forced = true }   // 快照用：刚配对成功
 if let s = arg("--pair-host") { CarPlayOverlayState.pairingHost = s }   // 快照用：蓝牙配对卡上的 Mac 名称
 if CommandLine.arguments.contains("--onboarding") { Onboarding.forced = true }   // 快照用：强制显示第一次的操作提示
+if let s = arg("--demo-onboarding") {   // 2.0 快照用：首次設定的某一頁（假資料，不讀也不寫偏好；Setup/SetupFlow.swift）
+    guard let p = SetupPage(rawValue: s) else { log("--demo-onboarding 只认：welcome language permissions carplay look done"); exit(2) }
+    SetupFlow.demo = p; SetupFlow.active = true; SetupFlow.page = p; SetupFlow.refreshPermissions(force: true)
+}
 if let s = arg("--event") { delegate.eventTest = s; CalendarSource.disabled = true }   // 快照用：固定一个「下一个行程」
 if CommandLine.arguments.contains("--banner") { delegate.showBanner = true }   // 快照用：显示「时间到了」横幅
 if CommandLine.arguments.contains("--messages-probe") { MessagesDemo.probe() }

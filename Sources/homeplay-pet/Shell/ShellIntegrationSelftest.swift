@@ -56,7 +56,22 @@ enum ShellIntegrationSelftest {
         PersonalGate.hint = "k"
         check(PersonalGate.avatarPerson(I(), people: people, owner: owner)?.id == "k"
               && PersonalGate.avatarPerson(I(recognitionActive: true, viewer: .owner("o")), people: people, owner: owner)?.id == "o", "頭像：換人提示只在沒開認人時顯示")   // l10n-ignore：selftest 斷言
-        check(PersonalGate.personalApps == ["calendar", "reminders", "messages", "facetime", "findmy"], "門：鎖住日曆、提醒事項、訊息、FaceTime、尋找")
+        check(PersonalGate.personalApps == ["calendar", "reminders", "messages", "facetime", "findmy", "contacts", "carplay"], "門：鎖住日曆、提醒事項、訊息、FaceTime、尋找、通訊錄、CarPlay")
+        // 2026-11-07 六項拍板：CarPlay 與資源庫「iPhone」區的 App 跟訊息同級
+        let phone = PhoneCarPlayApp.idPrefix + "com.autonavi.amap"
+        for (name, i) in [("訪客模式", I(guestMode: true)), ("認出家人", I(recognitionActive: true, viewer: .known("k"))), ("認不出", I(recognitionActive: true, viewer: .guest)), ("換成家人", I(hintIsOwner: false))] {   // l10n-ignore
+            check(PersonalGate.locks(CarPlayApp.id, i) && PersonalGate.locks(phone, i) && ControlCenter.locked(.carPlay, i), "門：\(name)＝CarPlay、iPhone App、控制中心的 CarPlay 方塊都鎖（需要主人）")   // l10n-ignore
+        }
+        check(!PersonalGate.locks(CarPlayApp.id, I()) && !PersonalGate.locks(phone, I()) && !ControlCenter.locked(.carPlay, I())
+              && !PersonalGate.locks(CarPlayApp.id, I(recognitionActive: true, viewer: .owner("o"))), "門：主人在用＝CarPlay 與 iPhone App 照常開")   // l10n-ignore
+        check(PersonalGate.locks(CarPlayApp.id, I(remoteGuest: true)) && PersonalGate.locks(phone, I(remoteGuest: true)) && !PersonalGate.locks("timers", I(remoteGuest: true)),
+              "門：遠端訪客規則照舊（允許清單外的 CarPlay、iPhone App 本來就鎖，計時器照開）")   // l10n-ignore
+        // ClioTalk「打開 CarPlay」：訪客時不開、不列名字（入口：Siri／ClioTalk 開 App）
+        let savedGuest = Shell.guestMode
+        Shell.guestMode = true
+        let clio = MainActor.assumeIsolated { ClioAppTools.open("CarPlay") }
+        Shell.guestMode = savedGuest
+        check(clio.isError && clio.content.contains("personal"), "門：訪客叫 ClioTalk 打開 CarPlay＝不開（\(clio.content.prefix(60))）")   // l10n-ignore
         check(ClioToolGroup.allCases.filter(\.isPersonal) == [.calendar, .reminders, .messages, .home, .calls], "門：ClioTalk 的個人工具是日曆、提醒事項、訊息、家庭、電話")
 
         // ClioTalk 的設定快照：訪客時不送個人工具

@@ -5,7 +5,9 @@
 // - 錶面上往上滑（螢幕底緣往上拖、↑）也到主畫面；主畫面再往上是「全部 App」；
 // - 點 App 進去；Esc／↓／左上角關閉鈕／底緣往上拖都是回上一層；
 // - 控制中心、ClioTalk 是蓋在任何畫面上的一層，先收掉它們，才輪到退回上一層；
-// - 一段時間沒人靠近（idle）或 CarPlay 畫面進來：全部收回錶面。
+// - 一段時間沒人靠近（idle）：全部收回錶面；
+// - 👀 膠囊往下拉住停一下＝App 切換器（一個畫面，返回＝主畫面；Shell/AppSwitcher.swift）；
+// - CarPlay 是一個 App（2026-11-06）：CarPlay 畫面在前面＝CarPlay App 在前面，回主畫面時會話留在背景。
 
 import Foundation
 
@@ -13,6 +15,7 @@ enum ShellScreen: Equatable {
     case face
     case home
     case library            // 全部 App（主畫面再往上滑）
+    case switcher           // App 切換器（膠囊往下拉住停一下）
     case app(String)
 
     var coversFace: Bool { self != .face }
@@ -34,9 +37,13 @@ struct ShellNav: Equatable {
         case openControlCenter
         case toggleControlCenter
         case openClioTalk
+        case openSwitcher           // 膠囊往下拉住停一下
         case idle                   // 沒人靠近太久
-        case carPlay                // CarPlay 畫面進來
+        case carPlay                // CarPlay 畫面進來（＝CarPlay App 到前面）
     }
+
+    /// 離開 CarPlay 的起點（carPlayToHome）：CarPlay App 在前面、返回＝主畫面——👀 下拉、空白鍵、選單「退出 CarPlay」、重按同一個終點
+    static let carPlayExit = ShellNav(screen: .app(CarPlayApp.id), overlay: .none, appReturn: .home)
 
     /// handled＝這個事件被外殼吃掉（呼叫端不要再做原本的事）；face＝要換到第幾個錶面（nil 不換）
     struct Result: Equatable {
@@ -50,10 +57,17 @@ struct ShellNav: Equatable {
     mutating func handle(_ e: Event, faceIndex: Int, faceCount: Int) -> Result {
         let last = max(0, faceCount - 1)
         switch e {
-        case .idle, .carPlay:
+        case .idle:
             let changed = overlay != .none || screen != .face
             overlay = .none; screen = .face
             return Result(handled: changed, face: nil)
+        case .carPlay:
+            let want = ShellScreen.app(CarPlayApp.id)
+            let changed = overlay != .none || screen != want
+            overlay = .none; screen = want; appReturn = .home
+            return Result(handled: changed, face: nil)
+        case .openSwitcher:
+            overlay = .none; screen = .switcher; return .done
         case .openControlCenter:
             overlay = .controlCenter; return .done
         case .toggleControlCenter:
@@ -61,13 +75,13 @@ struct ShellNav: Equatable {
         case .openClioTalk:
             overlay = .clioTalk; return .done
         case .openApp(let id):
-            if screen == .home || screen == .library { appReturn = screen } else if case .app = screen {} else { appReturn = .home }
+            if screen == .home || screen == .library { appReturn = screen } else if case .app = screen {} else { appReturn = .home }   // 切換器、錶面開的：回主畫面
             overlay = .none; screen = .app(id); return .done
         case .back:
             if overlay != .none { overlay = .none; return .done }
             switch screen {
             case .app: screen = appReturn; return .done
-            case .library: screen = .home; return .done
+            case .library, .switcher: screen = .home; return .done
             case .home: screen = .face; return .done
             case .face: return .ignored            // 錶面上的 Esc 照舊（收提示、退出直播）
             }
@@ -77,7 +91,7 @@ struct ShellNav: Equatable {
             switch screen {
             case .face: screen = .home; return .done
             case .home: screen = .library; return .done
-            case .library, .app: return .done
+            case .library, .app, .switcher: return .done
             }
         case .page(let d):
             guard d != 0 else { return .ignored }
@@ -90,7 +104,7 @@ struct ShellNav: Equatable {
             case .home:
                 screen = .face
                 return Result(handled: true, face: d > 0 ? 0 : last)
-            case .library, .app:
+            case .library, .app, .switcher:
                 return .done
             }
         }
@@ -169,7 +183,71 @@ struct TimerBook: Equatable {
 // MARK: - 自檢（main.swift 的 --selftest 呼叫）
 
 enum ShellSelfTest {
+    /// 輸入與導覽的防回歸（2026-11-07 審查）：重播後不殘留換頁、取消走各自的收尾、重按不打斷手勢、切換器沒有左緣返回
+    static func inputGuards(_ check: (Bool, String) -> Void) {
+        typealias S = ShellInput
+        // 膠囊上斜拖交回轉身體之後，下一下（控制中心、CarPlay）不能繼承那次的換頁
+        let saved = (FacePaging.drag, S.replayed, S.claimed)
+        FacePaging.drag = FacePaging.Drag(at: .zero, uv: CGPoint(x: 0.5, y: 0.05), fromStyle: FaceStyle.lineup.first ?? .island, fromNav: ShellNav())
+        S.replayed = true; S.claimed = true
+        check(S.beginPress() && !S.replayed && !S.claimed && S.down == nil,
+              "外殼：新的一下開始時清掉上一下的重播與接住，還掛著的換頁要先收（控制中心橫拖不換錶面、CarPlay 放手送得到）")   // l10n-ignore
+        (FacePaging.drag, S.replayed, S.claimed) = saved
+        // 取消（兩指接手、系統收走觸控）：每一種拖動走自己的收尾
+        check(S.cancelSteps(kind: .indicator, claimed: true, indicatorPulling: true, facePaging: false, sbPressing: false, ccDragging: false) == [.indicator]
+              && S.cancelSteps(kind: nil, claimed: false, indicatorPulling: false, facePaging: true, sbPressing: false, ccDragging: false) == [.facePage]
+              && S.cancelSteps(kind: nil, claimed: false, indicatorPulling: false, facePaging: false, sbPressing: true, ccDragging: false) == [.springBoard]
+              && S.cancelSteps(kind: .cc(slider: nil), claimed: false, indicatorPulling: false, facePaging: false, sbPressing: false, ccDragging: false) == [.controlCenter]
+              && S.cancelSteps(kind: .edgeTop(cc: true), claimed: true, indicatorPulling: false, facePaging: false, sbPressing: false, ccDragging: true) == [.controlCenter]
+              && S.cancelSteps(kind: .edgeTop(cc: true), claimed: false, indicatorPulling: false, facePaging: false, sbPressing: false, ccDragging: false).isEmpty
+              && S.cancelSteps(kind: .switcher, claimed: true, indicatorPulling: false, facePaging: false, sbPressing: false, ccDragging: false) == [.switcher]
+              && S.cancelSteps(kind: .tap, claimed: false, indicatorPulling: false, facePaging: false, sbPressing: false, ccDragging: false).isEmpty,
+              "外殼：手勢被取消時膠囊彈回、錶面退回、主畫面回最近一頁、控制中心照落點收、切換器放回，點按不當點按")   // l10n-ignore
+        // 重按：拖到一半不進出 CarPlay；按著沒動＝先收掉這一下（放手不再點到東西）
+        check(S.forcePress(dragging: true, pressing: true) == .ignore && S.forcePress(dragging: false, pressing: true) == .cancelPressThenEnter
+              && S.forcePress(dragging: false, pressing: false) == .enter,
+              "外殼：拖曳中重按不在手勢中間進出 CarPlay；按著沒動的那一下先收掉再進出")   // l10n-ignore
+        // 手勢總表：切換器上沒有左緣返回（同 iOS）；App 上左緣右滑＝返回、系統關掉觸控滑動切換頁面時不做
+        let edge = CGPoint(x: 0.03, y: 0.5)
+        check(S.kind(owner: .shell, screen: .switcher, uv: edge, backAllowed: true) == .switcher
+              && S.kind(owner: .shell, screen: .app("timers"), uv: edge, backAllowed: true) == .edgeLeft
+              && S.kind(owner: .shell, screen: .app("timers"), uv: edge, backAllowed: false) == .tap
+              && S.kind(owner: .indicator, screen: .switcher, uv: CGPoint(x: 0.5, y: 0.1), backAllowed: true) == .indicator
+              && S.kind(owner: .shell, screen: .face, uv: CGPoint(x: 0.5, y: 0.5), backAllowed: true) == nil,
+              "外殼：切換器上沒有左緣返回（整面歸切換器），App 上左緣右滑＝返回；膠囊在切換器上照舊")   // l10n-ignore
+        // 2026-11-07 六項拍板：錶面左緣右滑＝一般換錶面（錶面是最上層，沒有返回）——左緣起手跟中間起手歸同一條路
+        check(S.kind(owner: .shell, screen: .face, uv: edge, backAllowed: true) == S.kind(owner: .shell, screen: .face, uv: CGPoint(x: 0.5, y: 0.5), backAllowed: true)
+              && S.kind(owner: .shell, screen: .face, uv: edge, backAllowed: true) == nil && S.kind(owner: .shell, screen: .home, uv: edge, backAllowed: true) == .edgeLeft,
+              "六項·錶面左緣：不再當返回接住，跟中間起手一樣交給錶面換頁；主畫面的左緣照舊")   // l10n-ignore
+        // 主畫面第一頁往右翻過頭＝回錶面：跟換頁同一套投射判定（四捨五入到 −1 頁），不到就彈回；別頁、資源庫、編輯模式不算
+        check(SB.leavesToFace(fromPage: 0, projected: -0.6, screen: .home, editing: false) && !SB.leavesToFace(fromPage: 0, projected: -0.4, screen: .home, editing: false)
+              && !SB.leavesToFace(fromPage: 1, projected: -0.6, screen: .home, editing: false) && !SB.leavesToFace(fromPage: 0, projected: -0.9, screen: .library, editing: false)
+              && !SB.leavesToFace(fromPage: 0, projected: -0.9, screen: .home, editing: true),
+              "六項·主畫面第一頁往右：過半頁（含甩）回錶面、不到彈回；資源庫與編輯模式不受影響")   // l10n-ignore
+        // 鍵盤模型：CarPlay 畫面＝車上旋鈕
+        typealias K = CarPlayKnobKeys
+        check(K.command(keyCode: 123, shift: false) == "left" && K.command(keyCode: 124, shift: false) == "right"
+              && K.command(keyCode: 126, shift: false) == "up" && K.command(keyCode: 125, shift: false) == "down"
+              && K.command(keyCode: 48, shift: false) == "cw" && K.command(keyCode: 48, shift: true) == "ccw"
+              && K.command(keyCode: 36, shift: false) == "select" && K.command(keyCode: 76, shift: false) == "select" && K.command(keyCode: 53, shift: false) == "back"
+              && K.command(keyCode: 49, shift: false) == nil && K.command(keyCode: 8, shift: false) == nil,
+              "六項·鍵盤：CarPlay 上方向鍵＝搖桿、Tab／⇧Tab＝轉動、Return＝選取、Esc＝返回；空白鍵不是旋鈕（＝👀）")   // l10n-ignore
+        check(["left", "right", "up", "down", "cw", "ccw"].allSatisfy(K.repeats) && !K.repeats("select") && !K.repeats("back"),
+              "六項·鍵盤：按住方向鍵、Tab 照鍵重複一直送；選取、返回只送一次")   // l10n-ignore
+        // 待決項拍板（2026-11-07）
+        var exit = ShellNav.carPlayExit
+        check(exit.handle(.back, faceIndex: 0, faceCount: 10).handled && exit == ShellNav(screen: .home, overlay: .none, appReturn: .home),
+              "待決·離開 CarPlay：👀、空白鍵、選單「退出 CarPlay」、重按都落在主畫面（不是錶面）")   // l10n-ignore
+        check(AppSwitcher.content(hasShot: true, locked: true) == .needsOwner && AppSwitcher.content(hasShot: false, locked: true) == .needsOwner
+              && AppSwitcher.content(hasShot: true, locked: false) == .shot && AppSwitcher.content(hasShot: false, locked: false) == .icon,
+              "待決·切換器：門關著的 App 不給最後一格，只畫圖示＋「需要主人」")   // l10n-ignore
+        check([48, 123, 124, 125, 126].allSatisfy { ShellAccessibility.summonsFocus(UInt16($0)) } && !ShellAccessibility.summonsFocus(49) && !ShellAccessibility.summonsFocus(36),
+              "待決·鍵盤導航：Tab 或方向鍵叫出焦點框，空白鍵與 Return 不叫（設定文案同）")   // l10n-ignore
+    }
+
     static func run(_ check: (Bool, String) -> Void) {
+        EdgeContainers.selfTest(check)   // 圓角同心：貼邊容器登記表（Design/EdgeContainers.swift）
+        TouchSelfTest.run(check)   // 觸控：落點分區、判定區外擴、橫直判定、眼神、捏合不重複（Shell/TouchInput.swift）
         // 導覽：十個錶面，最後一個再往後＝主畫面，主畫面往後＝第一個錶面
         var n = ShellNav()
         check(n.handle(.page(1), faceIndex: 3, faceCount: 10) == .ignored && n.screen == .face, "外殼：中間的錶面換頁交回原本的路")
@@ -201,7 +279,8 @@ enum ShellSelfTest {
         check(!n.handle(.idle, faceIndex: 0, faceCount: 10).handled, "外殼：已在錶面時 idle 不重畫")
         _ = n.handle(.openApp("worldclock"), faceIndex: 0, faceCount: 10)
         _ = n.handle(.openClioTalk, faceIndex: 0, faceCount: 10)
-        check(n.handle(.carPlay, faceIndex: 0, faceCount: 10).handled && n.screen == .face && n.overlay == .none, "外殼：CarPlay 畫面優先")
+        check(n.handle(.carPlay, faceIndex: 0, faceCount: 10).handled && n.screen == .app(CarPlayApp.id) && n.overlay == .none, "外殼：CarPlay 畫面優先（收掉疊層，CarPlay App 在前面）")
+        inputGuards(check)
 
         // 計時器：兩組同時跑，最快到點的是主要那個；到點照先後拿出來
         var b = TimerBook()
@@ -220,12 +299,28 @@ enum ShellSelfTest {
         MotionSelfTest.run(check)   // 2.0 R14：彈簧、投射、rubber band（Design/HPMotion.swift）
         HPSelfTest.run(check)       // HPDS（Design/）
         HVTruthSelfTest.run(check)   // HomeView 對齊：Look 與狀態色實測值（Design/HVTruth.swift）
+        HPIconPressSelfTest.run(check); SBLayoutSelftest.run(check)   // 圖示按壓動效、無 Dock 的主畫面版面（Design/HPIconPress.swift、Shell/SpringBoard/SBSelftest.swift）
+        SBLibraryPageSelftest.run(check)   // App 資源庫＝最後一頁再往後一格（Shell/SpringBoard/SBSelftest.swift）
+        SBOwnerSelftest.run(check)   // 主畫面排列存到排列的主人名下，途中換人不蓋掉別人的（Shell/SpringBoard/SBSelftest.swift）
+        SBFloatySelftest.run(check)   // 浮動資料夾：分頁、拖放目標、翻頁帶（Shell/SpringBoard/SBFloatyFolder.swift）
+        HomeWallpaperSelfTest.run(check)   // 體驗追趕 P4-3：主畫面桌布的照片來源（Shell/HomeWallpaper.swift）
+        CameraTimelineSelfTest.run(check)   // 體驗追趕 P4：攝影機近況時間軸（Shell/CameraTimeline.swift）
+        NowPlayingHandoffSelfTest.run(check)   // 體驗追趕 P4：正在播放控制權交接判定（Shell/Apps/NowPlayingPage.swift）
+        HPMaterialSelfTest.run(check)   // 體驗追趕 P3：材質 token 表與控制中心的 luma 自適應（Design/HPMaterial.swift）
+        HPNumeralGlassSelfTest.run(check)   // 體驗追趕 P1：玻璃大數字的實色退路與染色微調（Design/HPNumeralGlass.swift）
+        HPIconGlassSelfTest.run(check)   // 體驗追趕 P0：圖示玻璃參數、融合分組、主體對比（Design/HPIconGlass.swift）
         HPLookSelfTest.run(check)   // HomeView 對齊 WP2：Look 登記處（Shell/HPLook.swift）
         HPMotionVariantSelfTest.run(check)   // HomeView 對齊後續 #5：動效變體解析層（Design/HPMotionVariant.swift）
         DisplayStageSelfTest.run(check)   // HomeView 對齊 WP3：三段顯示狀態機（Shell/DisplayStage.swift）
         AmbientPosterSelfTest.run(check)   // HomeView 對齊後續 #1／#6：Ambient 海報版面與輪播（Shell/AmbientPoster.swift；之前漏掛）
         BackSwipeSelfTest.run(check)   // HomeView 對齊後續 #2／#8：返回手勢判定與手感參數（Shell/BackSwipe.swift；之前漏掛）
         PortalSlideSelfTest.run(check)   // HomeView 對齊後續 #7：橫滑換頁的 Portal 純邏輯（Faces/ScreenGeometry.swift）
+        PhoneAppsSelfTest.run(check)   // iPhone 的 CarPlay App：URL scheme 挑法、上主畫面的條件（Shell/AppPlatform/PhoneApps.swift）
+        AirDropSelftest.run(check)   // AirDrop：收件判斷、卡片、訪客臨時接收、分享（Shell/AirDrop/）
+        ReceiverRecoverySelfTest.run(check)   // 接收端連不上時只強制重啟 launchd 作業、一分鐘一次（ReceiverAgent.swift）
+        AirDropCarPlaySelftest.run(check)   // CarPlay 連著時的 AirDrop 對策：傳給自己（Shell/AirDrop/AirDropSelfMessage.swift）
+        HomeIndicatorSelfTest.run(check)   // 👀 膠囊兼任 Home Indicator：距離／速度／停頓判定、CarPlay 上的位置與手勢歸屬（Shell/HomeIndicator.swift）
+        AppSwitcherSelfTest.run(check)   // App 切換器與 CarPlay App：卡片、背景中的 CarPlay、導覽（Shell/AppSwitcher.swift）
         HomeAlertsSelfTest.run(check)   // HomeView 對齊 WP5／#3：家庭警報觸發、去重、快照轉移（Shell/HomeAlerts.swift；之前漏掛）
         let near = [CGRect(x: 0, y: 0, width: 88, height: 88), CGRect(x: 100, y: 0, width: 88, height: 88)], far = [near[0], CGRect(x: 120, y: 0, width: 88, height: 88)]
         check(HPGlass.needsMerge(near) && !HPGlass.needsMerge(far), "玻璃：相距小於 24 px 才融合")
@@ -233,6 +328,12 @@ enum ShellSelfTest {
         AppsSelfTest.run(check)   // 2.0: 闹钟、天气、日历、提醒事项的純邏輯
         RecipeSelfTest.run(check)   // 食譜 App：JSON-LD、時間、份量（Shell/Apps/RecipeParser.swift）
         MusicSelfTest.run(check)    // 音樂 App：資料庫輸出解析
+        SingSelfTest.run(check)     // 功能補齊：跟唱的逐字時間（Shell/Apps/SingApp.swift）
+        HomeClimateSelfTest.run(check)   // 功能補齊：家庭 App 溫控頁的模式與旋鈕（Shell/HomeClimate.swift）
+        GamesSelfTest.run(check); ContactsSelfTest.run(check)   // 功能補齊：遊戲的掃描、通訊錄的分組與 FaceTime 號碼（Shell/Apps/GamesApp.swift、ContactsApp.swift）
+        SideShowSelfTest.run(check)   // SideShow 副屏、桌面小工具、CarPlay 小工具頁探驗（SideShow/SideShowSelfTest.swift）
         MetricsSelfTest.run(check)  // 2.0 D1 儀表：警示門檻、格式、平滑、取樣器（Metrics/）
+        SetupFlow.selftest(check)
+        FamilyProfiles.selftest(check)   // 2.0 家人檔案：遷移不丟資料、檔案切換隔離、說「我是 X」、音樂來源偏好（People/FamilyProfiles.swift）   // 2.0 首次設定：只在全新時出現、頁序、快照不改偏好（Setup/SetupFlow.swift）
     }
 }

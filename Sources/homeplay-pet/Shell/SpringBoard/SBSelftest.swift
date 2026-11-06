@@ -60,7 +60,7 @@ enum SBBoardSelftest {
         fresh()
         var l = SB.layout; l.pages.append(SBPage(items: [])); SB.layout = l
         SB.enterEdit(now: now); SB.exitEdit()
-        check(SB.layout.pages.count == 1, "SpringBoard：完成時拿掉空頁")
+        check(SB.layout.pages.count == SBLayout.official.pages.count, "SpringBoard：完成時拿掉空頁")
 
         // 資料夾：App 停在別的圖示上 0.35 s，放手做成資料夾
         fresh()
@@ -101,7 +101,7 @@ enum SBBoardSelftest {
         check(menus.allSatisfy { screen.insetBy(dx: 30, dy: 30).contains($0) }, "SpringBoard：每一格長按的選單都在螢幕裡")
         check(SBUI.galleryEntries().allSatisfy { SBUI.sheetCard.contains($0.1) } && SBUI.galleryEntries().count == SBWidgetKind.allCases.count,   // 2.0 Web App 的不在圖庫（＋Smart Stack −Web App）
               "SpringBoard：圖庫清單每個小工具（含 Smart Stack）都在 sheet 裡")   // l10n-ignore：selftest 訊息
-        let cells = SBUI.libraryCells(AppRegistry.visible.count)
+        let cells = SBUI.libraryLayout().cells
         // 2026-10-25 間距加大後內建 App 要捲一點（像 iOS App 資料庫）：左右在畫面內、捲到底每個都看得到
         let libScroll = SB.libraryMaxScroll
         check(cells.allSatisfy { let r = SBUI.libraryIcon($0); return r.minX >= 14 && r.maxX <= 1010 && r.minY >= SBUI.libraryTop && r.maxY - libScroll + 40 < 1000 }, "SpringBoard：App 資料庫的全部 App 都在畫面裡")
@@ -123,5 +123,88 @@ enum SBBoardSelftest {
         check(SBUI.libraryApps().isEmpty, "SpringBoard：App 資料庫搜尋沒有結果時是空的")
         SB.libraryQuery = ""
         SB.exitEdit()
+    }
+}
+
+/// 主畫面沒有 Dock（2026-11-06 拍板移除）：網格回到官方量的值，第三列、頁點、底緣上滑的熱區上下不相撞
+enum SBLayoutSelftest {
+    static func run(_ check: (Bool, String) -> Void) {
+        check(Shell.gridTop == 241 && Shell.rowPitch == 240 && SBUI.dotsY == 976, "主畫面：首列頂 241、列距 240、頁點 976（官方量的值）")   // l10n-ignore
+        let w = Shell.widgetRect(col: 0, row: 0)
+        check(abs(w.width - 392) < 0.5 && abs(w.height - 392) < 0.5, "主畫面：2×2 小工具 392（＝iOS small 158 pt）")   // l10n-ignore
+        let row3Icon = SB.iconRect(in: SB.frame(col: 0, row: 2, span: (1, 1)))
+        let row3LabelBottom = row3Icon.maxY + HPTokens.Home.labelBaseline + 8
+        let dots = SBUI.dotsCapsule(2), edgeTop = 0.90 * 1024
+        let panel = SBUI.full.insetBy(dx: HPTokens.Home.panelInset, dy: HPTokens.Home.panelInset)
+        check(row3LabelBottom < SBUI.dotsY - 7 && panel.contains(dots), "主畫面：第三列標籤在頁點上面、頁點在面板裡")   // l10n-ignore
+        check(row3Icon.maxY + 12 < edgeTop, "主畫面：底緣上滑的熱區不蓋到第三列圖示的點按範圍")   // l10n-ignore
+    }
+}
+
+/// App 資源庫＝最後一頁再往後一格（2026-11-06 拍板）
+enum SBLibraryPageSelftest {
+    static func run(_ check: (Bool, String) -> Void) {
+        let saved = (SB.forcedLayout, SB.owner, SB.page, SBStore.persist, Shell.nav, Shell.homeEditing, SB.working)
+        defer {
+            SB.forcedLayout = saved.0; SB.owner = saved.1; SB.page = saved.2; SBStore.persist = saved.3; Shell.nav = saved.4; Shell.homeEditing = saved.5; SB.working = saved.6
+            SB.pageDragging = false; SB.pagePos = MotionValue("sbpage", spring: SBMotion.page, from: CGFloat(SB.page), to: CGFloat(SB.page), now: 0)
+        }
+        SBStore.persist = false
+        SB.forcedLayout = SBDemo.layout("official"); SB.owner = .none; _ = SB.layout
+        Shell.nav = ShellNav(); Shell.nav.screen = .home; Shell.homeEditing = false
+        let n = SB.visiblePages.count
+        check(SB.pageSlots == n + 1 && SB.librarySlot == n, "資源庫：頁點最後多一格資源庫")   // l10n-ignore
+        SB.goToPage(n - 1, now: 0); SB.goToPage(n, now: 0)
+        check(Shell.nav.screen == .library && SB.page == n, "資源庫：最後一頁再往後翻＝App 資源庫")   // l10n-ignore
+        SB.goToPage(n + 3, now: 0)
+        check(SB.page == n, "資源庫：資源庫後面沒有別的頁")   // l10n-ignore
+        SB.goToPage(n - 1, now: 0)
+        check(Shell.nav.screen == .home && SB.page == n - 1, "資源庫：往回翻回最後一頁")   // l10n-ignore
+        // 點資源庫圖示：88×88、在畫面裡、點中就去資源庫
+        let hit = SBUI.libraryDotHit
+        check(hit.width >= 88 && hit.height >= 88 && SBUI.full.contains(hit)
+              && SBUI.dotsTap(CGPoint(x: hit.midX, y: hit.midY)) == SB.librarySlot, "資源庫：頁點的資源庫圖示點按範圍 ≥ 88、點了去資源庫")   // l10n-ignore
+        SB.goToPage(0, now: 0)
+        let first = SBUI.dotCenter(0, of: SBUI.dotSlots)
+        check(SBUI.dotsTap(CGPoint(x: first.x + 20, y: SBUI.dotsY + 40)) == 1, "資源庫：點目前那一點右邊＝下一頁（點按範圍 88 高）")   // l10n-ignore
+        // 只有一頁：照樣有一個點＋資源庫圖示
+        SB.forcedLayout = SBLayout(pages: [SBPage(items: [.app("music")])]); SB.owner = .none; _ = SB.layout
+        check(SB.visiblePages.count == 1 && SBUI.dotSlots == 2, "資源庫：只有一頁時頁點也出現（一點＋資源庫）")   // l10n-ignore
+        // 編輯模式沒有資源庫那一格
+        Shell.homeEditing = true
+        check(SB.pageSlots == SB.visiblePages.count && SBUI.dotsTap(CGPoint(x: hit.midX, y: hit.midY)) == nil, "資源庫：編輯模式不出現")   // l10n-ignore
+        Shell.homeEditing = false
+        // Esc／膠囊離開資源庫：停在資源庫那一格的要退回最後一頁
+        SB.forcedLayout = SBDemo.layout("official"); SB.owner = .none; _ = SB.layout
+        SB.goToPage(SB.librarySlot, now: 0); Shell.nav.screen = .home; SB.settleLibrarySlot()
+        check(SB.page == SB.visiblePages.count - 1, "資源庫：不在資源庫畫面時退回最後一頁")   // l10n-ignore
+    }
+}
+
+/// 主畫面排列存到排列的主人名下（不是「現在」在看的人）：編輯或拖曳途中換了人，不能把前一位的排列蓋到新觀看者名下
+enum SBOwnerSelftest {
+    static func run(_ check: (Bool, String) -> Void) {
+        let saved = (SB.forcedLayout, SB.owner, SB.working, SBStore.persist, SBStore.layouts, PersonHome.viewerOverride, Shell.guestMode)
+        defer {
+            SB.forcedLayout = saved.0; SB.owner = saved.1; SB.working = saved.2; SBStore.persist = saved.3; SBStore.layouts = saved.4
+            PersonHome.viewerOverride = saved.5; Shell.guestMode = saved.6
+        }
+        SBStore.persist = false; SB.forcedLayout = nil; Shell.guestMode = false
+        var mine = SBLayout.official; mine.pages[0].items.removeAll { $0 == .app("podcasts") }
+        var theirs = SBLayout.official; theirs.pages[0].items.removeAll { $0 == .app("messages") }
+        SBStore.layouts = ["sb-a": mine, "sb-b": theirs]
+        PersonHome.viewerOverride = "sb-a"; SB.owner = .none
+        var l = SB.layout   // 讀進 A 的排列
+        l.pages[0].items.removeAll { $0 == .app("music") }
+        SB.working = l   // 拖曳／改大小途中改的是 working
+        PersonHome.viewerOverride = "sb-b"   // 還沒重讀排列就換人了
+        SB.commit()
+        var ln = l; ln.normalize(dropEmpty: false)
+        check(SBStore.layouts["sb-a"] == ln && SBStore.layouts["sb-b"] == theirs,
+              "SpringBoard：存檔存到排列的主人名下，途中換人不蓋掉別人的排列")   // l10n-ignore：selftest 訊息
+        // 訪客（owner 是 nil）不存
+        PersonHome.viewerOverride = nil; SB.owner = .some(nil); SB.working = l
+        SB.commit()
+        check(SBStore.layouts.count == 2, "SpringBoard：訪客的排列不存")   // l10n-ignore：selftest 訊息
     }
 }

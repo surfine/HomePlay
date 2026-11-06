@@ -92,6 +92,50 @@ enum MessagesSender {
         }
     }
 
+    /// 傳一個檔案（照片）給某個 handle（iMessage）：同樣要 confirmed、送完回查 chat.db 有沒有一筆帶這個檔名附件的外送列
+    static func fileScript(path: String, to handle: String) -> String {
+        """
+        tell application "Messages"
+          set svc to 1st account whose service type = iMessage
+          set p to participant \(literal(handle)) of svc
+          send (POSIX file \(literal(path))) to p
+        end tell
+        """
+    }
+
+    static func sendFile(_ file: URL, to handle: String, confirmed: Bool, databasePath: String = MessagesAccess.defaultPath,
+                         completion: @escaping (MessagesSendResult) -> Void) {
+        guard confirmed else { completion(.notConfirmed); return }
+        guard FileManager.default.fileExists(atPath: file.path) else { completion(.failed("no file")); return }
+        let baseline = MessagesStore(path: databasePath)?.maxRowID() ?? 0
+        let name = file.lastPathComponent
+        DispatchQueue.main.async {
+            var err: NSDictionary?
+            NSAppleScript(source: fileScript(path: file.path, to: handle))?.executeAndReturnError(&err)
+            if let err {
+                let code = (err[NSAppleScript.errorNumber] as? Int) ?? 0
+                log("messages: send file script error \(code)")
+                completion(code == -1743 ? .needsAutomation : .failed("applescript \(code)"))
+                return
+            }
+            DispatchQueue.global(qos: .userInitiated).async {
+                let deadline = Date().addingTimeInterval(confirmWindow * 2)   // 附件要先上傳，給 20 s
+                var result = MessagesSendResult.unconfirmed
+                if let store = MessagesStore(path: databasePath) {
+                    repeat {
+                        switch store.outgoingAttachment(after: baseline, name: name) {
+                        case .found: result = .sent
+                        case .failed: result = .failed("delivery")
+                        case .none: Thread.sleep(forTimeInterval: pollStep)
+                        }
+                    } while result == .unconfirmed && Date() < deadline
+                }
+                log("messages: send file \(result)")
+                DispatchQueue.main.async { completion(result) }
+            }
+        }
+    }
+
     /// 每 0.5 s 查一次，最多 10 s
     static func confirm(_ text: String, chatGUID: String?, baseline: Int64, databasePath: String) -> MessagesSendResult {
         let deadline = Date().addingTimeInterval(confirmWindow)

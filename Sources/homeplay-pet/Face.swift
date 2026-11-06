@@ -60,6 +60,7 @@ final class Face {
     func needsSmooth(_ now: Double) -> Bool {
         blinkEnd > 0 || helloStart >= 0 && helloTime(now) < Self.helloDuration || onboardingActive   // 2.0 hello
             || PermissionPrimer.visible || approaching || PeopleOverlay.visible   // 2.0: 谁在看的问候／录脸引导
+            || TouchExpand.animating(now: now)   // 觸控：展開的控制項長出來、放開後收
     }      // 效能基準用：臉部軟體重繪次數
     private var lastTick = CACurrentMediaTime()
     private var nextBlink = CACurrentMediaTime() + 2.5, blinkEnd = 0.0, doubleBlink = false
@@ -81,24 +82,23 @@ final class Face {
         nextBlink = CACurrentMediaTime() + max(0, delay)
     }
 
-    /// 有变化才重画；返回 nil 表示不用换贴图。
-    func tick(_ now: Double) -> CGImage? {
-        let dt = min(0.1, max(0, now - lastTick)); lastTick = now
-        var dirty = forceDirty; forceDirty = false
-
+    /// 眼睛的眨、瞄、表情過渡（tick 的第一段）：CarPlay 直播時 tick 停著，膠囊照樣要眨眼（CarPlayChrome.swift 叫）
+    @discardableResult
+    func tickEyes(_ now: Double, _ dt: Double) -> Bool {
+        var changed = false
         // 眨眼：约 4 s ± 0.6 一次，八分之一机率连眨两下；困倦时眨得慢、隔得久；睡着不眨
         let slow = expression == .sleepy
         if !frozen && expression != .asleep {
-            if blinkEnd == 0 && now > nextBlink { blinkEnd = now + (slow ? 0.38 : 0.13); dirty = true; Face.dbgBlink += 1 }
+            if blinkEnd == 0 && now > nextBlink { blinkEnd = now + (slow ? 0.38 : 0.13); changed = true; Face.dbgBlink += 1 }
             if blinkEnd > 0 {
-                if slow { dirty = true }
+                if slow { changed = true }
                 if now > blinkEnd {
-                    blinkEnd = 0; dirty = true
+                    blinkEnd = 0; changed = true
                     if !doubleBlink && Double.random(in: 0..<1) < 0.125 { doubleBlink = true; nextBlink = now + 0.16 }
                     else { doubleBlink = false; nextBlink = now + (slow ? 6 : 4) + Double.random(in: -0.6...0.6) }
                 }
             }
-        } else if blinkEnd > 0 { blinkEnd = 0; dirty = true }
+        } else if blinkEnd > 0 { blinkEnd = 0; changed = true }
 
         // 瞄：只在待机，每 7–11 s 往右上看 1.4 s
         if !frozen && expression == .idle && !followPointer {
@@ -112,13 +112,22 @@ final class Face {
         }
         if glanceEnd > 0 || Face.glanceOverride { t.pdx = 13; t.pdy = -14 }
         if Face.glanceOverride {
-            if cur != t { cur = t; dirty = true; Face.dbgApproach += 1 }   // 快照：一步到位
+            if cur != t { cur = t; changed = true; Face.dbgApproach += 1 }   // 快照：一步到位
         } else if animateDetails {
             approaching = cur.approach(t, CGFloat(1 - exp(-dt * 14)))
-            if approaching { dirty = true; Face.dbgApproach += 1 }
+            if approaching { changed = true; Face.dbgApproach += 1 }
         } else if cur != t {
-            cur = t; dirty = true; Face.dbgApproach += 1
+            cur = t; changed = true; Face.dbgApproach += 1
         }
+
+        return changed
+    }
+
+    /// 有变化才重画；返回 nil 表示不用换贴图。
+    func tick(_ now: Double) -> CGImage? {
+        let dt = min(0.1, max(0, now - lastTick)); lastTick = now
+        var dirty = forceDirty; forceDirty = false
+        if tickEyes(now, dt) { dirty = true }
 
         // 睡着的 z 一秒换一次位置（这时整个视图也降到 1 fps）
         if expression == .asleep {
@@ -209,6 +218,8 @@ final class Face {
     static var helloDuration: Double { HelloIntro.duration }   // 2.0 hello：Hello/HelloScene.swift
 
     private(set) var wallpaper: CGImage?, frosted: CGImage?
+    /// 不帶錶面的霧化背景畫一段（CarPlay 上的膠囊：黑透材質裡不能透出錶面的桌布；CarPlayChrome.swift）
+    func withoutFrost<T>(_ body: () -> T) -> T { let f = frosted; frosted = nil; defer { frosted = f }; return body() }
     private var paletteKey = -1
     private(set) var flow = CGPoint.zero, flowV = CGPoint.zero, builtFlow = CGPoint(x: 9, y: 9)
     private var lastWall = 0.0
@@ -517,7 +528,8 @@ final class Face {
             if helloStart >= 0, helloTime(now) < Self.helloDuration, !helloInHandoff(now) {   // 2.0 hello：網格漸層＋一筆寫出的 hello（Hello/HelloScene.swift）
                 drawHelloScene(g, helloTime(now)); return
             }
-            if Shell.ambientPosterActive { drawAmbientPoster(g, now: now) }   // HomeView 對齊（拍板 2026-11-05）：Ambient＝專用海報場景（Shell/AmbientPoster.swift）
+            if HomeIndicator.drawsPull { renderIndicatorPull(g, now) }   // 👀 膠囊往下拉著：主畫面＋縮成卡片的這一面（Shell/HomeIndicator.swift）
+            else if Shell.ambientPosterActive { drawAmbientPoster(g, now: now) }   // HomeView 對齊（拍板 2026-11-05）：Ambient＝專用海報場景（Shell/AmbientPoster.swift）
             else if shellCoversFace { renderShell(g, now) } else {   // 2.0: 主畫面與 App 蓋掉錶面（Shell/HomeScreen.swift）
             switch style {
             case .island: renderIslandFace(g, now)
@@ -552,10 +564,12 @@ final class Face {
             if FaceOverview.active { drawOverview(g, now) }   // 长按换錶面总览盖在最上面
             if helloInHandoff(now), helloTime(now) < Self.helloDuration { drawHelloScene(g, helloTime(now)) }   // 2.0 hello：淡出、露出 👀 錶面
             if Onboarding.active { drawOnboarding(g, now) }   // 第一次打开的操作提示
+            drawSetup(g, now)                                  // 2.0：首次設定（Setup/SetupScreen.swift）
             drawClioTalk(g, now)                               // 2.0: ClioTalk 回答卡（ClioTalk/ClioTalkPanel.swift）
             drawPermissionPrimer(g, now)                       // 权限说明卡盖在最上面（要点按钮）
             drawPeopleOverlay(g, now)                          // 2.0: 谁在看的问候／录脸引导
             drawShellFocusRing(g)                              // 2.0: P05 鍵盤焦點環（Shell/ShellAccessibility.swift）
+            drawTouchOverlays(g, now)                          // 觸控：碰了先展開的控制項、第一次的提示卡（Shell/TouchInput.swift）
             if bannerUntil > now { drawBanner(g, red: style == .bedside) }
             if cur.dim > 0.005 && style != .bedside {
                 g.setFillColor(NSColor.black.withAlphaComponent(cur.dim).cgColor)
@@ -610,11 +624,16 @@ final class Face {
             drawPixelIsland(g, center: c0, scale: s0, now: now); return
         }
         let p = cur, lt = Self.timerInTile.contains(style) ? 0 : liveT
-        let k0 = 1.4 * s0
+        var s0 = s0, k0 = 1.4 * s0
         let cw0 = p.cw * k0, ch0 = p.ch * k0
-        let cw = cw0 + (880 - cw0) * lt, ch = ch0 + (230 - ch0) * lt
-        let c = CGPoint(x: c0.x + (lc.x - c0.x) * lt, y: c0.y + (lc.y - c0.y) * lt)
-        let rect = CGRect(x: c.x - cw / 2, y: c.y - ch / 2, width: cw, height: ch)
+        var cw = cw0 + (880 - cw0) * lt, ch = ch0 + (230 - ch0) * lt
+        var c = CGPoint(x: c0.x + (lc.x - c0.x) * lt, y: c0.y + (lc.y - c0.y) * lt)
+        var rect = CGRect(x: c.x - cw / 2, y: c.y - ch / 2, width: cw, height: ch)
+        // 共享元素（2026-11-06）：CarPlay ↔ 錶面時同一顆膠囊從 CarPlay 頂端那條帶滑回自己的位置，不跳
+        if capsuleCoreBuilding == nil, let g2 = Self.capsuleGlideRect(to: rect, now: now) {
+            let q = g2.height / rect.height
+            s0 *= q; k0 *= q; cw = g2.width; ch = g2.height; c = CGPoint(x: g2.midX, y: g2.midY); rect = g2
+        }
         let eyesArea = rect.insetBy(dx: -ch * 0.6, dy: -ch * 0.45)   // 臉頰紅暈、睡著的 z 會畫到膠囊外面一點
         islandRectBuilding = islandRectBuilding.map { $0.union(eyesArea) } ?? eyesArea
         if capsuleCoreBuilding == nil { capsuleCoreBuilding = rect }
@@ -686,10 +705,23 @@ final class Face {
         }
     }
 
+    /// 共享元素的起點：CarPlay 收回錶面時記下 CarPlay 上膠囊的位置（PetView.showVideo）
+    nonisolated(unsafe) static var capsuleGlide: (from: CGRect, start: Double)?
+    static func capsuleGlideRect(to rect: CGRect, now: Double) -> CGRect? {
+        guard let gl = capsuleGlide, !HPMotion.reduceMotion else { return nil }
+        let t = CGFloat(HPMotion.frozen("cpglide") ?? (now - gl.start))
+        let sp = CarPlayChrome.glideSpring
+        if HPMotion.frozen("cpglide") == nil, sp.settled(from: 0, to: 1, velocity: 0, t: t) { capsuleGlide = nil; return nil }
+        return Shell.lerp(gl.from, rect, max(0, min(1, sp.value(from: 0, to: 1, velocity: 0, t: t).x)))
+    }
+
+    /// 横幅圓角跟螢幕同心（上緣離螢幕 56；EdgeContainers 登記）
+    static var bannerRadius: CGFloat { HPTokens.Radius.concentric(rect: HPTokens.bannerCard) }
+
     /// 计时器到点的横幅：顶上一块液态玻璃（夜灯时是暗红），点一下屏幕收起，12 秒后自己收
     private func drawBanner(_ g: CGContext, red: Bool) {
         // 10-grid：左緣 64／右緣 960（HPTokens.bannerCard），同心圓角跟著上緣 inset；內距只用 8 的倍數
-        let r = HPTokens.bannerCard, rad = Screen.concentric(inset: 56)   // 跟螢幕圓角同心
+        let r = HPTokens.bannerCard, rad = Face.bannerRadius   // 跟螢幕圓角同心
         if red {
             g.setFillColor(srgb(0x1a0504).cgColor)
             g.addPath(continuousRoundedRect(r, radius: rad)); g.fillPath()

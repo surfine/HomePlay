@@ -20,6 +20,8 @@ struct Person: Codable, Equatable, Identifiable, Sendable {
     var useContactPhoto: Bool? = nil
     /// 2.0 第五輪：頭像來源（nil＝自動：帳號頭像 → 聯絡人「我」→ 縮寫；見 People/AvatarSources.swift）
     var avatarSource: AvatarSource? = nil
+    /// 2.0 家人檔案：用 emoji 當頭像（nil＝不用；設了就優先畫它，見 People/FamilyProfiles.swift）。舊版讀到這欄會略過，不影響名冊
+    var emoji: String? = nil
 
     /// 头像上的字：名字的第一个字（取第一个字素，不拆开 emoji 和合字）。
     var initial: String {
@@ -161,6 +163,15 @@ final class PeopleRegistry {
         people[index].avatar = style
         people[index].useContactPhoto = nil
         people[index].avatarSource = source == .contact && !people[index].isOwner ? .automatic : source
+        try saveRoster()
+        onChange?()
+    }
+
+    /// 2.0 家人檔案：emoji 頭像（空字串＝拿掉；只留第一個字素）
+    func setEmoji(_ id: String, _ emoji: String?) throws {
+        guard let index = people.firstIndex(where: { $0.id == id }) else { throw PeopleError.notFound }
+        let e = emoji?.trimmingCharacters(in: .whitespacesAndNewlines).first.map(String.init)
+        people[index].emoji = e
         try saveRoster()
         onChange?()
     }

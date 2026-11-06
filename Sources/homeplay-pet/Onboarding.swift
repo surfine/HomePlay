@@ -14,10 +14,12 @@ enum Onboarding {
     /// 用户收起提示后（不是快照）：AppDelegate 接着说明「输入监控」（F5 叫 Siri 要用）
     static var onDismiss: (() -> Void)?
     static var done: Bool { UserDefaults.standard.bool(forKey: defaultsKey) }
+    /// hello 停著當背景的條件：操作提示卡排著或開著，或首次設定（Setup/SetupFlow.swift）排著或開著
+    static var holding: Bool { armed || active || SetupFlow.pending || SetupFlow.active }
 }
 
 extension Face {
-    var onboardingActive: Bool { Onboarding.active }
+    var onboardingActive: Bool { Onboarding.active || SetupFlow.active }   // 首次設定開著時，外殼、翻頁、長按都不收
 
     /// 排队：hello 写完（或根本没有 hello）就出现
     func armOnboarding() { Onboarding.armed = true; forceDirty = true }
@@ -31,6 +33,9 @@ extension Face {
 
     /// 每帧：到点出现、12 秒后自己收；有变化回 true
     func tickOnboarding(_ now: Double) -> Bool {
+        // 首次設定排在操作提示卡前面：hello 寫完先走設定，走完提示卡才出來（armed 一直留著）
+        if SetupFlow.pending, !sayingHello || helloReadyForSetup { SetupFlow.start(now: now); return true }
+        if SetupFlow.active || SetupFlow.pending { return SetupFlow.tick(now) }
         if Onboarding.armed, !sayingHello || helloReadyForSetup {   // 2.0 hello：第一次打開時 hello 停住當背景，卡片浮在上面
             Onboarding.armed = false; Onboarding.active = true; Onboarding.until = now + Onboarding.duration
             return true

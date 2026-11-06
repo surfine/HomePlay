@@ -25,6 +25,7 @@ extension SBWidgetKind {
         case .findMy: return L("sb.widget.findMy", "查找")
         case .batteries: return L("sb.widget.batteries", "电池")
         case .webApp: return L("webapp.widget.title", "Web App")
+        case .desktopWidgets: return L("dw.title", "桌面小组件")
         }
     }
     /// 圖庫裡的一句說明（HIG：動詞開頭）
@@ -43,13 +44,14 @@ extension SBWidgetKind {
         case .findMy: return L("sb.blurb.findMy", "查看家人与设备在哪里。")
         case .batteries: return L("sb.blurb.batteries", "查看设备的电量。")
         case .webApp: return L("webapp.widget.blurb", "来自 Web App 的小组件。")
+        case .desktopWidgets: return L("dw.blurb", "显示 Mac 桌面上的小组件，包括从 iPhone 添加的。")
         }
     }
     /// 圖庫清單上的 App 圖示（沒有 App 的用符號）
     var iconApp: String? {
         switch self {
         case .photos: return nil
-        case .batteries: return nil
+        case .batteries, .desktopWidgets: return nil
         default: return appID
         }
     }
@@ -58,6 +60,7 @@ extension SBWidgetKind {
         case .photos: return "photo.on.rectangle"
         case .batteries: return "battery.75percent"
         case .webApp: return "globe"
+        case .desktopWidgets: return "widget.small"
         case .weather: return "cloud.sun.fill"
         case .calendar: return "calendar"
         case .reminders: return "checklist"
@@ -223,6 +226,7 @@ extension Face {
         case .findMy: drawSBFindMy(g, w, r, a, preview)
         case .batteries: drawSBBatteries(g, w, r, a, preview)
         case .webApp: drawWebAppWidget(g, w, r, a, preview, now)   // 2.0 Web App（Shell/WebApps/AdaptiveCards.swift）
+        case .desktopWidgets: drawDesktopWidgets(g, w, r, a, preview)   // Shell/DesktopWidgets.swift
         }
     }
 

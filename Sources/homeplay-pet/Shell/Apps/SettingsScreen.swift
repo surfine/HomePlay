@@ -13,17 +13,18 @@ final class SettingsApp: PetApp {
     var title: String { L("app.settings", "设置") }
     let icon = AppIcon(color: srgb(0x8e8e93), symbol: "gearshape.fill", system: "/System/Applications/System Settings.app")
 
-    private enum Picker { case room, sharedList }
-    private var picking: Picker? = CommandLine.arguments.contains("--settings-room") ? .room : nil
-    private var hits: [(CGRect, () -> Void)] = []
+    enum Picker { case room, sharedList, sideshow, sideshowPair }
+    var picking: Picker? = CommandLine.arguments.contains("--settings-room") ? .room : nil
+    var hits: [(CGRect, () -> Void)] = []
 
-    private static let x0 = HPGrid.App.leading, x1 = HPGrid.App.trailing, inset = HPGrid.Inset.card
-    private static let row = HPTokens.Size.row
+    static let x0 = HPGrid.App.leading, x1 = HPGrid.App.trailing, inset = HPGrid.Inset.card
+    static let row = HPTokens.Size.row
 
     func launch(face: Face) -> Bool { RemoteInput.fromGuest }   // 遠端訪客：不打開（吃掉，畫面不動）
-    func didOpen(now: Double) { picking = CommandLine.arguments.contains("--settings-room") ? .room : nil }
+    func didOpen(now: Double) { picking = CommandLine.arguments.contains("--settings-room") ? .room : SideShowSettings.demoPicker }
     var backSymbol: String { picking != nil ? "chevron.left" : "xmark" }
     func handleBack(now: Double) -> Bool {
+        if picking == .sideshowPair { picking = .sideshow; SideShowServer.shared.store.cancelPairing(); return true }   // 加入裝置 → 回 SideShow
         if picking != nil { picking = nil; return true }
         return false
     }
@@ -47,6 +48,8 @@ final class SettingsApp: PetApp {
         switch picking {
         case .room?: drawRoomPicker(g, face); AppUI.title(g, face, L("settings.room", "所在房间")); return
         case .sharedList?: drawListPicker(g, face); AppUI.title(g, face, L("settings.sharedList", "家人共用清单")); return
+        case .sideshow?: drawSideShow(g, face); AppUI.title(g, face, L("settings.sideshow", "SideShow")); return   // SideShow/SideShowSettings.swift
+        case .sideshowPair?: drawSideShowPair(g, face, now: now); AppUI.title(g, face, L("sideshow.add", "添加设备")); return
         case nil: break
         }
         drawMain(g, face)
@@ -55,20 +58,20 @@ final class SettingsApp: PetApp {
 
     // MARK: 畫
 
-    private let lf = HPType.sf(42, .regular), sf = HPType.sf(30, .regular), hf = HPType.sf(30, .semibold)
+    let lf = HPType.sf(42, .regular), sf = HPType.sf(30, .regular), hf = HPType.sf(30, .semibold)
 
-    private func header(_ g: CGContext, _ face: Face, _ t: String, y: inout CGFloat) {
+    func header(_ g: CGContext, _ face: Face, _ t: String, y: inout CGFloat) {
         face.drawLeft(g, t, font: hf, x: Self.x0 + Self.inset, y: y + 40, color: HPComponents.secondary)
         y += 56
     }
-    private func footnote(_ g: CGContext, _ face: Face, _ t: String, y: inout CGFloat) {
+    func footnote(_ g: CGContext, _ face: Face, _ t: String, y: inout CGFloat) {
         for l in MediaUI.wrap(t, sf, Self.x1 - Self.x0 - 2 * Self.inset, maxLines: 6) {
             face.drawLeft(g, l, font: sf, x: Self.x0 + Self.inset, y: y + 38, color: HPComponents.secondary); y += 40
         }
     }
     /// 一列：左邊名稱、右邊值與 ›（action 為 nil＝不能點，字變淡）
     /// dim：真的不能用（例如沒有小幫手）才變淡；純說明的列照常是主文字色
-    private func row(_ g: CGContext, _ face: Face, _ r: CGRect, _ title: String, value: String?, chevron: Bool, check: Bool = false, dim: Bool = false, action: (() -> Void)?) {
+    func row(_ g: CGContext, _ face: Face, _ r: CGRect, _ title: String, value: String?, chevron: Bool, check: Bool = false, dim: Bool = false, action: (() -> Void)?) {
         let x = r.minX + Self.inset
         let ink = dim ? HPComponents.secondary : HPComponents.label
         var right = r.maxX - Self.inset
@@ -93,7 +96,7 @@ final class SettingsApp: PetApp {
         let rs = ReminderSource.shared
         let canPickList = rs.authorized && PersonalGate.allowed
         let sharedName = RemindersApp.sharedListID.flatMap { id in rs.lists.first { $0.id == id }?.title } ?? L("settings.room.none", "未设置")
-        let card1 = CGRect(x: Self.x0, y: y, width: w, height: Self.row * 3)
+        let card1 = CGRect(x: Self.x0, y: y, width: w, height: Self.row * 4)   // 第 4 列：SideShow
         HPComponents.groupCard(g, card1)
         row(g, face, CGRect(x: Self.x0, y: y, width: w, height: Self.row), L("settings.room", "所在房间"),
             value: hasHome ? roomName : L("settings.room.needHelper", "需要小帮手"), chevron: hasHome, dim: !hasHome,
@@ -114,7 +117,11 @@ final class SettingsApp: PetApp {
         AppUI.fillPill(g, CGRect(x: track.minX, y: track.minY, width: max(track.height, track.width * lv), height: track.height), color: HPComponents.label)
         HPAX.note(g, br, .text, L("settings.brightness", "亮度"), value: "\(Int((Shell.brightness * 100).rounded()))%", shape: .rounded(0))
         brightnessTrack = track
-        y += Self.row * 2
+        // SideShow（區網副屏，SideShow/SideShowSettings.swift）：放在這張卡裡，畫面放得下
+        HPComponents.separatorLine(g, x: Self.x0 + Self.inset, maxX: Self.x1, y: y + Self.row * 2)
+        row(g, face, CGRect(x: Self.x0, y: y + Self.row * 2, width: w, height: Self.row), L("settings.sideshow", "SideShow"),
+            value: SideShowSettings.on ? L("sideshow.on", "开") : L("sideshow.off", "关"), chevron: true) { [weak self] in self?.picking = .sideshow }
+        y += Self.row * 3
         y += HPGrid.Rhythm.rowGap
         footnote(g, face, L("settings.room.note", "家庭 App 先显示这个房间；对 ClioTalk 说“关灯”只关这里，说“全部”才是整个家。")
                  + " " + L("settings.sharedList.note", "共用清单（例如购物）家人和访客都看得到、都能勾；摆在厨房时打开提醒事项直接是它。"), y: &y)

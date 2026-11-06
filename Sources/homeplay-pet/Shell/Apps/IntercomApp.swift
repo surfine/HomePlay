@@ -300,7 +300,7 @@ enum P10AppsSelfTest {
               "尋找：真的只有這台 Mac，其他是示範資料")   // l10n-ignore
         check(OfficialIcons.names["findmy"] == "findmy" && OfficialIcons.names["safari"] == "safari" && OfficialIcons.fallback["safari"] != nil,
               "圖示：尋找、Safari 有官網圖示可退")   // l10n-ignore
-        check(["findmy", "intercom", "safari", "recipes"].allSatisfy { id in AppRegistry.visible.contains { $0.id == id } } && AppRegistry.visible.count <= 32,
+        check(["findmy", "intercom", "safari", "recipes"].allSatisfy { id in AppRegistry.visible.contains { $0.id == id } } && AppRegistry.all.count <= 32,   // 容量只數內建；iPhone／Web App 讓資料庫往下捲
               "內建 App：尋找、對講、Safari、烹飪都在，App 資料庫（可捲動、4×4×2 頁）放得下")   // l10n-ignore
     }
 }

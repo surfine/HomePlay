@@ -70,6 +70,19 @@ enum L10n {
         let v = bundle.localizedString(forKey: key, value: "\u{1}", table: nil)
         return v == "\u{1}" ? source : v
     }
+
+    /// 指定語言查譯文（SideShow 網頁要三語一起送，照裝置的系統語言挑；不改目前語言）
+    nonisolated(unsafe) private static var bundles: [PetLanguage: Bundle] = [:]
+    private static let bundlesLock = NSLock()
+    static func text(_ key: String, _ source: String, in lang: PetLanguage) -> String {
+        bundlesLock.lock()
+        if bundles[lang] == nil, let b = loadBundle(lang) { bundles[lang] = b }
+        let b = bundles[lang]
+        bundlesLock.unlock()
+        guard let b else { return source }
+        let v = b.localizedString(forKey: key, value: "\u{1}", table: nil)
+        return v == "\u{1}" ? source : v
+    }
 }
 
 /// 介面文字一律走這裡：L("menu.enterCarPlay", "进入 CarPlay")。帶參數的用 String(format: L(...), ...)。

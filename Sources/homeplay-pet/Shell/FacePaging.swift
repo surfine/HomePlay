@@ -24,6 +24,10 @@ enum FacePaging {
         guard hypot(dx, dy) > hysteresis else { return .undecided }
         return abs(dx) > abs(dy) * 1.2 ? .horizontal : .vertical
     }
+    /// 這一下觸控板捲動歸錶面換頁嗎：換頁拖動中、或剛放手（1.5 s 內）的慣性——不管現在畫面已經換到哪一層
+    static func ownsScroll(precise: Bool, dragging: Bool, momentum: Bool, sinceRelease: Double) -> Bool {
+        precise && (dragging || (momentum && sinceRelease < 1.5))
+    }
     /// 拖了多少頁（正＝往右拖＝看前一頁）：螢幕寬 w 個點對應 1024＋頁縫
     static func offset(dx: CGFloat, screenWidth w: CGFloat) -> CGFloat { w > 1 ? dx / w * 1024 / (1024 + Face.pageGap) : 0 }
 
@@ -150,6 +154,22 @@ extension PetView {
         face.forceDirty = true
     }
 
+    /// 手勢被取消、或這一下交給別人（重播交回轉身體、新的一下開始時上一下還沒收）：沒換上來就只是放掉；
+    /// 換上來一半的照「退回」走——同一條彈簧回 0，到了把原本的錶面放回去（減少動態效果：直接放回去）
+    func facePageCancel(now: Double) {
+        guard let d = FacePaging.drag else { return }
+        FacePaging.drag = nil
+        guard d.dir != 0 else { return }
+        guard !HPMotion.reduceMotion else { facePageRestore(d); return }
+        Face.pageHold = nil
+        Face.pageStart = (max(0, -CGFloat(d.dir) * d.pager.offset), 0)
+        Face.pageGoal = 0
+        if let t = face.faceTransition { face.faceTransition = (t.sharp, t.frosted, now, t.islandFrom) }
+        Face.pageCancel = { [weak self] in self?.facePageRestore(d) }
+        log("face page cancel → back")
+        face.forceDirty = true
+    }
+
     /// 快照：--face-drag x＝手指拖了 x 頁、還按著（逐格：再加 HOMEPLAY_FACE_FLING 看放手）
     func facePageDemo(_ x: CGFloat) {
         guard Shell.nav.screen == .face else { return }
@@ -217,6 +237,12 @@ enum FacePagingSelftest {
               "錶面換頁：只認螢幕的圓角方塊裡（角落外、機身上不算）")   // l10n-ignore：selftest 訊息
         check(FacePaging.classify(dx: 6, dy: 2) == .undecided && FacePaging.classify(dx: 14, dy: 3) == .horizontal && FacePaging.classify(dx: 4, dy: 14) == .vertical
               && FacePaging.classify(dx: -12, dy: 11) == .vertical, "錶面換頁：10 pt 遲滯，橫向才換頁、斜的與直的交回原本的手勢")   // l10n-ignore：selftest 訊息
+        check(FacePaging.ownsScroll(precise: true, dragging: true, momentum: false, sinceRelease: 99)
+              && FacePaging.ownsScroll(precise: true, dragging: false, momentum: true, sinceRelease: 0.4)
+              && !FacePaging.ownsScroll(precise: true, dragging: false, momentum: false, sinceRelease: 0.4)
+              && !FacePaging.ownsScroll(precise: true, dragging: false, momentum: true, sinceRelease: 2)
+              && !FacePaging.ownsScroll(precise: false, dragging: true, momentum: false, sinceRelease: 0),
+              "手勢歸屬：換頁從起手到慣性結束都歸錶面換頁，換到主畫面也不交給主畫面翻頁")   // l10n-ignore
         let w: CGFloat = 400
         check(abs(FacePaging.offset(dx: -w * (1024 + Face.pageGap) / 1024 * 0.5, screenWidth: w) + 0.5) < 1e-9, "錶面換頁：螢幕寬的一半＝半頁（1:1）")
     }

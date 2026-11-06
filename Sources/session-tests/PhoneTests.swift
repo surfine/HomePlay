@@ -45,6 +45,20 @@ func runPhoneSuites() {
         expect(k.becameLive() == [], "up alone before live sends nothing")
     }
 
+    suite("phone-knob-hid") {
+        func k(_ c: String) -> KnobState? { HID.knobState(forPetMessage: #"{"type":"knob","command":"\#(c)"}"#) }
+        expect(k("left") == KnobState(x: -1) && k("right") == KnobState(x: 1) && k("up") == KnobState(y: -1) && k("down") == KnobState(y: 1),
+               "arrows → one joystick pulse on x/y")
+        expect(k("cw") == KnobState(wheel: 1) && k("ccw") == KnobState(wheel: -1), "Tab / Shift-Tab → wheel ±1")
+        expect(k("select") == KnobState(select: true) && k("back") == KnobState(back: true), "Return → select, Esc → back")
+        expect(k("home") == nil && HID.knobState(forPetMessage: #"{"type":"telephony","command":"select"}"#) == nil && HID.knobState(forPetMessage: "knob") == nil,
+               "unknown commands and other types ignored")
+        // 報告：按下（或脈衝）之後緊跟全零的放開——方向歸零、按鍵放開
+        expect(hexs(HID.knobReport(k("up")!)) == "0000ff00" && hexs(HID.knobReport(k("right")!)) == "00010000", "joystick pulse report")
+        expect(hexs(HID.knobReport(k("ccw")!)) == "000000ff" && hexs(HID.knobReport(k("select")!)) == "01000000", "wheel and select reports")
+        expect(hexs(HID.knobReport(KnobState())) == "00000000", "release report is all zero")
+    }
+
     suite("phone-telephony-hid") {
         expect(HID.telephonyButton(forPetMessage: #"{"type":"telephony","command":"answer"}"#) == .hookSwitch, "answer → hookSwitch")
         expect(HID.telephonyButton(forPetMessage: #"{"type":"telephony","command":"decline"}"#) == .drop, "decline → drop")

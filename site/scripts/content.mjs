@@ -10,7 +10,7 @@ export const notice = `${github}/blob/main/NOTICE`;
 // 固定檔名 + releases/latest/download：以後出新版，官網的下載按鈕不用跟著改。
 export const releaseDownload = `${github}/releases/latest/download/HomePlay-macOS-arm64.zip`;
 // 2.0 測試版：pre-release 不算 latest，所以寫明 tag 與檔名；出新 beta 時改這兩行
-export const betaDownload = `${github}/releases/download/v2.0.0-beta.5/HomePlay-2.0-beta5-macOS-arm64.zip`;
+export const betaDownload = `${github}/releases/download/v2.0.0-beta.6/HomePlay-2.0-beta6-macOS-arm64.zip`;
 
 const FACES = ['idle', 'happy', 'love', 'wink', 'thinking', 'annoyed', 'surprised', 'worried', 'sleepy', 'asleep'];
 const FINISHES = ['g4', 'silver', 'starlight', 'rose', 'gray'];
@@ -379,9 +379,9 @@ export const copy = {
     moreTitle: "還有更多。",
     more20Eyebrow: "2.0 Preview",
     more20Title: "整套 HomeView，放上你的 Mac。",
-    more20Body: "主畫面和小工具、十一款錶面、十六個 App，還有會等你開口的助手 ClioTalk，也能認出家裡每個人。現在是 beta 5，<span class=\"nb\">免費下載。</span>",
+    more20Body: "主畫面和小工具、十一款錶面、十六個 App，還有會等你開口的助手 ClioTalk，也能認出家裡每個人。現在是 beta 6，<span class=\"nb\">免費下載。</span>",
     more20Link: "看 2.0 Preview",
-    more20Beta: "下載 2.0 beta 5",
+    more20Beta: "下載 2.0 beta 6",
     moreHistEyebrow: "長文",
     moreHistTitle: "小工具往事。",
     moreHistBody: "從 1984 年蘋果選單裡的計算機，講到今天的即時動態。六章，每章一件可以動手玩的展品；每個事實<span class=\"nb\">都有出處。</span>",
@@ -742,9 +742,9 @@ export const copy = {
     moreTitle: "还有更多。",
     more20Eyebrow: "2.0 Preview",
     more20Title: "整套 HomeView，放上你的 Mac。",
-    more20Body: "主屏幕和小组件、十一款表盘、十六个 App，还有会等你开口的助手 ClioTalk，也能认出家里每个人。现在是 beta 5，<span class=\"nb\">免费下载。</span>",
+    more20Body: "主屏幕和小组件、十一款表盘、十六个 App，还有会等你开口的助手 ClioTalk，也能认出家里每个人。现在是 beta 6，<span class=\"nb\">免费下载。</span>",
     more20Link: "看 2.0 Preview",
-    more20Beta: "下载 2.0 beta 5",
+    more20Beta: "下载 2.0 beta 6",
     moreHistEyebrow: "长文",
     moreHistTitle: "小工具往事。",
     moreHistBody: "从 1984 年苹果菜单里的计算机，讲到今天的实时活动。六章，每章一件可以动手玩的展品；每个事实<span class=\"nb\">都有出处。</span>",
@@ -1105,9 +1105,9 @@ export const copy = {
     moreTitle: "There’s more.",
     more20Eyebrow: "2.0 Preview",
     more20Title: "The whole HomeView, on your Mac.",
-    more20Body: "A home screen with widgets, eleven faces, sixteen apps, and ClioTalk, an assistant that waits for you to ask. It recognizes each person in the house too. Now in beta 5, free to download.",
+    more20Body: "A home screen with widgets, eleven faces, sixteen apps, and ClioTalk, an assistant that waits for you to ask. It recognizes each person in the house too. Now in beta 6, free to download.",
     more20Link: "See the 2.0 Preview",
-    more20Beta: "Download 2.0 beta 5",
+    more20Beta: "Download 2.0 beta 6",
     moreHistEyebrow: "Long read",
     moreHistTitle: "A history of widgets.",
     moreHistBody: "From the Calculator in the 1984 Apple menu to today’s Live Activities. Six chapters, one playable exhibit each, and a source for every fact.",

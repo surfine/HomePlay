@@ -169,3 +169,26 @@ enum ReceiverAgent {
 /// 高 16 位＝键值、0x0A/0x0B＝按下/抬起）。装一个会话级 CGEventTap（输入监控已授权）：
 /// 176 按住＝对手机 Siri 说话、放开＝结束，并把按下/抬起都吞掉，免得 Mac 听写一起抢这颗键。辅助键只在
 /// HOMEPLAY_DIAG_KEYS=1 时写 syskeys.log——键盘发的是别的键值时，按一次 F5 就能看到。
+
+/// 接收端連不上時的強制重啟節流：已裝 launchd 作業時，一分鐘內最多 kickstart -k 一次
+enum ReceiverRecovery {
+    nonisolated(unsafe) static var lastForce: Date?
+    static let minInterval: TimeInterval = 60
+    static func shouldForceRestart(now: Date) -> Bool {
+        if let l = lastForce, now.timeIntervalSince(l) < minInterval { return false }
+        lastForce = now
+        return true
+    }
+}
+
+enum ReceiverRecoverySelfTest {
+    static func run(_ check: (Bool, String) -> Void) {
+        let saved = ReceiverRecovery.lastForce
+        defer { ReceiverRecovery.lastForce = saved }
+        ReceiverRecovery.lastForce = nil
+        let t0 = Date(timeIntervalSince1970: 1_000_000)
+        check(ReceiverRecovery.shouldForceRestart(now: t0) && !ReceiverRecovery.shouldForceRestart(now: t0.addingTimeInterval(30))
+              && ReceiverRecovery.shouldForceRestart(now: t0.addingTimeInterval(61)),
+              "接收端連不上：強制重啟一分鐘最多一次（不再每次重連都另起實例）")   // l10n-ignore
+    }
+}

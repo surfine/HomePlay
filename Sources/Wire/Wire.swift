@@ -60,7 +60,11 @@ package func avcCRecord(from fmt: CMFormatDescription) -> Data? {
 // MARK: - WebSocket 服务器（Network.framework，无第三方依赖）
 
 package final class WSServer {
-    private let listener: NWListener
+    /// 監聽器失效（睡眠喚醒、網路介面變動等）時會整個換新的，所以是 var；只在 queue 上換
+    private var listener: NWListener
+    private let port: UInt16
+    /// 監聽器重建的退避秒數（成功就歸零）
+    private var rebuildDelay: Double = 0
     private let queue = DispatchQueue(label: "ws.server")
     /// 只在 queue 上读写：listener / 连接的回调本来就在这条队列上跑。
     private var conns: [NWConnection] = []
@@ -74,17 +78,49 @@ package final class WSServer {
     private var readyIDs: Set<ObjectIdentifier> = []   // 由 countLock 保护
     package var onConnect: ((NWConnection) -> Void)?
     package var onText: ((String) -> Void)?
+    /// 監聽器狀態（就緒、失效、重建）給呼叫端寫日誌
+    package var onListenerEvent: ((String) -> Void)?
 
     package init(port: UInt16) throws {
+        self.port = port
+        listener = try Self.makeListener(port)
+    }
+
+    private static func makeListener(_ port: UInt16) throws -> NWListener {
         let params = NWParameters.tcp
         let ws = NWProtocolWebSocket.Options()
         ws.autoReplyPing = true
         params.defaultProtocolStack.applicationProtocols.insert(ws, at: 0)
-        listener = try NWListener(using: params, on: NWEndpoint.Port(rawValue: port)!)
+        return try NWListener(using: params, on: NWEndpoint.Port(rawValue: port)!)
     }
 
+    /// 2026-11-07 真機：監聽器在長時間執行後失效、沒人接手，行程還活著卻不再聽 8788——
+    /// 桌寵連不上、一直另起接收端（新的佔不到 17000 又退出）。失效就關掉舊的、退避後換一個新的。
+    private static func nextRebuildDelay(_ d: Double) -> Double { d == 0 ? 1 : min(30, d * 2) }
+
     package func start() {
-        listener.newConnectionHandler = { [weak self] conn in
+        attach(listener)
+        listener.start(queue: queue)
+    }
+
+    /// 只在 queue 上呼叫（start 時 listener 尚未開始，也安全）
+    private func attach(_ l: NWListener) {
+        l.stateUpdateHandler = { [weak self, weak l] state in
+            guard let self, let l, l === self.listener else { return }
+            switch state {
+            case .ready:
+                if self.rebuildDelay > 0 { self.onListenerEvent?("WebSocket 監聽器已恢復（埠 \(self.port)）") }
+                self.rebuildDelay = 0
+            case .failed(let err):
+                self.rebuildDelay = Self.nextRebuildDelay(self.rebuildDelay)
+                self.onListenerEvent?("WebSocket 監聽器失效（\(err)），\(Int(self.rebuildDelay)) 秒後重建")
+                l.cancel()
+                self.queue.asyncAfter(deadline: .now() + self.rebuildDelay) { [weak self] in self?.rebuild() }
+            default:
+                break
+            }
+        }
+        l.newConnectionHandler = { [weak self] conn in
             guard let self else { return }
             self.conns.append(conn)
             conn.stateUpdateHandler = { state in
@@ -103,7 +139,25 @@ package final class WSServer {
             }
             conn.start(queue: self.queue)
         }
-        listener.start(queue: queue)
+    }
+
+    /// 在 queue 上：換一個新的監聽器（建不起來就照退避再試）
+    private func rebuild() {
+        do {
+            let l = try Self.makeListener(port)
+            listener = l
+            attach(l)
+            l.start(queue: queue)
+        } catch {
+            rebuildDelay = Self.nextRebuildDelay(rebuildDelay)
+            onListenerEvent?("WebSocket 監聽器重建失敗（\(error)），\(Int(rebuildDelay)) 秒後再試")
+            queue.asyncAfter(deadline: .now() + rebuildDelay) { [weak self] in self?.rebuild() }
+        }
+    }
+
+    /// 自檢：退避序列 1、2、4…最多 30 秒
+    package static func rebuildDelays(_ n: Int) -> [Double] {
+        var d = 0.0; return (0..<n).map { _ in d = nextRebuildDelay(d); return d }
     }
 
     private func drop(_ conn: NWConnection) {

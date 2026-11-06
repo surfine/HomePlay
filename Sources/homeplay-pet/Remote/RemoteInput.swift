@@ -129,7 +129,7 @@ extension PetView {
             if Shell.lockFace { return }
             if !shellNavigate(.page(dir)) { setFaceStyle(face.style.next(dir)) }
         case .home, .library: shellNavigate(.page(dir))
-        case .app: break
+        case .app, .switcher: break
         }
     }
 }
@@ -202,6 +202,7 @@ enum RemotePrivacy {
         case .app("home"): return s.homeGuestView
         case .app("podcasts"): return s.mediaNowPlaying   // 2.0 v2-music
         case .app(let id): return guestApps.contains(id)   // 允許清單，不是排除清單
+        case .switcher: return false   // 切換器的卡片是各個 App 的最後一格：不給訪客
         }
     }
 

@@ -250,7 +250,7 @@ enum WebAppSelftest {
         check(G.canOpen(i, person: "o", viewer: "kid", viewerIsOwner: false, shared: true) && !G.canOpen(i, person: "o", viewer: "kid", viewerIsOwner: false, shared: false)
               && !G.canOpen(PersonalGate.Inputs(recognitionActive: true, viewer: .known("kid"), remoteGuest: true), person: "o", viewer: "kid", viewerIsOwner: false, shared: true),
               "Web App 門：家庭看板（共享）認出的家人都能開；遠端訪客照樣不行")   // l10n-ignore：selftest 訊息
-        // 每人一份：只出現在加的那個人的主畫面與資料庫；不認得的 id 在存檔清理時拿掉
+        // 每人一份：只出現在加的那個人的主畫面與資料庫；不認得的 id 存檔清理時照留，刪除流程才拿掉
         let st = WebAppStore.shared
         let saved = st.useMemory([WebApp(uuid: u1, manifestID: "x", name: "Groceries", startURL: "https://shop.example/app/", scope: "https://shop.example/app/", display: "standalone",
                                          theme: nil, background: nil, person: "kid", added: 0)])
@@ -259,7 +259,9 @@ enum WebAppSelftest {
               "Web App：每人一份、App id 認得出來")   // l10n-ignore：selftest 訊息
         var lay = SBLayout(pages: [SBPage(items: [.app("web." + u1), .app("web.gone"), .app("music")])])
         lay.sanitize()
-        check(lay.pages[0].items == [.app("web." + u1), .app("music")], "Web App：主畫面存檔裡刪掉的 Web App 清掉、還在的留著")   // l10n-ignore：selftest 訊息
+        check(lay.pages[0].items == [.app("web." + u1), .app("web.gone"), .app("music")], "Web App：存檔清理時認不得的 Web App 照留（清單暫時讀不到不能從主畫面刪掉）")   // l10n-ignore：selftest 訊息
+        lay.removeApp("web.gone")
+        check(lay.pages[0].items == [.app("web." + u1), .app("music")], "Web App：刪除 Web App 時由刪除流程從排列拿掉")   // l10n-ignore：selftest 訊息
         check(RemotePrivacy.guestSafe(RemotePrivacy.Screen(gateOpen: true, screen: .app("web." + u1))) == false && AppProviders.isPersonal("web." + u1),
               "Web App：遠端訪客的裝置看不到開著的 Web App")   // l10n-ignore：selftest 訊息
         // 範圍外的連結交給 Safari、file: 與自訂 scheme 擋掉（決策用的純函數）

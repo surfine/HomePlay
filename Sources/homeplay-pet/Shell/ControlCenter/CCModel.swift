@@ -45,7 +45,8 @@ struct CCLayout: Codable, Equatable {
         CCSlot(tile: .cameras, size: .s1x1), CCSlot(tile: .follow, size: .s1x1), CCSlot(tile: .carPlay, size: .s1x1),
         CCSlot(tile: .lockFace, size: .s1x1), CCSlot(tile: .alarm, size: .s1x1), CCSlot(tile: .focus, size: .s1x1),
     ], [
-        CCSlot(tile: .dnd, size: .s1x1), CCSlot(tile: .screenMirroring, size: .s1x1),
+        CCSlot(tile: .dnd, size: .s1x1), CCSlot(tile: .screenMirroring, size: .s1x1), CCSlot(tile: .airDrop, size: .s2x1),
+        CCSlot(tile: .profile, size: .s2x1), CCSlot(tile: .airDropReceive, size: .s2x1),
     ]])
 
     /// 一頁的排法：照順序放在第一個放得下的位置；放不下的回傳在 overflow
@@ -145,10 +146,16 @@ enum PersonCC {
     static let key = "shell.ccLayouts"
     /// 快照、自檢、示範不寫偏好
     nonisolated(unsafe) static var persist = !CCSystem.demo
-    nonisolated(unsafe) static var layouts: [String: CCLayout] = {
-        guard let raw = UserDefaults.standard.data(forKey: key), let d = try? JSONDecoder().decode([String: CCLayout].self, from: raw) else { return [:] }
-        return d.mapValues { $0.normalized() }
-    }()
+    nonisolated(unsafe) static var layouts: [String: CCLayout] = load(UserDefaults.standard.data(forKey: key))
+    /// 讀不懂的那幾份（例如將來的版本多了新模組）：原樣留著，存檔時照寫回去，不覆寫掉
+    nonisolated(unsafe) static var unreadable: [String: Any] = [:]
+    /// 逐人解碼：一份讀不懂不影響其他人（跟 SBStore.load 同一個作法）
+    static func load(_ raw: Data?) -> [String: CCLayout] {
+        let r = PerPersonCodec.decode(raw, as: CCLayout.self)
+        unreadable = r.unreadable
+        return r.ok.mapValues { $0.normalized() }
+    }
+    static func encoded() -> Data? { PerPersonCodec.encode(layouts, keeping: unreadable) }
     static func layout(for id: String?) -> CCLayout {
         guard let id, let l = layouts[id] else { return .standard }
         return l
@@ -160,10 +167,11 @@ enum PersonCC {
     static func set(_ l: CCLayout, for id: String) {
         let n = l.normalized()
         layouts[id] = n == CCLayout.standard.normalized() ? nil : n
+        unreadable[id] = nil   // 這個人自己改過了：讀不懂的舊那份不再寫回
         guard persist else { return }
-        if let raw = try? JSONEncoder().encode(layouts) { UserDefaults.standard.set(raw, forKey: key) }
+        if let raw = encoded() { UserDefaults.standard.set(raw, forKey: key) }
     }
-    static func prune(keeping ids: Set<String>) { layouts = layouts.filter { ids.contains($0.key) } }
+    static func prune(keeping ids: Set<String>) { layouts = layouts.filter { ids.contains($0.key) }; unreadable = unreadable.filter { ids.contains($0.key) } }
 }
 
 // MARK: - selftest
@@ -218,6 +226,18 @@ enum CCModelSelftest {
               "控制中心：每人一份；沒存過的人與訪客用預設")   // l10n-ignore：selftest 訊息
         PersonCC.set(std, for: "kid")
         check(PersonCC.layouts["kid"] == nil, "控制中心：改回預設就不另外存")
+        // 一份含讀不懂的模組（將來版本）：其他人的版面照讀，那一份原樣留著、存檔寫回去
+        let savedBad = PersonCC.unreadable
+        defer { PersonCC.unreadable = savedBad }
+        let mixed = #"{"ok":{"pages":[[{"tile":"wifi","size":"s2x1"}]]},"future":{"pages":[[{"tile":"hologram","size":"s1x1"}]]}}"#
+        PersonCC.layouts = PersonCC.load(Data(mixed.utf8))
+        let reread = PersonCC.encoded().flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String: Any] }
+        let futureBack = (reread?["future"] as? [String: Any]).flatMap { try? JSONSerialization.data(withJSONObject: $0) }.map { String(decoding: $0, as: UTF8.self) } ?? ""
+        let okBack = PersonCC.load(PersonCC.encoded())["ok"]
+        check(PersonCC.layouts["ok"]?.all.map(\.tile) == [.wifi] && okBack?.all.map(\.tile) == [.wifi] && futureBack.contains("hologram") && PersonCC.unreadable["future"] != nil,
+              "控制中心：版面逐人讀，含讀不懂模組的那份原樣留著、存回去，其他人照讀")   // l10n-ignore：selftest 訊息
+        PersonCC.set(kid, for: "future")
+        check(PersonCC.unreadable["future"] == nil && PersonCC.layout(for: "future") == kid, "控制中心：自己改過之後，讀不懂的舊那份不再寫回")   // l10n-ignore：selftest 訊息
         // 每個模組都有分類、標題、預設大小在允許的大小裡
         check(ControlCenter.Tile.allCases.allSatisfy { $0.sizes.contains($0.defaultSize) && !ControlCenter.title($0).isEmpty },
               "控制中心：每個模組都有標題，預設大小合法")   // l10n-ignore：selftest 訊息
@@ -231,7 +251,7 @@ enum CCModelSelftest {
         // 遠端訪客（訪客的 iPhone／iPad 在用）：改狀態或露資料的全部拒絕
         typealias I = PersonalGate.Inputs
         let rg = I(remoteGuest: true), owner = I()
-        let sensitive: [ControlCenter.Tile] = [.follow, .guest, .focusMode, .dnd, .focus, .night, .home, .cameras, .wifi, .bluetooth, .carPlay, .lockFace, .darkMode, .screenMirroring]
+        let sensitive: [ControlCenter.Tile] = [.follow, .guest, .focusMode, .dnd, .focus, .night, .home, .cameras, .wifi, .bluetooth, .carPlay, .lockFace, .darkMode, .screenMirroring, .airDrop]
         check(sensitive.allSatisfy { ControlCenter.locked($0, rg) } && ControlCenter.remoteGuestAllowed.allSatisfy { !ControlCenter.locked($0, rg) },
               "控制中心：遠端訪客鎖住所有改狀態、露資料的模組，只留音量、亮度、計時器、鬧鐘、播放中")   // l10n-ignore：selftest 訊息
         let acts: [CCHit.Action] = [.output(1), .airplay, .homeTile("x"), .scene("s"), .btDevice("a"), .focusMode("f"), .wifiRow, .module(.follow), .header(.wifi), .nightRow]

@@ -203,6 +203,10 @@ final class PhotoShelf {
     static let exts: Set<String> = ["jpg", "jpeg", "png", "heic", "heif", "tif", "tiff"]
 
     init(folder: URL) { self.folder = folder }
+    /// 正在看的那張的檔案（AirDrop 分享用）；還沒有照片就是 nil
+    var currentFile: URL? { files.indices.contains(index) && current != nil ? files[index] : nil }
+    /// 資料夾剛放進新照片（AirDrop 收到的）：下一幀就重掃，不等 30 秒
+    func rescanSoon() { lastScan = -1e9 }
     static var defaultFolder: URL {
         FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Pictures/HomePlay", isDirectory: true)
     }

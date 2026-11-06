@@ -47,7 +47,8 @@ enum HPSelfTest {
         let ours = HPIcons.kind(forSymbol: "alarm.fill") == .alarms && HPIcons.kind(forSymbol: "timer") == .timers && HPIcons.kind(forSymbol: "globe") == .worldClock
         check(ours && HPIcons.kind(forSymbol: "music.note") == .music && HPIcons.kind(forSymbol: "no.such.symbol") == nil, "HPDS：自畫圖示照 SF Symbol 對上")
         // 第四輪：內建 App 每一個都有自畫圖示（不讀系統 App 圖示）；FaceTime、對講照 App id
-        let missing = AppRegistry.visible.filter { HPIcons.kind(forID: $0.id) == nil && HPIcons.kind(forSymbol: $0.icon.symbol) == nil }.map(\.id)
+        // 只看內建（Web App、iPhone App 自帶圖示）
+        let missing = AppRegistry.all.filter { !AppRegistry.hidden.contains($0.id) }.filter { HPIcons.kind(forID: $0.id) == nil && HPIcons.kind(forSymbol: $0.icon.symbol) == nil }.map(\.id)
         check(missing.isEmpty, "HPDS：每個內建 App 都有 HPIcons 圖示（缺：\(missing)）")
         // 第四輪：夜間紅色只看房間亮度或手動開關，鏡頭關著（不知道房間光）不自己進夜間
         check(!Shell.nightFrom(room: nil, manual: false) && Shell.nightFrom(room: 0.3, manual: false) && !Shell.nightFrom(room: 0.9, manual: false) && Shell.nightFrom(room: nil, manual: true) && Shell.nightFrom(room: 1.2, manual: true), "夜間：只看房間亮度＋手動「夜間」，不看時段")

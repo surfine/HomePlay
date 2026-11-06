@@ -9,7 +9,7 @@ import AppKit
 
 struct SBPress {
     enum Hit: Equatable { case item(String), empty, folderApp(String), libraryApp(String), libraryEmpty }
-    enum Mode { case pending, drag, page, stack, swallow, libraryScroll }
+    enum Mode { case pending, drag, page, stack, swallow, libraryScroll, folderDrag, folderPage }
     var p: CGPoint
     var at: NSPoint
     var t: Double
@@ -32,6 +32,23 @@ enum SBInputState {
     nonisolated(unsafe) static var scrollStack: (key: String, acc: CGFloat)?
     nonisolated(unsafe) static var scrollPage = false
     nonisolated(unsafe) static var libWheel: CGFloat?   // 2.0 depth：資料庫這一手滾輪的目標（1:1 跟手）
+    nonisolated(unsafe) static var scrollVertical = false   // 這一手觸控板一開始是直的
+    nonisolated(unsafe) static var pageMomentum = false   // 觸控板翻頁那一手放開後的慣性事件（吃掉）
+    /// 換頁這一手沒套橡皮筋的位置（頁）與取樣：第一頁往右「翻到 −1 頁」＝回錶面，判定跟換頁一樣看投射落點（SB.leavesToFace）
+    nonisolated(unsafe) static var pageRaw: CGFloat = 0
+    nonisolated(unsafe) static var pageRawSamples: [(t: Double, x: CGFloat)] = []
+    static func trackRaw(_ x: CGFloat, now: Double) {
+        pageRaw = x
+        pageRawSamples.append((now, x)); if pageRawSamples.count > 5 { pageRawSamples.removeFirst() }
+    }
+}
+
+extension SB {
+    /// 主畫面第一頁再往右翻＝回錶面（錶面在主畫面左邊，2026-11-07 拍板）：跟換頁同一套判定——放手時的投射落點四捨五入到 −1 頁才算，
+    /// 不到就照舊彈回第一頁。只在主畫面（資源庫不算）、不在編輯模式（編輯時不離開主畫面，同滾輪）
+    static func leavesToFace(fromPage: Int, projected: CGFloat, screen: ShellScreen, editing: Bool) -> Bool {
+        screen == .home && !editing && fromPage == 0 && Int(projected.rounded()) < 0
+    }
 }
 
 // MARK: - 拖曳（純狀態，tick 也會叫：停住不動時的 dwell）
@@ -195,6 +212,9 @@ extension SB {
         case .widget(let w):
             guard canEdit else { return }
             sizes = w.kind.sizes.count > 1 ? w.kind.sizes : []; current = w.size
+            if w.kind == .photos, !AirDropShare.items(image: PhotosWidgetSource.shared.image).isEmpty {
+                rows.append(SBMenuRow(action: .shareAirDrop, title: SelfShare.title, symbol: SelfShare.symbol))   // CarPlay 連著時改成「用訊息傳給自己」（AirDropSelfMessage.swift）
+            }
             if !SBWidgetData.options(w.kind).isEmpty {
                 rows.append(SBMenuRow(action: .editWidget(key), title: String(format: L("sb.menu.editWidget", "编辑「%@」"), w.kind.title), symbol: "info.circle"))
             }
@@ -260,7 +280,7 @@ extension PetView {
     private func sbHit(_ p: CGPoint) -> SBPress.Hit {
         if Shell.nav.screen == .library {
             let off = SB.libraryScrollNow   // 2.0 depth：捲動後的格子跟著位移；被裁掉一半以上的不算
-            for (app, cell) in zip(SBUI.libraryApps(), SBUI.libraryCells(SBUI.libraryApps().count)) {
+            for (app, cell) in zip(SBUI.libraryApps(), SBUI.libraryLayout().cells) {
                 let ir = SBUI.libraryIcon(cell).offsetBy(dx: 0, dy: -off)
                 let vis = ir.intersection(CGRect(x: -1e9, y: SBUI.libraryTop - 32, width: 2e9, height: 1024))
                 if vis.height >= ir.height * 0.5, ir.insetBy(dx: -12, dy: -12).contains(p) { return .libraryApp(app.id) }
@@ -268,8 +288,9 @@ extension PetView {
             return .libraryEmpty
         }
         if let f = SB.folder, !f.closing, case .folder(let fo)? = SB.layout.item("f:\(f.id)") {
-            let apps = Array(fo.apps.prefix(SBFolder.pageSize))
-            for (id, cell) in zip(apps, SBUI.folderCells()) where SB.iconRect(in: cell).insetBy(dx: -12, dy: -12).contains(p) { return .folderApp(id) }
+            // 浮動資料夾：看得到的那一頁
+            let pages = SBFloaty.pages(fo.apps), page = pages.indices.contains(f.page) ? pages[f.page] : []
+            for (id, cell) in zip(page, SBUI.folderCells()) where SB.iconRect(in: cell).insetBy(dx: -12, dy: -12).contains(p) { return .folderApp(id) }
             return .empty
         }
         for pl in SB.placements(page: SB.pageIndex) where SB.hitRect(pl).contains(p) || (SB.editing && SBUI.badgeHit(SB.frame(pl), icon: pl.item.isIcon).contains(p)) {
@@ -284,8 +305,8 @@ extension PetView {
         guard Shell.nav.screen == .home || Shell.nav.screen == .library, Shell.appMorph == nil, !Shell.peopleSheet,
               let uv, let p = sbPoint(uv), e.clickCount == 1 || sbEngaged, !e.modifierFlags.contains(.command) else { return false }
         if !sbEngaged {
-            // 邊緣手勢（控制中心、ClioTalk、往上）照舊；頭像、頂端藥丸也照舊
-            if uv.y < 0.13 && uv.x > 0.70 || uv.y < 0.12 && uv.x > 0.32 && uv.x < 0.68 || uv.y > 0.90 && uv.x > 0.2 && uv.x < 0.8 { return false }
+            // 邊緣手勢（控制中心、👀 膠囊、往上）照舊；頭像、頂端藥丸也照舊（歸屬見 Shell/HomeIndicator.swift）
+            if HomeIndicator.owner(p, on: .home, pill: LiveActivityStack.pillHit, inset: nil) != .shell || uv.y > 0.90 && uv.x > 0.2 && uv.x < 0.8 { return false }
         }
         let now = CACurrentMediaTime()
         SBInputState.token += 1
@@ -322,7 +343,7 @@ extension PetView {
             if SB.folder != nil { SB.enterEdit(now: now) } else if Shell.nav.screen == .home { SB.enterEdit(now: now) }
         case .folderApp: SB.enterEdit(now: now)
         case .libraryApp(let id):
-            if let cell = zip(SBUI.libraryApps(), SBUI.libraryCells(SBUI.libraryApps().count)).first(where: { $0.0.id == id })?.1 { SB.openLibraryMenu(app: id, cell: cell.offsetBy(dx: 0, dy: -SB.libraryScrollNow), now: now) }   // 2.0 depth：捲動後錨在畫面上的位置
+            if let cell = zip(SBUI.libraryApps(), SBUI.libraryLayout().cells).first(where: { $0.0.id == id })?.1 { SB.openLibraryMenu(app: id, cell: cell.offsetBy(dx: 0, dy: -SB.libraryScrollNow), now: now) }   // 2.0 depth：捲動後錨在畫面上的位置
         case .libraryEmpty: break
         }
         SBInputState.press = pr
@@ -343,6 +364,17 @@ extension PetView {
         case .stack: sbStackTrack(p, pr: pr, now: now); return true
         case .libraryScroll: sbLibraryTrack(p, pr: pr, now: now); return true
         case .swallow: return true
+        case .folderDrag:   // 浮動資料夾：面板裡重排、左右緣翻頁；拖出面板＝拿出來、接著在主畫面上拖
+            if SB.folderDragUpdate(p, now: now), let id = SB.folder?.drag?.id { sbPullOutOfFolder(id, at: p, now: now); pr.mode = .drag }
+            return true
+        case .folderPage:
+            if var f = SB.folder {   // 1:1 跟手，頭尾 rubber band
+                let v = pr.startPage - (p.x - pr.startX) / SBFloaty.panel.width, hi = CGFloat(SBFloaty.pageCount(SB.folderApps().count) - 1)
+                f.pageDrag = v < 0 ? -HPMotion.rubberBand(-v, 1) : (v > hi ? hi + HPMotion.rubberBand(v - hi, 1) : v)
+                SB.folder = f
+            }
+            SB.pageSamples.append((now, p.x)); if SB.pageSamples.count > 6 { SB.pageSamples.removeFirst() }
+            return true
         case .pending: break
         }
         guard hypot(wdx, wdy) > ShellInput.slop else { return true }
@@ -359,19 +391,13 @@ extension PetView {
             if !SB.editing, !pr.longFired, vertical, k.hasPrefix("s:") { pr.mode = .stack; SB.stackDrag = (k, 0, []); sbStackTrack(p, pr: pr, now: now); return true }
         case .folderApp(let id):
             if pr.longFired || SB.editing {
-                // 從資料夾拖出來：拿出來、關資料夾，在主畫面上接著拖
-                var l = SB.layout
-                if let f = SB.folder { if case .folder(var fo)? = l.item("f:\(f.id)") {
-                    fo.apps.removeAll { $0 == id }
-                    l.replace("f:\(f.id)", with: fo.apps.count == 1 ? .app(fo.apps[0]) : .folder(fo))
-                    if fo.apps.isEmpty { l.remove("f:\(f.id)") }
-                } }
-                SB.layout = l; SB.commit()
-                SB.folder = nil
+                // 浮動資料夾：先在面板裡拖（重排、翻頁），拖出面板才拿出來
                 SB.enterEdit(now: now)
-                SB.beginDragFree(app: id, at: p, now: now)
+                if SBFloaty.panel.contains(p) { SB.folderDragBegin(id, at: p); _ = SB.folderDragUpdate(p, now: now); pr.mode = .folderDrag; return true }
+                sbPullOutOfFolder(id, at: p, now: now)
                 pr.mode = .drag; return true
             }
+            if horizontal, SBFloaty.pageCount(SB.folderApps().count) > 1 { sbFolderPageBegin(&pr, now: now); return true }
         case .libraryApp(let id):
             if pr.longFired, !SB.layout.appsOnHome.contains(id), PersonHome.canEdit || SB.forcedLayout != nil {
                 // 從 App 資料庫拖到主畫面（iOS）：回主畫面、進編輯、手上拿著它
@@ -385,8 +411,17 @@ extension PetView {
         default: break
         }
         if pr.longFired { pr.mode = .swallow; return true }
-        if horizontal, Shell.nav.screen == .home, SB.sheet == nil, SB.menu == nil, SB.folder == nil, SB.visiblePages.count > 1 || SB.editing {
-            pr.mode = .page; SB.pageDragging = true; SB.pageDragValue = pr.startPage; SB.pageSamples = []
+        if horizontal, SB.folder != nil, SB.menu == nil, SB.sheet == nil, SBFloaty.panel.contains(pr.p), SBFloaty.pageCount(SB.folderApps().count) > 1 {
+            sbFolderPageBegin(&pr, now: now); return true   // 浮動資料夾：面板裡橫拖換頁
+        }
+        if horizontal, Shell.nav.screen == .home, SB.sheet == nil, SB.menu == nil, SB.folder == nil, SB.pageSlots > 1 {   // 不在編輯模式時至少有一頁＋資源庫：第一頁往右照樣接（回錶面）
+            pr.mode = .page; SB.pageDragging = true; SB.pageDragValue = pr.startPage; SB.pageSamples = []; SBInputState.pageRawSamples = []
+            sbPageTrack(p, pr: pr, now: now); return true
+        }
+        // App 資源庫：橫拖＝跟最後一頁之間翻（同一套跟手、橡皮筋、投射）
+        if horizontal, Shell.nav.screen == .library, SB.libraryReachable, SB.menu == nil, SB.sheet == nil, !SB.librarySearching {
+            SB.armLibraryPaging(now: now); pr.startPage = CGFloat(SB.librarySlot)
+            pr.mode = .page; SB.pageDragging = true; SB.pageDragValue = pr.startPage; SB.pageSamples = []; SBInputState.pageRawSamples = []
             sbPageTrack(p, pr: pr, now: now); return true
         }
         // 2.0 depth：App 資料庫直向拖＝捲（內容放不下時；iOS 的資料庫一樣）；選單開著歸選單
@@ -418,8 +453,9 @@ extension PetView {
     }
 
     private func sbPageTrack(_ p: CGPoint, pr: SBPress, now: Double) {
-        let n = CGFloat(SB.visiblePages.count)
+        let n = CGFloat(SB.pageSlots)
         var x = pr.startPage - (p.x - pr.startX) / 1024
+        SBInputState.trackRaw(x, now: now)
         if x < 0 { x = -HPMotion.rubberBand(-x * 1024, 1024) / 1024 } else if x > n - 1 { x = n - 1 + HPMotion.rubberBand((x - n + 1) * 1024, 1024) / 1024 }
         SB.pageDragValue = x
         SB.pageSamples.append((now, x))
@@ -433,6 +469,17 @@ extension PetView {
         let x = SB.pageDragValue
         let projected = x + HPMotion.project(v * 1000) / 1000   // 頁／秒 → 投射落點（Apple 的減速率 0.998）
         let from = CGFloat(SB.page)
+        // 第一頁往右翻過頭＝回錶面：同一套投射，但用沒套橡皮筋的位置與速度（不然拖得再遠也到不了 −1 頁）
+        let rs = SBInputState.pageRawSamples
+        var rv: CGFloat = 0
+        if let a = rs.first, let b = rs.last, b.t - a.t > 0.004, now - b.t <= 0.08 { rv = (b.x - a.x) / CGFloat(b.t - a.t) }
+        SBInputState.pageRawSamples = []
+        if !rs.isEmpty, SB.leavesToFace(fromPage: SB.page, projected: SBInputState.pageRaw + HPMotion.project(rv * 1000) / 1000, screen: Shell.nav.screen, editing: SB.editing) {
+            SB.goToPage(0, now: now, from: 0)   // 主畫面停回第一頁（下次回來從第一頁開始）
+            log("sb page → face")
+            shellNavigate(.back)   // 跟 ↓／Esc 回錶面同一個過場
+            return
+        }
         var to = Int(projected.rounded())
         to = max(Int(from) - 1, min(Int(from) + 1, to))
         SB.goToPage(to, now: now, velocity: v, from: x)   // 從手指的位置接著走（不先跳回舊頁）
@@ -472,6 +519,19 @@ extension PetView {
         SB.manualAt[d.key] = now
     }
 
+    /// 手勢被取消（兩指接手、系統收走觸控、按著時重按）：照放手收尾但不帶速度、不當點按——
+    /// 換頁、資料庫捲動、Smart Stack 照手指的位置落到最近的停點、拖著的圖示放下；還沒動的按下（含排著的長按）就作廢
+    func sbCancelPress() {
+        guard let pr = SBInputState.press else { return }
+        SBInputState.token += 1
+        SB.pageSamples = []; SB.libraryScrollSamples = []; SB.stackDrag?.samples = []; SBInputState.pageRawSamples = []   // 取消不回錶面：只回最近一頁
+        if pr.mode == .pending || pr.mode == .swallow {
+            SBInputState.press = nil; SB.pressedKey = nil; face.forceDirty = true
+            return
+        }
+        _ = sbMouseUp(pr.event, uv: nil)
+    }
+
     func sbMouseUp(_ e: NSEvent, uv: CGPoint?) -> Bool {
         guard let pr = SBInputState.press else { return false }
         SBInputState.press = nil
@@ -484,6 +544,13 @@ extension PetView {
         case .stack: sbStackRelease(now: now)
         case .libraryScroll: SB.libraryScrollEnd(now: now)
         case .swallow: break
+        case .folderDrag: _ = SB.folderDragUpdate(sbPoint(uv), now: now); SB.folderDragEnd()
+        case .folderPage:
+            let pos = SB.folderPagePos(now), s = SB.pageSamples
+            let v = s.count > 1 ? -(s.last!.1 - s.first!.1) / CGFloat(max(0.008, s.last!.0 - s.first!.0)) / SBFloaty.panel.width * 1000 : 0
+            let n = SBFloaty.pageCount(SB.folderApps().count)
+            let to = HPMotion.nearest(pos, velocity: v, stops: (0..<n).map { CGFloat($0) })
+            SB.setFolderPage(Int(to.rounded()), now: now)
         case .pending:
             // 沒拖：走外殼的點按（先問頂端藥丸／即時動態，再問這裡，最後頭像與其他）
             if !pr.longFired { shellTap(CGPoint(x: pr.p.x / 1024, y: pr.p.y / 1024)) }
@@ -507,18 +574,23 @@ extension PetView {
                 if SBUI.folderTitle.contains(p) { return true }
             }
             if SB.editing, SBUI.folderTitle.contains(p) { SB.folder?.renaming = true; return true }
+            // 浮動資料夾：點頁點換頁
+            if let i = SBFloaty.dotRects(SBFloaty.pageCount(SB.folderApps().count)).firstIndex(where: { $0.contains(p) }), SBFloaty.pageCount(SB.folderApps().count) > 1 {
+                SB.setFolderPage(i, now: now); return true
+            }
+            if SB.editing {   // 「−」：這一頁哪一格的徽標
+                let page = SBFloaty.pages(SB.folderApps()).dropFirst(f.page).first ?? []
+                if let i = SBUI.folderCells().prefix(page.count).firstIndex(where: { SBUI.badgeHit($0, icon: true).contains(p) }) { SB.sheet = .removeConfirm("a:\(page[i])"); return true }
+            }
             if case .folderApp(let id) = sbHit(p) {
-                if SB.editing {
-                    if SBUI.folderCells().contains(where: { SBUI.badgeHit($0, icon: true).contains(p) }) { SB.sheet = .removeConfirm("a:\(id)") }
-                    return true
-                }
-                let idx = SB.layout.item("f:\(f.id)").flatMap { if case .folder(let fo) = $0 { return fo.apps.firstIndex(of: id) }; return nil } ?? 0
+                if SB.editing { return true }
+                let idx = SB.folderApps().firstIndex(of: id) ?? 0
                 let cell = SBUI.folderCells()[idx % SBFolder.pageSize]
                 SB.folder = nil
                 shellOpenApp(id, from: cell)
                 return true
             }
-            if !SBUI.folderPanel.contains(p) { SB.closeFolder(now: now) }
+            if !SBUI.folderPanel.contains(p), !SBUI.folderTitle.contains(p) { SB.closeFolder(now: now) }
             return true
         }
         if SB.editing {
@@ -541,23 +613,25 @@ extension PetView {
             SB.exitEdit()   // 點空白處：完成（iOS）
             return true
         }
+        if let to = SBUI.dotsTap(p), to >= 0, to < SB.pageSlots { SB.goToPage(to, now: now); return true }   // 頁點、資源庫圖示
         guard case .item(let k) = sbHit(p), let it = SB.layout.item(k), let pl = SB.placements(page: SB.pageIndex).first(where: { $0.item.key == k }) else { return false }
         let r = SB.frame(pl)
         if long { SB.openMenu(for: k, now: now); return true }
         switch it {
         case .app(let id): shellOpenApp(id, from: r)
         case .folder(let f): SB.openFolder(f.id, from: r, now: now)
-        case .widget(let w): sbOpenWidget(w, r)
+        case .widget(let w): sbOpenWidget(w, r, p)
         case .stack(let s):
             let ws = SB.stackWidgets(s, face: face, now: now)
-            if !ws.isEmpty { sbOpenWidget(ws[min(s.index, ws.count - 1)], r) }
+            if !ws.isEmpty { sbOpenWidget(ws[min(s.index, ws.count - 1)], r, p) }
         case .spacer: return false
         }
         return true
     }
 
-    private func sbOpenWidget(_ w: SBWidget, _ r: CGRect) {
+    private func sbOpenWidget(_ w: SBWidget, _ r: CGRect, _ p: CGPoint) {
         if w.kind == .photos { tapPhotosWidget(); return }
+        if w.kind == .desktopWidgets { if PersonalGate.allowed { DesktopWidgetSource.shared.tap(p, in: r) }; return }   // Shell/DesktopWidgets.swift
         if let id = w.kind.appID ?? w.config["app"] { shellOpenApp(id, from: r) }   // 2.0 Web App 的小工具帶 app
     }
 
@@ -571,6 +645,7 @@ extension PetView {
 
     func sbPerform(_ a: SBAction, now: Double) {
         switch a {
+        case .shareAirDrop: SelfShare.share(PhotosWidgetSource.shared.image.map { .image($0) })
         case .editHome: SB.enterEdit(now: now)
         case .removeItem(let k): SB.sheet = .removeConfirm(k)
         case .editWidget(let k): SB.sheet = .config(k)
@@ -650,7 +725,7 @@ extension PetView {
         if let m = SB.menu { sbMenuTap(m, p, now: now); return true }
         if SBUI.librarySearch.contains(p) { SB.librarySearching = true; return true }
         if case .libraryApp(let id) = sbHit(p),
-           let cell = zip(SBUI.libraryApps(), SBUI.libraryCells(SBUI.libraryApps().count)).first(where: { $0.0.id == id })?.1 {
+           let cell = zip(SBUI.libraryApps(), SBUI.libraryLayout().cells).first(where: { $0.0.id == id })?.1 {
             SB.librarySearching = false
             shellOpenApp(id, from: cell.offsetBy(dx: 0, dy: -SB.libraryScrollNow))   // 2.0 depth：從捲動後的位置長出來
             return true
@@ -664,6 +739,9 @@ extension PetView {
     func sbScroll(_ e: NSEvent, uv: CGPoint?) -> Bool {
         let now = CACurrentMediaTime()
         let precise = e.hasPreciseScrollingDeltas
+        // App 資源庫：觸控板兩指橫滑＝翻回最後一頁（直滑照舊捲清單）
+        if Shell.nav.screen == .library, precise, SB.libraryReachable, SB.menu == nil, SB.sheet == nil, !SB.librarySearching,
+           let r = sbTrackpadPage(e, now: now, fromLibrary: true) { return r }
         // 2.0 depth：App 資料庫捲動（內容放不下時；跟 App 清單同一套方向語意：deltaY 正＝內容往上）
         if Shell.nav.screen == .library {
             guard SB.menu == nil, SB.sheet == nil, SB.libraryMaxScroll > 0.5 else { return false }
@@ -706,6 +784,15 @@ extension PetView {
             }
             return true
         }
+        // 浮動資料夾：觸控板橫捲／滾輪換頁（一手一頁）
+        if let f = SB.folder, SB.menu == nil, SB.sheet == nil, SBFloaty.pageCount(SB.folderApps().count) > 1 {
+            let d = abs(e.scrollingDeltaX) > abs(e.scrollingDeltaY) ? -e.scrollingDeltaX : (precise ? 0 : -e.scrollingDeltaY)
+            if (!precise || abs(d) > 8), d != 0, now - Shell.lastPageAt > 0.35 {
+                Shell.lastPageAt = now
+                SB.setFolderPage(f.page + (d > 0 ? 1 : -1), now: now); face.forceDirty = true
+            }
+            return true
+        }
         if SB.overlayOpen { return true }
         // Smart Stack 上：上下換
         if let p, !precise || abs(e.scrollingDeltaY) > abs(e.scrollingDeltaX),
@@ -725,33 +812,47 @@ extension PetView {
         }
         // 觸控板兩指橫滑：換頁（1:1 跟手，放手照投射）；直滑照舊轉身體
         if precise {
-            guard SB.visiblePages.count > 1 || SB.editing else { return false }
+            guard SB.pageSlots > 1 else { return false }
             if e.momentumPhase != [] { return true }
-            if e.phase == .began { SBInputState.scrollPage = false }
-            if !SBInputState.scrollPage, abs(e.scrollingDeltaX) > abs(e.scrollingDeltaY) * 1.2, e.phase == .changed || e.phase == .began {   // 橫的才接；直的照舊轉身體
-                SBInputState.scrollPage = true; SB.pageDragging = true; SB.pageDragValue = SB.pagePosition(now); SB.pageSamples = []
-            }
-            guard SBInputState.scrollPage else { return false }
-            if e.phase == .ended || e.phase == .cancelled {
-                SBInputState.scrollPage = false; sbPageRelease(now: now); face.forceDirty = true; return true
-            }
-            let n = CGFloat(SB.visiblePages.count)
-            var x = SB.pageDragValue - e.scrollingDeltaX / 1024 * 2.2
-            if x < -0.3 { x = -0.3 } else if x > n - 0.7 { x = n - 0.7 }
-            SB.pageDragValue = x
-            SB.pageSamples.append((now, x)); if SB.pageSamples.count > 5 { SB.pageSamples.removeFirst() }
-            face.forceDirty = true
-            return true
+            return sbTrackpadPage(e, now: now, fromLibrary: false) ?? false
         }
-        // 滑鼠滾輪：主畫面的頁之間換；頭尾再滾交回原本的路（換到錶面）；編輯模式不離開
+        // 滑鼠滾輪：主畫面的頁之間換，最後一頁再往後是 App 資源庫；頭尾再滾交回原本的路（換到錶面）；編輯模式不離開
         let dir = e.scrollingDeltaY > 0 ? -1 : (e.scrollingDeltaY < 0 ? 1 : (e.scrollingDeltaX > 0 ? -1 : (e.scrollingDeltaX < 0 ? 1 : 0)))
         guard dir != 0 else { return true }
         let to = SB.page + dir
-        if to >= 0, to < SB.visiblePages.count {
+        if to >= 0, to < SB.pageSlots {
             if now - Shell.lastPageAt > 0.25 { Shell.lastPageAt = now; SB.goToPage(to, now: now); face.forceDirty = true }
             return true
         }
         return SB.editing
+    }
+
+    /// 觸控板兩指橫滑翻頁（主畫面與 App 資源庫共用）：nil＝這一手不是橫的，交回原本的路
+    private func sbTrackpadPage(_ e: NSEvent, now: Double, fromLibrary: Bool) -> Bool? {
+        if e.momentumPhase != [] { return SBInputState.pageMomentum ? true : nil }   // 翻頁那一手的慣性：吃掉，不讓資源庫跟著捲
+        if e.phase == .began { SBInputState.scrollPage = false; SBInputState.pageMomentum = false; SBInputState.scrollVertical = false }
+        if SBInputState.scrollVertical { return nil }   // 這一手一開始是直的（捲清單）：中途偏橫也不翻頁
+        if !SBInputState.scrollPage, e.phase == .changed || e.phase == .began, abs(e.scrollingDeltaY) > abs(e.scrollingDeltaX) * 1.2, abs(e.scrollingDeltaY) > 1 {
+            SBInputState.scrollVertical = true; return nil
+        }
+        if !SBInputState.scrollPage, abs(e.scrollingDeltaX) > abs(e.scrollingDeltaY) * 1.2, e.phase == .changed || e.phase == .began {   // 橫的才接
+            if fromLibrary { SB.armLibraryPaging(now: now) }
+            SBInputState.scrollPage = true; SB.pageDragging = true; SB.pageDragValue = SB.pagePosition(now); SB.pageSamples = []
+            SBInputState.pageRaw = SB.pageDragValue; SBInputState.pageRawSamples = []
+        }
+        guard SBInputState.scrollPage else { return nil }
+        if e.phase == .ended || e.phase == .cancelled {
+            SBInputState.scrollPage = false; SBInputState.pageMomentum = true
+            sbPageRelease(now: now); face.forceDirty = true; return true
+        }
+        let n = CGFloat(SB.pageSlots)
+        SBInputState.trackRaw(SBInputState.pageRaw - e.scrollingDeltaX / 1024 * 2.2, now: now)
+        var x = SB.pageDragValue - e.scrollingDeltaX / 1024 * 2.2
+        if x < -0.3 { x = -0.3 } else if x > n - 0.7 { x = n - 0.7 }
+        SB.pageDragValue = x
+        SB.pageSamples.append((now, x)); if SB.pageSamples.count > 5 { SB.pageSamples.removeFirst() }
+        face.forceDirty = true
+        return true
     }
 
     // MARK: 鍵盤（ShellInput.shellKeyDown 在焦點處理之前先問）
@@ -786,6 +887,10 @@ extension PetView {
             if e.keyCode == 51 { if !SB.libraryQuery.isEmpty { SB.libraryQuery.removeLast() }; SB.librarySearching = true; return true }
             if e.keyCode == 36 || e.keyCode == 76, SB.librarySearching, let first = SBUI.libraryApps().first {
                 SB.librarySearching = false; shellOpenApp(first.id, from: SBUI.libraryCells(1)[0].offsetBy(dx: 0, dy: -SB.libraryScrollNow)); return true
+            }
+            // ←：翻回最後一頁（照主畫面換頁）
+            if e.keyCode == 123, !SB.librarySearching, SB.menu == nil, SB.libraryReachable, !HPAccessibilitySettings.keyboardNavigation {
+                SB.armLibraryPaging(now: now); SB.goToPage(SB.librarySlot - 1, now: now); return true
             }
             if printable, !(e.keyCode == 49 && !SB.librarySearching) {   // 直接打字就開始搜尋（實體鍵盤）
                 SB.librarySearching = true; SB.libraryQuery += chars; return true
@@ -836,10 +941,10 @@ extension PetView {
             default: return false
             }
         }
-        // 平常：← → 在主畫面的頁之間換；頭尾交回原本的路（換到錶面）
+        // 平常：← → 在主畫面的頁之間換，最後一頁再 → 是 App 資源庫；頭尾交回原本的路（換到錶面）
         if e.keyCode == 123 || e.keyCode == 124, !HPAccessibilitySettings.keyboardNavigation {
             let to = SB.page + (e.keyCode == 124 ? 1 : -1)
-            if to >= 0, to < SB.visiblePages.count { SB.goToPage(to, now: now); return true }
+            if to >= 0, to < SB.pageSlots { SB.goToPage(to, now: now); return true }
         }
         return false
     }
@@ -866,6 +971,7 @@ extension PetView {
             SB.libraryScroll.set(v, velocity: 0, now: now)
             if HPMotion.frozen("sbLibScroll") != nil { SB.libraryScroll = MotionValue("sbLibScroll", spring: .smooth, from: 0, to: max(v, 1e-3), now: now) }   // 要拍到指示器就凍在半途
         }
+        if arg("--home-page") == "library" { SB.goToPage(SB.librarySlot, now: now); SB.armLibraryPaging(now: now) }   // 翻到資源庫那一格（頁點上的資源庫圖示）
         if let s = arg("--home-page"), let n = Int(s) { SB.page = max(0, min(SB.visiblePages.count - 1, n)); SB.pagePos = MotionValue("sbpage", spring: SBMotion.page, from: CGFloat(SB.page), to: CGFloat(SB.page), now: now) }
         if let s = arg("--home-page-anim")?.split(separator: ":").compactMap({ Int($0) }), s.count == 2 {
             SB.page = s[1]; SB.pagePos = MotionValue("sbpage", spring: SBMotion.page, from: CGFloat(s[0]), to: CGFloat(s[1]), now: now)
@@ -875,6 +981,7 @@ extension PetView {
         if args.contains("--home-edit-menu") { SB.openEditMenu(now: now - 1) }
         if let x = arg("--face-drag").flatMap(Double.init) { facePageDemo(CGFloat(x)) }   // 錶面跟手換頁拖到一半（x 頁，負＝往左拖看下一個）
         if let id = arg("--home-folder"), let pl = SB.placements(page: SB.pageIndex).first(where: { $0.item.key == "f:\(id)" }) { SB.openFolder(id, from: SB.frame(pl), now: now - 1) }
+        if let n = arg("--home-folder-page").flatMap(Int.init), SB.folder != nil { SB.folder?.page = n }   // 浮動資料夾：打開在第幾頁
         if let g = arg("--home-gallery") {
             let parts = g.split(separator: ":")
             let k = SBWidgetKind(rawValue: String(parts[0]))
@@ -919,6 +1026,8 @@ enum SBAX {
         return nil
     }
     static func center(_ r: CGRect) -> CGPoint { CGPoint(x: r.midX, y: r.midY) }
+    /// iPhone App 念成「名字（在 CarPlay 打开）」：點了是在 CarPlay 上開
+    static func appLabel(_ app: PetApp) -> String { app is PhoneCarPlayApp ? app.title + L("sb.ax.openInCarPlay", "（在 CarPlay 打开）") : app.title }
     /// 自訂動作（VoiceOver 轉子「動作」）的順序；名字照這個順序給
     static func actionNames(editing: Bool) -> [String] {
         editing ? [L("sb.ax.left", "向左移动"), L("sb.ax.right", "向右移动"), L("sb.ax.up", "向上移动"), L("sb.ax.down", "向下移动"), L("sb.ax.remove", "从主屏幕移除"), L("sb.ax.done", "完成编辑")]
@@ -933,11 +1042,15 @@ enum SBAX {
                                    rect: SBUI.librarySearch, shape: .capsule, press: .tap(center(SBUI.librarySearch))))
             out.append(ShellAXItem(id: "avatar", kind: .chrome, role: .button, label: L("people.switch.title", "换人"), rect: Shell.avatarRect, shape: .circle, press: .tap(center(Shell.avatarRect))))
             let off = SB.libraryScrollNow   // 2.0 depth：捲動後的框跟著位移；被裁掉一半以上的不列
-            for (app, cell) in zip(SBUI.libraryApps(), SBUI.libraryCells(SBUI.libraryApps().count)) {
+            for (i, h) in SBUI.libraryLayout().headers.enumerated() where h.y - off >= SBUI.libraryTop - 32 && h.y - off < 1000 {   // 分區標題（iPhone）
+                out.append(ShellAXItem(id: "sb.library.section.\(i)", kind: .text, role: .heading, label: h.title,
+                                       rect: CGRect(x: HPTokens.Home.gridMargin, y: h.y - off, width: 600, height: SBUI.librarySectionHeader)))
+            }
+            for (app, cell) in zip(SBUI.libraryApps(), SBUI.libraryLayout().cells) {
                 let ir = SBUI.libraryIcon(cell).offsetBy(dx: 0, dy: -off)
                 let vis = ir.intersection(CGRect(x: -1e9, y: SBUI.libraryTop - 32, width: 2e9, height: 1024))
                 guard vis.height >= ir.height * 0.5 else { continue }
-                out.append(ShellAXItem(id: "home.app.\(app.id)", kind: .homeItem, role: .button, label: app.title, rect: ir, shape: .rounded(ir.width * 0.2237), press: .tap(center(ir))))
+                out.append(ShellAXItem(id: "home.app.\(app.id)", kind: .homeItem, role: .button, label: SBAX.appLabel(app), rect: ir, shape: .rounded(ir.width * 0.2237), press: .tap(center(ir))))
             }
             return menuItems() ?? out
         }
@@ -945,10 +1058,10 @@ enum SBAX {
         if let s = SB.sheet { return sheetItems(s) }
         if let f = SB.folder, case .folder(let fo)? = SB.layout.item("f:\(f.id)") {
             out.append(ShellAXItem(id: "sb.folder.title", kind: .text, role: .heading, label: fo.name, rect: SBUI.folderTitle))
-            for (id, cell) in zip(fo.apps.prefix(SBFolder.pageSize), SBUI.folderCells()) {
+            for (id, cell) in zip(SBFloaty.pages(fo.apps).dropFirst(f.page).first ?? [], SBUI.folderCells()) {   // 浮動資料夾：看得到的那一頁
                 guard let app = AppRegistry.app(id) else { continue }
                 let ir = SB.iconRect(in: cell)
-                out.append(ShellAXItem(id: "home.app.\(id)", kind: .homeItem, role: .button, label: app.title, rect: ir, shape: .rounded(ir.width * 0.2237), press: .tap(center(ir))))
+                out.append(ShellAXItem(id: "home.app.\(id)", kind: .homeItem, role: .button, label: SBAX.appLabel(app), rect: ir, shape: .rounded(ir.width * 0.2237), press: .tap(center(ir))))
             }
             return out
         }
@@ -966,7 +1079,7 @@ enum SBAX {
             case .app(let id):
                 guard let app = AppRegistry.app(id) else { continue }
                 let ir = SB.iconRect(in: f)
-                out.append(ShellAXItem(id: SBAX.id(key), kind: .homeItem, role: .button, label: app.title, rect: ir, shape: .rounded(ir.width * 0.2237), press: .tap(center(ir)), customActions: PersonHome.canEdit ? names : []))
+                out.append(ShellAXItem(id: SBAX.id(key), kind: .homeItem, role: .button, label: SBAX.appLabel(app), rect: ir, shape: .rounded(ir.width * 0.2237), press: .tap(center(ir)), customActions: PersonHome.canEdit ? names : []))
             case .folder(let fo):
                 let ir = SB.iconRect(in: f)
                 out.append(ShellAXItem(id: SBAX.id(key), kind: .homeItem, role: .button, label: fo.name, value: String(format: L("sb.ax.folderCount", "%d 个 App"), fo.apps.count), rect: ir,
@@ -987,7 +1100,11 @@ enum SBAX {
         if n > 1 || SB.editing {
             let r = SBUI.dotsCapsule(n)
             out.append(ShellAXItem(id: "sb.pages", kind: .chrome, role: .button, label: L("sb.ax.pages", "页面"),
-                                   value: String(format: L("sb.ax.page", "第 %1$d 页，共 %2$d 页"), SB.page + 1, n), rect: r, shape: .capsule, press: SB.editing ? .tap(center(r)) : .none))
+                                   value: String(format: L("sb.ax.page", "第 %1$d 页，共 %2$d 页"), min(SB.page, n - 1) + 1, n), rect: r, shape: .capsule, press: SB.editing ? .tap(center(r)) : .none))
+        }
+        if SB.libraryReachable {   // 頁點最後的資源庫圖示
+            let r = SBUI.libraryDotHit
+            out.append(ShellAXItem(id: "sb.libraryDot", kind: .chrome, role: .button, label: L("sb.library", "App 资源库"), rect: r, shape: .circle, press: .tap(center(r))))
         }
         return out
     }
@@ -1076,5 +1193,29 @@ extension PetView {
         case 5: SB.exitEdit(); return true
         default: return false
         }
+    }
+}
+
+// MARK: - 浮動資料夾的輸入小工具
+
+extension PetView {
+    /// 從資料夾拿出來：資料夾少一個（剩一個就變回圖示、空了就刪），關資料夾，在主畫面上接著拖
+    func sbPullOutOfFolder(_ id: String, at p: CGPoint, now: Double) {
+        var l = SB.layout
+        if let f = SB.folder, case .folder(var fo)? = l.item("f:\(f.id)") {
+            fo.apps = (f.drag?.order ?? fo.apps).filter { $0 != id }
+            l.replace("f:\(f.id)", with: fo.apps.count == 1 ? .app(fo.apps[0]) : .folder(fo))
+            if fo.apps.isEmpty { l.remove("f:\(f.id)") }
+        }
+        SB.layout = l; SB.commit()
+        SB.folder = nil
+        SB.enterEdit(now: now)
+        SB.beginDragFree(app: id, at: p, now: now)
+    }
+    func sbFolderPageBegin(_ pr: inout SBPress, now: Double) {
+        pr.mode = .folderPage
+        pr.startPage = SB.folderPagePos(now)
+        SB.pageSamples = []
+        if var f = SB.folder { f.pageDrag = pr.startPage; f.pageAnim = nil; SB.folder = f }
     }
 }

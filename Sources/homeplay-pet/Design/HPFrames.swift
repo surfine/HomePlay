@@ -30,6 +30,17 @@ enum HPFrames {
             Shell.nav.screen = .app(id); Shell.nav.overlay = .none
             AppRegistry.app(id)?.didOpen(now: t0); face.beginFaceTransition()
         }
+        // HOMEPLAY_FACE_UP=1：錶面 → 主畫面（霧化過場＋膠囊縮成頂端藥丸，同 ShellInput 的 .up），配 HOMEPLAY_ANIM=homeface:0,pill:0——膠囊下拉過場的 render ms 對照組
+        if ProcessInfo.processInfo.environment["HOMEPLAY_FACE_UP"] != nil, Shell.nav.screen == .face {
+            _ = face.render(t0)
+            Shell.homeHue = Shell.hue(fromFace: face.lastFrame, face: face)
+            Shell.captureHomeBackdrop(face.lastFrame)
+            if let ir = face.islandRect {
+                let ch = ir.height / 1.9, cw = max(ch, ir.width - 1.2 * ch)
+                Shell.pillFrom = (CGRect(x: ir.midX - cw / 2, y: ir.midY - ch / 2, width: cw, height: ch), t0)
+            }
+            Shell.nav.screen = .home; face.beginFaceTransition()
+        }
         // HOMEPLAY_LIST_DELETE=1：提醒事項清單（--app reminders --demo-reminders-list）完成第一條，0.9 s 後拿掉——下面的列讓位上來
         if ProcessInfo.processInfo.environment["HOMEPLAY_LIST_DELETE"] != nil {
             _ = face.render(t0)
@@ -45,7 +56,7 @@ enum HPFrames {
             _ = face.tickShell(now, 1 / fps)   // 控制中心、Live Activity、過場的收尾跟著走
             face.forceDirty = true
             let r0 = CACurrentMediaTime()
-            let img = face.render(now)
+            let img = CarPlayDemo.render(face, now: now) ?? face.render(now)   // --demo-carplay：CarPlay 畫面上的膠囊逐格
             ms.append((CACurrentMediaTime() - r0) * 1000)
             if timeOnly && i < count - 1 { continue }   // 2.0 faceglass：HOMEPLAY_FRAMES_TIME=1 只量每幀的 render（不寫檔，最後一張照寫）
             let path = base + String(format: "-%03d.png", i)

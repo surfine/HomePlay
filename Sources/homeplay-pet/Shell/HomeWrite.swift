@@ -75,6 +75,7 @@ final class HomeDoorbell {
     /// 接管：舊畫面放大＋模糊淡出（外殼的 takeover），換成門鈴攝影機全螢幕
     @MainActor func ring(accessory id: String) {
         guard let v = (NSApp.delegate as? AppDelegate)?.view else { return }
+        v.surfaceFromCarPlay("doorbell")   // CarPlay 在前面也要看到門口
         Shell.beginTakeover(v.face)
         _ = HomeApp.shared.showCameras(id: id)
     }

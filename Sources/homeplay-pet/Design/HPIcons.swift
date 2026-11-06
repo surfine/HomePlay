@@ -10,6 +10,8 @@ import CoreText
 enum HPIcons {
     enum Kind: String, CaseIterable {
         case alarms, timers, worldClock, calendar, facetime, home, intercom, messages, music, podcasts, reminders, settings, weather, findMy, safari, clioTalk, nowCooking
+        case sing, games, contacts   // 功能補齊：主體是 SF Symbol（跟唱的麥克風、遊戲把手、聯絡人）
+        case carPlay   // 2026-11-06：CarPlay 是主畫面上的一個 App（car.fill，跟藥丸上的 CarPlay 角標同一個符號）
     }
 
     /// App id → 圖示（外殼知道是哪個 App 時先用這個；FaceTime、對講由 App 包加進 AppRegistry，id 是 "facetime"、"intercom"）
@@ -32,6 +34,10 @@ enum HPIcons {
         case "facetime": return .facetime
         case "intercom": return .intercom
         case "recipes": return .nowCooking   // HomeView 對齊 WP5：Now Cooking 獨立 app
+        case "sing": return .sing
+        case "games": return .games
+        case "contacts": return .contacts
+        case "carplay": return .carPlay
         default: return nil
         }
     }
@@ -82,6 +88,10 @@ enum HPIcons {
         case .findMy: return (srgb(0x5DD56C), srgb(0x2FB146))
         case .clioTalk: return (srgb(0x2E2C38), srgb(0x111116))
         case .nowCooking: return (srgb(0xB6B5BA), srgb(0x8E8E93))   // 實測 AccentColor＝systemGray
+        case .sing: return (srgb(0xFF6A86), srgb(0xF2304F))
+        case .games: return (srgb(0x7D7BF0), srgb(0x4F4CD6))
+        case .contacts: return (srgb(0xB4B3B8), srgb(0x8C8B91))
+        case .carPlay: return (srgb(0x4CD964), srgb(0x2DB84C))
         }
     }
     /// 白底的圖示（App 資料庫、淺色主畫面上要一圈很淡的邊才看得出輪廓）
@@ -124,6 +134,10 @@ enum HPIcons {
         case .safari: drawSafari(g, u)
         case .clioTalk: drawClioTalk(g, u)
         case .nowCooking: drawNowCooking(g, u)
+        case .sing: drawSymbolBody(g, u, "music.mic")
+        case .games: drawSymbolBody(g, u, "gamecontroller.fill")
+        case .contacts: drawSymbolBody(g, u, "person.crop.circle.fill")
+        case .carPlay: drawSymbolBody(g, u, "car.fill")
         }
         g.endTransparencyLayer()
         g.restoreGState()
@@ -149,6 +163,10 @@ enum HPIcons {
         case .findMy: return NSColor(srgbRed: 0.05, green: 0.4, blue: 0.1, alpha: 0.35)
         case .nowCooking: return NSColor(white: 0.15, alpha: 0.4)
         case .clioTalk: return NSColor(white: 0, alpha: 0.5)
+        case .sing: return NSColor(srgbRed: 0.5, green: 0.02, blue: 0.12, alpha: 0.35)
+        case .games: return NSColor(srgbRed: 0.15, green: 0.1, blue: 0.5, alpha: 0.4)
+        case .contacts: return NSColor(white: 0.15, alpha: 0.4)
+        case .carPlay: return NSColor(srgbRed: 0.05, green: 0.4, blue: 0.1, alpha: 0.35)
         case .calendar, .home, .intercom, .reminders, .safari: return NSColor(white: 0, alpha: 0.12)
         }
     }
@@ -488,6 +506,19 @@ enum HPIcons {
             let top = NSColor(srgbRed: 0.77 + 0.23 * t, green: 0.55, blue: 1 - 0.15 * t, alpha: 1)
             fill(g, CGPath(roundedRect: r, cornerWidth: w / 2, cornerHeight: w / 2, transform: nil), top, top.blended(withFraction: 0.25, of: .black) ?? top)
         }
+    }
+
+    /// 功能補齊的新 App：主體直接用 SF Symbol（奶白、置中、佔 56%），底與亮邊照同一套
+    private static func drawSymbolBody(_ g: CGContext, _ u: Unit, _ name: String) {
+        let r = u.rect(0.22, 0.22, 0.56, 0.56)
+        let cfg = NSImage.SymbolConfiguration(pointSize: r.height, weight: .semibold).applying(NSImage.SymbolConfiguration(paletteColors: [glyph]))
+        guard let img = NSImage(systemSymbolName: name, accessibilityDescription: nil)?.withSymbolConfiguration(cfg) else { return }
+        let sz = img.size, k = min(r.width / max(1, sz.width), r.height / max(1, sz.height))
+        let dst = CGRect(x: r.midX - sz.width * k / 2, y: r.midY - sz.height * k / 2, width: sz.width * k, height: sz.height * k)
+        NSGraphicsContext.saveGraphicsState()
+        NSGraphicsContext.current = NSGraphicsContext(cgContext: g, flipped: true)
+        img.draw(in: dst, from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: true, hints: nil)
+        NSGraphicsContext.restoreGraphicsState()
     }
 
     // MARK: 出圖（--hpicons-png）

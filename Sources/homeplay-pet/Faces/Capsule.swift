@@ -120,12 +120,37 @@ extension Face {
         g.restoreGState()
     }
 
-    /// 玻璃（Liquid Glass）：校準過的 iOS 系統玻璃（Faces/FaceGlass.swift），背景是這一刻已經畫好的錶面。
-    /// Regular：Clear 在照片上幾乎看不見膠囊，眼睛像浮在空中；Regular 的淺深跟著背後的亮度
+    /// 玻璃（Liquid Glass）：beta 1 的設計（2026-11-06 使用者：還原晶瑩剔透）——我們自己的玻璃步驟（SystemGlass：折射 −2.4、模糊 9、
+    /// 高光 0.55、白填 0.12、內緣暗 0.3），背景是這一刻已經畫好的錶面；位置與分鐘不變就用快取。
+    /// 85eff38 曾換成系統 Regular 玻璃（較霧、厚邊框＋裡面一顆淺色內膠囊，看起來像兩層），這裡改回來；錶面數字等其他玻璃不動
     func glassPill(_ g: CGContext, _ r: CGRect) -> Bool {
         guard let backdrop = g.makeImage() else { return false }
-        return faceGlass(g, [CGPath(roundedRect: r, cornerWidth: r.height / 2, cornerHeight: r.height / 2, transform: nil)], backdrop: backdrop, clear: false)
+        let ri = r.integral, sc = renderPixelScale
+        let key = "\(style.rawValue)|\(Int(ri.minX)),\(Int(ri.minY)),\(Int(ri.width)),\(Int(ri.height))|\(Int(sc * 100))|\(Int(Date().timeIntervalSince1970 / 60))"
+        let path = CGPath(roundedRect: r, cornerWidth: r.height / 2, cornerHeight: r.height / 2, transform: nil)
+        if let hit = Self.pillCache, hit.key == key {
+            drawPillImage(g, hit.image, hit.rect, path); return true
+        }
+        // 橫滑換頁中整頁被平移，backdrop 是整個畫布、玻璃會照沒平移的位置取樣（取到頁縫的黑）＝變暗；而且這張會被快取住、
+        // 滑完到下一分鐘前都是暗的。滑動中不算新的、不寫快取：有快取用快取，沒有就讓呼叫端用輕的那版
+        if faceTransition != nil, Self.pageDir != 0 { return false }
+        var p = SystemGlassParams.portrait
+        p.refractionAmount = -2.4; p.blurRadius = 9; p.highlight = 0.55; p.fill = 0.12; p.ringShadow = 0.3
+        guard let out = SystemGlass.shared.render(path: path, key: "pill|\(key)", scale: sc, backdrop: backdrop, params: p) else { return false }
+        Self.pillCache = (key, out.image, out.rect)
+        drawPillImage(g, out.image, out.rect, path)
+        return true
     }
+    private func drawPillImage(_ g: CGContext, _ img: CGImage, _ rect: CGRect, _ path: CGPath) {
+        g.saveGState()   // 外面一圈柔和接觸陰影：玻璃浮在錶面上
+        g.addRect(CGRect(x: -100, y: -100, width: 1224, height: 1224)); g.addPath(path); g.clip(using: .evenOdd)
+        let h = path.boundingBoxOfPath.height
+        g.setShadow(offset: CGSize(width: 0, height: h * 0.06), blur: h * 0.16, color: NSColor(white: 0, alpha: 0.22).cgColor)
+        g.addPath(path); g.setFillColor(NSColor(white: 0, alpha: 0.4).cgColor); g.fillPath()
+        g.restoreGState()
+        g.saveGState(); g.addPath(path); g.clip(); drawUpright(g, img, in: rect); g.restoreGState()
+    }
+    nonisolated(unsafe) private static var pillCache: (key: String, image: CGImage, rect: CGRect)?
 
     // MARK: Siri 球
 

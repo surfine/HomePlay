@@ -47,6 +47,7 @@ enum SBWidgetSize: String, Codable, CaseIterable {
 /// 小工具種類：HomePlay 已有的 App 都給一個
 enum SBWidgetKind: String, Codable, CaseIterable {
     case photos, weather, calendar, reminders, music, podcasts, home, worldClock, timers, alarms, findMy, batteries
+    case desktopWidgets   // SideShow 致敬：Mac 桌面上系統畫好的小工具（螢幕錄製擷取，Shell/DesktopWidgets.swift）
     case webApp   // 2.0 Web App：config["app"]＝哪個 Web App、config["tag"]＝manifest widgets 的 tag（Shell/WebApps/AdaptiveCards.swift）
 
     /// 點小工具打開哪個 App（電池沒有 App：打開控制中心那一層不合適，就不開）
@@ -65,6 +66,7 @@ enum SBWidgetKind: String, Codable, CaseIterable {
         case .findMy: return "findmy"
         case .batteries: return nil
         case .webApp: return nil   // 照 config["app"]
+        case .desktopWidgets: return nil   // 照點到的那一個系統小工具開對應的 Mac App
         }
     }
     /// 這個種類有哪些大小（照 iOS 同名小工具；放得下又有意義的才給）
@@ -75,10 +77,11 @@ enum SBWidgetKind: String, Codable, CaseIterable {
         case .reminders, .findMy: return [.small, .medium, .large]
         case .alarms: return [.small, .wide, .medium]
         case .webApp: return [.small, .wide, .medium, .large]
+        case .desktopWidgets: return [.small, .wide, .medium, .large]
         }
     }
     /// 個人內容（訪客、認不出的人看到「需要主人」；PersonalGate）
-    var personal: Bool { self == .calendar || self == .reminders || self == .findMy }
+    var personal: Bool { self == .calendar || self == .reminders || self == .findMy || self == .desktopWidgets }   // 桌面小工具可能是行事曆、提醒事項
 }
 
 struct SBWidget: Codable, Equatable {
@@ -404,7 +407,7 @@ struct SBLayout: Codable, Equatable {
             return newID
         case .folder(var f):
             let add = incoming.filter { !f.apps.contains($0) }
-            guard f.apps.count + add.count <= SBFolder.pageSize else { return nil }   // 一個資料夾 3×3（滿了就當一般放下）
+            guard f.apps.count + add.count <= SBFloaty.maxApps else { return nil }   // 浮動資料夾：一頁 3×3、最多四頁（滿了就當一般放下）
             f.apps += add
             pages[p].items[i] = .folder(f)
             return f.id
@@ -415,10 +418,10 @@ struct SBLayout: Codable, Equatable {
     static func folderName(_ apps: [String]) -> String {
         func cat(_ id: String) -> String {
             switch id {
-            case "music", "podcasts", "photos": return L("sb.folder.entertainment", "娱乐")
-            case "messages", "facetime", "intercom": return L("sb.folder.social", "社交")
+            case "music", "podcasts", "photos", "sing", "games": return L("sb.folder.entertainment", "娱乐")
+            case "messages", "facetime", "intercom", "contacts": return L("sb.folder.social", "社交")
             case "calendar", "reminders", "safari", "cliotalk": return L("sb.folder.productivity", "效率")
-            case "home", "weather", "findmy": return L("sb.folder.lifestyle", "生活")
+            case "home", "weather", "findmy", "recipes", "carplay": return L("sb.folder.lifestyle", "生活")
             default: return L("sb.folder.utilities", "工具")
             }
         }
@@ -429,8 +432,16 @@ struct SBLayout: Codable, Equatable {
 
     // MARK: 預設與遷移
 
-    /// 官方預設（第六輪）：左上 FaceTime／家庭／音樂／訊息，右上 2×2 照片，第三列鬧鐘、行事曆、Podcast、提醒事項
-    static let official: SBLayout = migrate(.official)
+    /// 預設第二頁：HomePlay 自己的 App（2026-11-06 拍板；第一頁照官方不動）
+    static let homePlayPage = ["carplay", "weather", "timers", "worldclock", "safari", "recipes", "sing", "games", "contacts", "findmy"]
+    /// 預設：第一頁照官方（第六輪：左上 FaceTime／家庭／音樂／訊息，右上 2×2 照片，第三列鬧鐘、行事曆、Podcast、提醒事項），
+    /// 第二頁 homePlayPage。沒自訂過的人（存檔裡沒有排列）直接拿到這份；自訂過的照存檔，不動。
+    static let official: SBLayout = {
+        var l = migrate(.official)
+        l.pages.append(SBPage(items: homePlayPage.filter { AppRegistry.app($0) != nil && !AppRegistry.hidden.contains($0) }.map { .app($0) }))
+        l.normalize()
+        return l
+    }()
 
     /// P02 的舊排列（右上 2×2 一個小工具＋App 照格子順序）→ 一頁：
     /// 前兩個 App、小工具（落在右上 2×2）、其餘 App；超過一頁的推到第二頁（舊版是直接收回 App 資料庫）
@@ -447,18 +458,29 @@ struct SBLayout: Codable, Equatable {
         return l
     }
 
-    /// 存檔裡有已經不存在的 App（改版拿掉了）就清掉；被藏起來的（食譜併進 Safari）換成 Safari
+    /// 提供者（iPhone App、Web App）的 id：認不認得要看背景掃描與檔案讀得到沒有，暫時認不得不代表 App 沒了，
+    /// 所以存檔清理時照留（畫面上先不畫）；使用者自己移除、刪掉 Web App 時各自從排列拿掉
+    static func isProviderID(_ id: String) -> Bool { id.hasPrefix("iphone:") || id.hasPrefix(WebApp.idPrefix) }
+    /// 清理時留不留這個 App：內建 App 要還在；提供者的 id 一律留
+    static func keeps(_ id: String) -> Bool {
+        if isProviderID(id) { return true }
+        return AppRegistry.app(id) != nil && !AppRegistry.hidden.contains(id)
+    }
+
+    /// 存檔裡有已經不存在的內建 App（改版拿掉了）就清掉；食譜被藏起來的那幾版（併進 Safari）存的換成 Safari——
+    /// 食譜現在是獨立 App（WP5），沒藏就照留，不然自訂過再存的食譜會被吃掉。
+    /// iPhone App 與 Web App 認不得時照留（背景掃描暫時沒結果、檔案暫時讀不到時不能把它從主畫面永久刪掉）
     mutating func sanitize() {
         for p in pages.indices {
             var seen = Set<String>()
             pages[p].items = pages[p].items.compactMap { it in
                 switch it {
                 case .app(var id):
-                    if id == "recipes" { id = "safari" }
-                    guard AppRegistry.app(id) != nil, !AppRegistry.hidden.contains(id), !seen.contains(id) else { return nil }
+                    if id == "recipes", AppRegistry.hidden.contains("recipes") { id = "safari" }
+                    guard Self.keeps(id), !seen.contains(id) else { return nil }
                     seen.insert(id); return .app(id)
                 case .folder(var f):
-                    f.apps = f.apps.map { $0 == "recipes" ? "safari" : $0 }.filter { AppRegistry.app($0) != nil && !AppRegistry.hidden.contains($0) && !seen.contains($0) }
+                    f.apps = f.apps.map { $0 == "recipes" && AppRegistry.hidden.contains("recipes") ? "safari" : $0 }.filter { Self.keeps($0) && !seen.contains($0) }
                     f.apps.forEach { seen.insert($0) }
                     if f.apps.isEmpty { return nil }
                     return .folder(f)
@@ -511,18 +533,21 @@ enum SBStore {
         var l = l
         l.normalize(dropEmpty: false)
         layouts[id] = l == .official ? nil : l
+        unreadable[id] = nil   // 本人改過了（含改回預設）：讀不懂的舊那份不再寫回
         save()
     }
     /// 還原預設：新舊兩份都清
     static func reset(_ id: String) {
         layouts[id] = nil
+        unreadable[id] = nil
         PersonHome.layouts[id] = nil
         save()
     }
     static func prune(keeping ids: Set<String>) {
-        let before = layouts.count
+        let before = layouts.count + unreadable.count
         layouts = layouts.filter { ids.contains($0.key) }
-        if layouts.count != before { save() }
+        unreadable = unreadable.filter { ids.contains($0.key) }   // 名冊刪掉的人：讀不懂的那份也一起清
+        if layouts.count + unreadable.count != before { save() }
     }
     static func save() {
         guard persist else { return }
@@ -546,9 +571,18 @@ enum SBModelSelftest {
         // 官方預設：舊版第六輪的格子一格不差
         let off = Lay.official
         let place = Lay.positions(off.pages[0].items)
-        check(off.pages.count == 1 && place["a:facetime"]! == (0, 0) && place["a:home"]! == (1, 0) && place["w:w-photos"]! == (2, 0)
+        check(off.pages.count == 2 && place["a:facetime"]! == (0, 0) && place["a:home"]! == (1, 0) && place["w:w-photos"]! == (2, 0)
               && place["a:music"]! == (0, 1) && place["a:messages"]! == (1, 1) && place["a:alarms"]! == (0, 2) && place["a:reminders"]! == (3, 2),
               "SpringBoard：官方預設＝FaceTime／家庭／音樂／訊息＋右上照片 2×2＋第三列四個")   // l10n-ignore：selftest 訊息
+        // 第二頁：HomePlay 的 App，照拍板的順序，跟第一頁不重複
+        let p2 = off.pages[1].items.compactMap { if case .app(let a) = $0 { return a }; return nil }
+        let p1 = Set(off.pages[0].items.compactMap { if case .app(let a) = $0 { return a }; return nil })
+        check(p2 == Lay.homePlayPage && p2.count == 10 && p1.isDisjoint(with: p2) && Lay.pack(off.pages[1].items).overflow.isEmpty,
+              "SpringBoard：預設第二頁＝CarPlay、天氣、計時器、世界時鐘、Safari、食譜、跟唱、遊戲、通訊錄、尋找")   // l10n-ignore：selftest 訊息
+        let fun = L("sb.folder.entertainment", "娱乐"), social = L("sb.folder.social", "社交"), tools = L("sb.folder.utilities", "工具")
+        check(Lay.folderName(["sing", "games"]) == fun && Lay.folderName(["contacts", "facetime"]) == social
+              && ["sing", "games", "contacts", "recipes", "carplay"].allSatisfy { Lay.folderName([$0]) != tools },
+              "SpringBoard：跟唱、遊戲歸娛樂，通訊錄歸社交，不落到「工具」")   // l10n-ignore：selftest 訊息
 
         // reflow：A 拖到 D 的位置，B C D 各往前一格（iOS 照閱讀順序讓開）
         let five = Array(apps.prefix(5))
@@ -599,7 +633,7 @@ enum SBModelSelftest {
         // 加小工具：放在這頁最前面，其他往後、多的推下一頁
         var addW = Lay.official
         addW.addWidget(.widget(SBWidget(id: "n", kind: .timers, size: .wide)), page: 0)
-        check(pos(addW.pages[0].items, "w:n")! == (0, 0) && addW.pages.count == 2 && addW.appsOnHome == Lay.official.appsOnHome,
+        check(pos(addW.pages[0].items, "w:n")! == (0, 0) && addW.pages.count > Lay.official.pages.count - 1 && Set(addW.appsOnHome) == Set(Lay.official.appsOnHome),
               "SpringBoard：加小工具放左上，擠出去的到第二頁、App 一個不少")   // l10n-ignore：selftest 訊息
         // 遷移：P02 的舊排列（換成天氣、拿掉訊息）→ 新版，位置不變
         var old = HomeLayout.official
@@ -623,6 +657,11 @@ enum SBModelSelftest {
         check(SBStore.layout(for: "old") == mig, "SpringBoard：只有舊版存檔的人自動遷移")
         SBStore.set(.official, for: "kid")
         check(SBStore.layouts["kid"] == nil, "SpringBoard：改回預設就不另外存")
+        // 自訂過的（存檔裡有排列）一律照存檔，新預設不蓋過去
+        var custom = Lay.migrate(HomeLayout.official); custom.addApp("timers")
+        SBStore.layouts["fam"] = custom
+        check(SBStore.layout(for: "fam") == custom && custom != Lay.official, "SpringBoard：自訂過的家人照舊，不換成新預設")   // l10n-ignore：selftest 訊息
+        SBStore.layouts["fam"] = nil
         SBStore.layouts["old"] = mine; SBStore.reset("old")
         check(SBStore.layout(for: "old") == .official, "SpringBoard：還原預設，新舊存檔一起清")
         // 一份壞掉的存檔不影響其他人；擠出去的不落進隱藏頁；開頭的空格不被當成擠出去的
@@ -638,7 +677,28 @@ enum SBModelSelftest {
         check(sp.pages.count == 1 && sp.pages[0].items.first == .spacer && Lay.positions(sp.pages[0].items)["a:x0"]! == (1, 0), "SpringBoard：開頭的空格留著，只拿掉擠出去的")   // l10n-ignore：selftest 訊息
         var bad = Lay(pages: [SBPage(items: [.app("recipes"), .app("nope"), .app("safari"), .folder(SBFolder(id: "q", name: "x", apps: ["nope"]))])])
         bad.sanitize()
-        check(bad.pages[0].items == [.app("safari")], "SpringBoard：存檔裡不存在的 App 清掉、食譜換 Safari 不重複")
+        check(bad.pages[0].items == [.app("recipes"), .app("safari")], "SpringBoard：存檔裡不存在的 App 清掉；食譜是獨立 App 照留")
+        // 背景掃描暫時沒結果：認不得的 iPhone App、Web App 照留在排列（含資料夾），載入再存回去那一格還在
+        let ghostPhone = "iphone:com.example.unscanned", ghostWeb = WebApp.idPrefix + "00000000-0000-4000-8000-00000000dead"
+        check(AppRegistry.app(ghostPhone) == nil && AppRegistry.app(ghostWeb) == nil, "SpringBoard：測試用的 iPhone／Web App id 確實認不得")   // l10n-ignore：selftest 訊息
+        let ghostRaw = #"{"p":{"version":2,"pages":[{"items":[{"app":{"_0":"music"}},{"app":{"_0":"\#(ghostPhone)"}},{"folder":{"_0":{"id":"gf","name":"G","apps":["\#(ghostWeb)","\#(ghostPhone)2"]}}}],"hidden":false}]}}"#
+        let ghostLoaded = SBStore.load(Data(ghostRaw.utf8))
+        let ghostBack = SBStore.encoded(ghostLoaded).flatMap { SBStore.load($0) }
+        let gItems = ghostBack?["p"]?.pages.first?.items ?? []
+        let gFolder: SBFolder? = gItems.compactMap { if case .folder(let f) = $0 { return f }; return nil }.first
+        check(gItems.contains(.app(ghostPhone)) && gFolder?.apps == [ghostWeb, ghostPhone + "2"] && gItems.first == .app("music"),
+              "SpringBoard：認不得的 iPhone／Web App 載入再存回去還在，資料夾也不消失（\(gItems.count)）")   // l10n-ignore：selftest 訊息
+        SBStore.unreadable["p"] = nil
+        // 讀不懂的那份：本人改回預設、還原預設之後不再寫回；名冊刪掉的人那份一起清
+        let savedBad = SBStore.unreadable
+        SBStore.unreadable = ["u1": ["version": 9], "u2": ["version": 9], "u3": ["version": 9]]
+        SBStore.set(.official, for: "u1")
+        SBStore.reset("u2")
+        SBStore.layouts["keep"] = mine
+        SBStore.prune(keeping: ["keep"])
+        let badLeft = SBStore.unreadable.keys.sorted()
+        SBStore.unreadable = savedBad; SBStore.layouts["keep"] = nil
+        check(badLeft.isEmpty, "SpringBoard：改回預設、還原預設後讀不懂的舊存檔不寫回；刪掉的人那份一起清（剩 \(badLeft)）")   // l10n-ignore：selftest 訊息
         // Smart Stack：智慧型旋轉照時段、建議計時器
         let st = SBStack(id: "z", size: .small, widgets: [SBWidget(id: "1", kind: .music, size: .small), SBWidget(id: "2", kind: .weather, size: .small)])
         check(st.rotatedIndex(hour: 8) == 1 && st.rotatedIndex(hour: 20) == 0 && st.suggestion(timerRunning: true, musicPlaying: false) == .timers,

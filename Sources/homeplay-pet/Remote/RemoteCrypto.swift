@@ -86,7 +86,9 @@ enum RemoteCrypto {
     // MARK: 只在區網
 
     /// 允許的來源：RFC 1918、連結本地、迴路、IPv6 ULA／連結本地（含 IPv4 對映）。100.64/10（CGNAT、Tailscale）不算家裡。
-    static func isPrivate(_ host: NWEndpoint.Host) -> Bool {
+    /// 2026-11-07：全域 IPv6 來源跟這台 Mac 某張網卡的 IPv6 前綴同網段（同一個家裡的 /64）也算——家裡路由器只發全域位址時
+    /// 平板、手機連進來的就是全域位址；外網的全域位址照舊拒絕。localPrefixes 可注入（自檢不讀真的網卡）。
+    static func isPrivate(_ host: NWEndpoint.Host, localPrefixes: [IPv6Prefix]? = nil) -> Bool {
         switch host {
         case .ipv4(let a): return isPrivateV4(Array(a.rawValue))
         case .ipv6(let a):
@@ -97,8 +99,39 @@ enum RemoteCrypto {
             if b[0] == 0xfe && (b[1] & 0xc0) == 0x80 { return true }               // fe80::/10
             if b[0..<6] == [0xfd, 0x7a, 0x11, 0x5c, 0xa1, 0xe0] { return false }   // fd7a:115c:a1e0::/48＝Tailscale，不是家裡
             if (b[0] & 0xfe) == 0xfc { return true }                               // fc00::/7
-            return false
+            return (localPrefixes ?? IPv6Prefix.local()).contains { $0.contains(b) }  // 跟本機網卡同網段的全域位址
         default: return false
+        }
+    }
+
+    /// 一張網卡的 IPv6 位址＋netmask（getifaddrs）
+    struct IPv6Prefix: Equatable {
+        var address: [UInt8]
+        var mask: [UInt8]
+        func contains(_ b: [UInt8]) -> Bool {
+            guard b.count == 16, address.count == 16, mask.count == 16, mask.contains(where: { $0 != 0 }) else { return false }   // 沒有前綴（/0）不算同網段
+            return (0..<16).allSatisfy { b[$0] & mask[$0] == address[$0] & mask[$0] }
+        }
+        /// 這台 Mac 開著的網卡上的全域 IPv6 前綴：不含迴路、點對點（utun 這類 VPN 隧道不是家裡的網段）、連結本地與 ULA（上面已經放行）
+        static func local() -> [IPv6Prefix] {
+            var head: UnsafeMutablePointer<ifaddrs>?
+            guard getifaddrs(&head) == 0 else { return [] }
+            defer { freeifaddrs(head) }
+            var out: [IPv6Prefix] = []
+            var p = head
+            while let i = p {
+                defer { p = i.pointee.ifa_next }
+                let f = Int32(i.pointee.ifa_flags)
+                guard f & IFF_UP != 0, f & IFF_LOOPBACK == 0, f & IFF_POINTOPOINT == 0,
+                      let a = i.pointee.ifa_addr, a.pointee.sa_family == sa_family_t(AF_INET6), let m = i.pointee.ifa_netmask else { continue }
+                func bytes(_ sa: UnsafeMutablePointer<sockaddr>) -> [UInt8] {
+                    sa.withMemoryRebound(to: sockaddr_in6.self, capacity: 1) { s in withUnsafeBytes(of: s.pointee.sin6_addr) { Array($0) } }
+                }
+                let addr = bytes(a)
+                guard addr[0] & 0xe0 == 0x20 else { continue }   // 2000::/3 全域單播
+                out.append(IPv6Prefix(address: addr, mask: bytes(m)))
+            }
+            return out
         }
     }
 

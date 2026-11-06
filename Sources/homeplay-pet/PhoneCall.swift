@@ -35,21 +35,24 @@ struct PhoneCallInfo: Equatable {
 
     var actions: [PhoneCallAction] { isIncomingRing ? [.decline, .answer] : (showsCard ? [.hangUp] : []) }
 
-    /// 卡片大字：聯絡人名字 > 號碼 > 「未知來電」
-    var title: String {
-        name ?? number ?? L("call.unknownCaller", "未知号码")
+    /// 卡片大字：聯絡人名字 > 號碼 > 「未知來電」。hidden（訪客：PersonalGate 門關著，2026-11-07）＝只寫狀態（響鈴時「來電」），不露名字與號碼
+    func title(hidden: Bool) -> String {
+        hidden ? phase : (name ?? number ?? L("call.unknownCaller", "未知号码"))
     }
 
-    /// 卡片小字：狀態；有名字又有號碼時把號碼也帶上
-    func subtitle(carrier: String?) -> String {
-        let phase: String
+    private var phase: String {
         switch state {
-        case .ringing: phase = L("call.state.ringing", "来电")
-        case .dialing: phase = L("call.state.dialing", "正在拨号…")
-        case .active: phase = L("call.state.active", "通话中")
-        case .held: phase = L("call.state.held", "通话保持中")
-        case .idle: phase = ""
+        case .ringing: return L("call.state.ringing", "来电")
+        case .dialing: return L("call.state.dialing", "正在拨号…")
+        case .active: return L("call.state.active", "通话中")
+        case .held: return L("call.state.held", "通话保持中")
+        case .idle: return ""
         }
+    }
+
+    /// 卡片小字：狀態；有名字又有號碼時把號碼也帶上。hidden＝不顯示（狀態已經在大字，號碼與電信商都是主人的）
+    func subtitle(carrier: String?, hidden: Bool = false) -> String {
+        guard !hidden else { return "" }
         var parts = [phase]
         if name != nil, let number { parts.append(number) }
         if state == .ringing, let carrier, !carrier.isEmpty { parts.append(carrier) }
@@ -114,6 +117,8 @@ struct SiriHoldKey: Equatable {
 final class PhoneCallCardModel: ObservableObject {
     @Published var call = PhoneCallInfo()
     @Published var carrier: String?
+    /// 訪客（PersonalGate 門關著）：只顯示「來電」，接聽／拒接照舊（AppDelegate.applyCall、PetView.shellStep 跟著門更新）
+    @Published var hidden = false
     var onAction: ((PhoneCallAction) -> Void)?
 }
 
@@ -129,13 +134,16 @@ struct PhoneCallCardView: View {
                 .background(Circle().fill(Color(nsColor: .systemGreen)))
                 .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 2) {
-                Text(model.call.title)
+                Text(model.call.title(hidden: model.hidden))
                     .font(.system(size: 15, weight: .semibold))
                     .lineLimit(1)
-                Text(model.call.subtitle(carrier: model.carrier))
-                    .font(.system(size: 12))
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
+                let sub = model.call.subtitle(carrier: model.carrier, hidden: model.hidden)
+                if !sub.isEmpty {
+                    Text(sub)
+                        .font(.system(size: 12))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             ForEach(model.call.actions, id: \.rawValue) { action in

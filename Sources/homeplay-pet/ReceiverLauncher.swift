@@ -174,10 +174,13 @@ enum ReceiverLauncher {
         // CarPlay 無線交接需要 Wi-Fi 憑據；由用戶在右鍵「Wi-Fi 密碼…」填一次，存本地 0600。
         p.environment = env
         let logURL = url.deletingLastPathComponent().appendingPathComponent("receiver.log")
-        // 控制日志体积：超过 2 MB 就清空（receiver 每条会话都会追写）
+        // 控制日志体积：超过 2 MB 就輪轉成 receiver.log.1（不刪：正在跑的接收端還寫在原檔上，
+        // 刪掉它的紀錄就跟著消失——2026-11-07 真機查事故時，19:41 起的紀錄就是這樣沒了）
         if let attrs = try? FileManager.default.attributesOfItem(atPath: logURL.path),
            let size = attrs[.size] as? Int, size > 2_000_000 {
-            try? FileManager.default.removeItem(at: logURL)
+            let old = logURL.appendingPathExtension("1")
+            try? FileManager.default.removeItem(at: old)
+            try? FileManager.default.moveItem(at: logURL, to: old)
         }
         if !FileManager.default.fileExists(atPath: logURL.path) {
             FileManager.default.createFile(atPath: logURL.path, contents: nil, attributes: [.posixPermissions: 0o600])   // 有 Wi-Fi 名稱與手機位址

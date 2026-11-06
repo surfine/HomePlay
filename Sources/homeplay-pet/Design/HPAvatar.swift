@@ -218,6 +218,13 @@ extension Person {
 extension Face {
     /// 畫一個家人的頭像（圓，r 是外框）：帳號頭像 → 聯絡人照片 → 縮寫；選了 👀 才畫 👀 人物
     func drawPersonAvatar(_ g: CGContext, _ person: Person, in r: CGRect) {
+        if let e = person.emoji, !e.isEmpty {   // 2.0 家人檔案：自己選的 emoji，畫在配色底的圓上
+            let c = person.avatarColors
+            g.setFillColor(srgb(c.bg).cgColor); g.fillEllipse(in: r)
+            let f = NSFont.systemFont(ofSize: r.height * 0.56)
+            drawLeft(g, e, font: f, x: r.midX - Typo.width(e, f) / 2, y: r.midY + r.height * 0.2, color: .black)
+            return
+        }
         if person.isOwner, !Face.demoData {
             AccountPicture.load { [weak self] in self?.forceDirty = true }
             MeCard.load { [weak self] in self?.forceDirty = true }

@@ -53,7 +53,7 @@ final class NowPlayingPage {
     func state(face: Face) -> (info: NowPlayingInfo, source: Source)? {
         if let d = demo { return (d.info, d.source) }
         guard let i = face.nowPlaying.info, !i.title.isEmpty else { return nil }
-        return (i, PhoneNowPlayingBridge.shared.active ? .phone : .mac)
+        return (i, NowPlayingSource.phoneShown ? .phone : .mac)   // 2.0 家人檔案：照來源偏好
     }
 
     /// 來源 App 是不是播客（只有 iPhone 的 iAP2 會告訴我們）
@@ -195,6 +195,12 @@ final class NowPlayingPage {
                 else { g.saveGState(); if let c = panelTransitionClip { g.clip(to: c) }; t.drawOver(g, face, now); g.restoreGState() }
             }
         }
+        // 體驗追趕 P4：控制權交接（Mac ↔ iPhone）——畫面上看得到的來源翻了，舊畫面模糊淡出
+        if Self.handoffNeeded(last: lastRender, source: s.source, now: now, demo: demo != nil) {
+            panelTransitionClip = nil
+            panelTransition = PageTransition(.blurFade, face: face, now: now, spring: HPMotion.T.playbackHandoff.spring, name: HPMotion.T.playbackHandoff.name)
+        }
+        lastRender = (s.source, now)
         sync(s)
         let i = s.info
         let podcast = isPodcast(face: face)
@@ -455,6 +461,14 @@ final class NowPlayingPage {
         drawTopBar(g, face: face, s, withLibraryStrip: withLibraryStrip)
     }
 
+    /// 上一次畫的來源與時間（交接判定用）
+    private var lastRender: (source: Source, at: Double)?
+    /// 純函式：上一幀還在畫正在播放（0.5 s 內）而且來源翻了才算交接；不在畫面上時翻的不補動畫、示範資料不算
+    static func handoffNeeded(last: (source: Source, at: Double)?, source: Source, now: Double, demo: Bool) -> Bool {
+        guard !demo, let l = last else { return false }
+        return l.source != source && now - l.at < 0.5
+    }
+
     /// 換一層（同一層再按一次＝關）
     private var panelTransition: PageTransition?
     /// 2.0 idle：面板（待播、AirPlay…）收起的過場還疊著舊畫面——這幾幀不給訪客裝置
@@ -611,7 +625,12 @@ final class NowPlayingPage {
             if demo != nil || (st.source == .mac && (MediaRemote.shared.canSeek || MusicControl.isSource)) { seek(to: f * st.info.duration, face: face, now: now) }
             return true
         }
-        if !podcast, hit(Self.libraryStrip) { if !guest { setPanel(.queue) }; return true }
+        // 拍板（2026-11-06）：手機來源 CarPlay 不給待播清單——直接切到 CarPlay 自己的音樂畫面（待播、播放列表都在那裡），看完按空格回桌寵
+        if !podcast, hit(Self.libraryStrip) {
+            if guest { return true }
+            if st.source == .phone, demo == nil { openSource(.phone) } else { setPanel(.queue) }
+            return true
+        }
         // 2.0 #11：播客的後退 15、快轉 30、倍速（MediaRemote；拿不到就灰掉、點了不做事）
         if podcast {
             let mr = mrAvailable(st)
@@ -769,5 +788,14 @@ final class NowPlayingPage {
                 c.addLine(to: CGPoint(x: 1024, y: 1024)); c.closePath(); c.fillPath()
             }
         }
+    }
+}
+
+enum NowPlayingHandoffSelfTest {
+    static func run(_ check: (Bool, String) -> Void) {
+        let f = NowPlayingPage.handoffNeeded
+        check(f((.mac, 10), .phone, 10.1, false) && !f((.mac, 10), .mac, 10.1, false), "正在播放交接：來源翻了才算")   // l10n-ignore
+        check(!f((.mac, 10), .phone, 11, false) && !f(nil, .phone, 10, false) && !f((.mac, 10), .phone, 10.1, true),
+              "正在播放交接：不在畫面上時翻的、第一次、示範資料都不補動畫")   // l10n-ignore
     }
 }

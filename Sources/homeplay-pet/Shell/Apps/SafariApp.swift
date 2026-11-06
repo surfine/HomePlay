@@ -476,6 +476,12 @@ final class SafariApp: PetApp {
         if leading != nil, started { hits.append((CGRect(x: f.minX, y: f.minY, width: zone, height: f.height), { [weak self] in self?.toggleReader() })) }
         if trailing != nil { hits.append((CGRect(x: f.maxX - zone, y: f.minY, width: zone, height: f.height), { [weak self] in guard let self else { return }; if self.web.loading { self.web.stop() } else { self.web.reload() } })) }
         hits.append((f, { [weak self] in self?.showAddress() }))
+        // 傳到手機：目前網頁用 AirDrop 送出（系統的 AirDrop 選人視窗）
+        if started, !AirDropShare.items(page: web.url).isEmpty {
+            HPAX.note(g, T.share, .button, SelfShare.title, value: SelfShare.useMessages ? SelfShare.note : nil, shape: .circle)   // CarPlay 連著時改走訊息傳給自己
+            HPComponents.glassCircle(g, face, T.share, symbol: SelfShare.symbol)
+            hits.append((T.share, { [weak self] in SelfShare.share(self?.web.url.map { .page($0) }) }))
+        }
     }
 
     // MARK: 從 iPhone 傳來（2.0 promo，Shell/Handoff/PhoneHandoff.swift）
@@ -567,7 +573,7 @@ final class SafariApp: PetApp {
         web.tap(css: SafariLogic.cssPoint(p, zoom: web.pageZoom))
         return true
     }
-    private func isControl(_ r: CGRect) -> Bool { r.maxY > T.field.minY - 4 || r == T.cook }
+    private func isControl(_ r: CGRect) -> Bool { r.maxY > T.field.minY - 4 || r == T.cook || r == T.share }
     /// 2.0 Web App：長按網址列＝加入主畫面（iOS 的分享 › 加入主畫面；原生小框裡也有一顆）
     func handleLongPress(_ p: CGPoint, face: Face, now: Double) -> Bool {
         self.face = face

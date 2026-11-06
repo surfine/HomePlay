@@ -435,6 +435,11 @@ final class ReceiverClient: NSObject, URLSessionWebSocketDelegate {
     func sendTouch(x: Double, y: Double, down: Bool) {
         send(#"{"type":"touch","contacts":[{"id":0,"x":\#(String(format: "%.5f", x)),"y":\#(String(format: "%.5f", y)),"down":\#(down ? "true" : "false")}]}"#)
     }
+    /// CarPlay 兩指（實驗旗標；接收端依 id 分槽送兩指 HID 報告，見 docs/plans/touch.md「CarPlay 兩指」）
+    func sendTouches(_ contacts: [(Int, Double, Double, Bool)]) {
+        let items = contacts.map { #"{"id":\#($0.0),"x":\#(String(format: "%.5f", $0.1)),"y":\#(String(format: "%.5f", $0.2)),"down":\#($0.3 ? "true" : "false")}"# }
+        send(#"{"type":"touch","contacts":["# + items.joined(separator: ",") + "]}")
+    }
     func sendMedia(_ command: String) {
         send(#"{"type":"media","command":"\#(command)"}"#)
     }
@@ -444,6 +449,11 @@ final class ReceiverClient: NSObject, URLSessionWebSocketDelegate {
     func sendSiri(down: Bool) { send(down ? #"{"type":"siri","action":"down"}"# : #"{"type":"siri","action":"up"}"#) }
     /// 車機的旋鈕／返回鍵（接收器轉成 CarPlay knob HID）；Esc 走這條。
     func sendKnob(_ command: String) { send(#"{"type":"knob","command":"\#(command)"}"#) }
+    /// CarPlay 主螢幕開某個 App（接收端送 requestUI＋URL；Shell/AppPlatform/PhoneApps.swift）
+    func openCarPlayApp(_ url: String) {
+        guard let d = try? JSONSerialization.data(withJSONObject: ["type": "openCarPlayApp", "url": url]), let s = String(data: d, encoding: .utf8) else { return }
+        send(s)
+    }
     /// 獨立通話音量（MacPlay 的 callVolume）；接收器改 DynamicsProcessor 的 OverallGain。
     func sendCallGain(_ db: Double) { send(#"{"type":"audio","command":"callGain","db":\#(db)}"#) }
     /// 來電卡的按鍵（接收器轉成 CarPlay 電話 HID）

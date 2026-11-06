@@ -91,6 +91,18 @@ enum RemoteSelftest {
         for a in ["8.8.8.8", "172.32.0.1", "100.64.1.1", "1.1.1.1", "2001:db8::1", "::ffff:8.8.8.8", "192.169.0.1", "fd7a:115c:a1e0::1", "fd7a:115c:a1e0:ab12::5"] {
             check(!RemoteCrypto.isPrivate(h(a)), "remote: \(a) 不是區網")
         }
+        // 2026-11-07：全域 IPv6 跟本機網卡同網段＝放行（SideShow 與 Remote 共用），不同網段照舊拒絕；ULA／連結本地、IPv4 私有照舊
+        func v6(_ s: String) -> [UInt8] { Array(IPv6Address(s)!.rawValue) }
+        let lan = [RemoteCrypto.IPv6Prefix(address: v6("2408:8207:1234:5678::a"), mask: v6("ffff:ffff:ffff:ffff::"))]
+        check(RemoteCrypto.isPrivate(h("2408:8207:1234:5678:1c2d:3e4f:5a6b:7c8d"), localPrefixes: lan), "remote: 全域 IPv6 跟本機網卡同一個 /64＝區網")   // l10n-ignore
+        check(!RemoteCrypto.isPrivate(h("2408:8207:1234:5679::1"), localPrefixes: lan) && !RemoteCrypto.isPrivate(h("2001:4860:4860::8888"), localPrefixes: lan),
+              "remote: 全域 IPv6 不同網段＝外網，照舊拒絕")   // l10n-ignore
+        check(RemoteCrypto.isPrivate(h("fe80::1"), localPrefixes: []) && RemoteCrypto.isPrivate(h("fd12:3456::1"), localPrefixes: [])
+              && RemoteCrypto.isPrivate(h("192.168.1.2"), localPrefixes: lan) && !RemoteCrypto.isPrivate(h("8.8.8.8"), localPrefixes: lan)
+              && !RemoteCrypto.isPrivate(h("fd7a:115c:a1e0::1"), localPrefixes: lan) && !RemoteCrypto.isPrivate(h("2408:8207:1234:5678::1"), localPrefixes: []),
+              "remote: ULA／連結本地、IPv4 私有照舊；Tailscale 照舊拒絕；本機沒有全域前綴時全域位址一律拒絕")   // l10n-ignore
+        check(!RemoteCrypto.IPv6Prefix(address: v6("::"), mask: v6("::")).contains(v6("2001:db8::1")), "remote: 沒有前綴（/0）不算同網段")   // l10n-ignore
+        check(RemoteCrypto.IPv6Prefix.local().allSatisfy { $0.address[0] & 0xe0 == 0x20 && $0.mask.count == 16 }, "remote: 本機網卡只取全域 IPv6 前綴")   // l10n-ignore
         check(!RemoteServer.admits(.hostPort(host: "203.0.113.7", port: 50000)), "remote: 外網來源的連線被拒")
         check(RemoteServer.admits(.hostPort(host: "192.168.1.20", port: 50000)), "remote: 區網來源的連線收下")
         let hostsOK = RemoteCrypto.hostAllowed("192.168.5.9:52424") && RemoteCrypto.hostAllowed("Aarons-MacBook-Air.local:52424") && RemoteCrypto.hostAllowed("[fe80::1]:52424")

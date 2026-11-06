@@ -294,6 +294,45 @@ final class MessagesStore {
         return out.map { (message: $0.0, chatTitle: $0.1, isGroup: $0.2) }
     }
 
+    /// 主人自己傳 iMessage 用的帳號（電話或信箱）：外送 iMessage 的 destination_caller_id 依次數排，最近 90 天的排前面、
+    /// 兩年內的接在後面。一律帶日期範圍，不掃整張 message 表（呼叫端放在背景佇列）。
+    /// 傳給自己用（CarPlay 連著時 iPhone 不能用 AirDrop）。沒有這個欄位（schema 改了）回空。只回字串，不寫日誌
+    static let ownHandleWindows: [Double] = [90, 730]
+    func ownHandles(limit: Int = 5, now: Date = Date()) -> [String] {
+        guard msgCols.contains("destination_caller_id") else { return [] }
+        func ranked(days: Double) -> [String] {
+            var out: [String] = []
+            let since = Int64((now.timeIntervalSinceReferenceDate - days * 86400) * 1e9)
+            try? query("""
+                SELECT MIN(destination_caller_id), COUNT(*) AS n FROM message
+                WHERE date > ? AND is_from_me = 1 AND service = 'iMessage' AND IFNULL(destination_caller_id,'') <> ''
+                GROUP BY lower(destination_caller_id) ORDER BY n DESC LIMIT ?
+                """, [since, limit]) { out.append(Self.str($0, 0)) }
+            return out
+        }
+        var seen = Set<String>(), out: [String] = []
+        for h in Self.ownHandleWindows.flatMap({ ranked(days: $0) }) {
+            var s = h.trimmingCharacters(in: .whitespaces)
+            if s.hasPrefix("e:") || s.hasPrefix("p:") { s.removeFirst(2) }   // account 欄的寫法（e:信箱／p:電話）
+            if !s.isEmpty, seen.insert(s.lowercased()).inserted { out.append(s) }
+        }
+        return Array(out.prefix(limit))
+    }
+
+    /// 送附件後確認用：ROWID > baseline、is_from_me=1、帶著檔名相同的附件。error != 0 回 .failed
+    func outgoingAttachment(after baseline: Int64, name: String) -> OutgoingState {
+        var state = OutgoingState.none
+        try? query("""
+            SELECT IFNULL(m.error,0) FROM message m
+            JOIN message_attachment_join maj ON maj.message_id = m.ROWID JOIN attachment a ON a.ROWID = maj.attachment_id
+            WHERE m.ROWID > ? AND m.is_from_me = 1 AND (a.transfer_name = ? OR a.filename LIKE ?)
+            ORDER BY m.ROWID
+            """, [baseline, name, "%/" + name]) { st in
+            state = sqlite3_column_int(st, 0) != 0 ? .failed : .found
+        }
+        return state
+    }
+
     /// 送出後確認用：ROWID > baseline、is_from_me=1、內文相同（可限定對話 guid）。error != 0 回 .failed
     enum OutgoingState { case none, found, failed }
     func outgoing(after baseline: Int64, text: String, chatGUID: String?) -> OutgoingState {

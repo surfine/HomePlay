@@ -3,7 +3,7 @@
 // 桌寵裡一個小小的 HTTP＋WebSocket 伺服器（Network.framework NWListener，Bonjour 廣播 _homeplay._tcp）：
 // - GET / 給一頁 HTML（RemotePage.swift）；/ws 升級成 WebSocket，先握手（RemoteCrypto.swift），之後全部加密。
 // - 只收區網：NWParameters.acceptLocalOnly、不走行動網路與 VPN（.cellular、.other＝utun），來源位址不是私有位址就直接斷
-//   （RemoteCrypto.isPrivate，Tailscale 的 fd7a:115c:a1e0::/48 不算）；Host 標頭只收 IP／.local（擋 DNS rebinding），
+//   （RemoteCrypto.isPrivate：全域 IPv6 跟本機網卡同網段也算；Tailscale 的 fd7a:115c:a1e0::/48 不算）；Host 標頭只收 IP／.local（擋 DNS rebinding），
 //   WebSocket 的 Origin 要跟 Host 同一個；同一個來源最多 4 條連線、全部最多 16 條。
 // - 同一台裝置同時從兩個不同位址連進來（金鑰被偷了才會這樣）：先 ping 舊的那條，兩條都活著＝自動移除這台、在 Mac 上通知。
 // - 沒配對的、金鑰不對的、被移除的：第一則訊息解不開就斷，一幀都拿不到。

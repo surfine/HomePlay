@@ -17,7 +17,7 @@ extension ControlCenter {
         let r = lerp(from, to, k)
         let s = size(t)
         let r0: CGFloat = s == .s4x1 ? wideRadius : (s == .s2x2 || s == .s4x2 ? squareRadius : from.height / 2)
-        let rad = r0 + (squareRadius - r0) * max(0, min(1, k))
+        let rad = r0 + (expandedRadius - r0) * max(0, min(1, k))
         let path = continuousRoundedRect(r, radius: rad)
         let contentA = max(0, min(1, (k - 0.4) / 0.5))
         HPGlass.add(path, interactive: false, union: nil, presence: 1) { c in
