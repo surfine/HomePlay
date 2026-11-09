@@ -59,6 +59,8 @@ export const excludePaths = [
   { path: "docs/prompt-macplay-lessons.md", reason: "給 agent 的內部交接提示" },
   { path: "docs/prompt-polish-handoff.md", reason: "給 agent 的內部交接提示" },
   { path: "tooling/public-overlay/", reason: "覆蓋檔本身不以原路徑出現，內容改放到快照根目錄" },
+  { path: "AGENTS.md", reason: "給 agent 的倉庫指令與技能路由，不進公開快照" },
+  { path: "CLAUDE.md", reason: "給 agent 的倉庫指令，不進公開快照" },
 ];
 
 /** 快照裡用覆蓋檔取代或新增的檔案：快照路徑 → 倉庫裡的來源。 */
