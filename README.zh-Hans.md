@@ -5,7 +5,7 @@
 [English](README.md)
 [产品页面](https://homeplay.aaronlau.me/zh-hans/2.0/)
 
-<img src="assets/github/hero-v2.gif" alt="从眼睛的特写拉远，Mac 桌面上出现一台小 HomeView" width="720">
+<img src="assets/github/hero-v2.gif" alt="从主画面上的眼睛拉远，看到整台机器" width="720">
 
 [下载 2.0 beta 6](https://github.com/surfine/HomePlay/releases/download/v2.0.0-beta.6/HomePlay-2.0-beta6-macOS-arm64.zip)
 [下载 1.0.6](https://github.com/surfine/HomePlay/releases/download/v1.0.6/HomePlay-macOS-arm64.zip)

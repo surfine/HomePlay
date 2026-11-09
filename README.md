@@ -5,7 +5,7 @@ A HomeView for the Mac desktop. It sits on the desk, watches you, and runs CarPl
 [简体中文](README.zh-Hans.md)
 [Website](https://homeplay.aaronlau.me/en/2.0/)
 
-<img src="assets/github/hero-v2.gif" alt="An eye close-up pulls back to a small HomeView on a Mac desktop" width="720">
+<img src="assets/github/hero-v2.gif" alt="The home screen pulls back from the eyes to the whole device" width="720">
 
 [Download 2.0 beta 6](https://github.com/surfine/HomePlay/releases/download/v2.0.0-beta.6/HomePlay-2.0-beta6-macOS-arm64.zip)
 [Download 1.0.6](https://github.com/surfine/HomePlay/releases/download/v1.0.6/HomePlay-macOS-arm64.zip)
