@@ -50,6 +50,14 @@ enum RemoteCrypto {
         return out
     }
 
+    /// 常數時間比對：長度不同直接 false（長度本身不是祕密），其餘每個 byte 都比完才回
+    static func equal(_ a: [UInt8], _ b: [UInt8]) -> Bool {
+        guard a.count == b.count else { return false }
+        var d: UInt8 = 0
+        for i in a.indices { d |= a[i] ^ b[i] }
+        return d == 0
+    }
+
     static func display(_ bytes: [UInt8]) -> String {
         let s = Array(encode(bytes))
         return stride(from: 0, to: s.count, by: 4).map { String(s[$0..<min(s.count, $0 + 4)]) }.joined(separator: "-")

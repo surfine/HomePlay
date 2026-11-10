@@ -818,11 +818,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         window.contentView = view
         view.updateFaceScale()
         AirDrop.start(view: view)   // AirDrop 收件卡片、上次沒還原的可被發現設定（Shell/AirDrop/）
-        RemoteServer.shared.view = view   // 2.0 idle: 網頁串流（Remote/）；預設關，設定 › iPhone 與 iPad 打開才開
+        RemoteServer.shared.view = view   // 2.0 idle: 網頁串流＋副屏（Remote/）；預設關，設定 › iPhone 與 iPad 打開才開
+        RemoteServer.shared.feed.face = view.face
+        RemoteStore.archiveLegacy()       // 舊版兩份名冊（金鑰、雜湊）在新身分模型下用不了：搬到 *.legacy.json
         if RemoteStore.enabled && !diagnosticRun || CommandLine.arguments.contains("--remote-test") { RemoteServer.shared.startFromLaunch() }
-        SideShowServer.shared.face = view.face   // SideShow（SideShow/）：預設關，螢幕上的設定 › SideShow 打開才開
-        SideShowServer.shared.store.onChange = { [weak self] in DispatchQueue.main.async { self?.view.face.forceDirty = true } }
-        if SideShowStore.enabled && !diagnosticRun { SideShowServer.shared.start() }
         if let lockedFace { view.lockFace(lockedFace) }
         if let finish { view.setFinish(finish) }   // 只给这次用，不写进偏好
         if let photosDir { view.face.photos = PhotoShelf(folder: URL(fileURLWithPath: photosDir, isDirectory: true)) }

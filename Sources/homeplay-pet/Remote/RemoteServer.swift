@@ -26,6 +26,9 @@ final class RemoteServer {
 
     let queue = DispatchQueue(label: "homeplay.remote", qos: .utility)
     var store = RemoteStore.shared
+    /// 副屏的內容（跟鏡像共用同一個 listener、同一份名冊）
+    let feed = SideShowFeed.shared
+    let tickets = RemoteSideTickets()
     private var listener: NWListener?
     private var conns: [ObjectIdentifier: RemoteConn] = [:]        // queue
     private let canvas = RemoteCanvas()                              // queue
@@ -93,6 +96,7 @@ final class RemoteServer {
         l.start(queue: queue)
         listener = l
         running = true
+        feed.start()
         log("remote: on")
     }
 
@@ -112,6 +116,8 @@ final class RemoteServer {
     func stop() {
         listener?.cancel(); listener = nil
         running = false
+        feed.stop()
+        tickets.revokeAll()
         queue.async {
             for c in self.conns.values { c.close() }
             self.conns.removeAll()
@@ -125,16 +131,32 @@ final class RemoteServer {
         if enabled, !running { start() } else if !enabled, running { stop(); store.cancelPairing() }
     }
 
-    /// 移除裝置：刪金鑰、踢掉它現在的連線
+    /// 移除裝置：刪公鑰、踢掉它現在的連線、作廢副屏的票
     func revoke(_ id: String) {
         store.revoke(id)
+        tickets.revoke(id)
         queue.async { for c in self.conns.values where c.deviceID == id { c.close() } }
         log("remote: device revoked")
         NotificationCenter.default.post(name: Self.changed, object: nil)
     }
 
+    /// 這台收不收整頁畫面：關掉就把它的連線踢掉（它下一句就沒東西可看）
+    func setMirror(_ id: String, _ on: Bool) {
+        store.setMirror(id, on)
+        if !on { queue.async { for c in self.conns.values where c.deviceID == id { c.close() } } }
+        NotificationCenter.default.post(name: Self.changed, object: nil)
+    }
+
+    /// 這台當不當副屏：關掉就作廢它的票（下一輪就 401）
+    func setSide(_ id: String, _ on: Bool) {
+        store.setSide(id, on)
+        if !on { tickets.revoke(id) }
+        NotificationCenter.default.post(name: Self.changed, object: nil)
+    }
+
     func setPersonal(_ id: String, _ on: Bool) {
         store.setPersonal(id, on)
+        tickets.revoke(id)   // 換版本（個人內容／訪客）要重新簽票
         queue.async {
             for c in self.conns.values where c.deviceID == id { c.guest = !on; c.ref = nil }
             self.pump(nil)
@@ -438,7 +460,10 @@ final class RemoteConn {
     private var wsMessage = Data()
     // 握手
     private var kind: UInt8 = 0
-    private var longKey: SymmetricKey?
+    private var nonceC: [UInt8] = [], nonceS: [UInt8] = []
+    private var ephemeral: P256.KeyAgreement.PrivateKey?
+    private var signKeyRaw: Data?
+    private var peerAgree: Data?
     private var key: SymmetricKey?
     private var rx: UInt64 = 0, tx: UInt64 = 0
     // 已驗證的裝置
@@ -456,8 +481,9 @@ final class RemoteConn {
     let ip: String
     private(set) var pongAt = -1.0
     private var host = ""
+    /// HTTP：標頭已讀、本文還沒收齊時暫存
+    private var pending: (method: String, path: String, headers: [String: String], need: Int)?
     private var didClose = false
-    private var handoffAt = -1e9
     var isClosed: Bool { phase == .closing || didClose }
 
     init(_ c: NWConnection, server: RemoteServer) { conn = c; self.server = server; ip = RemoteServer.ip(c.endpoint) }
@@ -524,47 +550,75 @@ final class RemoteConn {
     private func handleHTTP() {
         // Safari 先試 https（「預設使用 HTTPS」）：TLS 的 ClientHello 一來就斷，讓它馬上退回 http，不要等 10 秒
         if buf.first == 0x16 { close(); return }
-        guard let end = buf.range(of: Data("\r\n\r\n".utf8)) else {
-            if buf.count > 16 * 1024 { close() }
-            return
+        if pending == nil {
+            guard let end = buf.range(of: Data("\r\n\r\n".utf8)) else {
+                if buf.count > 16 * 1024 { close() }
+                return
+            }
+            let head = String(decoding: buf[..<end.lowerBound], as: UTF8.self)
+            buf.removeSubrange(..<end.upperBound)
+            var lines = head.components(separatedBy: "\r\n")
+            let req = lines.removeFirst().split(separator: " ")
+            var h: [String: String] = [:]
+            for l in lines { if let i = l.firstIndex(of: ":") { h[l[..<i].lowercased()] = l[l.index(after: i)...].trimmingCharacters(in: .whitespaces) } }
+            guard req.count >= 2, let ch = RemoteCrypto.canonicalHost(h["host"] ?? "") else { respond(421, "text/plain", Data("host".utf8)); return }
+            host = ch   // 之後 CSP、Origin 比對都用重組過的，不回填原字串
+            let n = Int(h["content-length"] ?? "0") ?? -1
+            guard n >= 0, n <= 4096 else { respond(400, "text/plain", Data("request".utf8)); return }
+            pending = (String(req[0]), String(req[1].split(separator: "?").first ?? "/"), h, n)
         }
-        let head = String(decoding: buf[..<end.lowerBound], as: UTF8.self)
-        buf.removeSubrange(..<end.upperBound)
-        var lines = head.components(separatedBy: "\r\n")
-        let req = lines.removeFirst().split(separator: " ")
-        var h: [String: String] = [:]
-        for l in lines { if let i = l.firstIndex(of: ":") { h[l[..<i].lowercased()] = l[l.index(after: i)...].trimmingCharacters(in: .whitespaces) } }
-        guard req.count >= 2, req[0] == "GET" else { respond(405, "text/plain", Data("method".utf8)); return }
-        guard let ch = RemoteCrypto.canonicalHost(h["host"] ?? "") else { respond(421, "text/plain", Data("host".utf8)); return }
-        host = ch   // 之後 CSP、Origin 比對都用重組過的，不回填原字串
-        let path = String(req[1].split(separator: "?").first ?? "/")
-        switch path {
-        case "/ws":
-            guard h["upgrade"]?.lowercased() == "websocket", let k = h["sec-websocket-key"] else { respond(400, "text/plain", Data()); return }
-            if let o = h["origin"], !(o.lowercased().hasPrefix("http://") && RemoteCrypto.canonicalHost(String(o.dropFirst(7))) == host) {
+        guard let p = pending, buf.count >= p.need else { return }   // 本文還沒收齊：等下一次 receive
+        let body = Data(buf.prefix(p.need))
+        buf.removeSubrange(..<p.need)
+        pending = nil
+
+        // WebSocket（只有鏡像頁用）
+        if p.path == "/ws" {
+            guard p.method == "GET", p.headers["upgrade"]?.lowercased() == "websocket", let k = p.headers["sec-websocket-key"] else { respond(400, "text/plain", Data()); return }
+            if let o = p.headers["origin"], !(o.lowercased().hasPrefix("http://") && RemoteCrypto.canonicalHost(String(o.dropFirst(7))) == host) {
                 log("remote: rejected cross-origin socket"); respond(403, "text/plain", Data()); return
             }
             let accept = Data(Insecure.SHA1.hash(data: Data((k + "258EAFA5-E914-47DA-95CA-C5AB0DC85B11").utf8))).base64EncodedString()
             let resp = "HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: \(accept)\r\n\r\n"
             conn.send(content: Data(resp.utf8), completion: .contentProcessed { _ in })
             phase = .hello
-        case "/", "/index.html":
+            return
+        }
+
+        // 副屏、配對、身分程式：一個 listener 上的另一條 endpoint
+        let r = SideShowRequest(method: p.method, path: p.path, headers: p.headers, body: body, ip: ip)
+        if let s = SideRoute.handle(r, store: server.store, tickets: server.tickets, feed: server.feed) { respond(s); return }
+
+        switch (p.method, p.path) {
+        case ("GET", "/"), ("GET", "/index.html"):
             respond(200, "text/html; charset=utf-8", Data(RemotePage.html(host: host).utf8), page: true)
-        case "/manifest.webmanifest":
+        case ("GET", "/manifest.webmanifest"):
             respond(200, "application/manifest+json", Data(RemotePage.manifest.utf8))
-        case "/icon-180.png", "/icon-512.png":
-            respond(200, "image/png", RemotePage.icon(path == "/icon-180.png" ? 180 : 512))
+        case ("GET", "/identity.js"):
+            respond(200, "text/javascript; charset=utf-8", Data(RemoteIdentityJS.source.utf8))
+        case ("GET", "/icon-180.png"), ("GET", "/icon-512.png"):
+            respond(200, "image/png", RemotePage.icon(p.path == "/icon-180.png" ? 180 : 512))
         default:
             respond(404, "text/plain", Data("not found".utf8))
         }
     }
 
+    private func respond(_ r: SideShowResponse) {
+        final(code: r.code, type: r.type, r.body, page: r.page, location: r.location)
+    }
+
     private func respond(_ code: Int, _ type: String, _ body: Data, page: Bool = false) {
-        let reason = [200: "OK", 400: "Bad Request", 403: "Forbidden", 404: "Not Found", 405: "Method Not Allowed", 421: "Misdirected Request"][code] ?? "Error"
+        final(code: code, type: type, body, page: page, location: nil)
+    }
+
+    private func final(code: Int, type: String, _ body: Data, page: Bool, location: String?) {
+        let reason = [200: "OK", 301: "Moved Permanently", 308: "Permanent Redirect", 400: "Bad Request", 401: "Unauthorized", 403: "Forbidden",
+                      404: "Not Found", 405: "Method Not Allowed", 409: "Conflict", 421: "Misdirected Request", 429: "Too Many Requests"][code] ?? "Error"
         var head = "HTTP/1.1 \(code) \(reason)\r\nContent-Type: \(type)\r\nContent-Length: \(body.count)\r\nConnection: close\r\n"
         head += "Cache-Control: no-store\r\nX-Content-Type-Options: nosniff\r\nReferrer-Policy: no-referrer\r\nX-Frame-Options: DENY\r\n"
+        if let location { head += "Location: \(location)\r\n" }
         if page {
-            head += "Content-Security-Policy: default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src 'self' blob: data:; media-src data: blob:; manifest-src 'self'; connect-src 'self' ws://\(host)\r\n"
+            head += "Content-Security-Policy: default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src 'self' blob: data:; media-src data: blob:; manifest-src 'self'; worker-src 'self'; connect-src 'self' ws://\(host)\r\n"
         }
         conn.send(content: Data((head + "\r\n").utf8) + body, completion: .contentProcessed { [weak self] _ in self?.close() })
         phase = .closing
@@ -649,74 +703,47 @@ final class RemoteConn {
         case .hello:
             // 'H' 1 kind id(8) nonceC(6)
             let b = [UInt8](m)
-            guard b.count == 17, b[0] == 0x48, b[1] == 1, b[2] == 0x50 || b[2] == 0x44 || b[2] == 0x54 else { close(); return }
+            guard b.count == 17, b[0] == 0x48, b[1] == RemoteIdentity.streamVersion, b[2] == 0x44 else { close(); return }   // 配對走 HTTP /pair，不再有 WebSocket 配對
             kind = b[2]
-            if kind == 0x50 {
-                guard let s = server.store.pairingSecret(for: ip) else { log("remote: pairing refused (no active code for this address)"); close(); return }
-                longKey = RemoteCrypto.pairingKey(s)
-            } else if kind == 0x54 {
-                // M1：交接碼（「加入主畫面」後第一次打開）：查到就拿走，用一次
-                let tid = b[3..<11].map { String(format: "%02x", $0) }.joined()
-                guard let t = server.store.takeHandoff(tid) else { log("remote: handoff refused (unknown, used or expired)"); close(); return }
-                longKey = RemoteCrypto.pairingKey(t.secret); deviceID = t.device
-            } else {
-                let id = b[3..<11].map { String(format: "%02x", $0) }.joined()
-                guard let k = server.store.key(for: id) else { log("remote: unknown device rejected"); close(); return }
-                longKey = k; deviceID = id
+            let id = b[3..<11].map { String(format: "%02x", $0) }.joined()
+            guard let dev = server.store.device(id), dev.mirror, let keys = server.store.keys(for: id), let peer = RemoteIdentity.agreeKey(keys.agree) else {
+                log("remote: unknown or mirror-disabled device rejected"); close(); return
             }
+            deviceID = id
+            signKeyRaw = keys.sign
+            peerAgree = peer.x963Representation
+            nonceC = Array(b[11..<17])
+            let eph = RemoteIdentity.newEphemeral()
+            ephemeral = eph
             var ns = [UInt8](repeating: 0, count: 6)
             for i in ns.indices { ns[i] = UInt8.random(in: 0...255) }
-            guard let lk = longKey, let sk = RemoteCrypto.sessionKey(lk, nonceC: Array(b[11..<17]), nonceS: ns) else { close(); return }
-            key = sk
-            sendWS(op: 0x2, Data([0x48, 1] + ns))
+            nonceS = ns
+            sendWS(op: 0x2, Data([0x53, RemoteIdentity.streamVersion]) + eph.publicKey.x963Representation + Data(ns))
             phase = .auth
         case .auth:
-            guard let key, let plain = RemoteCrypto.open(m, key: key, dir: 0, counter: rx),
-                  let obj = try? JSONSerialization.jsonObject(with: plain) as? [String: Any] else {
-                if kind == 0x50 { server.store.pairingFailed(ip: ip); log("remote: wrong pairing code") } else { log("remote: device key mismatch") }
-                close(); return
+            // 64 bytes 的 ECDSA 簽章（明文）：證明「就是名冊上那台」，然後兩邊各自算工作階段金鑰
+            guard m.count == 64, let eph = ephemeral, let sign = signKeyRaw, let id = deviceID, let peer = peerAgree else { close(); return }
+            let t = RemoteIdentity.streamTranscript(kind: kind, id: id, nonceC: nonceC, ephS: eph.publicKey.x963Representation, nonceS: nonceS)
+            guard RemoteIdentity.verify(m, transcript: t, signKey: sign),
+                  let sk = RemoteIdentity.streamKey(privateKey: eph, peer: peer, nonceC: nonceC, nonceS: nonceS) else {
+                log("remote: device signature rejected"); close(); return
             }
-            rx += 1
-            if kind == 0x54 {
-                // 交接：把這台裝置自己的金鑰交給剛從主畫面圖示打開的那一頁（只放 localStorage，不進網址）
-                guard let id = deviceID, let d = server.store.device(id) else { close(); return }
-                sendJSON(["t": "paired", "id": d.id, "key": d.key])
-                log("remote: handoff used")
-                server.queue.asyncAfter(deadline: .now() + 1) { [weak self] in self?.close() }
-                phase = .live
-            } else if kind == 0x50 {
-                // 配對：發一把這台裝置自己的金鑰，碼作廢，斷線讓它用新身分重連
-                guard server.store.pairingSecret != nil else { close(); return }
-                server.store.pairingUsed()
-                let d = server.store.add(name: obj["name"] as? String ?? "iPad")
-                sendJSON(["t": "paired", "id": d.id, "key": d.key])
-                log("remote: paired new device")
-                NotificationCenter.default.post(name: RemoteServer.changed, object: nil)
-                server.queue.asyncAfter(deadline: .now() + 1) { [weak self] in self?.close() }
-                phase = .live   // 不會再處理它的訊息（沒有 authed）
-            } else {
-                guard let id = deviceID, let dev = server.store.device(id) else { close(); return }
-                authed = true; guest = !dev.personal
-                phase = .live
-                server.store.touch(id, ip: ip)
-                sendJSON(["t": "ok", "guest": guest, "mac": RemoteServer.computerName])
-                server.sessionsChanged(id, delta: 1)
-                log("remote: device connected")
-                server.authenticated(self)
-                server.pump(nil)
-            }
+            guard let dev = server.store.device(id), dev.mirror else { close(); return }
+            key = sk
+            authed = true; guest = !dev.personal
+            phase = .live
+            server.store.touch(id, ip: ip)
+            sendJSON(["t": "ok", "guest": guest, "mac": RemoteServer.computerName])
+            server.sessionsChanged(id, delta: 1)
+            log("remote: device connected")
+            server.authenticated(self)
+            server.pump(nil)
         case .live:
             guard authed, let key, let plain = RemoteCrypto.open(m, key: key, dir: 0, counter: rx),
                   let obj = try? JSONSerialization.jsonObject(with: plain) as? [String: Any], let t = obj["t"] as? String else { close(); return }
             rx += 1
             switch t {
             case "a": server.acked(self, seq: UInt32(clamping: (obj["s"] as? Int) ?? -1), latency: nil)
-            case "h":
-                // 要一張交接碼（放進網址給「加入主畫面」用）：20 秒最多一張
-                let now = CACurrentMediaTime()
-                guard let id = deviceID, now - handoffAt >= 20, let tok = server.store.newHandoff(for: id) else { return }
-                handoffAt = now
-                sendJSON(["t": "handoff", "tok": tok])
             case "i":
                 guard let k = obj["k"] as? String, ["d", "m", "u"].contains(k), let x = obj["x"] as? Double, let y = obj["y"] as? Double else { return }
                 server.input(self, kind: k, x: max(0, min(1024, x)), y: max(0, min(1024, y)), n: UInt32(clamping: (obj["n"] as? Int) ?? 0))

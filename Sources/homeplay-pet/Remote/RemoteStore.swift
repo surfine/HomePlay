@@ -1,26 +1,40 @@
-// 2.0 閒置裝置·網頁串流：配過的裝置、一次性配對碼、開關。
+// 2.0 閒置裝置（鏡像整個畫面＋副屏）：一份名冊、一套配對碼、一種身分。
 //
-// - 預設關著；設定 › iPhone 與 iPad 打開才開伺服器。
-// - 每台裝置一把自己的 32 bytes 金鑰，存在 ~/Library/Application Support/HomePlay/remote-devices.json（權限 0600，只有這個使用者讀得到）。
-//   移除裝置＝刪掉那把金鑰並踢掉它的連線，之後它要重新配對。
-// - 配對碼只在記憶體裡：10 分鐘失效、用過一次就失效。打錯：同一個來源位址 3 次就不再讓它試（碼對別人照樣有效），
-//   全部加起來 20 次才作廢——陌生人打錯幾次不能讓主人的碼立刻失效；80 bits 的碼，20 次猜中的機率可以忽略。
-// - 交接碼（M1）：主人配好的裝置跟 Mac 要一張 60 秒、用一次的交接碼放進網址（#t=），「加入主畫面」後第一次打開拿它換回
-//   這台裝置的金鑰；金鑰本身永遠不進網址、不進瀏覽紀錄。
-// - 寫檔在同一把鎖裡「拍快照＋寫入」，撤銷之後不會被比它早拍的快照寫回來（M5）。
-// - 每台裝置預設是「訪客」：個人內容（訊息、聯絡人、FaceTime、照片、行事曆、提醒）不傳過去（RemoteServer 的 guestSafe）。
+// 這是 Windows SideShow 的「一個平台、多個 endpoint」在 HomePlay 的等價物（考據見 docs/plans/sideshow.md）：
+// 裝置是同一台、名冊是同一份、配對碼只有一種，差別只在「這台收哪種內容」——
+// mirror（整頁畫面，Mac 要醒著）與 side（白名單內容，快取在裝置上，Mac 睡了照看）。
+//
+// 身分：裝置自己產金鑰對，Mac 只存公鑰（Remote/RemoteIdentity.swift）。所以名冊檔裡沒有任何祕密，
+// 被讀走也冒充不了裝置；移除裝置＝刪掉公鑰，它下次簽章就驗不過。
+//
+// 配對碼：40 bits（5 bytes）、10 分鐘失效、用一次就失效；同一個來源打錯 3 次就不再讓它試，
+// 全部加起來 20 次才作廢——陌生人打錯幾次不能讓主人的碼立刻失效。
+//
+// 舊版（beta 7 以前）留了兩份名冊（remote 的長期金鑰、sideshow 的雜湊）。金鑰式握手已移除，
+// 那些裝置無法再證明身分，所以第一次啟動把它們搬到 *.legacy.json 保留證據，然後從空名冊開始。
 
 import Foundation
-import CryptoKit
 
 struct RemoteDevice: Codable, Equatable {
     var id: String          // 16 個十六進位字
     var name: String
-    var key: String         // base64
-    var personal = false    // 顯示個人內容（主人自己的裝置）；預設訪客
-    var created: Double
+    var agree: String       // base64，P-256 ECDH 公鑰（raw 65 bytes）
+    var sign: String        // base64，P-256 ECDSA 公鑰（raw 65 bytes）
+    var mirror = true       // 收整頁畫面
+    var side = false        // 當副屏
+    var personal = false    // 顯示個人內容（主人自己的裝置）
+    var created: Double = 0
     var lastSeen: Double?
     var lastIP: String?     // 上次連線的來源位址（設定頁顯示；不同位址同時連線＝自動移除）
+
+    /// 這台收哪幾種內容；兩個都關＝留著配對但什麼都不給
+    enum Cap: String, CaseIterable { case mirror, side }
+    var caps: Set<Cap> {
+        var s: Set<Cap> = []
+        if mirror { s.insert(.mirror) }
+        if side { s.insert(.side) }
+        return s
+    }
 }
 
 final class RemoteStore {
@@ -32,7 +46,7 @@ final class RemoteStore {
     static let pairingLifetime: Double = 600
     static let maxPairingFailures = 20          // 全部來源加起來：到了就作廢
     static let maxPairingFailuresPerIP = 3      // 單一來源：到了就不再讓它試這個碼
-    static let handoffLifetime: Double = 60
+    static let maxDevices = 12
 
     static var enabled: Bool {
         get { UserDefaults.standard.bool(forKey: enabledKey) }
@@ -49,20 +63,23 @@ final class RemoteStore {
     let file: URL
     /// 配對碼（記憶體）
     private var pairing: (secret: [UInt8], expires: Double, failures: Int, perIP: [String: Int])?
-    /// 交接碼（記憶體）：查找用的 id → (密碼, 裝置, 失效時間)
-    private var handoffs: [String: (secret: [UInt8], device: String, expires: Double)] = [:]
-    /// 發碼順序（同一時刻發的幾張也分得出新舊）
-    private var handoffSeq: [String: Int] = [:]
-    private var handoffCounter = 0
     var now: () -> Double = { Date().timeIntervalSince1970 }
 
     init(file: URL? = nil) {
-        if let file { self.file = file } else {
-            let dir = ProcessInfo.processInfo.environment["HOMEPLAY_REMOTE_DIR"].map { URL(fileURLWithPath: $0, isDirectory: true) }
-                ?? FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appendingPathComponent("HomePlay")
-            self.file = dir.appendingPathComponent("remote-devices.json")
-        }
+        self.file = file ?? Self.defaultFile
         if let d = try? Data(contentsOf: self.file), let list = try? JSONDecoder().decode([RemoteDevice].self, from: d) { devices = list }
+    }
+
+    static var defaultFile: URL {
+        let dir = ProcessInfo.processInfo.environment["HOMEPLAY_REMOTE_DIR"].map { URL(fileURLWithPath: $0, isDirectory: true) }
+            ?? FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appendingPathComponent("HomePlay")
+        return dir.appendingPathComponent("remote-devices.json")
+    }
+
+    /// 舊版的副屏名冊（雜湊式身分）。只為了搬家與自檢，不再有人寫它。
+    static var legacySideFile: URL {
+        let dir = ProcessInfo.processInfo.environment["HOMEPLAY_SIDESHOW_DIR"].map { URL(fileURLWithPath: $0, isDirectory: true) } ?? HomePlayState.directory
+        return dir.appendingPathComponent("sideshow-devices.json")
     }
 
     // MARK: 裝置
@@ -71,17 +88,28 @@ final class RemoteStore {
 
     func device(_ id: String) -> RemoteDevice? { lock.lock(); defer { lock.unlock() }; return devices.first { $0.id == id } }
 
-    func key(for id: String) -> SymmetricKey? {
-        guard let d = device(id), let k = Data(base64Encoded: d.key), k.count == 32 else { return nil }
-        return SymmetricKey(data: k)
+    /// 驗簽用的兩把公鑰（base64 → raw）；格式不對回 nil
+    func keys(for id: String) -> (agree: Data, sign: Data)? {
+        guard let d = device(id), let a = Data(base64Encoded: d.agree), let s = Data(base64Encoded: d.sign),
+              a.count == 65, s.count == 65 else { return nil }
+        return (a, s)
     }
 
+    /// 裝置自己報的名字：只留可見字元、最多 40 字
+    static func clean(_ s: String) -> String {
+        let t = String(s.unicodeScalars.filter { !CharacterSet.controlCharacters.contains($0) }.prefix(40)).trimmingCharacters(in: .whitespaces)
+        return t.isEmpty ? "iPad" : t
+    }
+
+    /// 加一台（公鑰驗不過就不加，避免名冊裡出現永遠驗不過的裝置）
     @discardableResult
-    func add(name: String) -> RemoteDevice {
-        var idb = [UInt8](repeating: 0, count: 8), kb = [UInt8](repeating: 0, count: 32)
+    func add(name: String, agree: Data, sign: Data, mirror: Bool = true, side: Bool = false, personal: Bool = false) -> RemoteDevice? {
+        guard RemoteIdentity.agreeKey(agree) != nil, RemoteIdentity.signKey(sign) != nil, devices.count < Self.maxDevices else { return nil }
+        var idb = [UInt8](repeating: 0, count: 8)
         for i in idb.indices { idb[i] = UInt8.random(in: 0...255) }
-        for i in kb.indices { kb[i] = UInt8.random(in: 0...255) }
-        let d = RemoteDevice(id: idb.map { String(format: "%02x", $0) }.joined(), name: Self.clean(name), key: Data(kb).base64EncodedString(), created: now())
+        let d = RemoteDevice(id: idb.map { String(format: "%02x", $0) }.joined(), name: Self.clean(name),
+                             agree: agree.base64EncodedString(), sign: sign.base64EncodedString(),
+                             mirror: mirror, side: side, personal: personal, created: now())
         lock.lock(); devices.append(d); lock.unlock()
         save()
         return d
@@ -97,17 +125,21 @@ final class RemoteStore {
         save()
     }
 
+    func setMirror(_ id: String, _ on: Bool) {
+        lock.lock(); if let i = devices.firstIndex(where: { $0.id == id }) { devices[i].mirror = on }; lock.unlock()
+        save()
+    }
+
+    func setSide(_ id: String, _ on: Bool) {
+        lock.lock(); if let i = devices.firstIndex(where: { $0.id == id }) { devices[i].side = on }; lock.unlock()
+        save()
+    }
+
     func touch(_ id: String, ip: String? = nil) {
         lock.lock()
         if let i = devices.firstIndex(where: { $0.id == id }) { devices[i].lastSeen = now(); if let ip { devices[i].lastIP = ip } }
         lock.unlock()
         save()
-    }
-
-    /// 裝置自己報的名字：只留可見字元、最多 40 字
-    static func clean(_ s: String) -> String {
-        let t = String(s.unicodeScalars.filter { !CharacterSet.controlCharacters.contains($0) }.prefix(40)).trimmingCharacters(in: .whitespaces)
-        return t.isEmpty ? "iPad" : t
     }
 
     /// 寫檔：先寫暫存檔、設 0600、再換上（不會留下別人讀得到的半截檔）
@@ -123,6 +155,24 @@ final class RemoteStore {
         h.write(data); try? h.close()
         if rename(tmp.path, file.path) != 0 { try? fm.removeItem(at: tmp) }
         try? fm.setAttributes([.posixPermissions: 0o600], ofItemAtPath: file.path)
+    }
+
+    // MARK: 舊名冊搬家
+
+    /// 舊版的兩份名冊在新身分模型下用不了：搬到 <檔名>.legacy.json（不刪，留著對帳），回傳各幾台。
+    /// 已經搬過就不再動（目標檔存在就跳過）。
+    @discardableResult
+    static func archiveLegacy(remote: URL? = nil, side: URL? = nil) -> (remote: Int, side: Int) {
+        let fm = FileManager.default
+        func move(_ from: URL) -> Int {
+            guard fm.fileExists(atPath: from.path) else { return 0 }
+            let n = (try? Data(contentsOf: from)).flatMap { try? JSONSerialization.jsonObject(with: $0) } as? [Any]
+            let dest = from.deletingPathExtension().appendingPathExtension("legacy.json")
+            if fm.fileExists(atPath: dest.path) { try? fm.removeItem(at: dest) }
+            try? fm.moveItem(at: from, to: dest)
+            return n?.count ?? 1
+        }
+        return (move(remote ?? defaultFile), move(side ?? legacySideFile))
     }
 
     // MARK: 配對碼
@@ -162,31 +212,22 @@ final class RemoteStore {
 
     func cancelPairing() { lock.lock(); pairing = nil; lock.unlock() }
 
-    // MARK: 交接碼（M1）
+    enum PairResult: Equatable { case ok(id: String), badCode, blocked, full }
 
-    /// 發給已驗證的裝置：8 bytes 查找 id＋16 bytes 密碼，base32。同一台只留最近兩張（頁面每 45 秒換一張，
-    /// 使用者打開分享選單時拿到的那張還有完整的 60 秒）
-    func newHandoff(for device: String) -> String? {
-        guard self.device(device) != nil else { return nil }
-        var b = [UInt8](repeating: 0, count: 24)
-        for i in b.indices { b[i] = UInt8.random(in: 0...255) }
-        let tid = b[0..<8].map { String(format: "%02x", $0) }.joined()
+    /// 裝置拿配對碼＋自己的公鑰換一個身分。成功只回 id——沒有任何祕密要傳。
+    func redeem(code: String, ip: String, name: String, agree: Data, sign: Data, mirror: Bool, side: Bool) -> PairResult {
         lock.lock()
-        let t = now()
-        handoffs = handoffs.filter { $0.value.expires > t }
-        let mine = handoffs.filter { $0.value.device == device }.sorted { (handoffSeq[$0.key] ?? 0) > (handoffSeq[$1.key] ?? 0) }
-        for old in mine.dropFirst(1) { handoffs[old.key] = nil }   // 加上這張新的＝最多兩張
-        if handoffs.count < 64 { handoffs[tid] = (Array(b[8..<24]), device, t + Self.handoffLifetime); handoffCounter += 1; handoffSeq[tid] = handoffCounter }
-        handoffSeq = handoffSeq.filter { handoffs[$0.key] != nil }
-        let ok = handoffs[tid] != nil
+        guard var p = pairing, now() < p.expires else { lock.unlock(); return .badCode }
+        if p.perIP[ip, default: 0] >= Self.maxPairingFailuresPerIP { lock.unlock(); return .blocked }
+        guard let given = RemoteCrypto.decode(code), RemoteCrypto.equal(given, p.secret) else {
+            p.failures += 1; p.perIP[ip, default: 0] += 1
+            pairing = p.failures >= Self.maxPairingFailures ? nil : p
+            lock.unlock(); return .badCode
+        }
+        guard devices.count < Self.maxDevices else { lock.unlock(); return .full }
         lock.unlock()
-        return ok ? RemoteCrypto.encode(b) : nil
-    }
-
-    /// 握手時查交接碼：查到就同時拿走（用一次，不管後面成不成功）
-    func takeHandoff(_ tid: String) -> (secret: [UInt8], device: String)? {
-        lock.lock(); defer { lock.unlock() }
-        guard let h = handoffs.removeValue(forKey: tid), now() < h.expires, devices.contains(where: { $0.id == h.device }) else { return nil }
-        return (h.secret, h.device)
+        guard let d = add(name: name, agree: agree, sign: sign, mirror: mirror, side: side, personal: true) else { return .badCode }
+        lock.lock(); pairing = nil; lock.unlock()
+        return .ok(id: d.id)
     }
 }

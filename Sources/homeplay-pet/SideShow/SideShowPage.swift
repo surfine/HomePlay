@@ -10,6 +10,7 @@
 // - 介面文字三語一起送，網頁照裝置的系統語言挑（跟 PetLanguage.fromSystem 同一套規則）。
 
 import AppKit
+import CryptoKit
 
 enum SideShowPage {
     /// 三語字串。closure 的參數故意叫 L：原始碼裡每一筆都是 L("鍵", "简体原文")，tooling/check-localizable.py 照樣查得到，
@@ -55,7 +56,7 @@ enum SideShowPage {
         "b.co2": L("home.alert.co2.body", "检测到%@有二氧化碳"),
         "b.leak": L("home.alert.leak.body", "检测到%@漏水"),
         "b.security": L("home.alert.security.body", "%@被打开"),
-        "pairHow": L("sideshow.web.pairHow", "在 Mac 的 HomePlay 里打开“设置 › SideShow › 添加设备”，用相机扫描屏幕上的二维码。"),
+        "pairHow": L("sideshow.web.pairHow", "在 Mac 的 HomePlay 里打开“设置 › iPhone 与 iPad › 添加设备”，用相机扫描屏幕上的二维码。"),
         "pairManual": L("sideshow.web.pairManual", "也可以输入配对码"),
         "pairButton": L("sideshow.web.pairButton", "配对"),
         "pairing": L("sideshow.web.pairing", "正在配对…"),
@@ -66,6 +67,7 @@ enum SideShowPage {
         "full": L("sideshow.web.full", "已配对的设备太多了，请先在 Mac 上移除不用的"),
         "unreachable": L("sideshow.web.unreachable", "连不上 Mac：它要醒着，而且在同一个 Wi‑Fi"),
         "removed": L("sideshow.web.removed", "这台设备已被移除，请重新配对"),
+        "noCrypto": L("sideshow.web.noCrypto", "这个浏览器太旧，不支持 WebCrypto（需要 iOS 15 以上）"),
     ] }
 
     /// 三語 JSON（</script> 不可能出現，但還是把 < 轉掉）
@@ -76,22 +78,21 @@ enum SideShowPage {
         return String(decoding: data, as: UTF8.self).replacingOccurrences(of: "<", with: "\\u003c")
     }
 
-    /// 頁面內容變了 AppCache 才會重抓：版本號＝頁面的雜湊
-    static let version: String = String(SideShowCrypto.hex(SideShowCrypto.sha256(html)).prefix(12))
+    static let version: String = String(RemoteCrypto.encode(Array(SHA256.hash(data: Data(html.utf8)))).prefix(12))
 
     static let html: String = body
 
-    static let manifest = ##"{"name":"SideShow","short_name":"SideShow","start_url":"/","display":"standalone","background_color":"#000000","theme_color":"#000000","orientation":"any","icons":[{"src":"/icon-180.png","sizes":"180x180","type":"image/png"},{"src":"/icon-512.png","sizes":"512x512","type":"image/png"}]}"##
+    static let manifest = ##"{"name":"SideShow","short_name":"SideShow","start_url":"/side/","display":"standalone","background_color":"#000000","theme_color":"#000000","orientation":"any","icons":[{"src":"/side/icon-180.png","sizes":"180x180","type":"image/png"},{"src":"/side/icon-512.png","sizes":"512x512","type":"image/png"}]}"##
 
-    static let appCache: String = { "CACHE MANIFEST\n# \(version)\n/\n/icon-180.png\n\nNETWORK:\n*\n" }()
+    static let appCache: String = { "CACHE MANIFEST\n# \(version)\n/side/\n/side/icon-180.png\n\nNETWORK:\n*\n" }()
 
-    /// 只快取頁面殼與圖示；/api/ 永遠走網路（帶金鑰、不能進快取）
+    /// 只快取頁面殼與圖示；/side/state 與 /side/session 永遠走網路（帶票、不能進快取）
     static let serviceWorker = #"""
-var C='sideshow-v1';
-self.addEventListener('install',function(e){e.waitUntil(caches.open(C).then(function(c){return c.addAll(['/','/icon-180.png']);}));self.skipWaiting();});
+var C='sideshow-v2';
+self.addEventListener('install',function(e){e.waitUntil(caches.open(C).then(function(c){return c.addAll(['/side/','/side/icon-180.png']);}));self.skipWaiting();});
 self.addEventListener('activate',function(e){e.waitUntil(self.clients.claim());});
-self.addEventListener('fetch',function(e){var u=new URL(e.request.url);if(e.request.method!=='GET'||u.pathname.indexOf('/api/')===0)return;
-e.respondWith(fetch(e.request).then(function(r){var k=r.clone();caches.open(C).then(function(c){c.put(e.request,k);});return r;}).catch(function(){return caches.match(e.request).then(function(m){return m||caches.match('/');});}));});
+self.addEventListener('fetch',function(e){var u=new URL(e.request.url);if(e.request.method!=='GET'||u.pathname.indexOf('/side/state')===0||u.pathname.indexOf('/side/session')===0)return;
+e.respondWith(fetch(e.request).then(function(r){var k=r.clone();caches.open(C).then(function(c){c.put(e.request,k);});return r;}).catch(function(){return caches.match(e.request).then(function(m){return m||caches.match('/side/');});}));});
 """#
 
     static func icon(_ s: Int) -> Data { RemotePage.icon(s) }
@@ -100,7 +101,7 @@ e.respondWith(fetch(e.request).then(function(r){var k=r.clone();caches.open(C).t
         let strings = strings
         return #"""
 <!doctype html>
-<html lang="en" manifest="/sideshow.appcache"><head>
+<html lang="en" manifest="/side/sideshow.appcache"><head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -109,8 +110,8 @@ e.respondWith(fetch(e.request).then(function(r){var k=r.clone();caches.open(C).t
 <meta name="apple-mobile-web-app-title" content="SideShow">
 <meta name="theme-color" content="#000000">
 <meta name="format-detection" content="telephone=no">
-<link rel="manifest" href="/manifest.webmanifest">
-<link rel="apple-touch-icon" href="/icon-180.png">
+<link rel="manifest" href="/side/manifest.webmanifest">
+<link rel="apple-touch-icon" href="/side/icon-180.png">
 <title>SideShow</title>
 <style>
 :root{--bg:#000;--card:rgba(28,28,30,.82);--card2:#2C2C2E;--label:#fff;--sec:rgba(235,235,245,.6);--ter:rgba(235,235,245,.3);--red:#FF4245;--green:#30D158;--orange:#FF9230;--blue:#0091FF;--edge:transparent}
@@ -155,6 +156,7 @@ body{overflow:hidden}
 <div id="status"></div></div>
 <div id="pair" class="hidden"><b>SideShow</b><p id="pmsg"></p><p id="perr"></p><input id="pcode" autocomplete="off" autocapitalize="characters" spellcheck="false" maxlength="12" placeholder="XXXX-XXXX"><button id="pbtn"></button></div>
 <script>
+\#(RemoteIdentityJS.source)
 (function(){
 var S=\#(strings);
 function pick(){var ls=navigator.languages||[navigator.language||'en'];for(var i=0;i<ls.length;i++){var l=(ls[i]||'').toLowerCase();if(l.indexOf('zh')!==0){if(l.indexOf('en')===0)return 'en';continue;}
@@ -166,11 +168,11 @@ function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,function(c){return
 function load(k){try{return JSON.parse(localStorage.getItem(k));}catch(e){return null;}}
 function save(k,v){try{localStorage.setItem(k,JSON.stringify(v));}catch(e){}}
 function drop(k){try{localStorage.removeItem(k);}catch(e){}}
-var AK='sideshow.auth',SK='sideshow.state',POLL=10000;
-var auth=load(AK),st=load(SK),failing=false;
+var SK='sideshow.state',POLL=10000;
+var ident=null,ticket=null,ticketAt=0,st=load(SK),failing=false;
 function pad(n){return n<10?'0'+n:''+n;}
 function hm(d,h24){var h=d.getHours(),m=pad(d.getMinutes());if(h24!==false)return pad(h)+':'+m;var ap=h<12?'AM':'PM';h=h%12||12;return h+':'+m+' '+ap;}
-function req(m,u,b,cb){var x=new XMLHttpRequest();x.open(m,u,true);x.timeout=8000;if(auth)x.setRequestHeader('Authorization','Bearer '+auth.id+'.'+auth.key);
+function req(m,u,b,cb){var x=new XMLHttpRequest();x.open(m,u,true);x.timeout=8000;if(ticket)x.setRequestHeader('X-Side-Ticket',ticket);
 if(b)x.setRequestHeader('Content-Type','application/json');x.onload=function(){cb(x.status,x.responseText);};x.onerror=x.ontimeout=function(){cb(0,'');};x.send(b?JSON.stringify(b):null);}
 function now(){return Date.now();}
 function macNow(){return now()+(st&&st.skew||0);}
@@ -198,29 +200,37 @@ function render(){
  fill($('empty'),any?'':'<div class="line sec">'+esc(t('nothing'))+'</div>');
  var s=$('status');if(stale){s.className='stale';s.textContent=t('lastUpdate').replace('%@',hm(new Date(st.recv||st.at*1000),st.h24))+' · '+t('asleep');}else{s.className='';s.textContent=t('connected');}
 }
-function poll(){if(!auth)return;req('GET','/api/state',null,function(code,txt){
+function signIn(cb){HPI.load().then(function(s){ident=s;if(!s){showPair();return;}
+ var at=Date.now()/1000;
+ HPI.sign(HPI.sideTranscript(s.id,at)).then(function(sig){
+  req('POST','/side/session',{id:s.id,at:at,sig:HPI.b64(sig)},function(c,txt){
+   if(c===200){try{ticket=JSON.parse(txt).ticket;ticketAt=now();}catch(e){ticket=null;}}
+   else if(c===401){showPair(t('removed'));return;}
+   if(cb)cb();});})['catch'](function(){showPair(t('noCrypto'));});},function(){showPair(t('noCrypto'));});}
+function poll(){if(!ident){signIn(function(){poll();});return;}if(!ticket||now()-ticketAt>240000){ticket=null;signIn(function(){poll();});return;}
+req('GET','/side/state',null,function(code,txt){
  if(code===200){try{var o=JSON.parse(txt);o.recv=now();o.skew=o.at*1000-o.recv;st=o;save(SK,st);failing=false;}catch(e){failing=true;}}
- else if(code===401){auth=null;st=null;drop(AK);drop(SK);showPair(t('removed'));return;}
+ else if(code===401){ticket=null;signIn(function(){poll();});return;}
  else failing=true;render();});}
 function showApp(){$('pair').className='hidden';$('app').className='';render();}
 function showPair(err){$('app').className='hidden';$('pair').className='';$('perr').textContent=err||'';$('pmsg').textContent=t('pairHow')+' '+t('pairManual');$('pcode').className='';$('pbtn').textContent=t('pairButton');$('pbtn').onclick=function(){redeem($('pcode').value);};}
 function devName(){var u=navigator.userAgent;return /iPad/.test(u)?'iPad':/iPhone/.test(u)?'iPhone':/Android/.test(u)?'Android':'Browser';}
 function redeem(code){code=(code||'').replace(/\s/g,'');if(!code)return;$('perr').textContent=t('pairing');
- req('POST','/api/pair',{code:code,name:devName()},function(c,txt){
-  if(c===200){try{var o=JSON.parse(txt);auth={id:o.id,key:o.key};save(AK,auth);}catch(e){}try{history.replaceState(null,'','/');}catch(e){}showApp();poll();return;}
-  $('perr').textContent=c===403?t('badCode'):c===429?t('blocked'):c===409?t('full'):t('unreachable');});}
+ HPI.pair(code,'side',devName()).then(function(){return HPI.load();}).then(function(s){ident=s;try{history.replaceState(null,'','/side/');}catch(e){}showApp();poll();},
+ function(e){var m=(e&&e.message)||'';$('perr').textContent=m==='pair 403'?t('badCode'):m==='pair 429'?t('blocked'):m==='pair 409'?t('full'):t('unreachable');});}
 var hashCode=(location.hash.match(/[#&]pair=([0-9A-Za-z-]+)/)||[])[1];
 var ios=/iPad|iPhone|iPod/.test(navigator.userAgent)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1);
 var standalone=window.navigator.standalone===true||(window.matchMedia&&matchMedia('(display-mode: standalone)').matches);
-if(auth){try{if(hashCode)history.replaceState(null,'','/');}catch(e){}showApp();poll();}
-else if(hashCode&&ios&&!standalone){showPair();$('pmsg').textContent=t('addToHome');$('pcode').className='hidden';$('pbtn').textContent=t('useHere');$('pbtn').onclick=function(){redeem(hashCode);};}
-else if(hashCode){showPair();redeem(hashCode);}
-else showPair();
+HPI.load().then(function(s){ident=s;
+ if(ident){try{if(hashCode)history.replaceState(null,'','/side/');}catch(e){}showApp();poll();return;}
+ if(hashCode&&ios&&!standalone){showPair();$('pmsg').textContent=t('addToHome');$('pcode').className='hidden';$('pbtn').textContent=t('useHere');$('pbtn').onclick=function(){redeem(hashCode);};}
+ else if(hashCode){showPair();redeem(hashCode);}
+ else showPair();},function(){showPair(t('noCrypto'));});
 setInterval(function(){if(!$('app').className)render();},1000);
 setInterval(poll,POLL);
 document.addEventListener('visibilitychange',function(){if(!document.hidden)poll();});
 var shift=0;setInterval(function(){shift=(shift+1)%4;document.body.style.transform='translate('+(shift&1)+'px,'+(shift>>1)+'px)';},180000);
-if('serviceWorker' in navigator&&window.isSecureContext){try{navigator.serviceWorker.register('/sw.js');}catch(e){}}
+if('serviceWorker' in navigator&&window.isSecureContext){try{navigator.serviceWorker.register('/side/sw.js');}catch(e){}}
 })();
 </script></body></html>
 """#

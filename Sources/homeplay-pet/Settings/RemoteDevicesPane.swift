@@ -13,6 +13,8 @@ final class RemotePaneModel: ObservableObject {
     @Published var code: [UInt8]?
     @Published var expires: Double?
     @Published var urls: [String] = []
+    /// 新配對的裝置要哪種內容：mirror（整頁畫面）／side（副屏）／both
+    @Published var mode = "mirror"
     private var observer: Any?
     private var timer: Timer?
 
@@ -53,10 +55,10 @@ final class RemotePaneModel: ObservableObject {
         objectWillChange.send()
     }
 
-    /// QR 裡的網址：第一個（.local）＋ #p=配對碼（# 後面不會送到伺服器）
+    /// QR 裡的網址：第一個（.local）＋ #p=配對碼＋mode（# 後面不會送到伺服器）
     var pairURL: String? {
         guard let code, let base = urls.first else { return nil }
-        return base + "#p=" + RemoteCrypto.encode(code)
+        return base + "#p=" + RemoteCrypto.encode(code) + "&mode=" + mode
     }
 
     var minutesLeft: Int { max(0, Int(((expires ?? 0) - Date().timeIntervalSince1970) / 60 + 0.99)) }
@@ -100,6 +102,16 @@ struct RemoteDevicesPane: View {
                 ForEach(m.devices, id: \.id) { d in
                     LabeledContent {
                         HStack(spacing: 10) {
+                            Toggle(L("remote.device.mirror", "镜像"), isOn: Binding(
+                                get: { d.mirror },
+                                set: { RemoteServer.shared.setMirror(d.id, $0); m.refresh() }))
+                                .toggleStyle(.switch).controlSize(.mini)
+                                .help(L("remote.device.mirror.help", "整个画面都传过来；这台 Mac 要醒着"))
+                            Toggle(L("remote.device.side", "副屏"), isOn: Binding(
+                                get: { d.side },
+                                set: { RemoteServer.shared.setSide(d.id, $0); m.refresh() }))
+                                .toggleStyle(.switch).controlSize(.mini)
+                                .help(L("remote.device.side.help", "时钟、天气、正在播放、计时器、家庭警报；Mac 睡着也看得到"))
                             if d.personal {
                                 InfoButton(L("remote.device.personal.warning", "网页版走的是一般 http：同一个 Wi‑Fi 里有心人可能冒充这台设备，看到你的个人内容。只在你信任的家庭网络里打开。"))
                             }
@@ -128,6 +140,13 @@ struct RemoteDevicesPane: View {
 
             if m.enabled {
                 Section {
+                    Picker(L("remote.add.mode", "这台设备收什么"), selection: Binding(get: { m.mode }, set: { m.mode = $0; m.newCode() })) {
+                        Text(L("remote.add.mode.mirror", "镜像画面")).tag("mirror")
+                        Text(L("remote.add.mode.side", "副屏")).tag("side")
+                        Text(L("remote.add.mode.both", "两者")).tag("both")
+                    }
+                    .pickerStyle(.segmented)
+                    .padding(.vertical, 2)
                     HStack(alignment: .center, spacing: 18) {
                         if let u = m.pairURL, let img = QRCode.image(u) {
                             Image(nsImage: img).interpolation(.none).resizable().frame(width: 132, height: 132)

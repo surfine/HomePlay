@@ -25,7 +25,9 @@ enum RemotePage {
             "badCode": L("remote.web.badCode", "配对码不对或已失效，请在 Mac 上产生新的码"),
             "removed": L("remote.web.removed", "这台设备已被移除，请重新配对"),
             "badFormat": L("remote.web.badFormat", "配对码是 16 个字，例如 ABCD-EFGH-JKMN-PQRS"),
-            "handoffExpired": L("remote.web.handoffExpired", "这个图标里的一次性交接码已经失效（只有 60 秒），请输入 Mac 上的配对码"),
+            "blocked": L("remote.web.blocked", "这台设备试错太多次，请在 Mac 上产生新的码"),
+            "full": L("remote.web.full", "这台 Mac 已经配对太多设备了"),
+            "noCrypto": L("remote.web.noCrypto", "这个浏览器太旧，不支持 WebCrypto（需要 iOS 15 以上）"),
         ]
         let data = (try? JSONSerialization.data(withJSONObject: d, options: [.sortedKeys])) ?? Data("{}".utf8)
         // </script> 不可能出現在這些字串裡，但還是把 < 轉掉
@@ -98,12 +100,13 @@ body{position:fixed;inset:0;left:0;top:0;right:0;bottom:0;touch-action:none}
 <script>var S = \#(strings);</script>
 <script>
 \#(cryptoJS)
+\#(RemoteIdentityJS.source)
 (function () {
   'use strict';
   var $ = function (id) { return document.getElementById(id); };
   var cv = $('c'), g = cv.getContext('2d'), screenEl = $('screen'), stage = $('stage');
   var standalone = !!(window.navigator.standalone || (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches));
-  var creds = null, ws = null, key = null, rx = 0, tx = 0, phase = 'idle', kind = 0, nonceC = null, handoff = null, handoffTimer = null;
+  var ident = null, ws = null, key = null, rx = 0, tx = 0, phase = 'idle', kind = 0x44, nonceC = null, ephS = null, nonceS = null, busy = false, mode = 'mirror';
   var earlyCloses = 0, retry = 0, pairCode = null, lastTouch = Date.now(), dimmed = false;
   var inputN = 0, pending = null, guest = true;
 
@@ -126,38 +129,20 @@ body{position:fixed;inset:0;left:0;top:0;right:0;bottom:0;touch-action:none}
     }
     return out.length === 10 ? out : null;
   }
-  // handoff token: 24 bytes = 8-byte lookup id + 16-byte secret, base32 (39 chars)
-  function tokenBytes(s) {
-    var out = [], acc = 0, bits = 0;
-    for (var i = 0; i < s.length; i++) {
-      var v = ALPHA.indexOf(s.charAt(i)); if (v < 0) return null;
-      acc = (acc << 5) | v; bits += 5;
-      if (bits >= 8) { bits -= 8; out.push((acc >> bits) & 255); }
-      acc &= (1 << bits) - 1;
-    }
-    return out.length === 24 ? out : null;
+  // ---------- identity: 兩把 P-256 私鑰只活在裝置的 IndexedDB（HPI，Remote/RemoteIdentityJS.swift）。
+  // Mac 只拿得到公鑰，所以沒有任何長期祕密需要從 Mac 傳過來，也就沒有交接碼、沒有網址裡的東西。
+  // Add to Home Screen 之後的副本跟 Safari 共用同一個來源的儲存（iOS 11.3 起），金鑰不用搬家。 ----------
+  function clearHash() { if (window.history && history.replaceState) history.replaceState(null, '', location.pathname + location.search); }
+  function readHash() {
+    var h = location.hash || '';
+    var p = h.match(/[#&]p=([0-9A-Za-z\-]+)/), m = h.match(/[#&]mode=(mirror|side|both)/);
+    if (p && !ident) pairCode = p[1];
+    if (m) mode = m[1];
+    if (h.length > 1) clearHash();   // codes (and old #t=/#d= links) never stay in the address bar
   }
   function nonce(dir, n) { var a = new Uint8Array(12); a[0] = dir; for (var i = 0; i < 6; i++) { a[4 + i] = n % 256; n = Math.floor(n / 256); } return a; }
   function store(k, v) { try { if (v === null) localStorage.removeItem(k); else localStorage.setItem(k, v); } catch (e) {} }
   function load(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
-
-  // ---------- credentials: localStorage only. The long-term key never goes into the URL or history.
-  // Add to Home Screen keeps the address, so while open in Safari the page puts a one-time handoff token (#t=, 60 s,
-  // issued by the Mac) there; the home-screen copy trades it for the key once, then forgets it. ----------
-  function clearHash() { if (window.history && history.replaceState) history.replaceState(null, '', location.pathname + location.search); }
-  function readCreds() {
-    var h = location.hash || '';
-    try { creds = JSON.parse(load('hp.dev') || 'null'); } catch (e) { creds = null; }
-    var p = h.match(/[#&]p=([0-9A-Za-z\-]+)/), t = h.match(/[#&]t=([0-9A-Z]{39})/);
-    if (p && !creds) pairCode = p[1];
-    if (t && !creds && tokenBytes(t[1])) handoff = t[1];
-    if (h.length > 1) clearHash();   // codes, tokens (and old #d= links) never stay in the address bar
-  }
-  function saveCreds(c) {
-    creds = c; store('hp.dev', c ? JSON.stringify(c) : null);
-  }
-  // in Safari (not the home-screen copy): keep a fresh handoff token in the address for Add to Home Screen
-  function askHandoff() { if (!standalone && creds && key && kind === 0x44) sendJSON({ t: 'h' }); }
 
   // ---------- layout (IdleLayouts: square on top / on the left, the rest is a big clock) ----------
   function layout() {
@@ -198,57 +183,75 @@ body{position:fixed;inset:0;left:0;top:0;right:0;bottom:0;touch-action:none}
   function sendJSON(o) { if (!key) return; sendRaw(HPC.seal(key, nonce(0, tx++), utf8(JSON.stringify(o)))); }
 
   function connect() {
+    if (ws || busy) return;
+    busy = true;
+    HPI.load().then(function (s) {
+      ident = s;
+      if (pairCode) { doPair(); return; }
+      busy = false;
+      if (!ident) { showPair(); return; }
+      openSocket();
+    }, function () { busy = false; showPair(S.noCrypto); });
+  }
+
+  // 配對走一般的 HTTP：把公鑰交給 Mac，換回自己的 id（沒有任何祕密回來）
+  function doPair() {
+    busy = true;
+    HPI.pair(pairCode, mode, deviceName()).then(function () {
+      pairCode = null;
+      return HPI.load();
+    }).then(function (s) {
+      ident = s; busy = false; hidePair(); if (!standalone) showTip(); openSocket();
+    }, function (e) {
+      busy = false; pairCode = null;
+      var m = (e && e.message) || '';
+      showPair(m === 'pair 429' ? S.blocked : m === 'pair 409' ? S.full : S.badCode);
+    });
+  }
+
+  function openSocket() {
     if (ws) return;
-    if (!creds && !pairCode && !handoff) { showPair(); return; }
-    kind = creds ? 0x44 : (handoff ? 0x54 : 0x50); key = null; rx = 0; tx = 0; phase = 'open';
+    key = null; rx = 0; tx = 0; phase = 'open';
     try { ws = new WebSocket('ws://' + location.host + '/ws'); } catch (e) { ws = null; return later(); }
     ws.binaryType = 'arraybuffer';
     var opened = false, gotOk = false;
     ws.onopen = function () {
       opened = true; nonceC = rand(6);
-      var h = new Uint8Array(17); h[0] = 0x48; h[1] = 1; h[2] = kind;
-      if (creds) h.set(hexd(creds.id), 3);
-      else if (kind === 0x54) h.set(tokenBytes(handoff).slice(0, 8), 3);
-      h.set(nonceC, 11); sendRaw(h); phase = 'hello';
+      var h = new Uint8Array(17); h[0] = 0x48; h[1] = 2; h[2] = 0x44;
+      h.set(hexd(ident.id), 3); h.set(nonceC, 11); sendRaw(h); phase = 'hello';
     };
     ws.onmessage = function (ev) {
       var b = new Uint8Array(ev.data);
       if (phase === 'hello') {
-        if (b.length !== 8 || b[0] !== 0x48) { ws.close(); return; }
-        var n = new Uint8Array(12); n.set(nonceC, 0); n.set(b.subarray(2, 8), 6);
-        var lk;
-        if (kind === 0x50) { var cb = codeBytes(pairCode || ''); if (!cb) { ws.close(); return; } lk = new Uint8Array(32); lk.set(cb, 0); }
-        else if (kind === 0x54) { var tb = tokenBytes(handoff || ''); if (!tb) { ws.close(); return; } lk = new Uint8Array(32); lk.set(tb.slice(8, 24), 0); }
-        else lk = b64d(creds.key);
-        key = HPC.derive(lk, n);
-        phase = 'live';
-        if (kind === 0x50) sendJSON({ t: 'pair', name: deviceName() });
-        else if (kind === 0x54) sendJSON({ t: 'claim' });
-        else sendJSON({ t: 'hi', v: 1, w: screen.width, h: screen.height, st: standalone });
+        // 'S' 2 ephS(65) nonceS(6)：Mac 的臨時金鑰
+        if (b.length !== 73 || b[0] !== 0x53 || b[1] !== 2) { ws.close(); return; }
+        ephS = b.subarray(2, 67); nonceS = b.subarray(67, 73); phase = 'sign';
+        HPI.ecdh(ephS).then(function (secret) {
+          var n = new Uint8Array(12); n.set(nonceC, 0); n.set(nonceS, 6);
+          key = HPC.derive(secret, n);
+          return HPI.sign(HPI.streamTranscript(0x44, ident.id, nonceC, ephS, nonceS));
+        }).then(function (sig) {
+          if (!ws) return;
+          sendRaw(sig); phase = 'wait';
+          sendJSON({ t: 'hi', v: 1, w: screen.width, h: screen.height, st: standalone });
+        })['catch'](function () { if (ws) ws.close(); });
         return;
       }
+      if (phase !== 'wait' && phase !== 'live') return;
       var p = HPC.open(key, nonce(1, rx++), b);
       if (!p) { ws.close(); return; }
       if (p[0] === 0x7b) {
         var o = JSON.parse(unutf8(p));
-        if (o.t === 'paired') { var wasPairing = kind === 0x50; pairCode = null; handoff = null; saveCreds({ id: o.id, key: o.key }); hidePair(); if (!standalone && wasPairing) showTip(); }
-        else if (o.t === 'ok') {
-          gotOk = true; earlyCloses = 0; retry = 0; guest = o.guest; status(S.connected.replace('%@', o.mac), true); hidePair();
-          askHandoff(); if (!standalone && !handoffTimer) handoffTimer = setInterval(askHandoff, 45000);
-        }
-        else if (o.t === 'handoff') { if (!standalone && window.history && history.replaceState && /^[0-9A-Z]{39}$/.test(o.tok)) history.replaceState(null, '', '#t=' + o.tok); }
-        else if (o.t === 'cover') { $('cover').style.display = o.on ? 'flex' : 'none'; if (o.on) { g.fillStyle = '#000'; g.fillRect(0, 0, 1024, 1024); } }
+        if (o.t === 'ok') {
+          phase = 'live'; gotOk = true; earlyCloses = 0; retry = 0; guest = o.guest;
+          status(S.connected.replace('%@', o.mac), true); hidePair();
+        } else if (o.t === 'cover') { $('cover').style.display = o.on ? 'flex' : 'none'; if (o.on) { g.fillStyle = '#000'; g.fillRect(0, 0, 1024, 1024); } }
       } else if (p[0] === 0x46) frame(p);
     };
     ws.onclose = function () {
-      var wasPair = kind === 0x50;
       ws = null; key = null;
-      if (kind === 0x54 && handoff) { handoff = null; if (!creds) { showPair(S.handoffExpired); return; } }
-      if (wasPair && pairCode) {
-        // the code was wrong, used or expired
-        if (opened) { pairCode = null; showPair(S.badCode); return; }
-      }
-      if (!wasPair && opened && !gotOk && ++earlyCloses >= 2) { saveCreds(null); showPair(S.removed); return; }
+      // 同一台一直被拒＝被移除了：忘掉身分、回到配對畫面
+      if (opened && !gotOk && ++earlyCloses >= 2) { HPI.forget(); ident = null; showPair(S.removed); return; }
       status(opened ? S.reconnecting : S.unreachable, false);
       later();
     };
@@ -319,7 +322,7 @@ body{position:fixed;inset:0;left:0;top:0;right:0;bottom:0;touch-action:none}
   $('pcode').addEventListener('keydown', function (e) { if (e.keyCode === 13) $('pgo').click(); });
   $('tip').addEventListener('click', function () { $('tip').style.display = 'none'; });
 
-  readCreds(); layout(); clock();
+  readHash(); layout(); clock();
   status(S.connecting, false);
   connect();
 })();

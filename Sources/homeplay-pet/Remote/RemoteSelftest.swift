@@ -56,28 +56,21 @@ enum RemoteSelftest {
         check(st.pairingSecret == nil, "remote: 全部打錯 20 次作廢")
         st.newPairing(); st.pairingUsed()
         check(st.pairingSecret == nil, "remote: 用過一次就失效")
-        // 裝置與權限
-        let dev = st.add(name: "iPad\u{0007} · iPadOS 15.8")
-        check(dev.name == "iPad · iPadOS 15.8" && !dev.personal, "remote: 新裝置名字去控制字元、預設是訪客")
+        // 裝置與權限（身分＝裝置自己的公鑰，Mac 沒有私鑰可存）
+        let ag = P256.KeyAgreement.PrivateKey().publicKey.x963Representation
+        let sg = P256.Signing.PrivateKey().publicKey.x963Representation
+        guard let dev = st.add(name: "iPad\u{0007} · iPadOS 15.8", agree: ag, sign: sg) else { check(false, "remote: 加裝置"); return }
+        check(dev.name == "iPad · iPadOS 15.8" && !dev.personal && dev.mirror && !dev.side, "remote: 新裝置名字去控制字元、預設是訪客、預設只鏡像")
         let mode = (try? FileManager.default.attributesOfItem(atPath: st.file.path)[.posixPermissions] as? Int) ?? -1
-        check(mode == 0o600, "remote: 裝置金鑰檔 0600（實際 \(String(mode, radix: 8))）")
-        check(RemoteStore(file: st.file).key(for: dev.id) != nil, "remote: 金鑰存檔後讀得回來")
-        // 交接碼：60 秒、用一次、移除後失效
-        let tok = st.newHandoff(for: dev.id)
-        let tb = tok.flatMap { RemoteCrypto.decode($0) } ?? []
-        let tid = tb.prefix(8).map { String(format: "%02x", $0) }.joined()
-        check(tb.count == 24 && st.takeHandoff(tid)?.device == dev.id && st.takeHandoff(tid) == nil, "remote: 交接碼用一次就沒了")
-        let tok2 = st.newHandoff(for: dev.id).flatMap { RemoteCrypto.decode($0) } ?? []
-        t += RemoteStore.handoffLifetime + 1
-        check(st.takeHandoff(tok2.prefix(8).map { String(format: "%02x", $0) }.joined()) == nil, "remote: 交接碼 60 秒後失效")
-        func tidOf(_ b: [UInt8]) -> String { b.prefix(8).map { String(format: "%02x", $0) }.joined() }
-        let tok3 = st.newHandoff(for: dev.id).flatMap { RemoteCrypto.decode($0) } ?? []
-        let tok4 = st.newHandoff(for: dev.id).flatMap { RemoteCrypto.decode($0) } ?? []
-        let tok5 = st.newHandoff(for: dev.id).flatMap { RemoteCrypto.decode($0) } ?? []
-        check(st.takeHandoff(tidOf(tok3)) == nil && st.takeHandoff(tidOf(tok4)) != nil && st.takeHandoff(tidOf(tok5)) != nil, "remote: 同一台只留最近兩張交接碼（網址換新的時，分享選單拿到的上一張還能用）")
+        check(mode == 0o600, "remote: 名冊檔 0600（實際 \(String(mode, radix: 8))）")
+        check(RemoteStore(file: st.file).keys(for: dev.id)?.sign == sg, "remote: 公鑰存檔後讀得回來")
+        st.setSide(dev.id, true); st.setMirror(dev.id, false)
+        check(st.device(dev.id)?.caps == [.side], "remote: 每台裝置各自記收哪種內容")
+        st.setPersonal(dev.id, true)
+        check(RemoteStore(file: st.file).device(dev.id)?.personal == true, "remote: 個人內容跟著裝置")
+        let other = st.add(name: "Kitchen", agree: ag, sign: sg)
         st.revoke(dev.id)
-        check(RemoteStore(file: st.file).key(for: dev.id) == nil, "remote: 移除後金鑰不在檔裡")
-        check(st.newHandoff(for: dev.id) == nil, "remote: 移除的裝置拿不到交接碼")
+        check(RemoteStore(file: st.file).device(dev.id) == nil && other != nil && st.all.count == 1, "remote: 移除只踢掉那一台、檔裡也沒有它")
         try? FileManager.default.removeItem(at: dir)
     }
 
@@ -315,7 +308,9 @@ enum RemoteSelftest {
         let st = RemoteStore(file: dir.appendingPathComponent("remote-devices.json"))
         var resurrected = 0
         for _ in 0..<60 {
-            let d = st.add(name: "iPad")
+            let ag = P256.KeyAgreement.PrivateKey().publicKey.x963Representation
+            let sg = P256.Signing.PrivateKey().publicKey.x963Representation
+            guard let d = st.add(name: "iPad", agree: ag, sign: sg) else { continue }
             DispatchQueue.concurrentPerform(iterations: 8) { i in if i == 3 { st.revoke(d.id) } else { st.touch(d.id, ip: "192.168.1.\(i)") } }
             if RemoteStore(file: st.file).device(d.id) != nil { resurrected += 1 }
         }
@@ -435,14 +430,19 @@ enum RemoteSelftest {
             task.send(.data(d)) { _ in sem.signal() }
             _ = sem.wait(timeout: .now() + 3)
         }
-        /// 握手：成功回 session key；被拒（伺服器斷線）回 false
-        func hello(kind: UInt8, id: String?, longKey: SymmetricKey) -> Bool {
-            var b: [UInt8] = [0x48, 1, kind]
-            if let id { b += stride(from: 0, to: 16, by: 2).map { UInt8(id.dropFirst($0).prefix(2), radix: 16)! } } else { b += [UInt8](repeating: 0, count: 8) }
+        /// 握手（版本 2）：裝置送 'H' 2 id nonceC，Mac 回 'S' 2 ephS nonceS，裝置簽 transcript。
+        /// 回 true＝兩邊算出同一把工作階段金鑰（伺服器之後才驗簽，簽錯會直接被斷）
+        func hello(id: String, agree: P256.KeyAgreement.PrivateKey, sign: P256.Signing.PrivateKey) -> Bool {
+            var b: [UInt8] = [0x48, RemoteIdentity.streamVersion, 0x44]
+            b += stride(from: 0, to: 16, by: 2).map { UInt8(id.dropFirst($0).prefix(2), radix: 16) ?? 0 }
             let nc = (0..<6).map { _ in UInt8.random(in: 0...255) }
             send(Data(b + nc))
-            guard let r = receive(), r.count == 8, r.first == 0x48 else { return false }
-            key = RemoteCrypto.sessionKey(longKey, nonceC: nc, nonceS: Array(r.dropFirst(2)))
+            guard let r = receive(), r.count == 73, r.first == 0x53, r[1] == RemoteIdentity.streamVersion else { return false }
+            let eph = Data(r[2..<67]), ns = Array(r[67..<73])
+            key = RemoteIdentity.streamKey(privateKey: agree, peer: eph, nonceC: nc, nonceS: ns)
+            let tr = RemoteIdentity.streamTranscript(kind: 0x44, id: id, nonceC: nc, ephS: eph, nonceS: ns)
+            guard let s = try? sign.signature(for: tr).rawRepresentation else { return false }
+            send(s)
             return key != nil
         }
         func sendJSON(_ o: [String: Any]) {
@@ -549,57 +549,37 @@ enum RemoteSelftest {
 
         // 沒配對的裝置
         let fakeID = "0123456789abcdef"
+        let strangerAgree = P256.KeyAgreement.PrivateKey(), strangerSign = P256.Signing.PrivateKey()
         do {
             let c = Client(port: port)
-            check(!c.hello(kind: 0x44, id: fakeID, longKey: SymmetricKey(size: .bits256)), "remote: 沒配對的裝置被拒")
+            check(!c.hello(id: fakeID, agree: strangerAgree, sign: strangerSign), "remote: 沒配對的裝置被拒")
             c.close()
         }
-        // 沒有配對碼時配對
-        do {
-            let c = Client(port: port)
-            check(!c.hello(kind: 0x50, id: nil, longKey: RemoteCrypto.pairingKey(RemoteCrypto.newPairingSecret())), "remote: 沒產生配對碼時不能配對")
-            c.close()
+        // 配對改走 HTTP（Remote/SideRoute.swift）：這裡直接把一台放進名冊，比照配對成功的結果
+        let dAgree = P256.KeyAgreement.PrivateKey(), dSign = P256.Signing.PrivateKey()
+        guard let creds = srv.store.add(name: "iPad · iPadOS 15.8", agree: dAgree.publicKey.x963Representation, sign: dSign.publicKey.x963Representation) else {
+            check(false, "remote: 放一台裝置進名冊"); return
         }
-        // 打錯碼
-        let secret = srv.store.newPairing()
+        check(srv.store.all.count == 1, "remote: 名冊裡只有那一台")
+        // 拿別人的金鑰冒充這台裝置
         do {
             let c = Client(port: port)
-            _ = c.hello(kind: 0x50, id: nil, longKey: RemoteCrypto.pairingKey(RemoteCrypto.newPairingSecret()))
-            c.sendJSON(["t": "pair", "name": "Attacker"])
-            check(c.receiveJSON() == nil, "remote: 打錯配對碼拿不到金鑰")
-            c.close()
-        }
-        // 對的碼
-        var creds: (id: String, key: SymmetricKey)?
-        do {
-            let c = Client(port: port)
-            _ = c.hello(kind: 0x50, id: nil, longKey: RemoteCrypto.pairingKey(secret))
-            c.sendJSON(["t": "pair", "name": "iPad · iPadOS 15.8"])
-            if let o = c.receiveJSON(), o["t"] as? String == "paired", let id = o["id"] as? String, let k = (o["key"] as? String).flatMap({ Data(base64Encoded: $0) }) {
-                creds = (id, SymmetricKey(data: k))
-            }
-            c.close()
-        }
-        check(creds != nil && srv.store.all.count == 1, "remote: 對的配對碼拿到這台裝置自己的金鑰")
-        do {
-            let c = Client(port: port)
-            _ = c.hello(kind: 0x50, id: nil, longKey: RemoteCrypto.pairingKey(secret))
-            c.sendJSON(["t": "pair", "name": "Again"])
-            check(c.receiveJSON() == nil && srv.store.all.count == 1, "remote: 用過的配對碼不能再用")
-            c.close()
-        }
-        guard let creds else { return }
-        // 拿錯的金鑰冒充這台裝置
-        do {
-            let c = Client(port: port)
-            _ = c.hello(kind: 0x44, id: creds.id, longKey: SymmetricKey(size: .bits256))
+            _ = c.hello(id: creds.id, agree: strangerAgree, sign: strangerSign)
             c.sendJSON(["t": "hi"])
-            check(c.receiveJSON() == nil, "remote: 冒用裝置 id（金鑰不對）被拒")
+            check(c.receiveJSON() == nil, "remote: 冒用裝置 id（簽章不對）被拒")
             c.close()
+        }
+        // 沒開鏡像的裝置連不上畫面（副屏還是能用）
+        do {
+            srv.store.setMirror(creds.id, false)
+            let c = Client(port: port)
+            check(!c.hello(id: creds.id, agree: dAgree, sign: dSign), "remote: 沒開鏡像的裝置連不上畫面")
+            c.close()
+            srv.store.setMirror(creds.id, true)
         }
         // 配過的裝置：連上、拿到畫面
         let live = Client(port: port)
-        _ = live.hello(kind: 0x44, id: creds.id, longKey: creds.key)
+        _ = live.hello(id: creds.id, agree: dAgree, sign: dSign)
         live.sendJSON(["t": "hi", "v": 1])
         let ok = live.receiveJSON()
         check(ok?["t"] as? String == "ok" && ok?["guest"] as? Bool == true, "remote: 配過的裝置連上（預設訪客）")
@@ -631,7 +611,7 @@ enum RemoteSelftest {
         check(live.receivePlain(1) == nil, "remote: 不安全時畫的舊幀不送給訪客（狀態已經安全也一樣）")
         do {
             let late = Client(port: port)   // 剛連上的（ref＝nil 會送整張畫布）也拿不到
-            _ = late.hello(kind: 0x44, id: creds.id, longKey: creds.key)
+            _ = late.hello(id: creds.id, agree: dAgree, sign: dSign)
             late.sendJSON(["t": "hi"])
             let ok2 = late.receiveJSON()
             check(ok2?["t"] as? String == "ok" && late.receivePlain(1) == nil, "remote: 剛連上的訪客也拿不到畫布上的不安全幀")
@@ -655,77 +635,47 @@ enum RemoteSelftest {
         check(closedGate, "remote: 訪客一碰，PersonalGate.cached 馬上變 false")
         PersonalGate.cached = savedCached
 
-        // M1：交接碼換金鑰：用一次；金鑰不進網址
-        live.sendJSON(["t": "h"])
-        let ho = live.receiveJSON("handoff")?["tok"] as? String
-        let tb = ho.flatMap { RemoteCrypto.decode($0) } ?? []
-        var handed = false, reused = true
-        if tb.count == 24 {
-            let tid = tb.prefix(8).map { String(format: "%02x", $0) }.joined()
-            let h1 = Client(port: port)
-            _ = h1.hello(kind: 0x54, id: tid, longKey: RemoteCrypto.pairingKey(Array(tb[8..<24])))
-            h1.sendJSON(["t": "claim"])
-            if let o = h1.receiveJSON(), o["t"] as? String == "paired", o["id"] as? String == creds.id,
-               let k = (o["key"] as? String).flatMap({ Data(base64Encoded: $0) }) { handed = SymmetricKey(data: k) == creds.key }
-            h1.close()
-            let h2 = Client(port: port)
-            reused = h2.hello(kind: 0x54, id: tid, longKey: RemoteCrypto.pairingKey(Array(tb[8..<24])))
-            h2.close()
-        }
-        check(handed, "remote: 交接碼換到這台裝置的金鑰")
-        check(!reused, "remote: 交接碼用過就不能再用")
+        // 頁面：不把任何祕密寫進網址（身分在 IndexedDB）
         let page = RemotePage.html(host: "127.0.0.1:1")
-        check(!page.contains("'#d='") && page.contains("'#t=' + o.tok") && page.contains("clearHash()"), "remote: 頁面不把金鑰寫進網址，只放交接碼")
+        check(page.contains("HPI") && !page.contains("hp.dev") && !page.contains("'#t='") && page.contains("clearHash()"), "remote: 頁面用 IndexedDB 的身分，網址裡沒有金鑰也沒有交接碼")
         // 移除：現在的連線被踢、之後連不回來
         srv.revoke(creds.id)
         check(live.waitClosed(), "remote: 移除裝置後現在的連線斷掉")
         live.close()
         do {
             let c = Client(port: port)
-            check(!c.hello(kind: 0x44, id: creds.id, longKey: creds.key), "remote: 移除的裝置連不回來")
+            check(!c.hello(id: creds.id, agree: dAgree, sign: dSign), "remote: 移除的裝置連不回來")
             c.close()
         }
 
-        // H4：同一台裝置同時從兩個位址（127.0.0.1 與 ::1）連進來＝金鑰外流：自動移除、兩條都斷
-        let secret2 = srv.store.newPairing()
-        var creds2: (id: String, key: SymmetricKey)?
-        do {
-            let c = Client(port: port)
-            _ = c.hello(kind: 0x50, id: nil, longKey: RemoteCrypto.pairingKey(secret2))
-            c.sendJSON(["t": "pair", "name": "iPad"])
-            if let o = c.receiveJSON(), let id = o["id"] as? String, let k = (o["key"] as? String).flatMap({ Data(base64Encoded: $0) }) { creds2 = (id, SymmetricKey(data: k)) }
-            c.close()
+        // H4：同一台裝置同時從兩個位址（127.0.0.1 與 ::1）連進來＝簽章被複製：自動移除、兩條都斷
+        let d2Agree = P256.KeyAgreement.PrivateKey(), d2Sign = P256.Signing.PrivateKey()
+        guard let creds2 = srv.store.add(name: "iPad", agree: d2Agree.publicKey.x963Representation, sign: d2Sign.publicKey.x963Representation) else {
+            check(false, "remote: 第二台裝置"); return
         }
-        guard let creds2 else { check(false, "remote: 第二台配對"); return }
         let a = Client(port: port)
-        _ = a.hello(kind: 0x44, id: creds2.id, longKey: creds2.key)
+        _ = a.hello(id: creds2.id, agree: d2Agree, sign: d2Sign)
         a.sendJSON(["t": "hi"])
         let okA = a.receiveJSON("ok") != nil
         let b = Client(port: port, address: "[::1]")
-        _ = b.hello(kind: 0x44, id: creds2.id, longKey: creds2.key)
+        _ = b.hello(id: creds2.id, agree: d2Agree, sign: d2Sign)
         b.sendJSON(["t": "hi"])
         let okB = b.receiveJSON("ok") != nil
         // 讓 a 一直在收（URLSession 收著才會回 pong）
         var gone = false
         for _ in 0..<60 where !gone { Thread.sleep(forTimeInterval: 0.1); gone = srv.store.device(creds2.id) == nil }
-        check(okA && okB && gone, "remote: 同一把金鑰同時從兩個位址連進來，自動移除（ok \(okA)/\(okB)）")
+        check(okA && okB && gone, "remote: 同一台裝置同時從兩個位址連進來，自動移除（ok \(okA)/\(okB)）")
         check(a.waitClosed() && b.waitClosed(), "remote: 自動移除後兩條連線都斷掉")
         a.close(); b.close()
         // 只有一條（換了位址重連、舊的已斷）：不算
-        let secret3 = srv.store.newPairing()
-        do {
-            let c = Client(port: port)
-            _ = c.hello(kind: 0x50, id: nil, longKey: RemoteCrypto.pairingKey(secret3))
-            c.sendJSON(["t": "pair", "name": "iPad"])
-            if let o = c.receiveJSON(), let id = o["id"] as? String, let k = (o["key"] as? String).flatMap({ Data(base64Encoded: $0) }) {
-                c.close()
-                let x = Client(port: port); _ = x.hello(kind: 0x44, id: id, longKey: SymmetricKey(data: k)); x.sendJSON(["t": "hi"]); _ = x.receiveJSON("ok"); x.close()
-                Thread.sleep(forTimeInterval: 0.5)
-                let y = Client(port: port, address: "[::1]"); _ = y.hello(kind: 0x44, id: id, longKey: SymmetricKey(data: k)); y.sendJSON(["t": "hi"]); _ = y.receiveJSON("ok")
-                Thread.sleep(forTimeInterval: 3.5)
-                check(srv.store.device(id) != nil && srv.store.device(id)?.lastIP == "::1", "remote: 換了位址重連（舊連線已斷）不會被移除，設定頁看得到上次的位址")
-                y.close()
-            } else { check(false, "remote: 第三台配對") }
-        }
+        let d3Agree = P256.KeyAgreement.PrivateKey(), d3Sign = P256.Signing.PrivateKey()
+        if let d3 = srv.store.add(name: "iPad", agree: d3Agree.publicKey.x963Representation, sign: d3Sign.publicKey.x963Representation) {
+            let x = Client(port: port); _ = x.hello(id: d3.id, agree: d3Agree, sign: d3Sign); x.sendJSON(["t": "hi"]); _ = x.receiveJSON("ok"); x.close()
+            Thread.sleep(forTimeInterval: 0.5)
+            let y = Client(port: port, address: "[::1]"); _ = y.hello(id: d3.id, agree: d3Agree, sign: d3Sign); y.sendJSON(["t": "hi"]); _ = y.receiveJSON("ok")
+            Thread.sleep(forTimeInterval: 3.5)
+            check(srv.store.device(d3.id) != nil && srv.store.device(d3.id)?.lastIP == "::1", "remote: 換了位址重連（舊連線已斷）不會被移除，設定頁看得到上次的位址")
+            y.close()
+        } else { check(false, "remote: 第三台裝置") }
     }
 }

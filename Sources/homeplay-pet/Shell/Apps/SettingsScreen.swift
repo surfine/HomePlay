@@ -24,7 +24,7 @@ final class SettingsApp: PetApp {
     func didOpen(now: Double) { picking = CommandLine.arguments.contains("--settings-room") ? .room : SideShowSettings.demoPicker }
     var backSymbol: String { picking != nil ? "chevron.left" : "xmark" }
     func handleBack(now: Double) -> Bool {
-        if picking == .sideshowPair { picking = .sideshow; SideShowServer.shared.store.cancelPairing(); return true }   // 加入裝置 → 回 SideShow
+        if picking == .sideshowPair { picking = .sideshow; RemoteServer.shared.store.cancelPairing(); return true }   // 加入裝置 → 回 iPhone 與 iPad
         if picking != nil { picking = nil; return true }
         return false
     }
@@ -48,7 +48,7 @@ final class SettingsApp: PetApp {
         switch picking {
         case .room?: drawRoomPicker(g, face); AppUI.title(g, face, L("settings.room", "所在房间")); return
         case .sharedList?: drawListPicker(g, face); AppUI.title(g, face, L("settings.sharedList", "家人共用清单")); return
-        case .sideshow?: drawSideShow(g, face); AppUI.title(g, face, L("settings.sideshow", "SideShow")); return   // SideShow/SideShowSettings.swift
+        case .sideshow?: drawSideShow(g, face); AppUI.title(g, face, L("settings.sideshow", "iPhone 与 iPad")); return   // SideShow/SideShowSettings.swift
         case .sideshowPair?: drawSideShowPair(g, face, now: now); AppUI.title(g, face, L("sideshow.add", "添加设备")); return
         case nil: break
         }
@@ -119,7 +119,7 @@ final class SettingsApp: PetApp {
         brightnessTrack = track
         // SideShow（區網副屏，SideShow/SideShowSettings.swift）：放在這張卡裡，畫面放得下
         HPComponents.separatorLine(g, x: Self.x0 + Self.inset, maxX: Self.x1, y: y + Self.row * 2)
-        row(g, face, CGRect(x: Self.x0, y: y + Self.row * 2, width: w, height: Self.row), L("settings.sideshow", "SideShow"),
+        row(g, face, CGRect(x: Self.x0, y: y + Self.row * 2, width: w, height: Self.row), L("settings.sideshow", "iPhone 与 iPad"),
             value: SideShowSettings.on ? L("sideshow.on", "开") : L("sideshow.off", "关"), chevron: true) { [weak self] in self?.picking = .sideshow }
         y += Self.row * 3
         y += HPGrid.Rhythm.rowGap

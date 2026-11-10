@@ -49551,19 +49551,19 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "SideShow"
+            "value" : "iPhone & iPad"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "SideShow"
+            "value" : "iPhone 与 iPad"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "SideShow"
+            "value" : "iPhone 與 iPad"
           }
         }
       }
@@ -49639,19 +49639,19 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Turn an old iPad or phone into a second screen for the clock, weather, Now Playing, timers, and home alerts. It keeps showing the latest info while your Mac sleeps."
+            "value" : "Turn an old iPhone or iPad into a second screen: mirror the whole display, or use it just as a side display for the clock, weather, Now Playing, timers, and home alerts. It keeps showing the latest info while your Mac sleeps."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "让旧 iPad 或手机当副屏：显示时钟、天气、正在播放、计时器和家庭警报。Mac 睡着时，它照样显示最后的内容。"
+            "value" : "把旧 iPhone 或 iPad 变成第二块屏幕：可以镜像整个画面，也可以只当副屏——时钟、天气、正在播放、计时器和家庭警报。Mac 睡着时，副屏照样显示最后的内容。"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "讓舊 iPad 或手機當副螢幕：顯示時鐘、天氣、正在播放、計時器和家庭警報。Mac 睡著時，它照樣顯示最後的內容。"
+            "value" : "把舊 iPhone 或 iPad 變成第二塊螢幕：可以鏡像整個畫面，也可以只當副屏——時鐘、天氣、正在播放、計時器和家庭警報。Mac 睡著時，副屏照樣顯示最後的內容。"
           }
         }
       }
@@ -50145,19 +50145,19 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "On your Mac, open HomePlay’s Settings › SideShow › Add Device, then scan the QR code with your camera."
+            "value" : "In HomePlay on your Mac, open Settings › iPhone & iPad › Add Device, then scan the QR code with the camera."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "在 Mac 的 HomePlay 里打开“设置 › SideShow › 添加设备”，用相机扫描屏幕上的二维码。"
+            "value" : "在 Mac 的 HomePlay 里打开“设置 › iPhone 与 iPad › 添加设备”，用相机扫描屏幕上的二维码。"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "在 Mac 的 HomePlay 打開「設定 › SideShow › 新增裝置」，用相機掃描螢幕上的 QR 碼。"
+            "value" : "在 Mac 的 HomePlay 裡打開「設定 › iPhone 與 iPad › 新增裝置」，用相機掃描螢幕上的 QR 碼。"
           }
         }
       }
@@ -55042,6 +55042,292 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "實用工具"
+          }
+        }
+      }
+    },
+    "sideshow.manage" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Paired devices, mirror and side display, and personal content are managed in Settings › iPhone & iPad on your Mac."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已配对的设备、镜像／副屏、个人内容，都在 Mac 的「设置 › iPhone 与 iPad」里管理。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已配對的裝置、鏡像／副屏、個人內容，都在 Mac 的「設定 › iPhone 與 iPad」裡管理。"
+          }
+        }
+      }
+    },
+    "sideshow.web.noCrypto" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This browser is too old for WebCrypto (iOS 15 or later needed)."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "这个浏览器太旧，不支持 WebCrypto（需要 iOS 15 以上）"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "這個瀏覽器太舊，不支援 WebCrypto（需要 iOS 15 以上）"
+          }
+        }
+      }
+    },
+    "remote.device.mirror" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mirror"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "镜像"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "鏡像"
+          }
+        }
+      }
+    },
+    "remote.device.mirror.help" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sends the whole screen; this Mac has to stay awake."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "整个画面都传过来；这台 Mac 要醒着"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "整個畫面都傳過來；這台 Mac 要醒著"
+          }
+        }
+      }
+    },
+    "remote.device.side" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Side display"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "副屏"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "副屏"
+          }
+        }
+      }
+    },
+    "remote.device.side.help" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Clock, weather, Now Playing, timers, and home alerts; keeps showing while your Mac sleeps."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "时钟、天气、正在播放、计时器、家庭警报；Mac 睡着也看得到"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "時鐘、天氣、正在播放、計時器、家庭警報；Mac 睡著也看得到"
+          }
+        }
+      }
+    },
+    "remote.add.mode" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "What this device gets"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "这台设备收什么"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "這台裝置收什麼"
+          }
+        }
+      }
+    },
+    "remote.add.mode.mirror" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mirror"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "镜像画面"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "鏡像畫面"
+          }
+        }
+      }
+    },
+    "remote.add.mode.side" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Side display"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "副屏"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "副屏"
+          }
+        }
+      }
+    },
+    "remote.add.mode.both" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Both"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "两者"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "兩者"
+          }
+        }
+      }
+    },
+    "remote.web.blocked" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Too many wrong attempts from this device. Make a new code on the Mac."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "这台设备试错太多次，请在 Mac 上产生新的码"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "這台裝置試錯太多次，請在 Mac 上產生新的碼"
+          }
+        }
+      }
+    },
+    "remote.web.full" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This Mac is already paired with too many devices."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "这台 Mac 已经配对太多设备了"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "這台 Mac 已經配對太多裝置了"
+          }
+        }
+      }
+    },
+    "remote.web.noCrypto" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This browser is too old for WebCrypto (iOS 15 or later needed)."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "这个浏览器太旧，不支持 WebCrypto（需要 iOS 15 以上）"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "這個瀏覽器太舊，不支援 WebCrypto（需要 iOS 15 以上）"
           }
         }
       }
