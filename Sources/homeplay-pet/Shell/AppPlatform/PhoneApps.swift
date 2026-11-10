@@ -326,8 +326,11 @@ enum PhoneAppsSelfTest {
         ud.set(true, forKey: PhoneAppProvider.showKey)
         if let music = AppRegistry.app("music") {
             let secs = SBUI.librarySections(p.apps(viewer: nil) + [music])
-            check(secs.count == 2 && secs[0].title == nil && secs[0].apps.map(\.id) == ["music"] && secs[1].title == L("sb.library.iphone", "iPhone")
-                  && secs[1].apps.map(\.title) == ["Alpha", "Bravo"], "iPhone App：資源庫另一區「iPhone」，照名字排")   // l10n-ignore
+            let phone = secs.first { $0.title == L("sb.library.iphone", "iPhone") }
+            let own = secs.filter { $0.title != L("sb.library.iphone", "iPhone") }
+            check(phone?.apps.map(\.title) == ["Alpha", "Bravo"] && own.contains { $0.apps.contains { $0.id == "music" } }
+                  && own.allSatisfy { $0.title != nil },
+                  "iPhone App：資源庫另一區「iPhone」，照名字排；自己的 App 照分類")   // l10n-ignore
             check(SBUI.librarySections([music]).count == 1, "iPhone App：沒有 iPhone App 時不出現分類")   // l10n-ignore
         }
         check(PhoneIconCache.key(eb) == "com.b-2.0" && SBAX.appLabel(p.apps(viewer: nil)[0]).hasSuffix(L("sb.ax.openInCarPlay", "（在 CarPlay 打开）")),

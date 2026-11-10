@@ -210,7 +210,7 @@ extension Face {
         switch bg {
         case .daytime:
             if era == .y2002 { drawBlobs(g, Self.palette(hour: hourNow, aqua: true), arcs: true) }
-            else if let wallpaper { drawUpright(g, wallpaper, in: full) }
+            else { drawIslandLookGradient(g) }   // 2026：Look 色票的乾淨漸層（Faces/IslandFace.swift）
         case .flow:
             g.setFillColor(NSColor(srgbRed: 0.071, green: 0.047, blue: 0.165, alpha: 1).cgColor); g.fill(full)
             let cs = CGColorSpace(name: CGColorSpace.sRGB)!

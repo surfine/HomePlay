@@ -46,6 +46,34 @@ final class WhoIsLooking {
         return phonePresent ?? false   // 要求了却不知道 iPhone 在不在：关门
     }
 
+    /// 連續幾次不像主人（純函數）。一次「不像」只算一回，中間看開不另加；主人一出現就歸零。滿三次鎖頁才改口。不寫偏好。
+    struct UnlikeStrikes: Equatable {
+        enum Glance: Equatable { case owner, unlike, idle }
+        static let askAfter = 3
+        var count = 0
+        var open = false
+        var asksPhone: Bool { count >= Self.askAfter }
+
+        func next(_ g: Glance) -> UnlikeStrikes {
+            switch g {
+            case .owner: return UnlikeStrikes()
+            case .unlike:
+                if open { return self }
+                return UnlikeStrikes(count: min(Self.askAfter, count + 1), open: true)
+            case .idle: return UnlikeStrikes(count: count, open: false)
+            }
+        }
+
+        /// 主人且沒有反證＝主人。反證或認不出的臉＝不像。沒人、家人＝這回先停，次數留著。
+        static func glance(viewer: Viewer, contradictsOwner: Bool) -> Glance {
+            if viewer.isOwner && !contradictsOwner { return .owner }
+            if contradictsOwner || viewer == .guest { return .unlike }
+            return .idle
+        }
+    }
+
+    private(set) var unlikeStrikes = UnlikeStrikes()
+
     // MARK: 相机线程与处理队列共用的状态（锁保护）
 
     private let lock = NSLock()
@@ -127,6 +155,7 @@ final class WhoIsLooking {
     private func publish(viewer new: Viewer, contradicts: Bool) {
         DispatchQueue.main.async { [self] in
             contradictsOwner = contradicts
+            unlikeStrikes = unlikeStrikes.next(UnlikeStrikes.glance(viewer: new, contradictsOwner: contradicts))
             guard new != viewer else { return }
             viewer = new
             // 只记「换了一类人」，不记名字

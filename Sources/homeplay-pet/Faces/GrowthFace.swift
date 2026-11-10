@@ -38,15 +38,17 @@ extension Face {
         fillShape(g, t, .white)
         // 島在環的正中央（寬 ≈ 392，稿：face('Growth') 寬 230／600）；時間在上、字在下，都不碰到島
         drawIsland(g, at: CGPoint(x: 512, y: 512), scale: 392 / 588, liveAt: CGPoint(x: 512, y: 512), now: now)
-        // 计时器长出来时让位给胶囊
+        // 计时器长出来时让位给胶囊。只留一个数（这个月陪了几天）：教学文案不上表盘，圈本身就是说明
         let fade = 1 - liveT
         if fade > 0.01 {
-            drawCentered(g, on.count == 1 ? L("growth.days.one", "这个月陪你 1 天") : String(format: L("growth.days", "这个月陪你 %d 天"), on.count), font: Self.rounded(44, weight: .bold), kern: 0, y: 700,
-                         color: NSColor(white: 1, alpha: fade))
-            let hf = Self.rounded(32, weight: .semibold)
-            for (i, line) in Self.wrap(L("growth.hint", "每天第一次打开，圈上就多一颗"), hf, 500, maxLines: 2).enumerated() {   // 收在點陣環裡
-                drawCentered(g, line, font: hf, kern: nil, y: 754 + CGFloat(i) * 42, color: NSColor(white: 1, alpha: 0.6 * fade))
-            }
+            let n = String(on.count)
+            let unit = on.count == 1 ? L("growth.unit.one", "天") : L("growth.unit", "天")
+            let nf = FaceType.numeric(.sf, 300, ["wght": 600, "wdth": 100]), uf = FaceType.sf(44, .semibold, mono: false)
+            let num = GlyphShape(n, font: nf, kern: -4).tall(height: 96, stretch: 1.0, at: CGPoint(x: 0, y: 0), anchorX: 0)
+            let uw = Typo.width(unit, uf), gap: CGFloat = 14
+            let x0 = 512 - (num.ink.width + gap + uw) / 2, top: CGFloat = 664
+            fillShape(g, num.moved(x0 - num.ink.minX, top - num.ink.minY), NSColor(white: 1, alpha: fade))
+            drawLeft(g, unit, font: uf, x: x0 + num.ink.width + gap, y: top + 96, color: NSColor(white: 1, alpha: 0.6 * fade))
         }
     }
     /// 有需要重画（秒针走动、轮替、漂动）就回 true；没有就回 false，省电

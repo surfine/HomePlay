@@ -423,33 +423,45 @@ final class SafariApp: PetApp {
 
     private func readerLines(_ a: SafariWeb.Article) -> [(String, NSFont, NSColor, CGFloat)] {
         var out: [(String, NSFont, NSColor, CGFloat)] = []   // 字、字型、顏色、這行的行高
-        let w = AppUI.contentW
+        let w: CGFloat = 720   // iOS 閱讀器：居中窄欄（約 70% 寬），不通欄
         let tf = AppUI.font(T.readerTitle, .bold), bf = AppUI.font(T.readerBody), hf = AppUI.font(T.readerBody + 4, .semibold)
-        func lh(_ f: NSFont) -> CGFloat { f.pointSize * 1.32 }
-        for l in Face.wrap(a.title, tf, w, maxLines: 4) { out.append((l, tf, AppUI.label, lh(tf))) }
+        func lh(_ f: NSFont) -> CGFloat { f.pointSize * 1.42 }
+        // iOS 順序：域名（小灰）在最上，然後標題、內文
         let host = SafariLogic.displayHost(web.url)
-        if !host.isEmpty { out.append((host, AppUI.font(30), AppUI.secondary, 60)) }
+        if !host.isEmpty { out.append((host.uppercased(), AppUI.font(25), AppUI.secondary, 46)); out.append(("", bf, .clear, 10)) }
+        for l in Face.wrap(a.title, tf, w, maxLines: 4) { out.append((l, tf, AppUI.label, lh(tf))) }
+        out.append(("", bf, .clear, 30))   // 標題與內文之間的大空
         for (i, b) in a.blocks.enumerated() {
             if i == 0, b.kind == "h", b.text == a.title { continue }   // 第一個 h1 就是標題
-            out.append(("", bf, .clear, 22))
-            let (f, prefix) = b.kind == "h" ? (hf, "") : (bf, b.kind == "li" ? "•  " : "")
-            for (i, l) in Face.wrap(prefix + b.text, f, w, maxLines: 40).enumerated() { out.append((i == 0 ? l : (prefix.isEmpty ? l : "    " + l), f, AppUI.label, lh(f))) }
+            let isH = b.kind == "h"
+            out.append(("", bf, .clear, isH ? 34 : 22))   // 小標題前多空一截（層級）
+            let (f, prefix) = isH ? (hf, "") : (bf, b.kind == "li" ? "•  " : "")
+            for (j, l) in Face.wrap(prefix + b.text, f, w, maxLines: 40).enumerated() { out.append((j == 0 ? l : (prefix.isEmpty ? l : "    " + l), f, AppUI.label, lh(f))) }
         }
         return out
     }
     private func renderReader(_ g: CGContext, _ face: Face, _ a: SafariWeb.Article) {
         let lines = readerLines(a)
+        let barTop = T.field.minY - 30   // 內容在地址欄上方收邊（iOS 閱讀器行為：不從工具列底下硬切半行）
         let total = lines.reduce(0) { $0 + $1.3 } + T.readerTop + 260
-        readerScroll.clamp(contentHeight: total, viewport: 1024)
-        g.saveGState(); g.clip(to: CGRect(x: 0, y: T.webTop, width: 1024, height: 1024 - T.webTop))
+        readerScroll.clamp(contentHeight: total, viewport: barTop - T.webTop)
+        g.saveGState(); g.clip(to: CGRect(x: 0, y: T.webTop, width: 1024, height: barTop - T.webTop))
         var y = T.readerTop - readerScroll.offset
+        let x = (CGFloat(1024) - 720) / 2   // 居中窄欄
         for (s, f, c, h) in lines {
             y += h
-            if y > T.webTop - 10, y - h < 1024, !s.isEmpty { AppUI.left(face, g, s, f, x: AppUI.margin, y: y, c) }
+            if y > T.webTop - 10, y - h < barTop + 8, !s.isEmpty { AppUI.left(face, g, s, f, x: x, y: y, c) }
         }
         g.restoreGState()
-        HPAX.note(g, CGRect(x: AppUI.margin, y: T.readerTop, width: AppUI.contentW, height: 600), .text, ([a.title] + a.blocks.prefix(6).map(\.text)).joined(separator: "\n"))
-        HPComponents.topFade(g, HPTokens.dark ? .black : .white, solidTo: T.webTop)
+        HPAX.note(g, CGRect(x: x, y: T.readerTop, width: 720, height: 600), .text, ([a.title] + a.blocks.prefix(6).map(\.text)).joined(separator: "\n"))
+        let bg: NSColor = HPTokens.dark ? .black : .white
+        HPComponents.topFade(g, bg, solidTo: T.webTop)
+        // 底緣淡出（對稱於 topFade）：文字沒進地址欄底下，是往上收
+        g.saveGState()
+        let cs = CGColorSpace(name: CGColorSpace.sRGB)!
+        let gr = CGGradient(colorsSpace: cs, colors: [bg.withAlphaComponent(0).cgColor, bg.cgColor] as CFArray, locations: [0, 1])!
+        g.drawLinearGradient(gr, start: CGPoint(x: 0, y: barTop - 90), end: CGPoint(x: 0, y: barTop), options: [.drawsBeforeStartLocation])
+        g.restoreGState()
     }
 
     /// 食譜網頁：浮在工具列上面的「開始烹飪」（橘色染色玻璃：這一頁的主要動作）

@@ -98,12 +98,20 @@ final class PhotosWidgetSource {
     /// 快照不讀圖庫（不讓私人照片落到磁碟）；--demo-official 用示範照片
     static var snapshotMode: Bool { Face.demoData }
 
+    /// 每幀查授權太貴（實測一次約 5ms 的 TCC 往返，主畫面每幀都畫小工具＝每幀一次）：1 秒內沿用；reset 時清掉
+    nonisolated(unsafe) private static var statusCache: (value: PermissionStatus, at: Double)?
     static var status: PermissionStatus {
-        switch PHPhotoLibrary.authorizationStatus(for: .readWrite) {
-        case .authorized, .limited: return .granted
-        case .notDetermined: return .notDetermined
-        default: return .denied
-        }
+        let now = CACurrentMediaTime()
+        if let c = statusCache, now - c.at < 1 { return c.value }
+        let v: PermissionStatus = {
+            switch PHPhotoLibrary.authorizationStatus(for: .readWrite) {
+            case .authorized, .limited: return .granted
+            case .notDetermined: return .notDetermined
+            default: return .denied
+            }
+        }()
+        statusCache = (v, now)
+        return v
     }
 
     private(set) var image: CGImage?
@@ -164,7 +172,7 @@ final class PhotosWidgetSource {
     func next() { taps += 1; onChange?() }
 
     /// 授權剛拿到：清掉重讀
-    func reset() { candidates = nil; fetchedAt = nil; image = nil; shownKey = nil; onChange?() }
+    func reset() { candidates = nil; fetchedAt = nil; image = nil; shownKey = nil; Self.statusCache = nil; onChange?() }
 
     private static func fetchCandidates(now: Date) -> [String] {
         let shared = SharedAlbums.selected   // 2.0 P10：勾了共享相簿就只從那幾本挑（Shell/SharedAlbums.swift）
@@ -311,13 +319,22 @@ enum PhotosDemoArt {
 extension Face {
     /// 主畫面右上的「照片」小工具（Shell.widgetRect）：照片鋪滿到圓角；沒授權時是一張請求卡
     func drawPhotosWidget(_ g: CGContext, _ wr: CGRect) {
+        let timing = ProcessInfo.processInfo.environment["HOMEPLAY_PW_TIME"] != nil
+        var t0 = CACurrentMediaTime()
+        func lap(_ name: String) {
+            guard timing else { return }
+            let t = CACurrentMediaTime(); FileHandle.standardError.write(Data(String(format: "[pw] %@ %.2fms\n", name, (t - t0) * 1000).utf8)); t0 = t
+        }
         let src = PhotosWidgetSource.shared
         let px = Int((wr.width * renderPixelScale).rounded())
-        src.activate(px: px) { [weak self] in self?.forceDirty = true }
+        if !Shell.skipping("pwactivate") { src.activate(px: px) { [weak self] in self?.forceDirty = true } }
+        lap("activate")
         let path = continuousRoundedRect(wr, radius: Shell.widgetRadius)
         g.saveGState(); g.addPath(path); g.clip()
         defer { g.restoreGState() }
+        if Shell.skipping("pwdraw") { return }   // 二分：小工具本體（HOMEPLAY_SKIP）
         let card = src.card
+        lap("card")
         let look = HomeAppearance.current   // P02：清透／染色＝照片去飽和（染色再乘所選色），疊在靜態層畫好的玻璃底上
         if card == .photo {
             g.setAlpha(WidgetImageTreatment.alpha(look))
@@ -337,13 +354,15 @@ extension Face {
         let k = wr.width / 158   // iOS 小工具 158 pt → 這裡的像素
         let pad = 16 * k
         let ir = CGRect(x: wr.minX + pad, y: wr.minY + pad, width: 32 * k, height: 32 * k)
-        if let icon = AppIconArt.systemIcon("/System/Applications/Photos.app", px: max(64, Int((ir.width * renderPixelScale).rounded()))) {
+        if let icon = Shell.skipping("pwicon") ? nil : AppIconArt.systemIcon("/System/Applications/Photos.app", px: max(64, Int((ir.width * renderPixelScale).rounded()))) {
             g.saveGState(); g.interpolationQuality = .high; g.draw(icon, in: ir); g.restoreGState()
         } else {
             drawSymbol(g, "photo.on.rectangle", in: ir, color: srgb(0xFF9500))
         }
+        lap("icon")
         let ink = look.glassBase ? WidgetInk.of(look).primary : dark ? NSColor.white : NSColor.black
         let sub = ink.withAlphaComponent(0.55)
+        lap("fill+ink")
         if card == .loading {   // P02：載入中＝佔位內容（靜態的圖示照畫，字換成不同寬的半透明條；HIG-WID-191／193）
             let ph = ink.withAlphaComponent(0.16)
             for (i, w) in [CGFloat(0.62), 0.86, 0.48].enumerated() {
@@ -354,7 +373,10 @@ extension Face {
             g.setFillColor(ph.cgColor); g.addPath(continuousRoundedRect(CGRect(x: wr.minX + pad, y: wr.maxY - pad - 44 * k, width: wr.width - pad * 2, height: 44 * k), radius: 10 * k)); g.fillPath()
             return
         }
+        if Shell.skipping("pwfonts") { return }   // 二分：字體建立（HOMEPLAY_SKIP）
         let tf = HPType.sf(15 * k, .semibold), bf = HPType.sf(12 * k, .regular)
+        if Shell.skipping("pwtext") { return }   // 二分：文字排版（HOMEPLAY_SKIP）
+        lap("fonts")
         let title: String, body: String, button: String?
         switch card {
         case .request:
@@ -377,11 +399,13 @@ extension Face {
             title = L("shell.photos.ask.title", "精选照片"); body = ""; button = nil
         }
         var y = ir.maxY + 10 * k + tf.ascender
+        lap("title-prep")
         drawLeft(g, Face.clipped(title, tf, wr.width - pad * 2), font: tf, x: wr.minX + pad, y: y, color: ink)
         y += 4 * k
         for line in Self.photosWrap(body, bf, wr.width - pad * 2, maxLines: button == nil ? 4 : 2) {
             y += bf.ascender - bf.descender + 1 * k
             drawLeft(g, Face.clipped(line, bf, wr.width - pad * 2), font: bf, x: wr.minX + pad, y: y, color: sub)
+            lap("body-line")
         }
         if let button {
             let bfnt = HPType.sf(13 * k, .semibold)

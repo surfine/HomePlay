@@ -383,14 +383,18 @@ enum HPGlass {
         let H = HPTokens.Home.self
         g.saveGState()
         g.addPath(path); g.clip()
-        // 內光：形狀外面整片填色、只讓影子落進形狀裡
-        g.setShadow(offset: .zero, blur: H.panelGlowBlur, color: NSColor(white: 1, alpha: H.panelGlowAlpha).cgColor)
+        // 上亮下隱（拍板 2026-11-07：底緣的亮邊看起來像白縫——光源在上，底部只剩一成）
+        let box = path.boundingBoxOfPath
+        let cs = CGColorSpace(name: CGColorSpace.sRGB)!
+        func fade(_ a: CGFloat) -> CGGradient {
+            CGGradient(colorsSpace: cs, colors: [NSColor(white: 1, alpha: a).cgColor, NSColor(white: 1, alpha: a * 0.1).cgColor] as CFArray, locations: [0, 1])!
+        }
+        // 內光：形狀外面整片填漸層色、只讓光落進形狀裡（原本均勻白＋shadow，底部一樣亮＝白縫來源）
         g.addRect(CGRect(x: -400, y: -400, width: 1824, height: 1824)); g.addPath(path)
-        g.setFillColor(NSColor(white: 1, alpha: 1).cgColor); g.fillPath(using: .evenOdd)
-        g.setShadow(offset: .zero, blur: 0, color: nil)
+        g.drawLinearGradient(fade(H.panelGlowAlpha), start: CGPoint(x: 0, y: box.minY), end: CGPoint(x: 0, y: box.maxY), options: [])
         // 亮線（只有裡面那一半看得到，所以線寬給兩倍）
-        g.addPath(path); g.setLineWidth(H.panelRimLine * 2)
-        g.setStrokeColor(NSColor(white: 1, alpha: H.panelRimAlpha).cgColor); g.strokePath()
+        g.replacePathWithStrokedPath(); g.clip()
+        g.drawLinearGradient(fade(H.panelRimAlpha), start: CGPoint(x: 0, y: box.minY), end: CGPoint(x: 0, y: box.maxY), options: [])
         g.restoreGState()
     }
 

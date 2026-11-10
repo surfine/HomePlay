@@ -77,7 +77,7 @@ struct FaceParams: Equatable {
 /// 錶面样式：滚轮或 ← → 换，像 Apple Watch 的数字表冠
 enum FaceStyle: String, CaseIterable {
     // 順序＝滾輪換錶面的順序（稿：docs/design-drafts/faces-v3/artifact）
-    case island, photos, modular, analog, flow, weather, calendar, homeModular, embossed, growth, black, bedside, system6, alarmClock, about, pocket, cluster
+    case island, photos, modular, analog, flow, weather, world, calendar, homeModular, embossed, growth, black, bedside, system6, alarmClock, about, pocket, cluster
     var title: String {
         switch self {
         case .island: return L("face.style.island", "岛")
@@ -90,6 +90,7 @@ enum FaceStyle: String, CaseIterable {
         case .system6: return "System 6"
         case .bedside: return L("face.style.bedside", "床头夜灯")
         case .weather: return L("face.style.weather", "天气")
+        case .world: return L("face.style.world", "世界")
         case .calendar: return L("face.style.calendar", "日历")
         case .homeModular: return L("face.style.homeModular", "家庭模块")
         case .embossed: return L("face.style.embossed", "浮雕指针")
@@ -99,7 +100,7 @@ enum FaceStyle: String, CaseIterable {
         case .cluster: return L("face.style.cluster", "仪表")
         }
     }
-    /// 陣容（滾輪、總覽、選單、設定都用這份）：十一款（最後一款是儀表，三種版式）。Pocket 併進 Modular、床頭夜燈併進「黑」的夜間（稿：faces-v3），
+    /// 陣容（滾輪、總覽、選單、設定都用這份）：十二款（天氣後面是「世界」；最後一款是儀表，三種版式）。Pocket 併進 Modular、床頭夜燈併進「黑」的夜間（稿：faces-v3），
     /// 浮雕指針成了 Typograph 的「材質」、Alarm Clock／About 成了 System 6 的「版式」，Home Modular 不再列出（要開發簽名的小幫手）；
     /// 程式都還留著，舊的偏好讀進來時換成新的那款（見 inLineup、migratedOptions）
     static var lineup: [FaceStyle] {

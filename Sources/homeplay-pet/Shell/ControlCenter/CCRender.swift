@@ -304,7 +304,10 @@ extension ControlCenter {
     // MARK: 播放中
 
     static func nowInfo(_ face: Face, _ now: Double) -> NowPlayingInfo? {
-        NowPlayingPage.shared.demo?.info ?? (face.musicActive(now) ? (face.nowPlaying.info ?? face.nowPlaying.shown) : nil)   // v2-music：示範也一致
+        if let d = NowPlayingPage.shared.demo { return d.info }   // v2-music：示範資料優先
+        // 快照／自檢：不要讀 Mac 的系統「正在播放」——進度會隨秒走，金幀每次都不一樣（2026-11-09 實測）
+        if CCSystem.demo, !NowPlayingPoller.disabled { return nil }
+        return face.musicActive(now) ? (face.nowPlaying.info ?? face.nowPlaying.shown) : nil
     }
     /// 專輯封面（跟「播放中」頁同一張，v2-music）；沒有封面才用播放器的 App 圖示
     static func drawArt(_ c: CGContext, _ face: Face, _ ir: CGRect, info: NowPlayingInfo?, ink: NSColor, lightGlass: Bool) {

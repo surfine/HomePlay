@@ -175,10 +175,6 @@ enum HPTokens {
         static let badge: CGFloat = 48
         /// 藥丸右下的顯示源角標（CarPlay 會話活著但在背景；2.0 align D）：badge 的一半，≈ 12.7 pt
         static let sourceBadge: CGFloat = 24
-        /// 長按藥丸拉出的兩顆「HomeView／CarPlay」：高＝topBar；上面那顆留在頂列 105 線上，寬 232（長標題最多到 384，左右各留 12）；
-        /// 下面那顆從它底下滴出來，中間空 48（> HPDrip.merge 40，頸子拉斷）
-        static let sourceCapsule = CGSize(width: 232, height: topBar)
-        static let sourceGap: CGFloat = 48
         /// 頁點直徑（原本 12/14/18 並存）
         static let dot: CGFloat = 14
         /// Live Activity 緊湊藥丸：系統尺寸，不進階梯

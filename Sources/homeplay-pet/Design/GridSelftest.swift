@@ -21,11 +21,15 @@ enum GridSelftest {
         check(menus.allSatisfy { $0.minX >= 48 && $0.maxX <= 976 && $0.minY >= 48 && $0.maxY <= 1000 }, "網格：長按選單都在畫面內（左右邊距 48）")
         check(SBUI.menuPanel(anchor: icon, rows: 3, sizes: true).minX == icon.minX, "網格：長按選單沒夾到邊時左緣對齊錨點左緣（\(HPTokens.Home.gridMargin)）")
 
-        // 3. App 資料庫：第一欄左緣＝搜尋欄左緣＝gridMargin；最後一欄右緣對稱；搜尋欄中線對齊頭像中線
+        // 3. App 資料庫：豆莢各佔主畫面兩欄，外緣就是 98.5／925.5；搜尋欄佔前三欄，中線對齊頭像。
         let cells = SBUI.libraryCells(8)
-        check(SBUI.librarySearch.minX == HPTokens.Home.gridMargin && SBUI.libraryIcon(cells[0]).minX == HPTokens.Home.gridMargin, "網格：App 資料庫第一欄左緣＝搜尋欄左緣＝\(HPTokens.Home.gridMargin)")
-        check(SBUI.libraryIcon(cells[3]).maxX == HPGrid.Home.trailing, "網格：App 資料庫最後一欄右緣＝\(HPGrid.Home.trailing)")
-        check(SBUI.librarySearch.midY == Shell.avatarRect.midY, "網格：App 資料庫搜尋欄跟頭像同一條垂直中線（\(Int(Shell.avatarRect.midY))）")
+        let pod0 = SBLPodGrid.podFrame(0, top: 0), pod1 = SBLPodGrid.podFrame(1, top: 0)
+        check(abs(pod0.minX - HPGrid.Home.margin) < 0.01 && abs(pod1.maxX - HPGrid.Home.trailing) < 0.01, "網格：App 資料庫豆莢外緣就是主畫面的外緣")
+        check(SBUI.libraryIcon(cells[0]).minX == HPTokens.Home.gridMargin && SBUI.libraryIcon(cells[3]).maxX == HPGrid.Home.trailing, "網格：App 資料庫搜尋結果仍用主畫面的 4 欄")
+        let savedScreen = Shell.nav.screen
+        Shell.nav.screen = .library   // 頭像在資料庫頁跟搜索欄中線（其他頁 152 照舊）
+        check(abs(SBUI.librarySearch.minX - HPGrid.Home.margin) < 0.01 && SBUI.librarySearch.midY == Shell.avatarRect.midY, "網格：App 資料庫搜尋欄左緣對齊主畫面，並跟頭像同一條垂直中線")
+        Shell.nav.screen = savedScreen
 
         // 4. 橫幅通知：左右落在 HPGrid.App 的 64／960
         check(HPTokens.bannerCard.minX == HPGrid.App.leading && HPTokens.bannerCard.maxX == HPGrid.App.trailing, "網格：橫幅通知左右落在 \(Int(HPGrid.App.leading))／\(Int(HPGrid.App.trailing))")

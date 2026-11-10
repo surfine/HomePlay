@@ -58,7 +58,10 @@ final class CarVideoPlayer: NSObject {
     private lazy var ci: CIContext? = device.map { CIContext(mtlDevice: $0, options: [.cacheIntermediates: false]) }
     private var ring: [MTLTexture] = []
     private var ringIndex = 0
-    private let side = 1088
+    /// 畫進螢幕的方圖邊長：底 1088（真機面板）；視窗放大後跟著顯示需求走（PetView.updateFaceScale 餵，上限 2048）——
+    /// 固定 1088 的話最大窗（900pt×2×0.72≈1296px）等於永遠在放大，控制列的字與 👀 膠囊帶也一起糊（拍板 2026-11-07：全 App 高清）
+    nonisolated(unsafe) var displaySide: Int = 0
+    private var side: Int { max(1088, min(2048, displaySide)) }
     private var bigWindow: CarVideoWindow?
 
     // MARK: 接收器的指令
@@ -209,7 +212,7 @@ final class CarVideoPlayer: NSObject {
     private var controlsDrawnUntil: Double = 0
 
     private func nextTexture() -> MTLTexture? {
-        if ring.isEmpty, let device {
+        if ring.isEmpty || ring[0].width != side, let device {   // 尺寸變了（視窗放大）就整組重建
             let d = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: .bgra8Unorm, width: side, height: side, mipmapped: false)
             d.usage = [.shaderRead, .shaderWrite, .renderTarget]
             d.storageMode = .private

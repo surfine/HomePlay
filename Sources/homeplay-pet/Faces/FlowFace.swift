@@ -9,6 +9,7 @@ nonisolated(unsafe) private var flowFaceLastTick = -1.0
 /// 色彩流動用的時鐘：只在有人靠近時往前走（沒人看就停住、3D 可以卸下省電；回來時接著流，不會跳）
 nonisolated(unsafe) private var flowAnimT = 0.0, flowAnimLast = -1.0, flowLastMinute = -1
 nonisolated(unsafe) private var flowDigitCache: (key: String, shapes: [GlyphShape])?
+nonisolated(unsafe) private var flowShadowCache: (key: String, image: CGImage)?
 
 
 extension Face {
@@ -20,13 +21,13 @@ extension Face {
         (CGPoint(x: 300, y: 330), 220, 1.0, 0x6f86ff, 0.70, 120, 31),   // 藍紫
     ]
 
-    private func drawFlowField(_ g: CGContext, _ now0: Double) {
+    private func drawFlowField(_ g: CGContext, _ now0: Double, grads: [CGGradient]? = nil, ring: CGGradient? = nil) {
         let now = flowAnimT
         let cs = CGColorSpace(name: CGColorSpace.sRGB)!
         // 底：外圈淡薰衣草，往內一圈洋紅，中間一大團藍（官方 Flow 的配色）
         g.setFillColor(srgb(0xd3c2ea).cgColor); g.fill(CGRect(x: 0, y: 0, width: 1024, height: 1024))
         let cx = 530 + flow.x * 40 + CGFloat(sin(now * 2 * .pi / 41)) * 24, cy = 500 + flow.y * 32 + CGFloat(cos(now * 2 * .pi / 47)) * 20
-        let ring = CGGradient(colorsSpace: cs, colors: [srgb(0x4a66ff).cgColor, srgb(0x5a62ff).cgColor, srgb(0x9a5cf0).cgColor,
+        let ring = ring ?? CGGradient(colorsSpace: cs, colors: [srgb(0x4a66ff).cgColor, srgb(0x5a62ff).cgColor, srgb(0x9a5cf0).cgColor,
                                                          srgb(0xff4fae).cgColor, srgb(0xf59bd2, 0.7).cgColor, srgb(0xd3c2ea, 0).cgColor] as CFArray,
                               locations: [0, 0.38, 0.55, 0.7, 0.84, 1])!
         g.saveGState()
@@ -37,9 +38,8 @@ extension Face {
             let ph = Double(i) * 1.7
             let bx = b.c.x + flow.x * b.par + CGFloat(sin(now * 2 * .pi / b.per + ph)) * 50
             let by = b.c.y + flow.y * b.par * 0.8 + CGFloat(cos(now * 2 * .pi / (b.per * 1.3) + ph)) * 40
-            let col = srgb(b.rgb)
-            let grad = CGGradient(colorsSpace: cs, colors: [col.withAlphaComponent(b.a).cgColor, col.withAlphaComponent(b.a * 0.5).cgColor,
-                                                            col.withAlphaComponent(0).cgColor] as CFArray, locations: [0, 0.45, 1])!
+            let grad = grads?[i] ?? CGGradient(colorsSpace: cs, colors: [srgb(b.rgb).withAlphaComponent(b.a).cgColor, srgb(b.rgb).withAlphaComponent(b.a * 0.5).cgColor,
+                                                            srgb(b.rgb).withAlphaComponent(0).cgColor] as CFArray, locations: [0, 0.45, 1])!
             g.saveGState()
             g.translateBy(x: bx, y: by); g.scaleBy(x: 1, y: b.sy)
             g.drawRadialGradient(grad, startCenter: .zero, startRadius: 0, endCenter: .zero, endRadius: b.r, options: [])
@@ -47,13 +47,28 @@ extension Face {
         }
     }
 
-    /// 畫面上的 Flow 底圖＝色團＋四週一圈很淡的白霧（隔著一層玻璃的樣子）。玻璃取樣用同一張，字裡字外才會一致
-    private func drawFlowBase(_ g: CGContext, _ now: Double) {
-        drawFlowField(g, now)
-        let cs = CGColorSpace(name: CGColorSpace.sRGB)!
-        let vig = CGGradient(colorsSpace: cs, colors: [NSColor(white: 1, alpha: 0).cgColor, NSColor(white: 1, alpha: 0.22).cgColor] as CFArray,
+    /// 漸層物件只建一次（原本每幀每團重建）
+    private static let ringGrad: CGGradient = CGGradient(colorsSpace: CGColorSpace(name: CGColorSpace.sRGB)!, colors: [srgb(0x4a66ff).cgColor, srgb(0x5a62ff).cgColor, srgb(0x9a5cf0).cgColor,
+                                                         srgb(0xff4fae).cgColor, srgb(0xf59bd2, 0.7).cgColor, srgb(0xd3c2ea, 0).cgColor] as CFArray,
+                              locations: [0, 0.38, 0.55, 0.7, 0.84, 1])!
+    private static let vigGrad: CGGradient = CGGradient(colorsSpace: CGColorSpace(name: CGColorSpace.sRGB)!, colors: [NSColor(white: 1, alpha: 0).cgColor, NSColor(white: 1, alpha: 0.22).cgColor] as CFArray,
                              locations: [0.55, 1])!
-        g.drawRadialGradient(vig, startCenter: CGPoint(x: 512, y: 512), startRadius: 0, endCenter: CGPoint(x: 512, y: 512), endRadius: 760, options: [])
+    private static let blobGrads: [CGGradient] = flowBlobs.map { b in
+        let col = srgb(b.rgb)
+        return CGGradient(colorsSpace: CGColorSpace(name: CGColorSpace.sRGB)!, colors: [col.withAlphaComponent(b.a).cgColor, col.withAlphaComponent(b.a * 0.5).cgColor,
+                                                            col.withAlphaComponent(0).cgColor] as CFArray, locations: [0, 0.45, 1])!
+    }
+
+    /// 畫面上的 Flow 底圖＝色團＋四週一圈很淡的白霧（隔著一層玻璃的樣子）。玻璃取樣用同一張，字裡字外才會一致。
+    /// 色團是大面積軟漸層：在 256² 裡畫好再放大（軟底視覺等價，光柵量 1/16，faceMs 17→約 4）——玻璃取樣同一張放大圖，軟底無差
+    private func drawFlowBase(_ g: CGContext, _ now: Double) {
+        let small = makeImage(256, 256) { c in
+            c.scaleBy(x: 0.25, y: 0.25)
+            drawFlowField(c, now, grads: Self.blobGrads, ring: Self.ringGrad)
+        }
+        g.interpolationQuality = .high
+        drawUpright(g, small, in: CGRect(x: 0, y: 0, width: 1024, height: 1024))
+        g.drawRadialGradient(Self.vigGrad, startCenter: CGPoint(x: 512, y: 512), startRadius: 0, endCenter: CGPoint(x: 512, y: 512), endRadius: 760, options: [])
     }
 
     /// 一個水珠數字（墨跡高 h、左上角在 at）：0 是圓潤的方圓、1 是膠囊，其他數字用 Soft 最粗的字形、把字腔填滿再鼓起來
@@ -193,12 +208,34 @@ extension Face {
         // 折射用的背景：同一片色彩（含邊緣白霧）畫成 384² 的清楚版，霧版由它做局部模糊
         // （192² 直接糊會變成整張的平均色，字裡透出的不是附近的色彩而是全畫面的平均，跟官方差很遠）
         let clear = snapshotBackdrop(px: 384) { c in self.drawFlowBase(c, now) }
-        let backdrop = blurredBackdrop(clear, sigma: 9, key: "flowface|\(Int(flowAnimT * 10))")
+        // 色團漂移週期 40s+：0.1s 內位移不足一像素，折射背景每秒刷新一次就夠（原本 10 次/秒）
+        let backdrop = blurredBackdrop(clear, sigma: 9, key: "flowface|\(Int(flowAnimT))")
         // 亮邊跟著人轉：人在左邊，光就從左邊打過來（像斜著看 iPhone 鎖定畫面的玻璃時間）
         let pt = Self.pointerOverride ?? pointer ?? .zero
         let turn = max(-0.9, min(0.9, -pt.x * 0.7 + pt.y * 0.35))
+        // 遠看要一眼讀出時間：字外一圈深色的柔和落影把字和色彩分開，字裡一道細亮邊把輪廓收乾淨（流體質感不動）
+        let union = CGMutablePath(); for s in shapes { union.addPath(s.path) }
+        let ic = HPAccessibility.increaseContrast
+        // 落影一分鐘才變：做成一張透明圖快取（模糊 30 每幀現算要多 15 ms 以上）
+        let shadowKey = "\(key)|\(ic)|\(Int(renderPixelScale * 100))"
+        let shadow: CGImage
+        if let c = flowShadowCache, c.key == shadowKey { shadow = c.image } else {
+            let sc = renderPixelScale, px = Int((1024 * sc).rounded())
+            shadow = makeImage(px, px) { c in
+                if sc != 1 { c.scaleBy(x: sc, y: sc) }
+                c.addRect(CGRect(x: -64, y: -64, width: 1152, height: 1152)); c.addPath(union); c.clip(using: .evenOdd)
+                c.setShadow(offset: CGSize(width: 0, height: -8), blur: 30 * sc, color: srgb(0x1a1150, ic ? 0.7 : 0.5).cgColor)
+                c.addPath(union); c.setFillColor(srgb(0x1a1150).cgColor); c.fillPath()
+            }
+            flowShadowCache = (shadowKey, shadow)
+        }
+        drawUpright(g, shadow, in: CGRect(x: 0, y: 0, width: 1024, height: 1024))
         drawLiquidGlass(g, shapes, key: "flowblob|\(key)", clear: clear, frosted: backdrop, params: .flowBlob,
                         lightTurn: turn, fallback: .bubble)
+        g.saveGState()
+        g.addPath(union); g.clip()
+        g.addPath(union); g.setStrokeColor(NSColor(white: 1, alpha: ic ? 0.9 : 0.6).cgColor); g.setLineWidth(ic ? 8 : 6); g.strokePath()
+        g.restoreGState()
 
         // 島：左上角一顆小水珠膠囊（寬 ≈ 256，稿：face('Flow') 寬 150／600、中心 (120, 150)／600）
         let corner = Screen.cornerCapsuleCenter(.topLeft, width: 256, height: 256 / 2.69)   // 左端半圓與螢幕圓角同心

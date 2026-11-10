@@ -212,6 +212,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         settings.target = self
         settings.image = NSImage(systemSymbolName: "gearshape", accessibilityDescription: settings.title)   // 2.0: P05 圖示也有標籤
         appMenu.addItem(settings)
+        if let view {   // 2.0 開場手勢引導：隨時重看（Intro/IntroGuide.swift）
+            let guide = NSMenuItem(title: L("menu.introGuide", "手势引导"), action: #selector(PetView.menuShowHints), keyEquivalent: "")
+            guide.target = view
+            guide.image = NSImage(systemSymbolName: "hand.draw", accessibilityDescription: guide.title)
+            appMenu.addItem(guide)
+        }
         appMenu.addItem(.separator())
         let hide = NSMenuItem(title: L("menu.hidePet", "隐藏桌宠"), action: #selector(hidePet), keyEquivalent: "h")
         hide.target = self
@@ -519,7 +525,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
     @objc func showSettings(_ sender: Any?) { SettingsWindowController.show(app: self) }
 
-    /// 2.0 首次設定、操作提示卡還開著就先等（設定裡已經講過怎麼配對；走完才進 CarPlay 的配對引導）
+    /// 2.0 首次設定、手勢引導還開著就先等（設定裡已經講過怎麼配對；走完才進 CarPlay 的配對引導）
     private func autoEnterCarPlayAfterSetup() {
         if SetupFlow.active || SetupFlow.pending || Onboarding.active || PermissionPrimer.active {
             DispatchQueue.main.asyncAfter(deadline: .now() + 2) { [weak self] in self?.autoEnterCarPlayAfterSetup() }
@@ -566,7 +572,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             case .denied: self.view.mood.show(.worried, for: 2.0, now: now)
             }
         }
-        // 第一次的操作提示收起后：F5 还接不住、也没问过「输入监控」，就接着说明一次
+        // 第一次的手势引导收起后：F5 还接不住、也没问过「输入监控」，就接着说明一次
         Onboarding.onDismiss = { [weak self] in
             guard let self, !SystemKeyTap.isActive,
                   PermissionCenter.status(.inputMonitoring) == .notDetermined else { return }
@@ -726,6 +732,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationDidFinishLaunching(_ note: Notification) {
+        NotificationCenter.default.addObserver(forName: .homePlaySwitchFace, object: nil, queue: .main) { [weak self] n in
+            guard let self, let raw = n.object as? String, let st = FaceStyle(rawValue: raw) else { return }
+            self.view.setFaceStyle(st)
+        }
         wirePermissionMoods()
         if HomePlayState.isolated { log("rehearsal state: Application Support/\(HomePlayState.name), agent \(ReceiverAgent.label)") }
         tightenLogPermissions()
@@ -744,7 +754,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 v.buildContextMenu().popUp(positioning: nil, at: NSPoint(x: v.bounds.midX, y: v.bounds.midY), in: v)
             }
         }
-        // 除錯／截图：开机直接打开设置的某一页（--open-settings general|appearance|carplay|camera|permissions）
+        // 除錯／截图：开机直接打开设置的某一页（--open-settings general|appearance|gestures|carplay|home|cliotalk|camera|people|devices|permissions）
         if CommandLine.arguments.contains("--clock-look-panel") {   // 截图：打开「字体与颜色」面板
             DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) { self.view.menuClockLook(nil) }
         }
@@ -752,11 +762,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let name = i + 1 < CommandLine.arguments.count ? CommandLine.arguments[i + 1] : "general"
             let pane = SettingsSection(rawValue: name) ?? .general
             if CommandLine.arguments.contains("--dark") { NSApp.appearance = NSAppearance(named: .darkAqua) }   // 截图：深色外观
-            DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) { SettingsWindowController.show(app: self, pane: pane) }
-            if let j = CommandLine.arguments.firstIndex(of: "--settings-out"), j + 1 < CommandLine.arguments.count {   // 2.0 第六輪：拍下那一頁（原生表單驗收）
-                let out = CommandLine.arguments[j + 1]
-                DispatchQueue.main.asyncAfter(deadline: .now() + 5) {
+            // 拍照從「窗口打開之後」起算 2.5 秒：開機慢、主線程卡住時，兩個計時器會在同一輪觸發，
+            // 以前會在 SwiftUI 換頁之前就拍下去，拍到上一次停留的那一頁（2.0 設定改版查到的 appearance→相機）
+            let out = CommandLine.arguments.firstIndex(of: "--settings-out").flatMap { $0 + 1 < CommandLine.arguments.count ? CommandLine.arguments[$0 + 1] : nil }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) {
+                SettingsWindowController.show(app: self, pane: pane)
+                guard let out else { return }   // 2.0 第六輪：拍下那一頁（原生表單驗收）
+                DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) {
                     if let v = SettingsWindowController.shared?.window?.contentView, let rep = v.bitmapImageRepForCachingDisplay(in: v.bounds) {
+                        v.layoutSubtreeIfNeeded()
                         v.cacheDisplay(in: v.bounds, to: rep)
                         try? rep.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: out))
                     }
@@ -823,7 +837,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             SetupFlow.pending = true
             log("first-run: setup flow armed")
         }
-        if Onboarding.forced || (snapshotPath == nil && !Onboarding.done) { view.face.armOnboarding() }   // hello 写完再出
+        // 2.0 開場手勢引導（Intro/IntroGuide.swift）：全新安裝接在首次設定之後自動播；升級上來的不自動播，主畫面出一次小提示卡
+        switch IntroGuide.launch(onboarded: Onboarding.done, seen: IntroGuide.seen, hintDone: IntroHint.done) {
+        case .autoPlay: if snapshotPath == nil, !Self.isDiagnosticRun { view.face.armOnboarding() }   // hello 写完再出（快照、診斷不自動播）
+        case .upgradeHint: if snapshotPath == nil, !HeroPull.on, !Self.isDiagnosticRun { IntroHint.pending = true; log("intro: upgrade hint armed") }
+        case .nothing: break
+        }
+        if Onboarding.forced { view.face.armOnboarding() }
         // 2.0: --demo-official 的主畫面照官方圖：後面是「照片」錶面（Portraits），不是這台 Mac 上次選的錶面
         if faceStyle == nil, OfficialDemo.on, ["--home", "--library", "--app"].contains(where: CommandLine.arguments.contains) { faceStyle = .photos }
         if snapshotPath == nil, benchSeconds == 0, !forceHello, !Self.isDiagnosticRun, HelloIntro.takeFirstLaunch() { view.face.beginHello(CACurrentMediaTime(), local: true) }   // 2.0 hello：HomePlay 2 第一次打開（設定卡已排上：hello 停住當它的背景）
@@ -834,10 +854,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if showBanner { view.face.showBanner() }
         view.applyShellSnapshotFlags()   // 2.0: --home --app --control-center --live-activity --demo-timers
         HelloProduct.startIfAsked(view)   // 2.0 hello：--hello-product 逐格拍產品版（Hello/HelloProduct.swift）
+        HeroPull.startIfAsked(view)   // README 片頭：--hero-pull 從眼睛拉到整機
         if let out = arg("--screen-png") {   // 2.0: 只出 1024² 螢幕平面圖（不等 RealityKit），對照設計用
             DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { [weak self] in
                 guard let self else { exit(2) }
                 self.view.face.forceDirty = true
+                // 診斷：--switch-face <raw> 走跟 App Intents 同一條通知，驗證切臉路徑
+                if let i = CommandLine.arguments.firstIndex(of: "--switch-face"), i + 1 < CommandLine.arguments.count {
+                    NotificationCenter.default.post(name: .homePlaySwitchFace, object: CommandLine.arguments[i + 1])
+                }
                 if let n = arg("--frames").flatMap({ Int($0) }) { HPFrames.run(self.view.face, out: out, count: n); exit(0) }   // 2.0: 動效包逐格（Design/HPFrames.swift）
                 let img = CarPlayDemo.render(self.view.face, now: CACurrentMediaTime()) ?? self.view.face.render()   // --demo-carplay：假的 CarPlay 畫面＋膠囊
                 try? NSBitmapImageRep(cgImage: img).representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: out))
@@ -1010,6 +1035,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     TrackpadPinch.shared.markApplied()
                     self.view.resizeWindow(toWidth: self.view.bounds.width * factor, anchorCenter: true)
                 }
+                // 两指旋转＝原地转身（同捏合：指针在桌宠上才算；手指离开带惯性停）
+                TrackpadPinch.shared.onRotate = { [weak self] rad in
+                    guard let self, let w = self.window else { return }
+                    guard w.frame.contains(NSEvent.mouseLocation), !TouchInput.fingerDown else { return }
+                    self.view.twistYaw(by: rad, timestamp: ProcessInfo.processInfo.systemUptime)
+                }
+                TrackpadPinch.shared.onRotateEnd = { [weak self] in self?.view.twistYawEnded(timestamp: ProcessInfo.processInfo.systemUptime) }
                 appendDiag("gesture.log", "MT pinch monitor started devices=\(mtDevices)")
             } else {
                 appendDiag("gesture.log", "MT pinch unavailable (fallback: option+scroll)")
@@ -1570,10 +1602,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     self.carPlayInBackground = true
                     self.view.face.status = .background
                     log("CarPlay live again after AirDrop pause; staying where the user was")
-                } else if back == nil, now < self.homeLatchUntil, !self.view.showingVideo {   // 2.0 align D：剛手動切到 HomeView，留在後台
+                } else if back == nil, !self.view.showingVideo,
+                          now < max(self.homeLatchUntil, Shell.lastActive + 3) {   // 拍板 2026-11-08：手動切換的鎖存之外，使用者 3 秒內有互動也不搶屏（黑視頻接管看起來像閃退）——CarPlay 留在後台，👀／空白鍵隨時叫回
                     self.carPlayInBackground = true
                     self.view.face.status = .background
-                    log("CarPlay live again; staying behind HomeView (manual switch \(Int(self.homeLatchUntil - now)) s left)")
+                    log("CarPlay live again; staying behind (latch or user active \(String(format: "%.1f", now - Shell.lastActive)) s ago)")
                 } else if self.carPlayLocked, !self.view.showingVideo {   // 訪客鎖著（2026-11-07）：連上了也留在後台，不自己跳到前面
                     self.carPlayInBackground = true
                     self.view.face.status = .background
@@ -2178,4 +2211,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
 extension Notification.Name {
     static let homePlaySiriHotKey = Notification.Name("HomePlaySiriHotKey")
+    /// App Intents：切換錶面（object＝FaceStyle.rawValue）
+    static let homePlaySwitchFace = Notification.Name("HomePlaySwitchFace")
 }

@@ -6,7 +6,7 @@ export const PREVIEW_SLUG = '2.0/';
 
 const zhHant = {
   title: 'HomePlay 2.0 Preview：整套 HomeView，放上你的 Mac',
-  description: 'HomePlay 2.0 Preview 把 HomeView 的整套介面放進 Mac 桌寵：主畫面、十一款錶面、十六個 App、會先問你的 ClioTalk、即時動態、控制中心，還能認出家人。現在可以下載 beta 6 試用。',
+  description: 'HomePlay 2.0 Preview 把 HomeView 的整套介面放進 Mac 桌寵：主畫面、十二款錶面、二十一個 App、會先問你的 ClioTalk、即時動態、控制中心，還能認出家人。現在可以下載 beta 6 試用。',
   ogTitle: 'HomePlay 2.0 Preview',
   ogAlt: 'HomePlay 桌寵的螢幕，眼睛 👀 在膠囊裡',
   keywords: 'HomePlay 2.0, HomeView, Liquid Glass, Mac 桌寵, ClioTalk, 即時動態, Live Activities, 開源',
@@ -18,7 +18,7 @@ const zhHant = {
   historyCta: { label: '下一篇', eyebrow: '從歷史回到現在', title: 'HomePlay 2.0 Preview', body: '最後一章講到 HomeView。HomePlay 2.0 把它的介面搬到 Mac 上：主畫面、即時動態、ClioTalk，還能認出家人。', link: '看 2.0 Preview' },
   kicker: 'HomePlay 2.0 Preview',
   h1: '<span class="l">整套 HomeView，</span> <span class="l glow">放上你的 Mac。</span>',
-  lede: 'HomeView 是 Apple 放在家裡的小螢幕。HomePlay 把它做成 Mac 桌面上的桌寵。1.0 有一雙會看你的眼睛，也能接 iPhone 的 CarPlay。2.0 加上 HomeView 的整套介面：主畫面和小工具、十一款錶面、十六個 App、語音助手 ClioTalk，還能認出家人。',
+  lede: 'HomeView 是 Apple 放在家裡的小螢幕。HomePlay 把它做成 Mac 桌面上的桌寵。1.0 有一雙會看你的眼睛，也能接 iPhone 的 CarPlay。2.0 加上 HomeView 的整套介面：主畫面和小工具、十二款錶面、二十一個 App、語音助手 ClioTalk，還能認出家人。',
   ctaBeta: '下載 2.0 beta 6',
   ctaDownload: '穩定版 1.0.6',
   ctaSource: '在 GitHub 看進度',
@@ -32,7 +32,7 @@ const zhHant = {
   galleryPrev: '上一張', galleryNext: '下一張', galleryGo: '第 {n} 張，共 {t} 張',
   gallery: [
     ['home-light', '<b>Liquid Glass 主畫面。</b>Liquid Glass 是 Apple 的半透明玻璃風格，這裡由 macOS 直接繪製。', '主畫面：FaceTime、家庭、音樂、訊息等圖示與一張照片小工具，背後是夕陽照片'],
-    ['era-1988', '<b>十一款錶面，包括 1988 年的樣子。</b>島錶面可以切換年代，裝著 👀 的膠囊會換成那個年代的樣子。', '1988 年代的島錶面：黑白像素的 10:09，下方是黑白像素膠囊裡的 👀'],
+    ['era-1988', '<b>十二款錶面，包括 1988 年的樣子。</b>島錶面可以切換年代，裝著 👀 的膠囊會換成那個年代的樣子。', '1988 年代的島錶面：黑白像素的 10:09，下方是黑白像素膠囊裡的 👀'],
     ['clio-confirm', '<b>ClioTalk 先問你。</b>要用你的名義送出的東西，它先唸給你聽。你說「好」，它才送。', 'ClioTalk 畫面：要加這個提醒嗎？下方有「好」與「取消」'],
     ['la-expanded', '<b>即時動態顯示在膠囊裡。</b>計時器、音樂、訊息和通話的進度，就在眼睛旁邊。', '主畫面上方展開的音樂即時動態：歌名 2SIDED 與播放控制'],
     ['people-greet', '<b>認得家裡的人。</b>人臉辨識在 Mac 上完成。每個人有自己的主畫面。', '錶面上方的問候卡：早安，並寫著認出你了'],
@@ -65,7 +65,7 @@ const zhHant = {
   },
   faces: {
     eyebrow: '錶面',
-    title: '十一款錶面。<span>眼睛一直是那雙 👀。</span>',
+    title: '十二款錶面。<span>眼睛一直是那雙 👀。</span>',
     lede: '照片、模組、Typograph、Flow、天氣、行事曆、陪伴的痕跡、黑色、島，還有 1988 年的 System 6。長按螢幕就能換。',
     names: { photos: '照片', modular: '模組', analog: 'Typograph', flow: 'Flow', weather: '天氣', calendar: '行事曆', growth: '陪伴的痕跡', black: '黑色', island: '島', system6: 'System 6' },
     altPrefix: '錶面：',
@@ -76,7 +76,7 @@ const zhHant = {
   },
   apps: {
     eyebrow: 'App',
-    title: '十六個內建 App，<span>每個做一件事。</span>',
+    title: '二十一個內建 App，<span>每個做一件事。</span>',
     lede: '天氣、時鐘、音樂、訊息、家庭、Safari 等，都照 HomeView 的版面重畫。字很大，站在房間另一頭也看得清楚。',
     weather: '<b>天氣。</b>天空會動，下雨時畫面裡也在下雨。天氣資料用概略位置向 Open-Meteo 查詢。',
     weatherAlt: '天氣 App：臺北市 22 度，雨，背景的雨滴在落下',
@@ -306,7 +306,7 @@ const zhHans = {
 
 const en = {
   title: 'HomePlay 2.0 Preview: all of HomeView, on your Mac',
-  description: 'HomePlay 2.0 Preview puts the full HomeView interface on a Mac desk pet: Home Screen, eleven faces, sixteen apps, ClioTalk that asks first, Live Activities, Control Center, and family recognition. Beta 6 is ready to try.',
+  description: 'HomePlay 2.0 Preview puts the full HomeView interface on a Mac desk pet: Home Screen, twelve faces, twenty-one apps, ClioTalk that asks first, Live Activities, Control Center, and family recognition. Beta 6 is ready to try.',
   ogTitle: 'HomePlay 2.0 Preview',
   ogAlt: 'The HomePlay screen, with the 👀 eyes in their capsule',
   keywords: 'HomePlay 2.0, HomeView, Liquid Glass, Mac desk pet, ClioTalk, Live Activities, open source',
@@ -318,7 +318,7 @@ const en = {
   historyCta: { label: 'Next', eyebrow: 'From history to today', title: 'HomePlay 2.0 Preview', body: 'The last chapter ends with HomeView. HomePlay 2.0 brings its interface to the Mac: a Home Screen, Live Activities, ClioTalk, and family recognition.', link: 'See 2.0 Preview' },
   kicker: 'HomePlay 2.0 Preview',
   h1: '<span class="l">All of HomeView.</span> <span class="l glow">On your Mac.</span>',
-  lede: 'HomeView is Apple’s small screen for the home. HomePlay turns it into a desk pet on your Mac. 1.0 has a pair of eyes that watch you, and it also takes CarPlay from your iPhone. 2.0 adds the full HomeView interface: a Home Screen with widgets, eleven faces, sixteen apps, ClioTalk (a voice assistant), and family recognition.',
+  lede: 'HomeView is Apple’s small screen for the home. HomePlay turns it into a desk pet on your Mac. 1.0 has a pair of eyes that watch you, and it also takes CarPlay from your iPhone. 2.0 adds the full HomeView interface: a Home Screen with widgets, twelve faces, twenty-one apps, ClioTalk (a voice assistant), and family recognition.',
   ctaBeta: 'Download 2.0 beta 6',
   ctaDownload: 'Stable 1.0.6',
   ctaSource: 'Follow 2.0 on GitHub',

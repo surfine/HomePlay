@@ -26,12 +26,13 @@ struct WebAppsSection: View {
     var body: some View {
         Section {
             if m.apps.isEmpty {
-                InfoRow(title: L("webapp.settings.none", "还没有 Web App"), subtitle: L("webapp.settings.none.sub", "在 Safari 里点地址栏或按住它，选「添加到主屏幕」。"))
+                InfoRow(title: L("webapp.settings.none", "还没有 Web App"), subtitle: L("webapp.settings.none.short", "在 Safari 选「添加到主屏幕」"), symbol: "globe", tint: .gray,
+                        info: L("webapp.settings.none.sub", "在 Safari 里点地址栏或按住它，选「添加到主屏幕」。"))
             }
             ForEach(m.apps, id: \.uuid) { a in
                 DisclosureGroup(isExpanded: Binding(get: { expanded.contains(a.uuid) }, set: { if $0 { expanded.insert(a.uuid) } else { expanded.remove(a.uuid) } })) {
                     Toggle(isOn: Binding(get: { a.shared }, set: { v in WebAppStore.shared.update(a.uuid) { $0.shared = v } })) {
-                        RowLabel(title: L("webapp.settings.shared", "家人也能打开"), subtitle: L("webapp.settings.shared.sub", "例如家庭看板：认出来的家人都能打开；访客仍然不行"))
+                        RowLabel(title: L("webapp.settings.shared", "家人也能打开"), subtitle: L("webapp.settings.shared.short", "认出来的家人都能打开，访客不行"), symbol: "person.2.fill", tint: .pink)
                     }
                     ForEach(WebAppPermission.allCases, id: \.self) { p in
                         Picker(selection: Binding(get: { a.permissions[p.rawValue] ?? "ask" }, set: { m.set(a, p, $0) })) {
@@ -48,7 +49,7 @@ struct WebAppsSection: View {
                             Button(L("webapp.settings.delete", "删除 Web App…"), role: .destructive) { WebAppEditor.confirmDelete(a) }
                         }
                     } label: {
-                        RowLabel(title: L("webapp.settings.data", "网站数据"), subtitle: L("webapp.settings.data.sub", "登录、Cookie、离线内容只留在这个 Web App 里"))
+                        RowLabel(title: L("webapp.settings.data", "网站数据"), subtitle: L("webapp.settings.data.short", "只留在这个 Web App 里"), symbol: "externaldrive.fill", tint: .gray)
                     }
                 } label: {
                     HStack(spacing: 10) {
@@ -64,10 +65,8 @@ struct WebAppsSection: View {
                 }
             }
         } header: {
-            Text(L("webapp.settings.header", "Web App"))
-        } footer: {
-            Text(L("webapp.settings.footer", "每个 Web App 都有自己的网站数据和权限，跟 Safari、跟其他 Web App 分开。只有添加它的人认出来时才能打开。"))
-                .foregroundStyle(.secondary).frame(maxWidth: .infinity, alignment: .leading)
+            SectionTitle(title: L("webapp.settings.header", "Web App"),
+                         info: L("webapp.settings.footer", "每个 Web App 都有自己的网站数据和权限，跟 Safari、跟其他 Web App 分开。只有添加它的人认出来时才能打开。") + "\n\n" + L("webapp.settings.data.sub", "登录、Cookie、离线内容只留在这个 Web App 里"))
         }
         .confirmationDialog(String(format: L("webapp.settings.clear.title", "要清除“%@”的网站数据吗？"), clearing?.name ?? ""),
                             isPresented: Binding(get: { clearing != nil }, set: { if !$0 { clearing = nil } })) {

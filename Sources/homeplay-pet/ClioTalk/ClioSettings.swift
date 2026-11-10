@@ -29,15 +29,15 @@ enum ClioToolGroup: String, CaseIterable, Codable {
     }
     var note: String {
         switch self {
-        case .calendar: return L("clio.tool.calendar.note", "查行程、加行程；加之前会先念给你听")
-        case .reminders: return L("clio.tool.reminders.note", "列出、新增；新增前会先念给你听")
+        case .calendar: return L("clio.tool.calendar.short", "查行程、加行程")
+        case .reminders: return L("clio.tool.reminders.short", "列出、新增提醒")
         case .music: return L("clio.tool.music.note", "控制 Mac 的「音乐」或 Spotify")
-        case .weatherTime: return L("clio.tool.weatherTime.note", "用大概的位置；开、查、取消计时器")
-        case .webSearch: return L("clio.tool.web.note", "Anthropic 用它自己的搜索；DeepSeek 与本机模型用 DeepSeek 的搜索 API")
-        case .messages: return L("clio.tool.messages.note", "读最近的对话、拟回复；送出前会先念给你听")
-        case .home: return L("clio.tool.home.note", "控制配件与场景、看摄像头；开锁、开车库门前会先念给你听")
-        case .calls: return L("clio.tool.calls.note", "用 FaceTime 打给联系人；拨出前会先念给你听")
-        case .apps: return L("clio.tool.apps.note", "按名字打开 App 和 Web App；访客打不开个人的")
+        case .weatherTime: return L("clio.tool.weatherTime.short", "用大概的位置；开计时器")
+        case .webSearch: return L("clio.tool.web.short", "查网上的新消息")
+        case .messages: return L("clio.tool.messages.short", "读最近的对话、拟回复")
+        case .home: return L("clio.tool.home.short", "控制配件与场景、看摄像头")
+        case .calls: return L("clio.tool.calls.short", "用 FaceTime 打给联系人")
+        case .apps: return L("clio.tool.apps.short", "按名字打开 App 和 Web App")
         }
     }
     /// 卡片底下「来自…」

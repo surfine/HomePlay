@@ -2,16 +2,24 @@
 //
 // 规则（2026-10-22 Aaron 定案）：
 // - 双指滑动＝转身体，只在机身上起手才生效；直播时屏幕里归 CarPlay（拖动）；透明边什么都不做。
+// - 屏幕是内容、机身是物件（2026-11-07）：不直播时屏幕上起手的双指滑只归画面（换页、捲动），外壳没接的也不转身体。
 // - 捏合缩放、三指拖移在整个桌宠都生效。
 // - 捏合与双指滑动互斥：一方确认后，另一方在本手势内不启动。
 //
 // 纯逻辑，不碰 AppKit／RealityKit：时间与命中结果由调用方传进来，selftest 直接驱动。
 import Foundation
+import CoreGraphics
 
 enum GestureTarget: String, Equatable {
     case none      // 透明区：不转、不拖
     case carplay   // 直播屏幕：在 CarPlay 里拖
     case rotate    // 机身：转身体
+
+    /// 起手点归谁（纯逻辑）：直播屏幕＝CarPlay；其他时候屏幕＝不转（归画面，外壳没接就什么都不做）；机身＝转身体
+    static func route(onScreen: Bool, onBody: Bool, live: Bool) -> GestureTarget {
+        if onScreen { return live ? .carplay : .none }
+        return onBody ? .rotate : .none
+    }
 }
 
 /// 双指滑动（scrollWheel）的仲裁。
@@ -118,6 +126,39 @@ struct TwoFingerClassifier {
         else if sameDirection || anchored { kind = .scroll }   // 一指几乎不动＋另一指横着连线走：也算滑
         else { kind = .twist }
         return kind
+    }
+}
+
+/// 兩指捏合與兩指旋轉互斥（2026-11-07 拍板：同一次兩指只認其中一個，先超過門檻者勝，到手指離開都只認它）。
+/// 觸控螢幕（捏合、旋轉兩個辨識器）與觸控板退路（沒有接觸帧時的 magnify／rotate 事件）共用；
+/// 觸控板有接觸帧時由 TwoFingerClassifier 在起手判（pinch／twist）。
+struct TwoFingerLock: Equatable {
+    enum Kind: Equatable { case undecided, pinch, rotate }
+    /// 累計縮放 4%、累計轉 8°（0.14 rad）：先到的勝。捏合時手指總會帶一點扭轉、轉的時候指距也會變一點，兩個門檻都不能太小
+    static let scaleThreshold: CGFloat = 0.04
+    static let angleThreshold: CGFloat = 0.14
+    private(set) var kind: Kind = .undecided
+    private var scale: CGFloat = 0, angle: CGFloat = 0
+
+    mutating func reset() { kind = .undecided; scale = 0; angle = 0 }
+    /// 餵這一幀的增量（ds＝倍率−1，da＝弧度），回這一次兩指歸誰
+    mutating func feed(scale ds: CGFloat = 0, angle da: CGFloat = 0) -> Kind {
+        guard kind == .undecided else { return kind }
+        scale += ds; angle += da
+        let s = abs(scale) / Self.scaleThreshold, a = abs(angle) / Self.angleThreshold
+        if s >= 1 || a >= 1 { kind = s >= a ? .pinch : .rotate }
+        return kind
+    }
+}
+
+/// 兩指旋轉轉身：手指轉多少，桌寵原地偏航轉多少（直接操作，1:1）；放手照轉身體原本的慣性投射，減少動態效果時不帶慣性
+enum TwistYaw {
+    /// 這一幀的 ty 增量：逆時針（rotation 為正）＝桌寵從上往下看也逆時針（同拖機身往右）
+    static func delta(radians: CGFloat) -> CGFloat { -radians }
+    /// 放手：最近 0.08 s 內還在轉才帶慣性（同拖機身放手）；減少動態效果＝直接停
+    static func release(velocity v: CGFloat, sinceLastMove: Double, reduceMotion: Bool) -> CGFloat {
+        guard !reduceMotion, sinceLastMove < 0.08 else { return 0 }
+        return max(-.pi, min(.pi, v * 0.2))
     }
 }
 

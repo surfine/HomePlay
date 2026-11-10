@@ -46,15 +46,16 @@ struct SharedAlbumsSection: View {
                 if let albums = m.albums {
                     if albums.isEmpty {
                         InfoRow(title: L("sharedAlbums.none", "没有找到共享相簿"),
-                                subtitle: L("sharedAlbums.none.sub", "在「照片」App 的设置里打开「共享相簿」，或请家人邀请你加入"))
+                                subtitle: L("sharedAlbums.none.short", "在「照片」设置里打开共享相簿"), symbol: "rectangle.stack.badge.person.crop.fill", tint: .gray,
+                                info: L("sharedAlbums.none.sub", "在「照片」App 的设置里打开「共享相簿」，或请家人邀请你加入"))
                     }
                     ForEach(albums) { a in
                         Toggle(isOn: Binding(get: { m.selected.contains(a.id) }, set: { m.set(a.id, $0) })) {
-                            RowLabel(title: a.title, subtitle: String(format: L("sharedAlbums.count", "%d 张照片"), a.count))
+                            RowLabel(title: a.title, subtitle: String(format: L("sharedAlbums.count", "%d 张照片"), a.count), symbol: "rectangle.stack.badge.person.crop.fill", tint: .indigo)
                         }
                     }
                 } else {
-                    InfoRow(title: L("sharedAlbums.loading", "正在读取共享相簿…"))
+                    InfoRow(title: L("sharedAlbums.loading", "正在读取共享相簿…"), symbol: "rectangle.stack.badge.person.crop.fill", tint: .gray)
                 }
             case .notDetermined, .denied:
                 LabeledContent {
@@ -63,15 +64,13 @@ struct SharedAlbumsSection: View {
                     }
                 } label: {
                     RowLabel(title: L("sharedAlbums.title", "共享相簿"),
-                             subtitle: m.status == .denied ? L("sharedAlbums.denied", "HomePlay 没有读取照片的权限") : L("sharedAlbums.ask", "先允许 HomePlay 读取「照片」图库"))
+                             subtitle: m.status == .denied ? L("sharedAlbums.denied", "HomePlay 没有读取照片的权限") : L("sharedAlbums.ask", "先允许 HomePlay 读取「照片」图库"),
+                             symbol: "rectangle.stack.badge.person.crop.fill", tint: .indigo)
                 }
             }
         } header: {
-            Text(L("sharedAlbums.title", "共享相簿"))
-        } footer: {
-            Text(L("sharedAlbums.footer", "勾了的相簿会轮流出现在主屏幕的「照片」小组件和「照片」表盘上；一本都不勾就照旧（精选照片、照片文件夹）。只读这台 Mac 上已经下载的照片，不联网、不存档。共享相簿认出你或家人时显示，访客和认不出的人看不到。"))
-                .foregroundStyle(.secondary).multilineTextAlignment(.leading).fixedSize(horizontal: false, vertical: true)
-                .frame(maxWidth: .infinity, alignment: .leading)
+            SectionTitle(title: L("sharedAlbums.title", "共享相簿"),
+                         info: L("sharedAlbums.footer", "勾了的相簿会轮流出现在主屏幕的「照片」小组件和「照片」表盘上；一本都不勾就照旧（精选照片、照片文件夹）。只读这台 Mac 上已经下载的照片，不联网、不存档。共享相簿认出你或家人时显示，访客和认不出的人看不到。"))
         }
         .onAppear { m.refresh() }
     }

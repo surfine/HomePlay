@@ -5,6 +5,7 @@
 import AppKit
 
 nonisolated(unsafe) private var islandGlassCache: (key: String, image: CGImage)?
+nonisolated(unsafe) private var islandLiftedCache: (key: String, image: CGImage)?
 /// 靜態層快取：背景＋玻璃大數字＋日期一分鐘才變一次；眨眼、瞄一眼只要重畫島（省下每幀約 5 ms）
 nonisolated(unsafe) private var islandStaticCache: (key: String, image: CGImage, layout: (CGPoint, CGFloat, CGPoint))?
 
@@ -19,7 +20,7 @@ extension Face {
         } else {
             let date = Self.displayDate
             let photoID = photos.current.map { "\(ObjectIdentifier($0).hashValue)" } ?? "-"
-            let key = "\(Int(date.timeIntervalSince1970 / 60))|\(wallpaperGeneration)|\(Int((rv * 24).rounded()))|\(clockStyle.rawValue)|\(ClockLook.active.key)|\(HPLook.name)|\(HPNumeralGlass.current.reduceTransparency)\(HPNumeralGlass.current.reduceMotion)|\(bg.rawValue)|\(photoID)|\(Int(renderPixelScale * 100))|\(L10n.language.rawValue)"
+            let key = "\(Int(date.timeIntervalSince1970 / 60))|\(bg == .daytime ? Int(hourNow * 4) : wallpaperGeneration)|\(Int((rv * 24).rounded()))|\(clockStyle.rawValue)|\(ClockLook.active.key)|\(HPLook.name)|\(HPNumeralGlass.current.reduceTransparency)\(HPNumeralGlass.current.reduceMotion)|\(bg.rawValue)|\(photoID)|\(Int(renderPixelScale * 100))|\(L10n.language.rawValue)"
             if let c = islandStaticCache, c.key == key {
                 drawUpright(g, c.image, in: full); layout = c.layout; Face.cacheHits += 1
             } else {
@@ -105,14 +106,14 @@ extension Face {
 
     /// 給光學玻璃的「清楚」背景：隨時段用壁紙本身；照片、Flow、純色當場取一張 512² 的
     private func islandClear(_ bg: IslandBackground, _ now: Double) -> CGImage? {
-        if bg == .daytime, let wallpaper { return wallpaper }
+        if bg == .daytime { return islandLookImage(lifted: true) }
         return snapshotBackdrop(px: 512) { c in self.drawIslandBackground(c, bg, now) }
     }
 
     /// 給玻璃數字折射用的背景（模糊過）
     private func islandBackdrop(_ bg: IslandBackground, _ now: Double) -> CGImage? {
         switch bg {
-        case .daytime: return frosted
+        case .daytime: return islandLookImage(lifted: false)   // 平滑漸層：模糊與否一樣，直接拿同一張
         case .photo:
             guard let img = photos.current else { return frosted }
             let key = "photo|\(ObjectIdentifier(img).hashValue)"
@@ -132,5 +133,55 @@ extension Face {
             islandGlassCache = (key, r)
             return r
         }
+    }
+
+    /// 「隨時段」背景（2026）：照現在 Look 的四層色票畫一道乾淨的直向漸層，不疊光團、不跟游標漂。
+    /// 彩色數字版：上深（數字色壓暗）→ 中淺（數字色帶底色）→ 下暖（強調色帶底色），像晨昏的天空；
+    /// 材質底版：同一個底色由淺到深。時段只調明暗（夜裡暗下來），色相永遠是 Look 的。
+    func drawIslandLookGradient(_ g: CGContext) {
+        let stops = Self.islandLookStops(HPLook.current, hour: hourNow)
+        let cs = CGColorSpace(name: CGColorSpace.sRGB)!
+        guard let gr = CGGradient(colorsSpace: cs, colors: stops.map { $0.1.cgColor } as CFArray, locations: stops.map { $0.0 }) else { return }
+        g.drawLinearGradient(gr, start: .zero, end: CGPoint(x: 0, y: 1024), options: [.drawsBeforeStartLocation, .drawsAfterEndLocation])
+    }
+
+    static func islandLookStops(_ l: HVTruth.Look, hour: Double) -> [(CGFloat, NSColor)] {
+        func mix(_ a: NSColor, _ b: NSColor, _ t: CGFloat) -> NSColor {
+            let a = a.usingColorSpace(.sRGB) ?? a, b = b.usingColorSpace(.sRGB) ?? b
+            return NSColor(srgbRed: a.redComponent + (b.redComponent - a.redComponent) * t, green: a.greenComponent + (b.greenComponent - a.greenComponent) * t,
+                           blue: a.blueComponent + (b.blueComponent - a.blueComponent) * t, alpha: 1)
+        }
+        // 時段明暗：白天 1、深夜 0.5，清晨與傍晚平滑過渡
+        let h = hour.truncatingRemainder(dividingBy: 24)
+        func smooth(_ a: Double, _ b: Double, _ x: Double) -> Double { let t = max(0, min(1, (x - a) / (b - a))); return t * t * (3 - 2 * t) }
+        let day = h < 12 ? smooth(4.5, 8, h) : 1 - smooth(17.5, 21.5, h)
+        let lum = CGFloat(0.5 + 0.5 * day)
+        let black = NSColor.black, white = NSColor.white
+        let raw: [(CGFloat, NSColor)]
+        if l.numerals == 0x000000 {   // 材質底版：同色由淺到深
+            let b = l.background_color
+            raw = [(0, mix(b, white, 0.10)), (0.55, mix(b, black, 0.12)), (1, mix(b, black, 0.34))]
+        } else {                      // 彩色數字版
+            // 拍板 2026-11-07：回 beta 1 的乾淨深底——單色相由深到更深，下緣不再染強調色（橘 Look 下緣發棕的來源）
+            let n = l.numerals_color, b = l.background_color
+            let base = mix(n, b, 0.15)
+            raw = [(0, mix(base, black, 0.60)), (0.6, mix(base, black, 0.42)), (1, mix(base, black, 0.26))]
+        }
+        return raw.map { ($0.0, mix(black, $0.1, lum)) }
+    }
+
+    /// 給玻璃取樣的同一張漸層（256²，按 Look 與時段快取）。lifted：給玻璃大數字折射用的，整張提亮一層——
+    /// 照官方照片錶面，數字要比底亮一階、亮緣清楚（玻璃參數不動，只在這個錶面調背景）
+    private func islandLookImage(lifted: Bool) -> CGImage {
+        let key = "look|\(HPLook.name)|\(Int(hourNow * 4))|\(lifted)|\(HPAccessibility.increaseContrast)"
+        if lifted, let c = islandLiftedCache, c.key == key { return c.image }
+        if !lifted, let c = islandGlassCache, c.key == key { return c.image }
+        let lift: CGFloat = HPAccessibility.increaseContrast ? 0.4 : 0.3
+        let img = snapshotBackdrop(px: 256) { c in
+            self.drawIslandLookGradient(c)
+            if lifted { c.setFillColor(NSColor(white: 1, alpha: lift).cgColor); c.fill(CGRect(x: 0, y: 0, width: 1024, height: 1024)) }
+        }
+        if lifted { islandLiftedCache = (key, img) } else { islandGlassCache = (key, img) }
+        return img
     }
 }

@@ -86,6 +86,15 @@ extension Face {
     /// 動效包：這次過場是回錶面——新錶面從約 45 px 模糊變清楚（v1 1:20.94→1:21.15），不是舊畫面起霧
     nonisolated(unsafe) static var toFaceDeblur = false
     nonisolated(unsafe) static var deblurFrom: CGImage?
+    /// 換頁時「舊畫面」要用哪一幀（回歸 #15）：上一幀乾淨（沒壓暗、不在換頁中、不是 CarPlay 直播/暫停）
+    /// 才用 lastFrame；否則退回最後一張穩定幀；兩張都沒有就不轉場。抽成純函式給 selftest 釘住。
+    enum TransitionSource { case last, settled, none }
+    static func transitionSource(dim: CGFloat, pageDir: Int, status: CarPlayStatus,
+                                 hasLast: Bool, hasSettled: Bool) -> TransitionSource {
+        if hasLast, dim <= 0.005, pageDir == 0, status != .live, status != .paused { return .last }
+        return hasSettled ? .settled : .none
+    }
+
     static let pageGap: CGFloat = 20
     private static let transitionCI = CIContext(options: [.cacheIntermediates: false])
     /// 上一幀畫的是哪個錶面（換頁方向用）；外殼的換頁（主畫面 ↔ 頭尾錶面）直接指定方向
@@ -94,7 +103,7 @@ extension Face {
     nonisolated(unsafe) static var pageDir = 0
 
     func beginFaceTransition() {
-        guard let old = lastFrame, !FaceOverview.active else { faceTransition = nil; return }
+        guard !FaceOverview.active else { faceTransition = nil; return }
         var dir = 0
         let lineup = FaceStyle.lineup, n = lineup.count
         if let o = Self.pageDirOverride { dir = o.signum() }
@@ -105,6 +114,19 @@ extension Face {
         }
         Self.pageDirOverride = nil
         Self.pageDir = dir
+        // 過場還在跑時再次換頁：沿用「最初那張」舊幀——lastFrame 是含上一層過場的合成幀，
+        // 重拍會層層複合出黑影與鬼影（使用者 2026-11-08 錄影實錘：快滑 photos↔island 出現巨型黑膠囊）
+        let old: CGImage
+        var source = "reentry"
+        if let t = faceTransition { old = t.sharp }
+        else {
+            switch Self.transitionSource(dim: cur.dim, pageDir: Self.pageDir, status: status,
+                                         hasLast: lastFrame != nil, hasSettled: settledFrame != nil) {
+            case .last: old = lastFrame!; source = "last"
+            case .settled: old = settledFrame!; source = "settled"
+            case .none: faceTransition = nil; return
+            }
+        }
         let frosted: CGImage
         if dir == 0 {
             let ci = CIImage(cgImage: old)
@@ -115,6 +137,10 @@ extension Face {
         portalCoreFrom = capsuleCore   // 後續 #7：橫滑也要的膠囊本體（確切矩形）
         Self.deblurFrom = nil
         if dir != 0 { Self.toFaceDeblur = false }
+        // 診斷（回歸 #17b／#15）：換面時記下這幀從哪來、往哪個方向、舊膠囊多大——
+        // 使用者錄影裡的黑藥丸只在這條路徑出現；下次再有黑膠囊，這一行可以對出是哪個來源幀。
+        let isl = islandRect.map { "\(Int($0.width))x\(Int($0.height))@\(Int($0.minX)),\(Int($0.minY))" } ?? "nil"
+        appendDiag("gesture.log", "FACETR begin ->\(style.rawValue) dir=\(dir) src=\(source) island=\(isl)")
     }
     /// 0…1；過場結束就清掉、回 nil
     func faceTransitionProgress(_ now: Double) -> CGFloat? {
@@ -174,6 +200,12 @@ extension Face {
             let newTx = PortalSlide.newShift(dir: Self.pageDir, x: x, shift: pageShift)
             let oldTx = PortalSlide.oldShift(dir: Self.pageDir, x: x, shift: pageShift)
             let handoff = from.map { PortalSlide.handoff(from: $0, to: to, x: x) } ?? 1
+            // 診斷：每個過場記一次（不是每幀），對照 #17b 的黑藥丸是否來自這條橫滑路徑
+            if Self.slideLogToken != t.start {
+                Self.slideLogToken = t.start
+                func fmt(_ r: CGRect?) -> String { r.map { "\(Int($0.width))x\(Int($0.height))@\(Int($0.minX)),\(Int($0.minY))" } ?? "nil" }
+                appendDiag("gesture.log", "FACETR slide dir=\(Self.pageDir) x=\(String(format: "%.2f", x)) from=\(fmt(from)) to=\(fmt(to))")
+            }
             if from != nil, let to, handoff > 0.001, let shot = g.makeImage() {   // 新頁（在 newTx）：拿這一幀畫好的新頁補；交棒時淡掉露出新膠囊
                 g.saveGState(); g.setAlpha(handoff)
                 portalPatch(g, shot, hole: PortalSlide.hole(to), tx: newTx)
@@ -211,15 +243,10 @@ extension Face {
             g.setAlpha(fade * (1 - fog)); drawUpright(g, t.sharp, in: full)
             g.setAlpha(fade * fog); drawUpright(g, t.frosted, in: full)
         }
-        // HomeView 對齊後續 #4：舊錶面在 👀 膠囊處「開門」——膠囊位置挖穿，
-        // 新錶面的膠囊透出來＝共享元素的連續性；膠囊留在原地不動，周圍的世界換掉。
-        if let island = t.islandFrom, island.width > 8, island.height > 8 {
-            g.setBlendMode(.clear)
-            let r = island.insetBy(dx: -2, dy: -2)
-            g.addPath(CGPath(roundedRect: r, cornerWidth: r.height / 2, cornerHeight: r.height / 2, transform: nil))
-            g.fillPath()
-            g.setBlendMode(.normal)
-        }
+        // 2.0「膠囊開門」挖洞已移除（2026-11-09，回歸 #17b／#15）：
+        // setBlendMode(.clear) 會把合成幀的 alpha 挖成 0，貼到 3D 螢幕（unlit）上就是黑色——
+        // 膠囊多大就出現多大的黑藥丸，還會留在 lastFrame 裡變成鬼影。beta 1／1.0.x 沒有這個效果，
+        // 使用者實測也只有「切換錶面」時才出現。舊畫面照一般淡出即可。
         g.restoreGState()
     }
 }

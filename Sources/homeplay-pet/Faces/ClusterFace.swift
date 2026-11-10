@@ -485,91 +485,62 @@ extension Face {
 
     // MARK: A 細線款
 
+    /// A：一個主數值（負載，細進度弧＋大數字），底下最多三個大字指標（電量或記憶體餘量、溫度、功率）。
+    /// 晶片名、頻率、刻度數字、熱節流線、外接碟名都不上錶面；警示只有一個位置（環的缺口）、一種顏色，只說最嚴重的那一件。
     private func drawClusterA(_ p: ClusterPainter, _ ro: ClusterReadout) {
         let t = p.t
-        clusterLamps(p, ro, y: 42, size: 24, padRight: 18)
+        let ic = HPAccessibility.increaseContrast
+        let second = ic && !t.night ? t.label.withAlphaComponent(0.8) : t.secondary
 
-        // 中央負載錶：細筆畫進度弧、無指針、一組次刻度、只標兩端
-        var r = ClusterRound(center: CGPoint(x: 544, y: 470), radius: 320, lo: 0, hi: 100, stroke: 6, roundCap: true, track: t.track)
+        // 主數值：負載
+        var r = ClusterRound(center: CGPoint(x: 544, y: 452), radius: 300, lo: 0, hi: 100, stroke: 12, roundCap: true, track: t.track)
         r.dashed = ro.cpu == nil
         if let c = ro.cpu, c > 0 { r.fill = (0, c, t.accent) }
-        r.minor = ClusterTicks(values: stride(from: 0.0, through: 100, by: 5).map { $0 }, r1: 298, r2: 308, width: 2, color: t.minorTick, round: true)
-        r.numbers = ([0, 100], ["0", "100"], 270, p.font(22, 300), t.secondary)
         p.round(r)
-
-        let lab = p.font(28, 400, mono: false)
-        p.text(L("cluster.cpu", "负载"), lab, x: 544, base: p.base(top: 296, lineHeight: 33.6, lab), color: t.secondary, align: .center, kern: 28 * 0.04)
-        let big = p.font(240, 300), unit = p.font(80, 300)
+        let lab = p.font(36, 500, mono: false)
+        p.text(L("cluster.cpu", "负载"), lab, x: 544, base: 300, color: second, align: .center)
+        let big = p.font(250, 400), unit = p.font(84, 400)
         let num = pct(ro.cpu)
-        let nk: CGFloat = -240 * 0.02
-        let wn = p.width(num, big, kern: nk), wu = ro.cpu == nil && !ro.offline ? 0 : p.width("%", unit)
-        let bx = 544 - (wn + (wu > 0 ? 6 + wu : 0)) / 2, bb = p.base(top: 340, lineHeight: 240, big)
+        let nk: CGFloat = -250 * 0.02
+        let wn = p.width(num, big, kern: nk), wu = ro.cpu == nil ? 0 : p.width("%", unit)
+        let bx = 544 - (wn + (wu > 0 ? 6 + wu : 0)) / 2, bb: CGFloat = 548
         p.text(num, big, x: bx, base: bb, color: t.label, kern: nk)
-        if wu > 0 { p.text("%", unit, x: bx + wn + 6, base: bb, color: t.secondary) }
-        let alt = p.font(28, 300)
-        p.text(clusterFreqLine(ro), alt, x: 544, base: p.base(top: 584, lineHeight: 33.6, alt), color: t.secondary, align: .center)
+        if wu > 0 { p.text("%", unit, x: bx + wn + 6, base: bb, color: second) }
 
-        // 左：電量（或桌機的記憶體餘裕）
-        let res = ro.reserve
-        let resColor = res.percent == nil ? t.secondary : t.tone(res.severity, normal: t.soc)   // 離線：電池圖示不留綠色
-        drawClusterARow(p, x: 56, title: res.title, value: pct(res.percent), unit: "%", hasValue: res.percent != nil, offline: ro.offline,
-                        color: t.toneText(res.severity), bold: t.night && res.severity == .critical)
-        let b1 = CGRect(x: 56, y: 812, width: 464, height: 8)
-        var bar = ClusterBar(rect: b1, track: t.track)
-        bar.dashed = ro.offline
-        if let v = res.percent { bar.fills = [(0, CGFloat(min(max(v, 0), 100) / 100), resColor, true, true)] }
-        p.bar(bar)
-        let small = p.font(20, 400, mono: false)
-        p.text(res.note, small, x: 56, base: p.base(top: 838, lineHeight: 24, small), color: t.toneText(res.severity) ?? t.secondary)
-
-        // 右：SoC 溫度，30–110 °C，100 °C 一條紅色限制線
-        drawClusterARow(p, x: 568, title: L("cluster.temp", "SoC 温度"), value: MetricFormat.celsius(ro.socTemp), unit: "°C", hasValue: ro.socTemp != nil, decimals: true, raw: ro.socTemp, offline: ro.offline,
-                        color: t.toneText(MetricRules.status(tempC: ro.socTemp)))
-        let b2 = CGRect(x: 568, y: 812, width: 464, height: 8)
-        var tb = ClusterBar(rect: b2, track: t.track)
-        tb.dashed = ro.offline
-        tb.bands = [(70 / 80, 1, t.critical.withAlphaComponent(0.16))]
-        if let c = ro.socTemp { tb.fills = [(0, CGFloat(min(max((c - 30) / 80, 0), 1)), t.tone(MetricRules.status(tempC: c)), true, true)] }
-        tb.marks = [(70 / 80, t.critical, 3, 10, 10)]
-        p.bar(tb)
-        p.text("30", small, x: 568, base: p.base(top: 838, lineHeight: 24, small), color: t.secondary)
-        p.text("110", small, x: 1032, base: p.base(top: 838, lineHeight: 24, small), color: t.secondary, align: .right)
-        let lim = p.font(20, 510, mono: false)
-        p.text(String(format: L("cluster.throttle", "热节流 %d °C"), 100), lim, x: 568 + 464 * 70 / 80 + 3, base: p.base(top: 838, lineHeight: 24, lim), color: t.critical, align: .right)
-
-        drawClusterCardA(p, ro)
-    }
-
-    /// A 的小錶頭：左標題、右大數字＋單位（基線對齊）
-    private func drawClusterARow(_ p: ClusterPainter, x: CGFloat, title: String, value: String, unit: String, hasValue: Bool, decimals: Bool = false, raw: Double? = nil, offline: Bool = false, color: NSColor? = nil, bold: Bool = false) {
-        let t = p.t
-        let lf = p.font(24, 400, mono: false), vf = p.font(44, bold ? 600 : color != nil ? 400 : 300), uf = p.font(24, 300)
-        let bb = p.base(top: 744, lineHeight: 44, vf)
-        p.text(title, lf, x: x, base: bb, color: t.secondary)
-        let shown = decimals ? (raw.map { String(format: "%.1f", $0) } ?? "—") : value
-        let right = x + 464
-        if hasValue || offline {
-            let wu = p.width(unit, uf)
-            p.text(unit, uf, x: right, base: bb, color: t.secondary, align: .right)
-            p.text(hasValue ? shown : "—", vf, x: right - wu - 4, base: bb, color: color ?? t.label, align: .right)
-        } else {
-            p.text("—", vf, x: right, base: bb, color: t.label, align: .right)
+        // 警示：環的缺口裡一顆膠囊，一種顏色（深淺底各用可讀的橘），只說最嚴重的一件
+        let worst = ro.telltales.max { ($0.severity == .critical ? 1 : 0) < ($1.severity == .critical ? 1 : 0) }
+        if ro.offline || worst != nil {
+            let text: String, icon: String, col: NSColor
+            if ro.offline { text = L("cluster.noReading", "暂时读不到"); icon = "wifi.slash"; col = second }
+            else {
+                let l = ro.lamp(worst!, t)
+                text = l.label; col = t.night ? t.label : t.warnText
+                if case .symbol(let n) = l.icon { icon = n } else { icon = "battery.25percent" }
+            }
+            let f = p.font(34, 600, mono: false)
+            let tw = p.width(text, f), h: CGFloat = 72, w = tw + 44 + 16 + 56
+            let pill = CGRect(x: 544 - w / 2, y: 650, width: w, height: h)
+            p.fillRounded(pill, radius: h / 2, col.withAlphaComponent(t.dark ? 0.2 : 0.12))
+            p.symbol(icon, in: CGRect(x: pill.minX + 28, y: pill.midY - 22, width: 44, height: 44), color: col)
+            p.text(text, f, x: pill.minX + 28 + 44 + 16, base: p.base(mid: pill.midY, f), color: col)
         }
-    }
 
-    private func drawClusterCardA(_ p: ClusterPainter, _ ro: ClusterReadout) {
-        let t = p.t, c = ro.card
-        let r = CGRect(x: 56, y: 892, width: 976, height: 140)
-        p.cardBackground(r, radius: 36)
-        let col = cardColor(c, t)
-        p.iconTile(CGRect(x: 84, y: 924, width: 76, height: 76), radius: 20, symbol: c.symbol, color: col, solid: cardSolid(c), glyph: 44)
-        let tx: CGFloat = 184, avail = r.maxX - 32 - tx
-        let tf = p.font(30, cardBold(c, t) ? 700 : 510, mono: false), sf = p.font(24, 400, mono: false)
-        let title = Face.clipped(c.title, tf, avail)
-        let h: CGFloat = 36 + 8 + (c.sub == nil ? 0 : 28.8)
-        let top = r.midY - h / 2
-        p.text(title, tf, x: tx, base: p.base(top: top, lineHeight: 36, tf), color: t.label)
-        if let s = c.sub { p.text(Face.clipped(s, sf, avail), sf, x: tx, base: p.base(top: top + 44, lineHeight: 28.8, sf), color: t.secondary) }
+        // 三個大字指標
+        let res = ro.reserve
+        let cols: [(String, String, String)] = [
+            (res.title, pct(res.percent), res.percent == nil ? "" : "%"),
+            (L("cluster.tempShort", "温度"), ro.socTemp.map { String(format: "%.0f", $0) } ?? "—", ro.socTemp == nil ? "" : "°C"),
+            (L("cluster.power", "功率"), ro.powerW.map { String(format: "%.0f", abs($0)) } ?? "—", ro.powerW == nil ? "" : "W"),
+        ]
+        let vf = p.font(84, 500), uf = p.font(38, 500), lf = p.font(36, 500, mono: false)
+        for (i, c) in cols.enumerated() {
+            let cx = 544 + CGFloat(i - 1) * 340
+            let wv = p.width(c.1, vf), wu = c.2.isEmpty ? 0 : p.width(c.2, uf) + 4
+            let x0 = cx - (wv + wu) / 2
+            p.text(c.1, vf, x: x0, base: 900, color: t.label)
+            if !c.2.isEmpty { p.text(c.2, uf, x: x0 + wv + 4, base: 900, color: second) }
+            p.text(Face.clipped(c.0, lf, 300), lf, x: cx, base: 960, color: second, align: .center)
+        }
     }
 
     private func cardColor(_ c: ClusterReadout.Card, _ t: ClusterTheme) -> NSColor {

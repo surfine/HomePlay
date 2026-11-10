@@ -103,8 +103,8 @@ enum HPSelfTest {
         let np = HPTokens.Night.primary, ns = HPTokens.Night.secondary
         check(HPAccessibility.contrast(np, on: .black) >= 4.5 && HPAccessibility.contrast(ns, on: .black) >= 4.5, "夜間紅：主要、次要對黑底 ≥ 4.5")
         check(HPAccessibility.luminance(np) > HPAccessibility.luminance(ns), "夜間紅：主要比次要亮（層級跟 vibrant 一致）")
-        // 2.0 P07：Modular 白天照官方量值、夜間黑底
-        check(ModularPalette.day.bg == HPTokens.Modular.bg && ModularPalette.night.bg == .black && ModularPalette.night.ink == np && ModularPalette.night.soft == ns, "Modular：白天官方色票、夜間黑底亮紅")
+        // 2.0 P07：Modular 白天是玻璃磚上的白字、夜間黑底亮紅（主要／次要＝夜間紅兩階）
+        check(ModularPalette.day.primary == .white && ModularPalette.night.isNight && ModularPalette.night.primary == np && ModularPalette.night.secondary == ns, "Modular：白天玻璃磚白字、夜間黑底亮紅")
         // 2.0 P07：True Tone 增益——暖升紅降藍、冷相反、0 不動、對稱有界
         let g1 = TrueTone.gain(1), g0 = TrueTone.gain(0), gm = TrueTone.gain(-0.5), gp = TrueTone.gain(0.5)
         let ttOK = g1.r > 1 && g1.b < 1 && g0 == (1, 1) && abs(gm.r - gp.b) < 1e-9 && abs(gm.b - gp.r) < 1e-9 && TrueTone.gain(2) == g1 && TrueTone.gain(-2) == TrueTone.gain(-1)

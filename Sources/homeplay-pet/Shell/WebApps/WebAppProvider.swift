@@ -351,8 +351,8 @@ enum WebAppUI {
         let bodyLines = body.map { Face.photosWrap($0, bf, 600, maxLines: 5) } ?? []
         let h = 72 + CGFloat(titleLines.count) * 50 + CGFloat(bodyLines.count) * 40 + 40 + 100 + 36
         let card = CGRect(x: 172, y: 512 - h / 2, width: 680, height: h)
-        if !ShellGlass.draw(g, face: face, path: continuousRoundedRect(card, radius: 72), key: "webalert|\(Int(h))") {
-            g.addPath(continuousRoundedRect(card, radius: 72)); g.setFillColor(HPTokens.card.withAlphaComponent(0.97).cgColor); g.fillPath()
+        if !ShellGlass.draw(g, face: face, path: continuousRoundedRect(card, radius: HPTokens.Radius.concentric(rect: card)), key: "webalert|\(Int(h))") {
+            g.addPath(continuousRoundedRect(card, radius: HPTokens.Radius.concentric(rect: card))); g.setFillColor(HPTokens.card.withAlphaComponent(0.97).cgColor); g.fillPath()
         }
         var y = card.minY + 76
         for l in titleLines { HPComponents.center(g, face, l, tf, cx: card.midX, y: y, HPTokens.label); y += 50 }

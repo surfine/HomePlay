@@ -1,5 +1,7 @@
 // 天氣錶面：照官方 HomeView 的天氣瓷磚——滿版天空照片般的底、左上狀況與高低溫、右上時間、
-// 液態玻璃的大溫度、底下四格（日落／風速／濕度／AQI）；膠囊住在溫度右邊，眼睛望向天空。
+// 液態玻璃的大溫度、底下四塊玻璃方塊（日落／風速／濕度／AQI）；膠囊住在溫度右邊，眼睛望向天空。
+// 沒有資料（沒定位、連不上）：不畫任何數值與「—」，只有天空、雲與玻璃大時間，膠囊在時間下面——錶面永遠是完成的畫面，
+// 原因與設定交給設定頁。
 // 稿：docs/design-drafts/faces-v3/artifact/engine_tail.js face('天氣')。資料見 WeatherSource.swift。
 
 import AppKit
@@ -93,10 +95,14 @@ extension Face {
     func renderWeatherFace(_ g: CGContext, _ now: Double) {
         let src = WeatherSource.shared
         src.activate { [weak self] in self?.forceDirty = true }
-        let d = src.data ?? (src.statusText == nil ? Self.demoWeather : nil)
+        // 快照／官方對照（--demo-official）一律用示範資料：否則真實抓取失敗留下的 statusText
+        // 會把畫面壓成空狀態，對不到官方 face-weather（54°＋四指標）
+        let d: WeatherData? = OfficialDemo.on
+            ? Self.demoWeather
+            : (src.data ?? (src.statusText == nil ? Self.demoWeather : nil))
         let date = Self.displayDate
         let full = CGRect(x: 0, y: 0, width: 1024, height: 1024)
-        let key = "w-static|\(Int(date.timeIntervalSince1970 / 60))|\(src.version)|\(L10n.language.rawValue)|\(Int(renderPixelScale * 100))|\(Self.weatherImperial)"
+        let key = "w-static|\(Int(date.timeIntervalSince1970 / 60))|\(src.version)|\(L10n.language.rawValue)|\(Int(renderPixelScale * 100))|\(Self.weatherImperial)|\(HPAccessibility.generation)\(HPAccessibility.reduceTransparency)\(HPAccessibility.increaseContrast)"
         if let c = weatherStaticCache, c.key == key {
             drawUpright(g, c.image, in: full); Face.cacheHits += 1
         } else {
@@ -111,7 +117,8 @@ extension Face {
 
         // 膠囊：在溫度右邊（寬約 256）；眼睛的朝向由表情決定，不另畫
         faceEyeLook = CGPoint(x: -5, y: -14); defer { faceEyeLook = nil }   // 望向天空
-        drawIsland(g, at: CGPoint(x: 815, y: 447), scale: 256 / (420 * 1.4), liveAt: CGPoint(x: 815, y: 447), now: now)
+        let at = d == nil ? CGPoint(x: 512, y: 900) : CGPoint(x: 815, y: 447)
+        drawIsland(g, at: at, scale: 256 / (420 * 1.4), liveAt: at, now: now)
     }
 
     /// 靜態層：天空＋狀況/時間文字＋玻璃大溫度＋底下四格。selftest 拿它驗「快取合成＝直接畫」。
@@ -137,53 +144,75 @@ extension Face {
             g.setShadow(offset: CGSize(width: 0, height: -2), blur: 14, color: NSColor(srgbRed: 0.1, green: 0.2, blue: 0.35, alpha: 0.32).cgColor)
             draw(); g.restoreGState()
         }
+        let (hh, mm) = Self.hourMinute(date)
+        guard let d else {
+            // 沒資料：玻璃大時間置中，膠囊在下面（renderWeatherFace）
+            let ts = "\(hh):\(mm)", font = FaceType.sf(400, .regular, mono: false)
+            var shape = GlyphShape(ts, font: font, kern: -6)
+            let ref = GlyphShape("0", font: font).ink.height, b0 = shape.ink
+            var k = 300 / max(1, ref)
+            if b0.width * k > 860 { k = 860 / b0.width }
+            shape = shape.transformed(CGAffineTransform(scaleX: k, y: k))
+            shape = shape.moved(512 - shape.ink.midX, 500 - shape.ink.minY)   // 雲在上半，時間落在下面的藍天裡，玻璃讀得出字形
+            drawLiquidGlass(g, [shape], key: "weather|\(skyKey)|time|\(ts)", clear: weatherCache.clear, frosted: weatherCache.frosted, params: .weatherTemp)
+            return
+        }
         func temp(_ v: Double) -> Int { Int((imperial ? v * 9 / 5 + 32 : v).rounded()) }
-        let dash = "—"
 
         // 左上：狀況圖示（多色）＋文字，下一行高低溫
         let symName = night ? sky.symbol.night : sky.symbol.day
         shadowed {
             drawMulticolorSymbol(g, symName, in: CGRect(x: 74, y: 62, width: 82, height: 62))
-            // 2.0 depth：沒資料時寫原因（沒定位、連不上），不是一個「—」
             let cf = FaceType.sf(48, .medium, mono: false)
-            drawLeft(g, d.map { Self.weatherText($0.code) } ?? WeatherSource.shared.statusShort.map { Self.clipped($0, cf, 470) } ?? dash, font: cf, x: 164, y: 126, color: white)
-            let hiLo = d.map { String(format: L("weather.hiLo", "高 %d° 低 %d°"), temp($0.hi), temp($0.lo)) }
-                ?? String(format: L("weather.hiLo", "高 %d° 低 %d°"), 0, 0).replacingOccurrences(of: "0", with: dash)
-            drawLeft(g, hiLo, font: FaceType.sf(44, .medium, mono: false), x: 78, y: 184, color: white)
+            drawLeft(g, Self.clipped(Self.weatherText(d.code), cf, 470), font: cf, x: 164, y: 126, color: white)
+            drawLeft(g, String(format: L("weather.hiLo", "高 %d° 低 %d°"), temp(d.hi), temp(d.lo)), font: FaceType.sf(44, .medium, mono: false), x: 78, y: 184, color: white)
             // 右上：時間
-            let (hh, mm) = Self.hourMinute(date)
-            let ts = "\(hh):\(mm)", tf = FaceType.sf(100, .semibold)
+            let ts = "\(hh):\(mm)", tf = FaceType.sf(72, .semibold)
             drawLeft(g, ts, font: tf, x: 945 - Self.weatherWidth(ts, tf), y: 164, color: white, kern: -0.8)
         }
 
         // 大溫度：液態玻璃
-        let big = d.map { "\(temp($0.temp))°" } ?? dash
+        let big = "\(temp(d.temp))°"
         let font = FaceType.sf(400, .regular, mono: false)
         var shape = GlyphShape(big, font: font)
         let ref = GlyphShape("0", font: font).ink.height
         var k = 282 / max(1, ref)
-        if d == nil { k *= 0.9 }
         let b0 = shape.ink
         if b0.width * k > 590 { k = 590 / b0.width }
         shape = shape.transformed(CGAffineTransform(translationX: 84 - b0.minX * k, y: 538).scaledBy(x: k, y: k))
         drawLiquidGlass(g, [shape], key: "weather|\(skyKey)|\(big)", clear: weatherCache.clear, frosted: weatherCache.frosted, params: .weatherTemp)
 
-        // 底下四格
+        // 底下四塊玻璃方塊：同一個圓角（官方磚 50）、同一個內距、同一套字級；讀不到的那一格不畫（不寫「—」）
         let aqiSym = NSImage(systemSymbolName: "aqi.medium", accessibilityDescription: nil) != nil ? "aqi.medium" : "circle.dotted"
-        let wind = d.map { imperial ? String(format: "%.0f mph", $0.wind * 0.621371) : String(format: "%.0f km/h", $0.wind) } ?? dash
-        let cols: [(x: CGFloat, sym: String, value: String, label: String)] = [
-            (157, "sunset", d?.sunset.map(Self.localTime) ?? dash, L("weather.sunset", "日落")),
-            (393, "wind", wind, L("weather.wind", "风速")),
-            (638, "humidity", d.map { String(format: "%.0f%%", $0.humidity) } ?? dash, L("weather.humidity", "湿度")),
-            (874, aqiSym, d?.aqi.map { String(format: "%.0f", $0) } ?? dash, "AQI"),
-        ]
-        // 第四輪：照官方 face-weather——數值與標籤是 medium（不是 semibold）、白 92%，數值基線 868、標籤 926
-        let cf = FaceType.sf(48, .medium, mono: false), soft = white.withAlphaComponent(0.92)
+        let wind = imperial ? String(format: "%.0f mph", d.wind * 0.621371) : String(format: "%.0f km/h", d.wind)
+        let cells: [(sym: String, value: String, label: String)] = [
+            d.sunset.map { ("sunset.fill", Self.localTime($0), L("weather.sunset", "日落")) },
+            ("wind", wind, L("weather.wind", "风速")),
+            ("humidity.fill", String(format: "%.0f%%", d.humidity), L("weather.humidity", "湿度")),
+            d.aqi.map { (aqiSym, String(format: "%.0f", $0), "AQI") },
+        ].compactMap { $0 }
+        let margin: CGFloat = 24, gap: CGFloat = 20, top: CGFloat = 676, bottom: CGFloat = 1000
+        let n = CGFloat(cells.count), w = (1024 - 2 * margin - (n - 1) * gap) / n
+        let tiles = cells.indices.map { CGRect(x: margin + CGFloat($0) * (w + gap), y: top, width: w, height: bottom - top) }
+        let plain = HPAccessibility.reduceTransparency
+        if plain {   // 減少透明度：不透明的深色磚
+            for r in tiles { g.addPath(continuousRoundedRect(r, radius: HPTokens.Radius.concentric(rect: r))); g.setFillColor(NSColor(white: 0.12, alpha: 0.82).cgColor); g.fillPath() }
+        } else {
+            drawLiquidGlass(g, tiles.map { GlyphShape(path: continuousRoundedRect($0, radius: HPTokens.Radius.concentric(rect: $0))) },
+                            key: "weather|\(skyKey)|tiles|\(cells.count)", clear: weatherCache.clear, frosted: weatherCache.frosted, params: .platter)
+        }
+        if HPAccessibility.increaseContrast {
+            for r in tiles { g.addPath(continuousRoundedRect(r, radius: HPTokens.Radius.concentric(rect: r))); g.setStrokeColor(NSColor(white: 1, alpha: 0.7).cgColor); g.setLineWidth(2); g.strokePath() }
+        }
+        let vf = FaceType.sf(48, .semibold, mono: false), lf = FaceType.sf(34, .medium, mono: false)
+        let soft = white.withAlphaComponent(HPAccessibility.increaseContrast ? 0.9 : 0.72)
         shadowed {
-            for c in cols {
-                drawSymbol(g, c.sym, in: CGRect(x: c.x - 52, y: 690, width: 104, height: 82), color: white, weight: .regular)
-                drawLeft(g, c.value, font: cf, x: c.x - Self.weatherWidth(c.value, cf) / 2, y: 868, color: soft)
-                drawLeft(g, c.label, font: cf, x: c.x - Self.weatherWidth(c.label, cf) / 2, y: 926, color: soft)
+            for (r, c) in zip(tiles, cells) {
+                drawSymbol(g, c.sym, in: CGRect(x: r.midX - 40, y: r.minY + 46, width: 80, height: 72), color: white, weight: .medium)
+                let v = Self.clipped(c.value, vf, r.width - 32)
+                drawLeft(g, v, font: vf, x: r.midX - Self.weatherWidth(v, vf) / 2, y: r.minY + 206, color: white)
+                let l = Self.clipped(c.label, lf, r.width - 32)
+                drawLeft(g, l, font: lf, x: r.midX - Self.weatherWidth(l, lf) / 2, y: r.minY + 260, color: soft)
             }
         }
     }

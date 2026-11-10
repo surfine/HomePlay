@@ -110,17 +110,18 @@ struct ClockLook: Equatable, Codable {
     var tone: Double = 0.5         // 色調滑桿：0 淡、1 濃（白色：0 偏灰、1 純白）
     var glass = true
 
+    /// 舊鍵：錶面體系之後設定存在海報配置裡（Shell/PosterConfiguration.swift），這個鍵只在第一次遷移時讀
     static let defaultsKey = "HomePlayClockLook"
-    nonisolated(unsafe) static var current: ClockLook = {
-        guard let d = UserDefaults.standard.data(forKey: defaultsKey), let v = try? JSONDecoder().decode(ClockLook.self, from: d) else { return ClockLook() }
-        return v
-    }() {
-        didSet { if let d = try? JSONEncoder().encode(current) { UserDefaults.standard.set(d, forKey: defaultsKey) } }
+    /// 從海報配置派生：字體＝typeface，粗細／色票／色調／玻璃＝配置的 homeplay 欄位
+    static var current: ClockLook {
+        get { PosterConfiguration.current.clockLook }
+        set { PosterConfiguration.current.clockLook = newValue }
     }
 
-    /// 快照用：命令行指定（--clock-look "font=stencil,weight=0.7,swatch=blue,tone=0.6,glass=0"），不寫 UserDefaults
+    /// 快照用：命令行指定（--clock-look "font=stencil,weight=0.7,swatch=blue,tone=0.6,glass=0"），不寫 UserDefaults；
+    /// 沒給的話用 --poster 那份配置派生的
     nonisolated(unsafe) static var snapshotOverride: ClockLook?
-    static var active: ClockLook { snapshotOverride ?? current }
+    static var active: ClockLook { snapshotOverride ?? PosterConfiguration.snapshotOverride?.clockLook ?? current }
     static func parse(_ s: String) -> ClockLook {
         var l = ClockLook()
         for kv in s.split(separator: ",") {
@@ -189,13 +190,22 @@ extension Face {
         let color = look.color(wallpaper: tone)
         g.saveGState(); g.setAlpha(alpha)
         let env = HPNumeralGlass.current   // 體驗追趕 P1：減少透明度／動態效果、材質版 Look 都畫實色（Design/HPNumeralGlass.swift）
-        if HPNumeralGlass.usesGlass(look: look, materialLookLinked: HPNumeralGlass.materialLookLinked, reduceTransparency: env.reduceTransparency, reduceMotion: env.reduceMotion) {
-            let tint = HPNumeralGlass.tint(color, base: look.glassTint, luma: HPNumeralGlass.luma(tone), swatch: look.swatch)
+        // 預設 system＝現行規則；隱藏偏好／旗標切到 sdf 才走 Faces/GlyphGlass.swift（實驗）
+        let route = NumeralGlassRoute.decide(mode: NumeralGlassMode.current, look: look, materialLookLinked: HPNumeralGlass.materialLookLinked,
+                                             reduceTransparency: env.reduceTransparency, reduceMotion: env.reduceMotion,
+                                             increaseContrast: HPAccessibility.increaseContrast)
+        switch route {
+        case .system, .sdf:
+            let luma = HPNumeralGlass.luma(tone)
+            let tint = HPNumeralGlass.tint(color, base: look.glassTint, luma: luma, swatch: look.swatch)
+            if route == .sdf, drawNumeralSDFGlass(g, shapes, clear: clear, frosted: frosted, tint: tint, luma: luma) { break }
             // 先用 beta 1 的玻璃步驟（SystemGlass .portraitFrosted），系統零件不在才退回 shader
             if !drawNumeralSystemGlass(g, shapes, clear: clear, tint: tint) {
                 drawLiquidGlass(g, shapes, clear: clear, frosted: frosted, tint: tint)
             }
-        } else {
+        case .frostedSolid:
+            drawNumeralFrostedSolid(g, shapes, color: color, tone: tone, tint: look.glassTint)
+        case .solid:
             for s in shapes { fillShape(g, s, color, shadow: 0.18) }
         }
         g.restoreGState()
@@ -223,6 +233,44 @@ extension Face {
         return true
     }
     nonisolated(unsafe) private static var numeralGlassCache: (key: String, image: CGImage, rect: CGRect)?
+
+    /// SDF 玻璃字（實驗，Faces/GlyphGlass.swift）：字外的可讀性陰影隨底色亮度加深，再蓋玻璃。回 false＝GPU 不可用
+    func drawNumeralSDFGlass(_ g: CGContext, _ shapes: [GlyphShape], clear: CGImage?, frosted: CGImage?, tint: NSColor?, luma: CGFloat) -> Bool {
+        guard let clear, !shapes.isEmpty else { return false }
+        let path = CGMutablePath()
+        for s in shapes { path.addPath(s.path) }
+        let key = shapes.map { "\($0.ink)" }.joined(separator: ";")
+        let hs = shapes.map(\.ink.height).sorted()
+        guard let r = GlyphGlass.shared.render(path: path, key: key, scale: renderPixelScale, backdrop: clear, frosted: frosted, luma: luma,
+                                               tint: tint, bezelHeight: hs[hs.count / 2]) else { return false }
+        legibilityShadow(g, path, alpha: GlyphGlassParams.shadowAlpha(luma: luma))
+        drawUpright(g, r.image, in: r.rect)
+        return true
+    }
+
+    /// 減少透明度（sdf 模式）：不透明的霧面——底色平均往白推，帶一點字色，外加可讀性陰影
+    private func drawNumeralFrostedSolid(_ g: CGContext, _ shapes: [GlyphShape], color: NSColor, tone: NSColor?, tint: CGFloat) {
+        let base = (tone ?? .gray).usingColorSpace(.sRGB) ?? .gray, c = color.usingColorSpace(.sRGB) ?? .white
+        let luma = HPNumeralGlass.luma(tone), w: CGFloat = luma < 0.5 ? 0.55 : 0.75, k = max(0.25, tint)
+        func ch(_ b: CGFloat, _ v: CGFloat) -> CGFloat { (b + (1 - b) * w) * (1 - k) + v * k }
+        let fill = NSColor(srgbRed: ch(base.redComponent, c.redComponent), green: ch(base.greenComponent, c.greenComponent),
+                           blue: ch(base.blueComponent, c.blueComponent), alpha: 1)
+        let path = CGMutablePath()
+        for s in shapes { path.addPath(s.path) }
+        legibilityShadow(g, path, alpha: GlyphGlassParams.shadowAlpha(luma: luma))
+        for s in shapes { fillShape(g, s, fill) }
+    }
+
+    /// 可讀性陰影：只在字外，濃度由呼叫端依底色亮度給
+    private func legibilityShadow(_ g: CGContext, _ path: CGPath, alpha: CGFloat) {
+        let ink = path.boundingBoxOfPath
+        g.saveGState()
+        g.addRect(CGRect(x: -100, y: -100, width: 1224, height: 1224)); g.addPath(path); g.clip(using: .evenOdd)
+        g.setShadow(offset: CGSize(width: 0, height: -ink.height * 0.012), blur: ink.height * 0.04,
+                    color: NSColor.black.withAlphaComponent(alpha).cgColor)
+        g.addPath(path); g.setFillColor(NSColor.black.cgColor); g.fillPath()
+        g.restoreGState()
+    }
 
     /// 字外一圈柔和落影（玻璃浮在背景上）：只畫在字形外面（beta 1 的 glassShadow）
     private func numeralShadow(_ g: CGContext, _ path: CGPath) {

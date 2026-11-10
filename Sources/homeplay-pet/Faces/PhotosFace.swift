@@ -1,4 +1,5 @@
-// 錶面「照片」：照 HomeView 的 Portraits——照片滿版，Compressed 玻璃大時間從上緣往下佔到約 59%，沒有日期；
+// 錶面「照片」：照 HomeView 的 Portraits——照片滿版，極高窄體的玻璃大時間時在左、分在右，從上緣幾乎到下緣，沒有日期；
+// 中間留一道縫給主角與膠囊（官方 faces 片尾幀：數字約佔 6%–94% 的高度，主角站在兩組數字中間、蓋在數字前面）；
 // 用 Vision 把人物（前景）摳出來，再蓋回數字與島上面，數字和島都像在人物後面（景深）。沒有前景就整組在最上層。
 // 摳圖在背景執行緒做、每張照片只做一次；做好前先照一般疊法畫，好了再重畫一次。
 // 2.0 R10：換分鐘時數字翻動（影片 v1 02:57.76→02:58.26 量到：舊位數往上模糊淡出、新位數從下面模糊浮上來，
@@ -16,6 +17,7 @@ nonisolated(unsafe) private var emptyBackdrop: (clear: CGImage, frosted: CGImage
 /// 換分鐘的翻動：舊的字（時、分）與開始時刻
 nonisolated(unsafe) private var digitRoll: (old: (String, String), start: Double)?
 nonisolated(unsafe) private var digitShown: (String, String)?
+nonisolated(unsafe) private var photosStaticCache: (key: String, image: CGImage)?
 
 extension GlyphShape {
     func offset(_ dx: CGFloat, _ dy: CGFloat) -> GlyphShape {
@@ -59,8 +61,6 @@ extension Face {
         let s = max(1024 / CGFloat(img.width), 1024 / CGFloat(img.height))
         let w = CGFloat(img.width) * s, h = CGFloat(img.height) * s
         let r = CGRect(x: (1024 - w) / 2, y: (1024 - h) / 2, width: w, height: h)
-        g.saveGState(); g.clip(to: full); drawUpright(g, img, in: r); g.restoreGState()
-
         let id = ObjectIdentifier(img)
         let mask = subjectMaskFor(img, id)
         // 給玻璃的背景：同一張照片的模糊版（每張一次）
@@ -72,7 +72,10 @@ extension Face {
         if photoClear?.id != id {   // 清楚的照片（畫成 1024² 一次）給玻璃邊緣折射出細節
             photoClear = (id, snapshotBackdrop(px: 1024) { c in c.clip(to: full); self.drawUpright(c, img, in: r) })
         }
-        drawPortraitClock(g, date, clear: photoClear?.image, frosted: photoBackdrop?.image, now: now)
+        photosStatic(g, "\(id.hashValue)", date) { c in
+            c.saveGState(); c.clip(to: full); self.drawUpright(c, img, in: r); c.restoreGState()
+            self.drawPortraitClock(c, date, clear: photoClear?.image, frosted: photoBackdrop?.image, now: now)
+        }
         // 島躲在人後面：先畫島，再把人物蓋回來（長成音樂／計時器時改到最上層，字才看得到）
         // 人物把島整個擋住（主角站在正中間）就不躲了，島站到人前面，免得看不到眼睛
         let live = liveT > 0.02 || (mask.map { subjectCover($0, id, photoRect: r) > 0.45 } ?? false)
@@ -93,8 +96,8 @@ extension Face {
     private func subjectCover(_ mask: CGImage, _ id: ObjectIdentifier, photoRect r: CGRect) -> CGFloat {
         if let c = subjectCoverCache, c.id == id { return c.cover }
         var cover: CGFloat = 0
-        let w = 290.0, h = w * 156 / 420
-        let cap = CGRect(x: 512 - w / 2, y: 812 - h / 2, width: w, height: h)
+        let w = Self.islandWidth, h = w * 156 / 420
+        let cap = CGRect(x: 512 - w / 2, y: Self.islandY - h / 2, width: w, height: h)
         if let data = mask.dataProvider?.data, let bytes = CFDataGetBytePtr(data), mask.bitsPerPixel == 8 {
             let bpr = mask.bytesPerRow, mw = CGFloat(mask.width), mh = CGFloat(mask.height)
             var sum = 0.0, n = 0.0
@@ -112,42 +115,70 @@ extension Face {
         return cover
     }
 
-    /// 島：數字下方置中，寬 ≈ 290（稿：face('Portraits') 寬 170／600、y 476／600）
+    /// 島：住在兩組數字中間那道縫的下段（數字長到下緣，島不再壓在數字下面）
+    private static let islandWidth: CGFloat = 220, islandY: CGFloat = 846
     private func drawPhotosIsland(_ g: CGContext, _ now: Double) {
-        drawIsland(g, at: CGPoint(x: 512, y: 812), scale: 290 / 588, liveAt: CGPoint(x: 512, y: 812), now: now)
+        let at = CGPoint(x: 512, y: Self.islandY)
+        drawIsland(g, at: at, scale: Self.islandWidth / 588, liveAt: at, now: now)
     }
 
-    /// Portraits 的兩組大數字：頂在 6%、底到 59%，左右各留 6%
+    /// Portraits 的兩組大數字：頂 58、底 966（官方片尾幀量到約 6%–94%），左右各留 58，中間的縫 248
     private static func portraitDigits(_ date: Date) -> (GlyphShape, GlyphShape) {
         let (hh, mm) = hourMinute(date)
         return portraitDigits(hh, mm)
     }
     private static func portraitDigits(_ hh: String, _ mm: String) -> (GlyphShape, GlyphShape) {
-        let look = ClockLook.active, top: CGFloat = 62, h: CGFloat = 542, gap: CGFloat = 52, w = 512 - gap / 2 - 58
+        let look = ClockLook.active, top: CGFloat = 58, h: CGFloat = 908, gap: CGFloat = 248, w = 512 - gap / 2 - 58
         let a = GlyphShape.clock(hh, look: look, height: h, maxWidth: w, at: CGPoint(x: 512 - gap / 2, y: top), anchorX: 1, weightBoost: 0.1)
         let b = GlyphShape.clock(mm, look: look, height: h, maxWidth: w, at: CGPoint(x: 512 + gap / 2, y: top), anchorX: 0, weightBoost: 0.1)
-        return GlyphShape.centeredPair(a, b)   // 12 小時制的單位數小時也在正中
+        // 不置中成一組：時貼左欄右緣、分貼右欄左緣，縫永遠在正中（主角與膠囊住在這裡）；字體長不到那麼高就上下置中
+        let dy = (top + h / 2) - a.ink.union(b.ink).midY
+        return (a.moved(0, dy), b.moved(0, dy))
     }
 
-    /// 沒有照片：溫暖的漸層當底，同一套 Portraits 版面（玻璃大時間、島在下面），中間一行告訴人照片要放哪裡
+    /// 沒有照片：內建的抽象漸層桌布（深色底上幾團柔光），同一套 Portraits 版面。錶面上不寫字——
+    /// 照片放哪裡由設定的「照片文件夹…」與共享相簿說明交代，不在錶面上教學
     private func renderPhotosEmpty(_ g: CGContext, _ date: Date, _ now: Double) {
-        func paint(_ c: CGContext) {
-            let cs = CGColorSpace(name: CGColorSpace.sRGB)!
-            let grad = CGGradient(colorsSpace: cs, colors: [srgb(0xf6c9a8).cgColor, srgb(0xe9a3a8).cgColor, srgb(0xb79ad6).cgColor] as CFArray,
-                                  locations: [0, 0.55, 1])!
-            c.drawLinearGradient(grad, start: .zero, end: CGPoint(x: 1024, y: 1024), options: [])
-        }
-        paint(g)
         if emptyBackdrop == nil {
-            let clear = snapshotBackdrop(px: 512) { c in paint(c) }
-            emptyBackdrop = (clear, blurredBackdrop(clear, sigma: 14, key: "photosEmpty"))
+            let clear = snapshotBackdrop(px: 512) { c in Self.paintPhotosEmpty(c) }
+            emptyBackdrop = (clear, blurredBackdrop(clear, sigma: 14, key: "photosEmpty2"))
         }
-        drawPortraitClock(g, date, clear: emptyBackdrop?.clear, frosted: emptyBackdrop?.frosted, now: now)
-        drawSymbol(g, "photo.on.rectangle.angled", in: CGRect(x: 480, y: 622, width: 64, height: 54), color: NSColor.white.withAlphaComponent(0.95), weight: .medium)
-        drawCentered(g, L("photos.empty.title", "放几张照片进来"), font: FaceType.sf(36, .bold, mono: false), kern: 0, y: 716, color: .white)
-        drawCentered(g, String(format: L("photos.emptyIn", "把照片放进「%@」文件夹"), photos.folder.lastPathComponent), font: FaceType.sf(28, .medium, mono: false), kern: 0, y: 958,
-                     color: NSColor.white.withAlphaComponent(0.85))
+        photosStatic(g, "empty", date) { c in
+            if let clear = emptyBackdrop?.clear { self.drawUpright(c, clear, in: CGRect(x: 0, y: 0, width: 1024, height: 1024)) }
+            else { Self.paintPhotosEmpty(c) }
+            self.drawPortraitClock(c, date, clear: emptyBackdrop?.clear, frosted: emptyBackdrop?.frosted, now: now)
+        }
         drawPhotosIsland(g, now)
+    }
+
+    /// 抽象漸層：深靛底，左上冷藍、右上珊瑚、左下洋紅三團柔光（像相片裡失焦的光），玻璃數字折射得出顏色
+    private static func paintPhotosEmpty(_ c: CGContext) {
+        let cs = CGColorSpace(name: CGColorSpace.sRGB)!
+        let base = CGGradient(colorsSpace: cs, colors: [srgb(0x1b2346).cgColor, srgb(0x2c2550).cgColor, srgb(0x3a2140).cgColor] as CFArray, locations: [0, 0.55, 1])!
+        c.drawLinearGradient(base, start: .zero, end: CGPoint(x: 0, y: 1024), options: [.drawsBeforeStartLocation, .drawsAfterEndLocation])
+        for (x, y, r, hex, a) in [(170.0, 150.0, 560.0, 0x4f7fe0 as UInt32, 0.62), (860, 300, 600, 0xff7d5c, 0.58), (230, 900, 640, 0xc0479c, 0.55), (760, 980, 420, 0xffb36b, 0.30)] {
+            let col = srgb(hex)
+            let grad = CGGradient(colorsSpace: cs, colors: [col.withAlphaComponent(a).cgColor, col.withAlphaComponent(a * 0.45).cgColor, col.withAlphaComponent(0).cgColor] as CFArray, locations: [0, 0.45, 1])!
+            c.drawRadialGradient(grad, startCenter: CGPoint(x: x, y: y), startRadius: 0, endCenter: CGPoint(x: x, y: y), endRadius: r, options: [])
+        }
+    }
+
+    /// 靜態層（照片或內建底＋玻璃大數字）：一分鐘才變，存成一張圖，眨眼、瞄一眼只重畫膠囊與主角。
+    /// 數字翻動中（digitRoll）不存，每幀照畫；翻完那一幀才存
+    private func photosStatic(_ g: CGContext, _ id: String, _ date: Date, _ draw: @escaping (CGContext) -> Void) {
+        let full = CGRect(x: 0, y: 0, width: 1024, height: 1024)
+        let (hh, mm) = Self.hourMinute(date), env = HPNumeralGlass.current
+        let key = "\(id)|\(hh):\(mm)|\(ClockLook.active.key)|\(HPLook.name)|\(env.reduceTransparency)\(env.reduceMotion)\(HPAccessibility.increaseContrast)|\(Int(renderPixelScale * 100))"
+        if digitRoll == nil, Motion.frozen("digits") == nil, let c = photosStaticCache, c.key == key, digitShown.map({ $0 == (hh, mm) }) ?? false {
+            drawUpright(g, c.image, in: full); Face.cacheHits += 1; return
+        }
+        let sc = renderPixelScale, px = Int((1024 * sc).rounded())
+        let img = makeImage(px, px) { c in
+            if sc != 1 { c.scaleBy(x: sc, y: sc) }
+            draw(c)
+        }
+        photosStaticCache = digitRoll == nil && Motion.frozen("digits") == nil ? (key, img) : nil
+        drawUpright(g, img, in: full); Face.cacheMisses += 1
     }
 
     /// 玻璃大時間；分鐘一變就翻動變了的位數（2.0 R10）
@@ -163,10 +194,10 @@ extension Face {
         digitShown = (hh, mm)
         let (a, b) = Self.portraitDigits(hh, mm)
         guard let roll = digitRoll else {
-            drawClockDigits(g, [a, b], look: look, clear: clear, frosted: frosted, alpha: 1); return
+            drawPortraitDigits(g, [a, b], look: look, clear: clear, frosted: frosted, alpha: 1); return
         }
         let t = CGFloat(Motion.frozen("digits") ?? (now - roll.start))
-        if t > 0.6 { digitRoll = nil; drawClockDigits(g, [a, b], look: look, clear: clear, frosted: frosted, alpha: 1); return }
+        if t > 0.6 { digitRoll = nil; drawPortraitDigits(g, [a, b], look: look, clear: clear, frosted: frosted, alpha: 1); return }
         forceDirty = true   // 翻動中每幀重畫
         let (oa, ob) = Self.portraitDigits(roll.old.0, roll.old.1)
         // 每一組（時、分）：長度一樣就逐位比，不一樣（9→10）整組一起翻
@@ -186,7 +217,7 @@ extension Face {
         let changed = slots.indices.filter { slots[$0].changed }
         if changed.count > 1, let last = changed.last { slots[last].delay = 0.08 }
         let still = slots.filter { !$0.changed }.compactMap(\.new)
-        if !still.isEmpty { drawClockDigits(g, still, look: look, clear: clear, frosted: frosted, alpha: 1) }
+        if !still.isEmpty { drawPortraitDigits(g, still, look: look, clear: clear, frosted: frosted, alpha: 1) }
         let height = a.ink.height > 0 ? a.ink.height : 500
         let outS = HPMotion.T.digitOut.spring, inS = HPMotion.T.digitIn.spring   // 動效包：參數表
         for sl in slots where sl.changed {
@@ -198,17 +229,39 @@ extension Face {
         }
     }
 
+    /// 玻璃數字＋亮緣：官方 Portraits 的數字邊上有一圈細亮線（上緣最亮），在照片上一眼分得出字形。
+    /// 減少透明度、減少動態效果時數字畫成實色（HPNumeralGlass），不加亮緣
+    private func drawPortraitDigits(_ g: CGContext, _ shapes: [GlyphShape], look: ClockLook, clear: CGImage?, frosted: CGImage?, alpha: CGFloat) {
+        drawClockDigits(g, shapes, look: look, clear: clear, frosted: frosted, alpha: alpha)
+        let env = HPNumeralGlass.current
+        guard HPNumeralGlass.usesGlass(look: look, materialLookLinked: HPNumeralGlass.materialLookLinked, reduceTransparency: env.reduceTransparency, reduceMotion: env.reduceMotion),
+              !shapes.isEmpty else { return }
+        let path = CGMutablePath()
+        for s in shapes { path.addPath(s.path) }
+        let ink = path.boundingBoxOfPath
+        let strong = HPAccessibility.increaseContrast
+        g.saveGState(); g.setAlpha(alpha)
+        g.addPath(path); g.clip()
+        // 亮緣：沿外框往內 2 單位的白線，上亮下淡（漸層裁在描邊裡）
+        g.addPath(path.copy(strokingWithWidth: strong ? 6 : 4, lineCap: .round, lineJoin: .round, miterLimit: 1)); g.clip()
+        let cs = CGColorSpace(name: CGColorSpace.sRGB)!
+        let top = NSColor.white.withAlphaComponent(strong ? 0.95 : 0.8), low = NSColor.white.withAlphaComponent(strong ? 0.6 : 0.28)
+        let grad = CGGradient(colorsSpace: cs, colors: [top.cgColor, low.cgColor] as CFArray, locations: [0, 1])!
+        g.drawLinearGradient(grad, start: CGPoint(x: 0, y: ink.minY), end: CGPoint(x: 0, y: ink.maxY), options: [])
+        g.restoreGState()
+    }
+
     /// 一個在動的玻璃位數：畫進透明的小畫布、糊開、帶透明度貼回去
     private func drawMovingDigit(_ g: CGContext, _ shape: GlyphShape, blur: CGFloat, alpha: CGFloat, look: ClockLook, clear: CGImage?, frosted: CGImage?) {
         guard alpha > 0.005 else { return }
-        if blur < 0.3 { drawClockDigits(g, [shape], look: look, clear: clear, frosted: frosted, alpha: alpha); return }
+        if blur < 0.3 { drawPortraitDigits(g, [shape], look: look, clear: clear, frosted: frosted, alpha: alpha); return }
         let sc = renderPixelScale, px = Int((1024 * sc).rounded())
         let pad = blur * 3 + 8
         let box = shape.ink.insetBy(dx: -pad, dy: -pad).intersection(CGRect(x: 0, y: 0, width: 1024, height: 1024))
         guard !box.isNull, box.width > 2 else { return }
         let layer = makeImage(px, px) { c in
             c.scaleBy(x: sc, y: sc)
-            drawClockDigits(c, [shape], look: look, clear: clear, frosted: frosted, alpha: 1)
+            drawPortraitDigits(c, [shape], look: look, clear: clear, frosted: frosted, alpha: 1)
         }
         let ci = CIImage(cgImage: layer)
         let k = CGFloat(layer.width) / 1024

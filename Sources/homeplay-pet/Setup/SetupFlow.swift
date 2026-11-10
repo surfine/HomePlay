@@ -26,7 +26,7 @@ enum SetupFlow {
     /// 走完或略過（之後就不自動出現；設定裡「重新设置」照樣能叫出來）
     static let doneKey = "setup.completed"
     /// 用過的痕跡：有任何一個就不是全新（升級上來的使用者不會被強迫走一遍）
-    static let footprintKeys = [doneKey, Onboarding.defaultsKey, PetLanguage.defaultsKey, HPLook.defaultsKey,
+    static let footprintKeys = [doneKey, Onboarding.defaultsKey, PetLanguage.defaultsKey, HPLook.defaultsKey, PosterStore.defaultsKey,
                                 PersonHome.key, SBStore.key, RemindersApp.sharedKey]
     static let askedScreenKey = "setup.askedScreenRecording"
 

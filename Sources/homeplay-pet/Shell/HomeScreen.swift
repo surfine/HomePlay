@@ -111,12 +111,16 @@ enum Shell {
     }
     static let widgetRadius: CGFloat = HPTokens.Radius.widget   // 第五輪：官方 Photos 小工具量到約 56
 
-    // 頂端藥丸：平常 208×62（稿 100×30）；2.0 P03：長成 Live Activity 時照內容變寬、高度不變（compact／minimal，Shell/LiveActivityStack.swift），上緣不動
-    /// 頂端藥丸的上緣。2.0 align：藥丸中心要跟左上返回鈕、右上時間同一條線（105）——
-    /// 62 高的話 105 − 31 = 74。以前是 46，整條頂列三個元件三條中心線，看起來高低錯落。
-    static let pillTop: CGFloat = HPTokens.cornerControlCenter - LiveActivityStack.height / 2
+    // 頂端藥丸：待機 166×48（眼睛膠囊，2026-11-09 收小一號、仍在安全帶裡）；長成 Live Activity 時照內容變寬、高度回到 54（compact／minimal，Shell/LiveActivityStack.swift），上緣不動
+    /// 頂端藥丸跟 CarPlay 同一顆（166×48）。CarPlay 的上緣貼安全帶中線；主畫面再往下，
+    /// 整顆落在玻璃面板裡。面板上緣以上是黑的，膠囊貼著那條線時圓頂會融進去，眼睛看起來被切掉。
+    static var pillTop: CGFloat {
+        let onCarPlay = HomeIndicator.carPlayCapsule(inset: HomeIndicator.inset).minY
+        let onGlass = HPTokens.Home.panelInset + 8   // 面板內再留一檔最小間距
+        return max(onCarPlay, onGlass)
+    }
     static func pillRect(_ t: CGFloat) -> CGRect {
-        lerp(CGRect(x: 512 - 104, y: pillTop, width: 208, height: 62), LiveActivityStack.compactPill, t)
+        lerp(CGRect(x: 512 - LiveActivityStack.idleWidth / 2, y: pillTop, width: LiveActivityStack.idleWidth, height: LiveActivityStack.idleHeight), LiveActivityStack.compactPill, t)
     }
     /// 2.0 R1：App 左上的返回鈕＝88 px 玻璃圓鈕（✕／‹），圓心在螢幕圓角的圓心上（HPTokens.backButton）；大標題由 App 自己畫在旁邊
     static let navHeight: CGFloat = 88
@@ -423,6 +427,8 @@ extension Face {
         }
         if LiveActivityStack.tick(self, now) { dirty = true }   // 2.0 P03：展開的彈簧、音量條
         if AirDrop.tick(now) { dirty = true }   // AirDrop 收件卡片的出入、訪客臨時接收到期（Shell/AirDrop/）
+        if HomeAlertCard.tick(now) { dirty = true }   // 家庭警報卡：出入、過期收卡（生產端本來沒人叫 HomeAlerts.tick）、版本變化（Shell/HomeAlertCard.swift）
+        warmSpringBoardIfIdle(now)   // 主畫面三層快取的閒置預熱（SpringBoard/SBRender.swift）   // 家庭警報卡：出入、過期收卡（生產端本來沒人叫 HomeAlerts.tick）、版本變化（Shell/HomeAlertCard.swift）
         if act != nil {
             let s = Int(Date().timeIntervalSince1970)
             if s != Shell.lastActivitySecond { Shell.lastActivitySecond = s; dirty = true }
@@ -692,7 +698,7 @@ extension Face {
         for i in acts.indices { acts[i].accent = Shell.nightTint(acts[i].accent, self) }   // 第四輪：夜間的 Live Activity 也是紅的
         if !acts.isEmpty { LiveActivityStack.compactPill = laLayout(acts).pill }
         var r = Shell.pillRect(t)
-        var k: CGFloat = 0.5   // 眼睛大小（drawEye 的 k；錶面上的膠囊是 1.4×scale）；P03：長成活動時眼睛不變大
+        var k: CGFloat = 0.5 * LiveActivityStack.idleHeight / LiveActivityStack.height   // 眼睛大小（drawEye 的 k；錶面上的膠囊是 1.4×scale）；P03：長成活動時眼睛不變大
         if let f = from {
             r = Shell.lerp(f.rect, r, f.e)
             k = (f.rect.height / 156) + (k - f.rect.height / 156) * f.e
@@ -701,10 +707,6 @@ extension Face {
             let e = ClioTalkPanel.progress(Shell.pillSpring, CGFloat(now - pf.start))   // 2.0 R14：彈簧
             r = Shell.lerp(pf.rect, r, e)
             k = (pf.rect.height / 156) + (k - pf.rect.height / 156) * e
-        }
-        if SourceSwitcher.open != nil, from == nil, drawSourceSwitcher(g, pill: r, now: now) {   // 2.0 align D：長按拉出兩顆，這一幀不畫藥丸與眼睛
-            LiveActivityStack.hits = []
-            return
         }
         if t > 0.02 {
             drawActivityStack(g, r, t: t, acts: acts, now: now)   // 2.0 P03：compact／minimal／expanded（Shell/LiveActivityStack.swift）
@@ -721,7 +723,7 @@ extension Face {
         // 第四輪：夜間整面轉紅時只把眼睛那一段貼回原樣（Live Activity 的內容、分離的小藥丸、大卡一起變紅）
         Shell.nightKeep = t > 0.02 ? CGRect(x: ex - laEyesHalf - 6, y: r.minY, width: 2 * laEyesHalf + 12, height: LiveActivityStack.height) : nil
         LiveActivityStack.homeKeep = t > 0.02 ? LiveActivityStack.eyesPath(cx: ex, cy: ey, sep: cur.sep * k, rx: cur.rx * k, ry: cur.ry * k) : nil
-        if from == nil, SourceSwitcher.carPlayBehind(self) { drawSourceBadge(g, pill: r) }   // 2.0 align D：CarPlay 在背景
+        if from == nil, !HeroPull.on, SourceSwitcher.carPlayBehind(self) { drawSourceBadge(g, pill: r) }   // 2.0 align D：CarPlay 在背景；片頭不跟這台 Mac 有沒有接上手機
         let eyes = r.insetBy(dx: -12, dy: -10)
         islandRectBuilding = islandRectBuilding.map { $0.union(eyes) } ?? eyes
         if capsuleCoreBuilding == nil { capsuleCoreBuilding = r }   // 後續 #7：橫滑 Portal 的共享元素

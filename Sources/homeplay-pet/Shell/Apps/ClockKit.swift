@@ -39,16 +39,24 @@ extension HPTokens {
         static let rollTravel: CGFloat = 0.9
     }
 
-    /// 世界時鐘（1024 畫布）：地圖滿版寬、緯度 78°N～56°S；卡片寬 260、間距 20，第四張從右邊露出一截（可以左右捲）
+    /// 世界時鐘（1024 畫布；稿 scratchpad/worldclock 的 512 設計單位 ×2）：上排一頁四個車站鐘，下面一張點陣地圖卡
     enum WorldClock {
-        static let mapTop: CGFloat = 196
-        static let mapNorth: CGFloat = 78, mapSouth: CGFloat = -56
-        static var mapHeight: CGFloat { 1024 * (mapNorth - mapSouth) / 360 }
-        static let cardTop: CGFloat = 598
-        static let cardW: CGFloat = 260, cardH: CGFloat = 378, cardGap: CGFloat = 20
-        static let cardRadius: CGFloat = 44
-        static let dialR: CGFloat = 86, dialTop: CGFloat = 26
-        static let line1: CGFloat = 248, line2: CGFloat = 292, line3: CGFloat = 334
+        static let side: CGFloat = 48, rowTop: CGFloat = 208, colGap: CGFloat = 24, perPage = 4
+        static var colW: CGFloat { (1024 - 2 * side - CGFloat(perPage - 1) * colGap) / CGFloat(perPage) }   // 214
+        /// 小鐘：錶盤半徑 91.2（稿 45.6 設計單位）、圓心離格子上緣 100；城市名、時差的基線；頁點的中心
+        static let dialR: CGFloat = 91.2, dialTop: CGFloat = 100
+        static let nameY: CGFloat = 451, relY: CGFloat = 487, dotsY: CGFloat = 524
+        static let pageDot: CGFloat = 14, pageDotGap: CGFloat = 16
+        /// 地圖卡：內縮 48、圓角與機身同心（登記在 Design/EdgeContainers.swift）
+        static let mapCard = CGRect(x: 48, y: 560, width: 928, height: 416)
+        static var mapRadius: CGFloat { HPTokens.Radius.concentric(rect: mapCard) }
+        static let mapInset: CGFloat = 32, mapStep: CGFloat = 12, mapDot: CGFloat = 3.5
+        /// 全螢幕大鐘（稿 Big：直徑 360 設計單位、置中偏下）：錶盤半徑 328、圓心 (512, 576)；
+        /// 城市＋日期在左上、溫度在右上（避開中央 👀），頁點在最底一顆玻璃膠囊裡——任何字都不壓在錶盤上
+        static let bigR: CGFloat = 328
+        static let bigCenter = CGPoint(x: 512, y: 576)
+        static let bigTextX: CGFloat = 80, bigNameY: CGFloat = 106, bigDateY: CGFloat = 144, bigTempY: CGFloat = 132
+        static let bigDotsY: CGFloat = 982, bigDot: CGFloat = 12, bigDotGap: CGFloat = 14
         /// 地圖顏色（深色＝實拍；淺色是推斷：同一套明暗關係換成淺灰）
         static var ocean: NSColor { dark ? .black : srgb(0xE9E9ED) }
         static var landDay: NSColor { dark ? srgb(0x4A4A4C) : srgb(0xFFFFFF) }
@@ -56,7 +64,6 @@ extension HPTokens {
         static var oceanNight: NSColor { dark ? .black : srgb(0xD3D3D9) }
         static var terminator: NSColor { dark ? NSColor(white: 0.78, alpha: 1) : NSColor(white: 0.45, alpha: 1) }
         static var meridian: NSColor { dark ? NSColor(white: 1, alpha: 0.07) : NSColor(white: 0, alpha: 0.05) }
-        static var card: NSColor { dark ? srgb(0x2C2C2E) : srgb(0xE5E5EA) }   // 淺色：白錶盤要放在淺灰卡上才看得出圓（推斷）
     }
 }
 

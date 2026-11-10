@@ -73,11 +73,11 @@ enum HomeIndicator {
     }
     /// 外圈那條帶在 1024 畫布上有多高
     static func bandHeight(inset: Int?) -> CGFloat { CGFloat(inset ?? 80) * 1024 / videoSide }
-    /// CarPlay 畫面上的膠囊：比例照頂端藥丸（208×62），整顆收在外圈帶內、上下留白一樣
+    /// CarPlay 畫面上的膠囊：同一顆「大小」（idle 的 height），位置貼安全帶中線——
+    /// 安全區是底線（使用者裁定 2026-11-08），任何縱橫比的流都不蓋內容
     static func carPlayCapsule(inset: Int?) -> CGRect {
-        let band = bandHeight(inset: inset)
-        let h = max(28, min(44, band * 0.6)), w = h * 208 / 62
-        let cy = max(h / 2 + 6, band / 2)
+        let h = LiveActivityStack.idleHeight, w = LiveActivityStack.idleWidth
+        let cy = max(h / 2 + 6, bandHeight(inset: inset) / 2)
         return CGRect(x: 512 - w / 2, y: cy - h / 2, width: w, height: h)
     }
     /// CarPlay 上歸外殼的那一塊：膠囊左右各寬 64（手指好按），高到帶的下緣
@@ -94,7 +94,9 @@ enum HomeIndicator {
         let u = p.x / 1024, v = p.y / 1024
         if v < 0.13 && u > 0.70 { return .controlCenter }                     // 右上角往下拉＝控制中心（不變）
         if let pill, pill.contains(p) { return .indicator }
-        if v < 0.12 && u > 0.32 && u < 0.68 { return .indicator }
+        // 頂端中央的備用命中區只在「有畫藥丸」的外殼頁成立；錶面沒有藥丸，不藏一個看不見的下拉把手——
+        // 錶面頂端照手勢語法走橫滑換頁（2026-11-09 整理）
+        if s != .face, v < 0.12 && u > 0.32 && u < 0.68 { return .indicator }
         return .shell
     }
 
@@ -253,8 +255,8 @@ extension PetView {
             Shell.carPlayPeek = true   // 拉著的時候先把 CarPlay 收到背景（會話不動），畫面換成外殼來畫；放手取消再叫回來（見下面）
         }
         if surface == .face {   // 錶面底下要有主畫面：桌布＝這一刻的錶面
-            Shell.homeHue = Shell.hue(fromFace: face.lastFrame, face: face)
-            Shell.captureHomeBackdrop(face.lastFrame)
+            Shell.homeHue = Shell.hue(fromFace: face.backdropFrame, face: face)
+            Shell.captureHomeBackdrop(face.backdropFrame)
         }
         HPGlass.pressUp()
         HomeIndicator.pull = HomeIndicator.Pull(surface: surface, shot: shot, appID: appID, lastMoveAt: now)
@@ -369,7 +371,10 @@ extension PetView {
     @discardableResult
     func carPlayToHome(reason: String) -> Bool {
         let shot = CarPlayDemo.showsVideo ? AppSwitcher.shots[CarPlayApp.id] : CarPlayChrome.shared.snapshot() ?? AppSwitcher.shots[CarPlayApp.id]
-        Shell.nav = ShellNav.carPlayExit
+        // 回哪裡：從 App 資料庫點進來的回資料庫；從 CarPlay App 圖示進來的照 appReturn；其餘照舊回主畫面。
+        // iPhone App 從資料庫打開時 shellOpenApp 不換頁，nav 還停在 .library——正好記住了來源。
+        let back = ShellNav.carPlayReturn(from: Shell.nav.screen, appReturn: Shell.nav.appReturn)
+        Shell.nav = ShellNav(screen: .app(CarPlayApp.id), overlay: .none, appReturn: back)
         Shell.carPlayPeek = true   // 收到背景時不讓 showVideo(false) 把導覽打回錶面（同膠囊）
         let sent = CarPlayDemo.active || ((NSApp.delegate as? AppDelegate)?.carPlayToBackgroundForShell() ?? false)
         Shell.carPlayPeek = false
@@ -447,11 +452,12 @@ enum HomeIndicatorSelfTest {
         check(H.cardScale(0, armed: false) == 1 && H.cardScale(200, armed: false) < H.cardScale(100, armed: false) && H.cardScale(5000, armed: false) == 0.5,
               "膠囊：卡片拉越遠越小，有下限")   // l10n-ignore
         check(H.cardScale(80, armed: true) == AppSwitcher.cardScale, "膠囊：停住時卡片縮成切換器卡片的大小")   // l10n-ignore
-        // CarPlay 上的位置：整顆在外圈 80 px 帶內
-        let cap = H.carPlayCapsule(inset: 80), band = H.bandHeight(inset: 80)
-        check(cap.minY > 0 && cap.maxY < band && abs(cap.midX - 512) < 0.01 && abs(band - 80 * 1024 / 1088) < 0.01,
-              "膠囊：CarPlay 上整顆收在安全區外圈（80 px）裡，不蓋 CarPlay 內容")   // l10n-ignore
-        check(abs(cap.width / cap.height - 208 / 62) < 0.01, "膠囊：CarPlay 上的比例跟頂端藥丸一樣（只是縮小）")   // l10n-ignore
+        // CarPlay 上：大小＝全系統同一顆（208×62），整顆收在安全帶內
+        let cap = H.carPlayCapsule(inset: 80)
+        let band = H.bandHeight(inset: 80)
+        check(cap.width == LiveActivityStack.idleWidth && cap.height == LiveActivityStack.idleHeight
+              && cap.maxY <= band && cap.minY > 0,
+              "膠囊：CarPlay 上同大小（166×48）且整顆收在安全帶內")   // l10n-ignore
         // 歸屬：CarPlay 上只有膠囊那條帶歸外殼
         let inset = 80
         check(H.owner(CGPoint(x: 512, y: 30), on: .carPlay, pill: nil, inset: inset) == .indicator, "歸屬：CarPlay 上按在膠囊＝外殼")   // l10n-ignore
@@ -461,9 +467,9 @@ enum HomeIndicatorSelfTest {
               "歸屬：CarPlay 上帶外、帶的兩端（含右上角）全部給 iPhone")   // l10n-ignore
         check(H.owner(CGPoint(x: 900, y: 40), on: .face, pill: nil, inset: nil) == .controlCenter
               && H.owner(CGPoint(x: 900, y: 40), on: .app, pill: Shell.pillRect(0), inset: nil) == .controlCenter, "歸屬：錶面／App 上右上角往下拉＝控制中心（不變）")   // l10n-ignore
-        check(H.owner(CGPoint(x: 512, y: 60), on: .face, pill: nil, inset: nil) == .indicator
-              && H.owner(CGPoint(x: 512, y: 130), on: .home, pill: LiveActivityStack.pillHit, inset: nil) == .indicator,
-              "歸屬：錶面頂端中間、主畫面的藥丸＝膠囊")   // l10n-ignore
+        check(H.owner(CGPoint(x: 512, y: 60), on: .face, pill: nil, inset: nil) == .shell
+              && H.owner(CGPoint(x: 512, y: LiveActivityStack.pillHit.midY), on: .home, pill: LiveActivityStack.pillHit, inset: nil) == .indicator,
+              "歸屬：錶面頂端不藏下拉把手（照樣橫滑換頁）；主畫面的藥丸＝膠囊")   // l10n-ignore
         check(H.owner(CGPoint(x: 512, y: 500), on: .face, pill: nil, inset: nil) == .shell, "歸屬：螢幕其他地方照原本的路（換頁、轉身體、點按）")   // l10n-ignore
         // 放手：拖離藥丸（沒往下拉）再放開＝取消，不是 Home 鍵；原地點照舊；拉著照距離收；長按用掉了不再做事
         check(H.releaseAction(consumed: false, claimed: false, moved: true, onCarPlay: false) == .none
@@ -477,5 +483,8 @@ enum HomeIndicatorSelfTest {
         check(!H.pullBegins(surface: .carPlay, demo: false, backgrounded: false) && H.pullBegins(surface: .carPlay, demo: false, backgrounded: true)
               && H.pullBegins(surface: .carPlay, demo: true, backgrounded: false) && H.pullBegins(surface: .app, demo: false, backgrounded: false),
               "膠囊：CarPlay 收不到背景（交接凍結）就不開始拉，畫面與導覽一致")   // l10n-ignore
+        // 2.0 兩邊互通（2026-11-09）：👀 點一下的歸屬——CarPlay 在背景切回 CarPlay，否則留給 HomePlay
+        check(SourceSwitcher.capsuleTap(carPlayBehind: true) == .carPlay && SourceSwitcher.capsuleTap(carPlayBehind: false) == .home,
+              "👀 膠囊：CarPlay 在背景時點一下＝切回 CarPlay；沒有背景會話＝Home 鍵／播放暫停")   // l10n-ignore
     }
 }

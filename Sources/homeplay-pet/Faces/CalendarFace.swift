@@ -1,5 +1,6 @@
-// 行事曆錶面：照 HomeView 的 Calendar 錶面——淺灰底、紅色月份與時間、藍色月曆格，
-// 今天的日期是壓在格子後面的巨大紅色圓頭粗筆畫數字（單筆畫構成，0–9 自己設計），今天那格是深藍圓。
+// 行事曆錶面：照 HomeView 的 Calendar 錶面——配色照現在的 Look 四層色票（固件行事曆的 12 種 Look）：
+// 底＝background；月份、時間、星期列、今天那格＝secondary（材質版的 secondary 是白，標題改用數字的黑、今天那格黑底白字）；
+// 今天的日期是格子後面的巨大圓頭粗筆畫數字（單筆畫構成，0–9 自己設計），用 numerals 色、壓到極低對比，只當底紋，不跟日期格搶。
 // 稿：docs/design-drafts/faces-v3/artifact/engine_tail.js face('行事曆')（600 單位座標 × 1024/600）。
 // 驗證用：HOMEPLAY_DATE=2026-10-04 可固定顯示的日期（時間仍取 --time／現在）。
 
@@ -78,7 +79,7 @@ extension Face {
         let date = Self.calendarToday
         let cal = Calendar.current
         let dc = cal.dateComponents([.year, .month, .day, .hour, .minute], from: date)
-        let key = "\(dc.year ?? 0)-\(dc.month ?? 0)-\(dc.day ?? 0) \(dc.hour ?? 0):\(dc.minute ?? 0)|\(L10n.language.rawValue)|\(Int(renderPixelScale * 100))|\(cal.firstWeekday)"
+        let key = "\(dc.year ?? 0)-\(dc.month ?? 0)-\(dc.day ?? 0) \(dc.hour ?? 0):\(dc.minute ?? 0)|\(L10n.language.rawValue)|\(Int(renderPixelScale * 100))|\(cal.firstWeekday)|\(HPLook.name)|\(HPAccessibility.increaseContrast)"
         if let c = calendarStaticCache, c.key == key {
             drawUpright(g, c.image, in: full); Face.cacheHits += 1
         } else {
@@ -107,21 +108,40 @@ extension Face {
         let k: CGFloat = 1024 / 600
         let loc = L10n.language.locale
         var cal = Calendar.current; cal.locale = loc
-        let blue = srgb(0x1c5fd8), red = srgb(0xf2433d)
-        g.setFillColor(srgb(0xeeeeef).cgColor); g.fill(CGRect(x: 0, y: 0, width: 1024, height: 1024))
+        let look = HPLook.faceLook(.calendar), ic = HPAccessibility.increaseContrast
+        let material = look.numerals == 0x000000
+        // 官方形象照的角色分配（🟢 取樣）：標題/時間＝numerals（Red-Blue 的紅）、
+        // 星期列與日期＝secondary（藍）、今天＝secondary 壓暗 55% 的海軍藍圓（實測 #002E64≈#006FFF×0.45）＋白字
+        let ink = material ? NSColor.black : look.secondary_color                // 日期格的數字（官方是藍）
+        let accent = material ? NSColor.black : look.numerals_color              // 月份、時間（官方是紅）
+        let todayFill = material ? NSColor.black
+            : (look.secondary_color.blended(withFraction: 0.66, of: .black) ?? look.secondary_color)
+        let todayText = material ? look.secondary_color : NSColor.white
+        g.setFillColor(look.background_color.cgColor); g.fill(CGRect(x: 0, y: 0, width: 1024, height: 1024))
 
         let today = cal.component(.day, from: date)
-        // 巨大紅色筆畫數字，壓在格子後面：整組置中於 x=300（600 單位），筆畫中線上緣 200、下緣 462
+        // 六週格先算出來（巨數字要對齊今天那一欄）
+        let first = cal.date(from: cal.dateComponents([.year, .month], from: date))!
+        let off = (cal.component(.weekday, from: first) - cal.firstWeekday + 7) % 7
+        let start = cal.date(byAdding: .day, value: -off, to: first)!
+        let month = cal.component(.month, from: date)
+        let todayIndex = (0..<42).first { i in
+            let d = cal.date(byAdding: .day, value: i, to: start)!
+            return cal.component(.day, from: d) == today && cal.component(.month, from: d) == month
+        } ?? 0
+        let todayCol = todayIndex % 7
+        // 巨大筆畫數字：官方形象照裡只佔今天那一欄、高度約三列，貼在日期格後面當底紋（不是整面置中）
         let digits = String(today).compactMap { Int(String($0)) }.map(calDigit)
-        let gap: CGFloat = 40
-        let total = digits.reduce(0) { $0 + $1.1 } + gap * CGFloat(digits.count - 1)
-        var x0 = (digits.count == 1 ? 288 : 300) - total / 2
+        let gs: CGFloat = 190 / calDigitH
+        let total = digits.reduce(0) { $0 + $1.1 } * gs
+        var x0 = (80 + CGFloat(todayCol) * 71.2) - total / 2
         g.saveGState()
-        g.setStrokeColor(srgb(0xff4b47).cgColor); g.setLineWidth(46 * k); g.setLineCap(.round); g.setLineJoin(.round)
+        g.setStrokeColor(look.numerals_color.withAlphaComponent(material ? (ic ? 0.04 : 0.06) : (ic ? 0.55 : 0.85)).cgColor)
+        g.setLineWidth(46 * k * gs); g.setLineCap(.round); g.setLineJoin(.round)
         for (path, w) in digits {
-            var t = CGAffineTransform(scaleX: k, y: k).translatedBy(x: x0, y: 200)
+            var t = CGAffineTransform(scaleX: k * gs, y: k * gs).translatedBy(x: x0 / gs, y: 196)
             if let p = path.copy(using: &t) { g.addPath(p); g.strokePath() }
-            x0 += w + gap
+            x0 += w * gs
         }
         g.restoreGState()
 
@@ -130,11 +150,11 @@ extension Face {
         var tsize: CGFloat = 35 * k
         let capL = 297 * k - 14
         while tsize > 24 * k, 46 * k + Typo.width(title, FaceType.sf(tsize, .semibold, mono: false)) > capL { tsize -= 1 }
-        drawLeft(g, title, font: FaceType.sf(tsize, .semibold, mono: false), x: 46 * k, y: 78 * k, color: red, kern: -0.3 * k)
+        drawLeft(g, title, font: FaceType.sf(tsize, .semibold, mono: false), x: 46 * k, y: 78 * k, color: accent, kern: -0.3 * k)
         let (h, m) = Self.hourMinute(date)
         let tf = FaceType.sf(35 * k, .semibold, mono: true), ts = "\(h):\(m)"
         let tw = Typo.width(ts, tf)
-        drawLeft(g, ts, font: tf, x: 556 * k - tw, y: 78 * k, color: red)
+        drawLeft(g, ts, font: tf, x: 556 * k - tw, y: 78 * k, color: accent)
 
         func centered(_ s: String, _ cx: CGFloat, _ base: CGFloat, _ font: NSFont, _ color: NSColor) {
             let w = Typo.width(s, font)
@@ -144,13 +164,9 @@ extension Face {
         let fw = cal.firstWeekday
         let syms = cal.veryShortWeekdaySymbols
         let wf = FaceType.sf(31 * k, .bold, mono: false)
-        for i in 0..<7 { centered(syms[(fw - 1 + i) % 7], (80 + CGFloat(i) * 71.2) * k, 141 * k, wf, blue) }
+        for i in 0..<7 { centered(syms[(fw - 1 + i) % 7], (80 + CGFloat(i) * 71.2) * k, 141 * k, wf, ink) }
 
-        // 六週格
-        let first = cal.date(from: cal.dateComponents([.year, .month], from: date))!
-        let off = (cal.component(.weekday, from: first) - fw + 7) % 7
-        let start = cal.date(byAdding: .day, value: -off, to: first)!
-        let month = cal.component(.month, from: date)
+        // 六週格（first／off／start／month 已在巨數字前算好）
         let nf = FaceType.sf(32 * k, .semibold, mono: false)
         for i in 0..<42 {
             let d = cal.date(byAdding: .day, value: i, to: start)!
@@ -159,11 +175,11 @@ extension Face {
             let inMonth = cal.component(.month, from: d) == month
             let n = cal.component(.day, from: d)
             if inMonth && n == today {
-                g.setFillColor(srgb(0x0b2a5c).cgColor)
+                g.setFillColor(todayFill.cgColor)
                 g.fillEllipse(in: CGRect(x: cx - 31 * k, y: y - 11 * k - 31 * k, width: 62 * k, height: 62 * k))
-                centered(String(n), cx, y, nf, .white)
+                centered(String(n), cx, y, nf, todayText)
             } else {
-                centered(String(n), cx, y, nf, blue.withAlphaComponent(inMonth ? 1 : 0.32))
+                centered(String(n), cx, y, nf, ink.withAlphaComponent(inMonth ? 1 : (ic ? 0.5 : 0.3)))
             }
         }
     }

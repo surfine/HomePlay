@@ -152,6 +152,9 @@ enum SB {
         return v.isEmpty ? [0] : v
     }
     nonisolated(unsafe) static var page = 0
+    /// 閒置預熱進度（warmSpringBoardIfIdle）：0–3；warmAt 防同幀重入
+    nonisolated(unsafe) static var warmStage = 0
+    nonisolated(unsafe) static var warmAt: Double = 0
     nonisolated(unsafe) static var pagePos = MotionValue("sbpage", spring: SBMotion.page, from: 0, to: 0, now: 0)
     nonisolated(unsafe) static var pageDragging = false
     nonisolated(unsafe) static var pageSamples: [(t: Double, x: CGFloat)] = []
@@ -170,7 +173,7 @@ enum SB {
         anims.removeAll()
         // App 資源庫這一格：翻到就是資源庫畫面（不走霧化過場，畫面已經跟著手滑過去了）；翻回來就是主畫面
         if libraryReachable, to == librarySlot {
-            if Shell.nav.screen == .home { Shell.nav.screen = .library; libraryQuery = ""; librarySearching = false; menu = nil; Shell.peopleSheet = false }
+            if Shell.nav.screen == .home { Shell.nav.screen = .library; libraryQuery = ""; librarySearching = false; setLibraryExpanded(nil, now: CACurrentMediaTime(), immediate: true); menu = nil; Shell.peopleSheet = false }
         } else if Shell.nav.screen == .library {
             Shell.nav.screen = .home
         }
@@ -244,6 +247,46 @@ enum SB {
     }
     nonisolated(unsafe) static var libraryQuery = ""
     nonisolated(unsafe) static var librarySearching = false
+    /// 點豆莢標題展開的那一類（nil＝豆莢總覽）。
+    /// 系統的對應物是 `SBHLibraryPodFolderController`／`expandedCategoryPodIconSpacing`：
+    /// 豆莢標題點下去開該類的展開頁，點豆莢裡的圖示才是直接開 App。
+    nonisolated(unsafe) static var libraryExpanded: SBLibraryCategory? = nil
+    /// 0＝豆莢總覽、1＝展開頁。`+[SBHLibraryPodZoomSettings _defaultCrossfadeSettings]` 把 duration 設成 0.2
+    /// （`__DATA` 0x1c5d74850）。臨界阻尼走到 95% 的 response＝0.2/0.76。
+    nonisolated(unsafe) static var libraryReveal = MotionValue("sbLibReveal", spring: Spring.settling(0.2), from: 0, to: 0, now: 0)
+    /// 展開頁內容的縮放：0＝還停在豆莢的大小、1＝滿版。彈簧與 0.05 秒延遲都是量到的常數（`SBLPodZoom`）。
+    /// 跟 `libraryReveal` 的 0.2 秒交叉淡化同時跑，不是同一條。
+    nonisolated(unsafe) static var libraryZoom = MotionValue("sbLibZoom", spring: SBLPodZoom.spring, from: 0, to: 0, now: 0, delay: SBLPodZoom.delay)
+    /// 正在淡出展開頁。animating 結束時才把 libraryExpanded 清掉；直接賦值（自檢）不會被清。
+    nonisolated(unsafe) static var libraryClosing = false
+
+    /// 點豆莢標題展開、點空白收回。快照直接落在終點，畫面才不會停在半透明。
+    static func setLibraryExpanded(_ cat: SBLibraryCategory?, now: Double, immediate: Bool = SnapshotPrivacy.active) {
+        if let cat {
+            libraryClosing = false
+            libraryExpanded = cat
+            if immediate {
+                libraryReveal.set(1, velocity: 0, now: now)
+                libraryZoom.set(1, velocity: 0, now: now)
+            } else {
+                libraryReveal.retarget(1, now: now)
+                libraryZoom.retarget(1, now: now, spring: SBLPodZoom.spring)
+                libraryZoom.delay = SBLPodZoom.delay
+            }
+        } else if immediate {
+            libraryClosing = false
+            libraryExpanded = nil
+            libraryReveal.set(0, velocity: 0, now: now)
+            libraryZoom.set(0, velocity: 0, now: now)
+        } else {
+            libraryClosing = libraryExpanded != nil
+            libraryReveal.retarget(0, now: now)
+            libraryZoom.retarget(0, now: now, spring: SBLPodZoom.spring)
+            libraryZoom.delay = SBLPodZoom.delay
+        }
+    }
+    /// 正在看展開頁（淡出的途中算回總覽，點擊才不會打在正在消失的那一層）
+    static var libraryShowingExpanded: Bool { libraryExpanded != nil && libraryReveal.to > 0.5 }
     // MARK: App 資料庫捲動（2.0 depth：第 17 個 App 起畫在螢幕外點不到；iOS 的資料庫可以捲）
     nonisolated(unsafe) static var libraryScroll = MotionValue("sbLibScroll", spring: SBMotion.settle, from: 0, to: 0, now: 0)
     nonisolated(unsafe) static var libraryScrollDragging = false
@@ -252,8 +295,22 @@ enum SB {
 
     /// 內容比畫面高多少（px）；0＝不用捲（16 個內建 App 剛好四列）
     static var libraryMaxScroll: CGFloat {
-        let last = SBUI.libraryLayout().cells.last?.minY ?? SBUI.libraryTop   // 分區標題也算進去（iPhone 分類）
-        return max(0, last + SBUI.libraryRowHeight - (1024 - 30))
+        let bottom: CGFloat
+        if SB.libraryQuery.isEmpty && !SB.librarySearching {
+            if libraryShowingExpanded {   // 展開的類別頁
+                bottom = (SBUI.libraryExpandedCells().last?.maxY ?? SBUI.libraryTop) + HPTokens.Home.labelBaseline
+            } else {
+                // 捲動以一整列豆莢為一格：最後一列要能捲到第一列的位置，不能停在切半的地方。
+                let n = SBUI.libraryPods().count
+                let rows = (n + SBLPodGrid.columns - 1) / SBLPodGrid.columns
+                bottom = SBUI.libraryTop + CGFloat(max(0, rows - 1)) * SBLPodGrid.rowPitch + SBLPodGrid.podHeight + SBLPodGrid.labelBand
+                return max(0, bottom - SBUI.libraryPodClipBottom)
+            }
+        } else {
+            let last = SBUI.libraryLayout().cells.last?.minY ?? SBUI.libraryTop   // 分區標題也算進去（iPhone 分類）
+            bottom = last + SBUI.libraryRowHeight
+        }
+        return max(0, bottom - (1024 - 30))
     }
     static var libraryScrollNow: CGFloat { libraryScrollDragging ? libraryScrollDrag : libraryScroll.value(CACurrentMediaTime()) }
     /// 兩頭的橡皮筋（拖的時候用）
@@ -298,6 +355,9 @@ enum SB {
         if editing && !HPMotion.reduceMotion && sheet == nil && folder == nil { return true }   // 晃動
         if !pagePos.done(now) { return true }
         if libraryScrollDragging || !libraryScroll.done(now) { return true }   // 2.0 depth：資料庫捲動
+        if !libraryReveal.done(now) { return true }
+        if !libraryZoom.done(now) { return true }
+        if libraryClosing { libraryExpanded = nil; libraryClosing = false }   // 交叉淡出結束
         if anims.values.contains(where: { !$0.x.done(now) || !$0.y.done(now) }) { return true }
         if !fades.isEmpty { return true }
         if let m = menu, !m.presence.done(now) { return true }

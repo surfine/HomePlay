@@ -101,10 +101,13 @@ enum SBBoardSelftest {
         check(menus.allSatisfy { screen.insetBy(dx: 30, dy: 30).contains($0) }, "SpringBoard：每一格長按的選單都在螢幕裡")
         check(SBUI.galleryEntries().allSatisfy { SBUI.sheetCard.contains($0.1) } && SBUI.galleryEntries().count == SBWidgetKind.allCases.count,   // 2.0 Web App 的不在圖庫（＋Smart Stack −Web App）
               "SpringBoard：圖庫清單每個小工具（含 Smart Stack）都在 sheet 裡")   // l10n-ignore：selftest 訊息
-        let cells = SBUI.libraryLayout().cells
-        // 2026-10-25 間距加大後內建 App 要捲一點（像 iOS App 資料庫）：左右在畫面內、捲到底每個都看得到
-        let libScroll = SB.libraryMaxScroll
-        check(cells.allSatisfy { let r = SBUI.libraryIcon($0); return r.minX >= 14 && r.maxX <= 1010 && r.minY >= SBUI.libraryTop && r.maxY - libScroll + 40 < 1000 }, "SpringBoard：App 資料庫的全部 App 都在畫面裡")
+        // 2026-11-09：瀏覽時改成豆莢網格（3 欄），檢查的是豆莢裡每一顆圖示
+        let podIcons = Array(SBUI.libraryPodIcons().values)
+        let podBottom = SBUI.libraryTop + SBLPodGrid.contentHeight(SBUI.libraryPods())
+        let podScroll = max(0, podBottom - (1024 - 30))
+        check(!podIcons.isEmpty && podIcons.allSatisfy { r in
+            r.minX >= 14 && r.maxX <= 1010 && r.minY >= SBUI.libraryTop && r.maxY - podScroll + 40 < 1000
+        }, "SpringBoard：App 資料庫的豆莢圖示都在畫面裡（捲到底看得到最後一列）")   // l10n-ignore：selftest 訊息
         check(SBUI.pageThumbs(5).allSatisfy { screen.contains(SBUI.pageCheck($0)) }, "SpringBoard：編輯頁面五頁也放得下")
 
         // 輔助使用：編輯模式有完成、項目有搬移的自訂動作；選單打開時只列選單
@@ -130,6 +133,9 @@ enum SBBoardSelftest {
 enum SBLayoutSelftest {
     static func run(_ check: (Bool, String) -> Void) {
         check(Shell.gridTop == 241 && Shell.rowPitch == 240 && SBUI.dotsY == 976, "主畫面：首列頂 241、列距 240、頁點 976（官方量的值）")   // l10n-ignore
+        let pill = Shell.pillRect(0)
+        check(pill.minY >= HPTokens.Home.panelInset + 8 && pill.maxY < HPTokens.Home.greetingBaseline,
+              "主畫面：眼睛膠囊整顆在玻璃面板裡，上緣至少留 8，不壓到問候語")   // l10n-ignore
         let w = Shell.widgetRect(col: 0, row: 0)
         check(abs(w.width - 392) < 0.5 && abs(w.height - 392) < 0.5, "主畫面：2×2 小工具 392（＝iOS small 158 pt）")   // l10n-ignore
         let row3Icon = SB.iconRect(in: SB.frame(col: 0, row: 2, span: (1, 1)))

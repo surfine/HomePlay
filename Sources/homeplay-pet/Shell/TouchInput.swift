@@ -8,11 +8,12 @@
 // - NSPressGestureRecognizer：機身上按住＝右鍵選單（HIG：右鍵選單＝按住）。螢幕上的按住照外殼自己的長按。
 // - NSMagnificationGestureRecognizer：兩指捏合＝縮放桌寵（跟觸控板捏合同一個語意）。
 // - NSPanGestureRecognizer（正好兩指）：機身上兩指拖＝轉身體（跟觸控板兩指滑同一個語意）。
-// 捏合與兩指拖在同一個 view 裡互斥（誰先認出來歸誰），view 設 exclusiveGestureBehavior＝.exclusive。
-// 兩指旋轉不接：觸控板的旋轉早就刻意不轉身體（捏合時手指總會帶一點扭轉，見 PetView.rotate）。
+// - NSRotationGestureRecognizer：兩指旋轉＝原地轉身（2026-11-07 拍板，跟觸控板兩指旋轉同一個語意；放手帶慣性停）。
+// 捏合與兩指拖在同一個 view 裡互斥（誰先認出來歸誰），view 設 exclusiveGestureBehavior＝.exclusive；
+// 捏合與旋轉讓兩個辨識器同時跑，由 TouchInput.twoLock（TwoFingerLock）判：先超過門檻的勝，到手指離開都只認它。
 //
-// 觸控跟滑鼠不同的只有這幾處（處理碼對所有輸入一樣，依互動類型決定呈現）：
-// 螢幕上的拖一律歸外殼（直向＝捲、橫向＝換頁；機身上的拖照舊轉身體）、點按判定區外擴到 44 pt（太小太密的碰了先展開）、
+// 觸控跟滑鼠不同的只有這幾處（處理碼對所有輸入一樣，依互動類型決定呈現；螢幕上的拖歸外殼三種輸入都一樣）：
+// 點按判定區外擴到 44 pt（太小太密的碰了先展開）、
 // 👀 看手指、返回滑動先看系統設定（NSEvent.isTouchSwipeNavigationEnabled）。
 // 系統對同一下觸控另外模擬出來的滑鼠／滾輪／捏合事件（手指還在、或剛放開 0.35 秒內）一律丟掉，同一下不會觸發兩次。
 
@@ -34,6 +35,8 @@ enum TouchRoute {
     }
     /// 捏合：整個桌寵都收（同觸控板），只有 CarPlay 直播的螢幕上不收（那裡的兩指只給實驗旗標）
     static func pinchAccepts(_ r: TouchRegion, live: Bool) -> Bool { !(r == .screen && live) }
+    /// 兩指旋轉＝轉身：跟捏合一樣整個桌寵都收，CarPlay 直播的螢幕上不收
+    static func rotationAccepts(_ r: TouchRegion, live: Bool) -> Bool { pinchAccepts(r, live: live) }
     /// 兩指拖＝轉身體：只在機身起手（同觸控板：螢幕上的兩指滑不轉）
     static func twoFingerPanAccepts(_ r: TouchRegion) -> Bool { r == .body }
     /// 按住＝右鍵選單：只在機身；螢幕上的按住是外殼的長按（圖示選單、錶面總覽、App 長按）
@@ -262,6 +265,11 @@ enum TouchInput {
     /// 第二根手指（CarPlay 實驗旗標用）
     nonisolated(unsafe) static var second: NSPoint?
     nonisolated(unsafe) static var pinchLast: CGFloat = 0
+    nonisolated(unsafe) static var rotationLast: CGFloat = 0
+    /// 捏合與旋轉互斥（同一次兩指只認一個）；兩個辨識器都結束才重來
+    nonisolated(unsafe) static var twoLock = TwoFingerLock()
+    nonisolated(unsafe) static var pinchActive = false
+    nonisolated(unsafe) static var rotationActive = false
     nonisolated(unsafe) static var probe: ((Double, Double), (Double, Double))?
     nonisolated(unsafe) static var pan2Active = false
     /// 除錯疊圖（HOMEPLAY_TOUCH_DEBUG=1）：畫出每個目標外擴後的判定區
@@ -395,7 +403,8 @@ extension PetView: NSGestureRecognizerDelegate {
         let pinch = NSMagnificationGestureRecognizer(target: self, action: #selector(touchPinchAction(_:)))
         let pan2 = NSPanGestureRecognizer(target: self, action: #selector(touchPan2Action(_:)))
         pan2.minimumNumberOfTouches = 2; pan2.maximumNumberOfTouches = 2
-        for r in [tracker, press, pinch, pan2] as [NSGestureRecognizer] {
+        let rotation = NSRotationGestureRecognizer(target: self, action: #selector(touchRotationAction(_:)))
+        for r in [tracker, press, pinch, pan2, rotation] as [NSGestureRecognizer] {
             r.allowedTouchTypes = .direct
             r.delegate = self
             addGestureRecognizer(r)
@@ -419,6 +428,7 @@ extension PetView: NSGestureRecognizerDelegate {
         case is TouchTracker: return true
         case is NSPressGestureRecognizer: return TouchRoute.pressMenuAccepts(region)
         case is NSMagnificationGestureRecognizer: return TouchRoute.pinchAccepts(region, live: live)
+        case is NSRotationGestureRecognizer: return TouchRoute.rotationAccepts(region, live: live)
         case is NSPanGestureRecognizer: return TouchRoute.twoFingerPanAccepts(region)
         default: return false
         }
@@ -430,7 +440,10 @@ extension PetView: NSGestureRecognizerDelegate {
     }
 
     func gestureRecognizer(_ g: NSGestureRecognizer, shouldRecognizeSimultaneouslyWith other: NSGestureRecognizer) -> Bool {
-        g is TouchTracker || other is TouchTracker   // 單指追蹤跟誰都並存；捏合與兩指拖、按住之間互斥
+        if g is TouchTracker || other is TouchTracker { return true }   // 單指追蹤跟誰都並存
+        // 捏合與旋轉同時跑，由 TwoFingerLock 判歸誰（先超過門檻的勝）；其餘（兩指拖、按住）互斥
+        return (g is NSMagnificationGestureRecognizer && other is NSRotationGestureRecognizer)
+            || (g is NSRotationGestureRecognizer && other is NSMagnificationGestureRecognizer)
     }
 
     // MARK: 動作（每個都處理 .cancelled，回到乾淨狀態）
@@ -472,16 +485,42 @@ extension PetView: NSGestureRecognizerDelegate {
         switch r.state {
         case .began:
             if TouchInput.arbiter.twoFingerBegan() { touchAbortPointerSequence() } else { TouchInput.commitWork?.cancel() }
+            if !TouchInput.rotationActive { TouchInput.twoLock.reset() }
+            TouchInput.pinchActive = true
             TouchInput.pinchLast = r.magnification
             log("touch: pinch began")
         case .changed:
             // magnification 是從起手累計；換成這一幀的倍率，跟觸控板捏合一樣限幅
             let f = min(1.06, max(0.94, (1 + r.magnification) / max(0.05, 1 + TouchInput.pinchLast)))
             TouchInput.pinchLast = r.magnification
+            guard TouchInput.twoLock.feed(scale: f - 1) == .pinch else { return }   // 這一次兩指歸旋轉（或還沒定）：不縮放
             if abs(f - 1) > 0.0005 { resizeWindow(toWidth: bounds.width * f, anchorCenter: true) }
         case .ended, .cancelled, .failed:
-            TouchInput.pinchLast = 0
+            TouchInput.pinchLast = 0; TouchInput.pinchActive = false
+            if !TouchInput.rotationActive { TouchInput.twoLock.reset() }
             touchEndResize()
+        default: break
+        }
+    }
+
+    /// 兩指旋轉＝原地轉身（跟觸控板同一條：PetView.twistYaw；放手帶慣性，減少動態效果直接停）
+    @objc func touchRotationAction(_ r: NSRotationGestureRecognizer) {
+        let t = ProcessInfo.processInfo.systemUptime
+        switch r.state {
+        case .began:
+            if TouchInput.arbiter.twoFingerBegan() { touchAbortPointerSequence() } else { TouchInput.commitWork?.cancel() }
+            if !TouchInput.pinchActive { TouchInput.twoLock.reset() }
+            TouchInput.rotationActive = true
+            TouchInput.rotationLast = r.rotation
+            log("touch: rotation began")
+        case .changed:
+            let d = r.rotation - TouchInput.rotationLast
+            TouchInput.rotationLast = r.rotation
+            if TouchInput.twoLock.feed(angle: d) == .rotate { twistYaw(by: d, timestamp: t) }
+        case .ended, .cancelled, .failed:
+            TouchInput.rotationLast = 0; TouchInput.rotationActive = false
+            if TouchInput.twoLock.kind == .rotate { twistYawEnded(timestamp: t) }
+            if !TouchInput.pinchActive { TouchInput.twoLock.reset() }
         default: break
         }
     }
@@ -517,6 +556,7 @@ extension PetView: NSGestureRecognizerDelegate {
         TouchInput.arbiter.phase = .pending
         TouchInput.scroll = nil
         if TouchTip.active { TouchTip.dismiss(); face.forceDirty = true }
+        IntroGuide.note(.touch)   // 手勢引導「自動」：最近一次用的是手指
         touchWillBegin()
         if let f = window?.frame { TouchInput.gaze.press(TouchGaze.pointer(finger: sp, window: f)) }
         // 等一下看是不是兩指：70 ms 到了還是單指就當成按下
@@ -659,11 +699,13 @@ extension PetView: NSGestureRecognizerDelegate {
     /// 搬視窗、縮放用的指標位置：觸控時是手指（系統游標不一定跟著手指走）
     var pointerScreenLocation: NSPoint { TouchInput.synthesizing && TouchInput.fingerDown ? TouchInput.screenPoint : NSEvent.mouseLocation }
 
-    // MARK: 螢幕上的單指拖＝外殼（拍板 4）：本來會交回去轉身體的，觸控時改成捲動
+    // MARK: 螢幕上的單指拖＝外殼（拍板 4）：本來會交回去轉身體的，改成捲動
+    // 2026-11-07 拍板「螢幕是內容、機身是物件」：滑鼠、觸控板的點按拖也走這條（三種輸入意思一致），轉身體只認拖機身
 
-    /// PetView.mouseDown 最後要開始轉身體時問：觸控、而且是在螢幕上按的 → 這一下改成「螢幕拖」
+    /// PetView.mouseDown 最後要開始轉身體時問：按在螢幕上（觸控看手指起手的區域，滑鼠／觸控板看游標）→ 這一下改成「螢幕拖」
     func touchArmsScreenDrag(at p: NSPoint) -> Bool {
-        guard TouchInput.synthesizing, TouchInput.downRegion == .screen, !showingVideo, !carVideo.active else { return false }
+        let region = TouchInput.synthesizing ? TouchInput.downRegion : touchRegion(p)
+        guard TouchRoute.singleFinger(region, live: showingVideo || carVideo.active) == .shell else { return false }
         TouchInput.scroll = TouchScrollState(last: p, pxPerPoint: 1024 / max(40, touchScreenWidthPoints), uv: touchScreenUV(p))
         log("touch: screen drag armed")
         return true
@@ -671,7 +713,7 @@ extension PetView: NSGestureRecognizerDelegate {
 
     /// 轉身體那條路的拖動：螢幕拖就改送捲動。回 true＝吃掉了
     func touchScreenDragged(_ e: NSEvent) -> Bool {
-        guard TouchInput.synthesizing, var s = TouchInput.scroll else { return false }
+        guard var s = TouchInput.scroll else { return false }
         let p = convert(e.locationInWindow, from: nil)
         let raw = (dx: p.x - s.last.x, dy: p.y - s.last.y)
         s.last = p
@@ -695,7 +737,7 @@ extension PetView: NSGestureRecognizerDelegate {
 
     /// 放手：捲過就收尾（帶慣性）並吃掉；沒捲＝點按，交回原本的路（膠囊播放、System 6…）
     func touchScreenReleased(_ e: NSEvent) -> Bool {
-        guard TouchInput.synthesizing, let s = TouchInput.scroll else { return false }
+        guard let s = TouchInput.scroll else { return false }
         TouchInput.scroll = nil
         guard s.lock.started else { return false }
         if s.began { touchDeliverScroll(dx: 0, dy: 0, phase: 4, momentum: 0, uv: s.uv) }
@@ -757,7 +799,7 @@ extension PetView: NSGestureRecognizerDelegate {
         if TouchTip.active, !TouchTip.forced, now > TouchTip.until { TouchTip.dismiss(); face.forceDirty = true }
         // 第一次在觸控螢幕上：出提示卡（只看視窗所在的螢幕；Sidecar 的 iPad 也算）
         if #available(macOS 27.0, *), !TouchTip.active, !AppDelegate.isDiagnosticRun, let s = window?.screen,
-           TouchTip.checkedScreen != ObjectIdentifier(s), !face.onboardingActive, !face.sayingHello {
+           TouchTip.checkedScreen != ObjectIdentifier(s), !face.onboardingActive, !face.sayingHello, IntroGuide.newGestureTips {   // 設定「遇到新手勢時提示一次」關掉就不出
             TouchTip.checkedScreen = ObjectIdentifier(s)
             if s.touchCapabilities.contains(.multiTouch), !TouchTip.shown {
                 TouchTip.active = true; TouchTip.until = now + TouchTip.duration; face.forceDirty = true

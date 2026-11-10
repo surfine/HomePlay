@@ -6,25 +6,29 @@ import SwiftUI
 private typealias M = DemoMath
 private let deg = DemoMath.deg
 
-enum IllusScene: String, CaseIterable, Identifiable {
-    case pinch, slide, three, force, facing, facingFront, follow, charge, onTop, light
-    var id: String { rawValue }
+enum IllusScene: Hashable {
+    case pinch, three, force, facing, facingFront, follow, charge, onTop, light
+    case shortcut, clio, people, devices      // 家庭、ClioTalk、家人、iPhone 與 iPad 的頁首（SettingsPageDemos.swift）
+    case gesture(GestureKind, IntroInput)     // 手勢頁：選中哪一行就播哪一個（SettingsGestureDemos.swift）
 
     var cycle: Double {
         switch self {
         case .pinch: return 3.4
-        case .slide: return 3.8
         case .three: return 4.2
         case .force, .onTop: return 4.4
         case .facing, .facingFront: return 4.8
         case .follow, .charge, .light: return 6.0
+        case .shortcut: return 6.4
+        case .clio: return 5.2
+        case .people: return 5.0
+        case .devices: return 5.6
+        case .gesture(let k, let i): return GestureDemo.cycle(k, i)
         }
     }
-    /// 播完 3 輪停住的那一幀（秒）
+    /// 播完 3 輪停住的那一幀（秒）；「減少動態效果」時只畫這一幀
     var key: Double {
         switch self {
         case .pinch: return 1.15
-        case .slide: return 0.85
         case .three: return 1.0
         case .force: return 0.98
         case .facing, .facingFront: return 1.6
@@ -32,6 +36,11 @@ enum IllusScene: String, CaseIterable, Identifiable {
         case .charge: return 2.2
         case .onTop: return 1.4
         case .light: return 2.3
+        case .shortcut: return 4.6
+        case .clio: return 1.8
+        case .people: return 2.4
+        case .devices: return 3.0
+        case .gesture(let k, let i): return GestureDemo.key(k, i)
         }
     }
 
@@ -39,7 +48,6 @@ enum IllusScene: String, CaseIterable, Identifiable {
         InPanel.background(g, p)
         switch self {
         case .pinch: Self.pinchL(g, p, t)
-        case .slide: Self.slideL(g, p, t)
         case .three: Self.threeL(g, p, t)
         case .force: Self.forceL(g, p, t)
         case .facing, .facingFront: Self.facingL(g, p, t)
@@ -47,12 +55,16 @@ enum IllusScene: String, CaseIterable, Identifiable {
         case .charge: Self.chargeL(g, p, t)
         case .onTop: Self.onTopL(g, p, t)
         case .light: Self.lightL(g, p, t)
+        case .shortcut: PageDemo.shortcutL(g, p, t)
+        case .clio: PageDemo.clioL(g, p, t)
+        case .people: PageDemo.peopleL(g, p, t)
+        case .devices: PageDemo.devicesL(g, p, t)
+        case .gesture(let k, let i): GestureDemo.left(k, i, g, p, t)
         }
     }
     func right(_ g: GraphicsContext, _ p: IllusPalette, _ t: Double) {
         switch self {
         case .pinch: Self.pinchR(g, p, t)
-        case .slide: Self.slideR(g, p, t)
         case .three: Self.threeR(g, p, t)
         case .force: Self.forceR(g, p, t)
         case .facing: Self.facingR(g, p, t, fixed: false)
@@ -61,20 +73,25 @@ enum IllusScene: String, CaseIterable, Identifiable {
         case .charge: Self.chargeR(g, p, t)
         case .onTop: Self.onTopR(g, p, t)
         case .light: Self.lightR(g, p, t)
+        case .shortcut: PageDemo.shortcutR(g, p, t)
+        case .clio: PageDemo.clioR(g, p, t)
+        case .people: PageDemo.peopleR(g, p, t)
+        case .devices: PageDemo.devicesR(g, p, t)
+        case .gesture(let k, let i): GestureDemo.right(k, i, g, p, t)
         }
     }
 
     // MARK: 雙指張合：縮放
 
     private static let pinchSep = Track(0.09, [(0.55, 0.30, .settle), (1.55, 0.09, .settle)])
-    private static func pinchL(_ g: GraphicsContext, _ p: IllusPalette, _ t: Double) {
+    static func pinchL(_ g: GraphicsContext, _ p: IllusPalette, _ t: Double) {
         InPanel.trackpad(g, p)
         let d = (x: cos(-32 * deg), y: sin(-32 * deg) * 1.4)
         for (s, dn) in [(1.0, 0.30), (-1.0, 0.34)] {
             InPanel.finger(g, p, t: t, down: dn, up: 2.25) { u in InPanel.padPt(0.5 + s * d.x * pinchSep(u), 0.52 + s * d.y * pinchSep(u)) }
         }
     }
-    private static func pinchR(_ g: GraphicsContext, _ p: IllusPalette, _ t: Double) {
+    static func pinchR(_ g: GraphicsContext, _ p: IllusPalette, _ t: Double) {
         OutPanel.background(g, p); OutPanel.sun(g, 26, 24); OutPanel.dots(g, 160, 92)
         let sc = Track(1, [(0.62, 1.24, .settle), (1.62, 1.0, .settle)])(t), guide = M.presence(t, 0.6, 1.62)
         if guide > 0.01 {
@@ -85,17 +102,9 @@ enum IllusScene: String, CaseIterable, Identifiable {
         FlatHome(x: 100, y: 104, S: 52, scale: sc, look: CGPoint(x: 0, y: -0.2), blink: M.blink(t, at: 2.7)).draw(g, p)
     }
 
-    // MARK: 雙指一起滑：轉身體
+    // MARK: 轉身體（手勢頁「轉身體」「兩指旋轉」的右格）
 
-    private static let slideX = Track(0.34, [(0.42, 0.66, .glide), (1.82, 0.34, .glide)])
-    private static func slideL(_ g: GraphicsContext, _ p: IllusPalette, _ t: Double) {
-        InPanel.trackpad(g, p)
-        for (dx, d1, u1) in [(-0.075, 0.25, 1.05), (0.075, 0.28, 1.07)] {
-            let second = t >= 1.5
-            InPanel.finger(g, p, t: t, down: second ? d1 + 1.5 : d1, up: second ? u1 + 1.4 : u1) { u in InPanel.padPt(slideX(u) + dx, 0.54) }
-        }
-    }
-    private static func slideR(_ g: GraphicsContext, _ p: IllusPalette, _ t: Double) {
+    static func slideR(_ g: GraphicsContext, _ p: IllusPalette, _ t: Double) {
         OutPanel.background(g, p); OutPanel.half(g, 22, Illus.H, 22); OutPanel.zig(g, 150, 22)
         let yf = Track(0, [(0.47, 30 * deg, .glide), (1.05, 38 * deg, .glide), (1.86, 4 * deg, .glide), (2.47, 0, .glide)])
         let yaw = yf(t), vel = (yaw - yf(t - 0.016)) / 0.016
@@ -115,7 +124,7 @@ enum IllusScene: String, CaseIterable, Identifiable {
 
     // MARK: 三指拖移：搬視窗
 
-    private static func threeL(_ g: GraphicsContext, _ p: IllusPalette, _ t: Double) {
+    static func threeL(_ g: GraphicsContext, _ p: IllusPalette, _ t: Double) {
         InPanel.trackpad(g, p)
         let cx = Track(0.3, [(0.5, 0.7, .glide), (2.05, 0.3, .glide)])
         let off: [(Double, Double)] = [(-0.13, 0.05), (0, -0.05), (0.13, 0.05)]
@@ -126,12 +135,12 @@ enum IllusScene: String, CaseIterable, Identifiable {
             }
         }
     }
-    private static func threeR(_ g: GraphicsContext, _ p: IllusPalette, _ t: Double) {
+    static func threeR(_ g: GraphicsContext, _ p: IllusPalette, _ t: Double) {
         OutPanel.background(g, p); OutPanel.desktop(g, p); OutPanel.window(g, 18, 22, 70, 52)
         let px = Track(0.22, [(0.5, 0.80, .glide), (2.05, 0.22, .glide)])
         let lift = Track(0, [(0.32, 1, .calm), (1.38, 0, .calm), (1.88, 1, .calm), (3.12, 0, .calm)])(t)
         let yaw = M.aim(at: t, follow: false) { atan(-(2 * px($0) - 1) * Aim.parallax) }
-        FlatHome(x: 30 + 140 * px(t), y: 104 - lift * 3, S: 34 * (1 + 0.04 * lift), yaw: yaw, reveal: 1, phase: t / IllusScene.three.cycle).draw(g, p)
+        FlatHome(x: 30 + 140 * px(t), y: 104 - lift * 3, S: 34 * (1 + 0.04 * lift), yaw: yaw, reveal: 1, phase: t / 4.2).draw(g, p)
     }
 
     // MARK: 稍微用力按下：進入／退出 CarPlay
@@ -140,7 +149,7 @@ enum IllusScene: String, CaseIterable, Identifiable {
         func c(_ s: Double) -> Double { DemoSpring.pop.step(t - s) - DemoSpring.pop.step(t - s - 0.09) }
         return c(0.78) + c(2.78)
     }
-    private static func forceL(_ g: GraphicsContext, _ p: IllusPalette, _ t: Double) {
+    static func forceL(_ g: GraphicsContext, _ p: IllusPalette, _ t: Double) {
         InPanel.trackpad(g, p)
         let pressure = Track(0, [(0.45, 1, .settle), (0.98, 0, .calm), (2.45, 1, .settle), (2.98, 0, .calm)])(t)
         let c = InPanel.padPt(0.5, 0.52), first = t < 1.8, dn = first ? 0.30 : 2.30, up = first ? 1.25 : 3.25
@@ -166,11 +175,11 @@ enum IllusScene: String, CaseIterable, Identifiable {
         }
         InPanel.finger(g, p, t: t, down: dn, up: up, scale: 1 - 0.1 * click(t)) { _ in c }
     }
-    private static func forceR(_ g: GraphicsContext, _ p: IllusPalette, _ t: Double) {
+    static func forceR(_ g: GraphicsContext, _ p: IllusPalette, _ t: Double) {
         OutPanel.background(g, p); OutPanel.halo(g, p, 100, 64, 48); OutPanel.sun(g, 170, 24, 6)
         let reveal = Track(0, [(0.80, 1, .bloom), (2.80, 0, .settle)])(t)
         FlatHome(x: 100, y: 104, S: 58, scale: 1 - 0.02 * click(t), reveal: M.clamp(reveal, 0, 1.2), look: CGPoint(x: 0, y: 0.2),
-                 blink: M.blink(t, at: 3.7), phase: t / IllusScene.force.cycle).draw(g, p)
+                 blink: M.blink(t, at: 3.7), phase: t / 4.4).draw(g, p)
     }
 
     // MARK: 朝向
@@ -250,9 +259,9 @@ enum IllusScene: String, CaseIterable, Identifiable {
     }
     private static func chargeR(_ g: GraphicsContext, _ p: IllusPalette, _ t: Double) {
         OutPanel.background(g, p); OutPanel.dots(g, 16, 16)
-        FlatHome(x: 74, y: 104, S: 60, reveal: 1, phase: t / IllusScene.charge.cycle).draw(g, p)
+        FlatHome(x: 74, y: 104, S: 60, reveal: 1, phase: t / 6.0).draw(g, p)
         for k in 0..<3 {   // 無線弧：一直都在（相位跟週期對齊）
-            let f = ((t / IllusScene.charge.cycle * 5 - Double(k) * 0.22).truncatingRemainder(dividingBy: 1) + 1).truncatingRemainder(dividingBy: 1)
+            let f = ((t / 6.0 * 5 - Double(k) * 0.22).truncatingRemainder(dividingBy: 1) + 1).truncatingRemainder(dividingBy: 1)
             InPanel.stroke(g, Path { q in q.addArc(center: CGPoint(x: 150, y: 60), radius: 10 + f * 20, startAngle: .radians(.pi * 0.82), endAngle: .radians(.pi * 1.18), clockwise: false) },
                            .white.opacity(sin(.pi * f) * 0.85), 2)
         }

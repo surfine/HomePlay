@@ -14,7 +14,7 @@ import AppKit
 /// 一個無障礙項目（畫布座標）
 struct ShellAXItem: Equatable {
     enum Kind: Equatable { case homeItem, chrome, control, text }
-    enum Press: Equatable { case tap(CGPoint), cc(ControlCenter.Tile), clio(ClioTalkPanel.Chip), back, carPlay, none }
+    enum Press: Equatable { case tap(CGPoint), cc(ControlCenter.Tile), clio(ClioTalkPanel.Chip), back, carPlay, intro(IntroGuide.Action), introHint(open: Bool), none }
     var id: String
     var kind: Kind
     var role: HPAXNote.Role
@@ -44,6 +44,8 @@ enum ShellAccessibility {
     // MARK: 依目前畫面列出項目
 
     static func items(face: Face, now: Double = CACurrentMediaTime()) -> [ShellAXItem] {
+        // 2.0 手勢引導：每頁的標題、說明、表格列念得出來，略過／下一個／輸入方式按得到（Intro/IntroGuide.swift）
+        if Onboarding.active, !SetupFlow.active, !PermissionPrimer.visible { return introItems() }
         // 這些卡蓋在最上面、各自有自己的點按規則：先不展開（PetView 本身的標籤照舊）
         if PermissionPrimer.visible || face.onboardingActive || face.inOverview { return [] }
         if PeopleOverlay.capturesClicks { return enrollItems() }   // 2.0 depth：录脸引导（PeopleOverlay.swift）
@@ -80,6 +82,13 @@ enum ShellAccessibility {
             if let p = pillItem(face: face, now: now) { out.append(p) }
             out += liveActivityItems(face: face)
             out += SBAX.items(face: face)   // 2.0 SpringBoard：多頁、資料夾、選單、sheet、App 資料庫（Shell/SpringBoard/SBInput.swift）
+            if face.introHintVisible, IntroHint.cardRect != .zero {   // 2.0 升級提示卡：蓋在主畫面上，排在最前面
+                out.insert(ShellAXItem(id: "introHint.close", kind: .control, role: .button, label: L("a11y.close", "关闭"),
+                                       rect: IntroHint.closeRect, shape: .circle, press: .introHint(open: false)), at: 0)
+                out.insert(ShellAXItem(id: "introHint", kind: .control, role: .button, label: L("intro.hint.title", "有新的手势引导"),
+                                       value: L("intro.hint.body", "点一下现在看，或之后到设置里重看"),
+                                       rect: IntroHint.cardRect, shape: .rounded(IntroHint.radius), press: .introHint(open: true)), at: 0)
+            }
         case .app(let id):
             if let p = pillItem(face: face, now: now) { out.append(p) }
             out += liveActivityItems(face: face)
@@ -186,6 +195,20 @@ enum ShellAccessibility {
             guard let p = PeopleRegistry.shared.person(id) else { return nil }
             return ShellAXItem(id: "people.\(id)", kind: .control, role: .button, label: p.name, rect: r, shape: .rounded(30), press: .tap(center(r)))
         }
+    }
+
+    /// 2.0 手勢引導：畫的時候記下的字與按鈕（IntroGuide.texts／hits，1024 座標）
+    private static func introItems() -> [ShellAXItem] {
+        var out: [ShellAXItem] = []
+        for (i, t) in IntroGuide.texts.enumerated() {
+            out.append(ShellAXItem(id: "intro.text\(i)", kind: .text, role: t.role, label: t.label, rect: t.rect, shape: .rounded(16)))
+        }
+        for (i, h) in IntroGuide.hits.enumerated() {
+            let role: HPAXNote.Role = h.selected.map { .radio($0) } ?? .button
+            out.append(ShellAXItem(id: "intro.hit\(i)", kind: .control, role: role, label: h.label, rect: h.rect,
+                                   shape: .capsule, press: .intro(h.action)))
+        }
+        return out
     }
 
     /// 2.0 depth：录脸引导卡（以前 VoiceOver 听不到「看着屏幕，慢慢转头」，也按不到取消）
@@ -394,6 +417,8 @@ extension PetView {
         case .clio(let c): ClioTalkController.shared.tap(c)
         case .back: shellNavigate(.back)
         case .carPlay: onForceEnter?()
+        case .intro(let a): IntroGuide.perform(a)
+        case .introHint(let open): introHintTap(open: open)
         case .none: return false
         }
         face.forceDirty = true

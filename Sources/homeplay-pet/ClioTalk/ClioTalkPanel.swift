@@ -87,6 +87,9 @@ enum ClioTalkPanel {
             s.kept = true
         case "thinking":
             s.phase = .thinking
+        case "streaming":   // 回答到一半（水滴的「回答」狀態快照）
+            s.phase = .streaming
+            s.answer = String(L("clio.demo.answer", "这周有两个生日：\n周二 10月27日：[朋友 A] 生日\n周五 10月30日 · 19:00：[朋友 B] 生日晚餐").prefix(9))
         case "error":
             s.phase = .error
             s.error = ClioError.missingKey.message
@@ -616,6 +619,7 @@ extension Face {
         ClioTalkController.shared.voice.tick()   // 2.0 語音：跟進倒數、沒開口逾時
         let moving = p == .thinking || p == .streaming || now - ClioTalkPanel.pressAt < 0.3 || ClioTalkPanel.voiceAnimating
             || now - ClioTalkPanel.openedAt < 0.8 || now - ClioTalkPanel.revealAt < 0.8   // 2.0 R9：滴下來、逐行浮現
+            || ClioTalkPanel.orbSettling   // 水滴的狀態過場還沒走完（空閒且到位就不逐幀）
         return na != a || (moving && now - ClioTalkPanel.lastDraw >= 1.0 / 30)
     }
 
@@ -675,8 +679,10 @@ extension Face {
         let think: CGFloat = voice.screen == .thinking ? P.progress(HPMotion.T.clioThink.spring, CGFloat(now - voice.thinkAt)) : 0
         let diameter = voice.screen == .card ? A.orbDiameter : A.listenDiameter + (A.orbDiameter - A.listenDiameter) * think
         let wv = t > 0 && !HPMotion.reduceMotion ? P.dropSpring.value(from: 0, to: 1, velocity: 0, t: t).v : 0   // 動效包：水滴的速度（拉長用）
+        let presence = P.orbPresence(s, voice, now: now)   // 水滴與卡片邊框光的同一個「存在」
+        drawClioEdgeGlow(g, presence, alpha: w)
         let bead = drawClioOrb(g, now, w: w, diameter: diameter, from: P.islandFrom ?? Shell.pillRect(0),
-                               busy: s.phase == .thinking || s.phase == .streaming || voice.screen == .thinking, speed: wv)
+                               busy: s.phase == .thinking || s.phase == .streaming || voice.screen == .thinking, speed: wv, presence: presence)
         // 聆聽中：右上 14 px 橘色麥克風點（跟 iOS 的錄音指示同一個語言）
         if voice.screen == .listening || ClioTalkController.shared.voice.loop.micOpen {
             let c = Screen.cornerCapsuleCenter(.topRight, width: 88, height: 88)
@@ -901,7 +907,8 @@ extension Face {
     /// 第三輪：👀 膠囊變成助理的珠。w 0…1：從 from（錶面上的眼睛膠囊或頂端藥丸）走到官方珠的位置、收成直徑 diameter 的正圓，
     /// 膠囊的年代材質淡出、黑色玻璃珠淡入；眼睛一直是同一對 👀，只跟著縮放。回傳珠最後的框（點它＝用說的問）
     @discardableResult
-    func drawClioOrb(_ g: CGContext, _ now: Double, w: CGFloat, diameter: CGFloat, from cap: CGRect, busy: Bool, speed: CGFloat = 0) -> CGRect {
+    func drawClioOrb(_ g: CGContext, _ now: Double, w: CGFloat, diameter: CGFloat, from cap: CGRect, busy: Bool, speed: CGFloat = 0,
+                     presence: OrbPresence = OrbPresence()) -> CGRect {
         let A = HPTokens.Assistant.self
         let breathe: CGFloat = busy && !HPMotion.reduceMotion ? 1 + 0.035 * CGFloat(sin(now * 4)) : 1   // 在想：珠輕輕地呼吸
         let d = diameter * breathe
@@ -926,7 +933,8 @@ extension Face {
             }
             g.endTransparencyLayer(); g.restoreGState()
         }
-        HPComponents.assistantOrb(g, r, shape: path, alpha: w)
+        // 珠的材質：官方水滴的做法——光照體積＋液面＋狀態邊緣光，ClioTalk 的四色（Faces/Capsule.swift 的 LiquidOrb）
+        LiquidOrb.draw(g, r, shape: path, presence, style: .current, alpha: w, liquidLevel: 0.64, stable: w >= 0.999)
         // 眼睛：膠囊上的大小（高 ÷ 156）→ 珠裡的大小（直徑 103 時 0.5，跟頂端藥丸一樣大）
         let k0 = cap.height / 156, k1 = 0.5 * d / A.orbDiameter
         let k = k0 + (k1 - k0) * w
@@ -940,7 +948,7 @@ extension Face {
     /// 示範用的圖片卡（--cliotalk-demo cyanotype）：我們自己畫的藍曬圖——普魯士藍底、白色植物線條。不是任何真實照片
     func drawClioDemoImage(_ g: CGContext, _ r: CGRect) {
         g.saveGState()
-        g.addPath(continuousRoundedRect(r, radius: HPTokens.Assistant.cardRadius)); g.clip()
+        g.addPath(continuousRoundedRect(r, radius: HPTokens.Radius.concentric(rect: r))); g.clip()   // 同心（拍板 2026-11-08）
         let cs = CGColorSpace(name: CGColorSpace.sRGB)
         let grad = CGGradient(colorsSpace: cs, colors: [srgb(0x0D3278).cgColor, srgb(0x0B3984).cgColor, srgb(0x0A3076).cgColor] as CFArray, locations: [0, 0.5, 1])!
         g.drawLinearGradient(grad, start: CGPoint(x: r.minX, y: r.minY), end: CGPoint(x: r.maxX, y: r.maxY), options: [])
@@ -1027,5 +1035,83 @@ extension Face {
             }
         }
         return (nil, s)
+    }
+}
+
+// MARK: - 水滴的狀態（聆聽／思考／回答／空閒）：珠與卡片邊框光共用
+
+extension ClioTalkPanel {
+    nonisolated(unsafe) static var orbMix = OrbPresence()
+    nonisolated(unsafe) static var orbMixAt = 0.0
+    nonisolated(unsafe) static var orbSettling = false
+    nonisolated(unsafe) private static var answerSeenLen = 0
+    nonisolated(unsafe) private static var answerGrowAt = -10.0
+
+    /// 這一刻的存在：聆聽（麥克風開著）、思考（送出後等回答）、回答（串流中）；過場往目標靠（τ 0.18 s），快照與減少動態效果直接到位
+    static func orbPresence(_ s: ClioSnapshot, _ v: ClioVoiceView, now: Double) -> OrbPresence {
+        var goal = OrbPresence()
+        if v.screen == .listening { goal.listen = 1 }
+        else if v.screen == .thinking || s.phase == .thinking { goal.think = 1 }
+        else if s.phase == .streaming { goal.answer = 1 }
+        // 回答的節奏：字每長一段就亮一下，隨後衰減
+        let n = s.answer.count
+        if n != answerSeenLen { if n > answerSeenLen { answerGrowAt = now }; answerSeenLen = n }
+        var m = goal
+        if demo == nil && !HPMotion.reduceMotion && orbMixAt > 0 {
+            let k = CGFloat(1 - exp(-max(0, now - orbMixAt) / 0.18))
+            m.listen = orbMix.listen + (goal.listen - orbMix.listen) * k
+            m.think = orbMix.think + (goal.think - orbMix.think) * k
+            m.answer = orbMix.answer + (goal.answer - orbMix.answer) * k
+        }
+        orbMixAt = now
+        orbSettling = abs(m.listen - goal.listen) + abs(m.think - goal.think) + abs(m.answer - goal.answer) > 0.01
+        let vs = ClioTalkController.shared.voice
+        m.level = demo == nil && v.screen == .listening && vs.active ? vs.micLevel : nil   // 真實麥克風音量；示範用假包絡
+        m.beat = demo == nil ? CGFloat(exp(-max(0, now - answerGrowAt) / 0.16)) : nil
+        m.t = demo != nil ? HPMotion.frozen("cliodrop") ?? now : now
+        orbMix = m
+        return m
+    }
+}
+
+extension Face {
+    /// 卡片的邊框光：跟珠同一個狀態（同一個「存在」的兩處）——沿螢幕邊往內，聆聽寬而柔、思考窄而亮、回答跟著字明滅、空閒幾乎看不見
+    func drawClioEdgeGlow(_ g: CGContext, _ p: OrbPresence, alpha: CGFloat) {
+        let style = OrbStyle.current
+        let e = LiquidOrb.edgeLight(p, reduceMotion: style.reduceMotion)
+        let full = CGRect(x: 0, y: 0, width: 1024, height: 1024), path = Screen.path(in: full)
+        g.saveGState(); g.setAlpha(alpha)
+        if style.increaseContrast {   // 增加對比：一條實線
+            if p.activity > 0.01 {
+                g.addPath(path); g.clip()
+                g.addPath(path); g.setLineWidth(8); g.replacePathWithStrokedPath(); g.clip()
+                g.drawLinearGradient(LiquidOrb.band, start: .zero, end: CGPoint(x: 1024, y: 0), options: [])
+            }
+            g.restoreGState(); return
+        }
+        // 環的內半徑換成往內的深度：水滴半徑 1 ↔ 螢幕邊往內 96 單位；小畫布上畫硬邊的帶子再模糊（同 LiquidOrb 的邊緣光）
+        let depth = (1 - e.inner) * 96
+        if e.intensity > 0.004, depth > 0.5, let img = SoftCanvas.screen.render(full, scale: 0.25, blur: depth * 0.6, key: [Int(depth)], device: LiquidOrb.deviceScale(g), { c in
+            c.addPath(path); c.setLineWidth(depth * 1.1); c.replacePathWithStrokedPath(); c.clip()
+            c.drawLinearGradient(LiquidOrb.band, start: .zero, end: CGPoint(x: 1024, y: 0), options: [])
+        }) {
+            g.setAlpha(alpha * min(1, e.intensity * 0.7))   // 底是純白／純黑，一般混合就夠（加法混合在整條邊上比較貴）
+            // 只疊四條邊＋四個圓角的內側（光只在邊上；整面疊一張 1024² 的圖太貴）。圓角往內彎約 0.3 個半徑，角落多補一塊
+            let t = min(512, (depth * 1.35 + 6).rounded(.up))   // 帶子半寬 0.55·depth＋兩次模糊的展開 0.6·depth
+            let c = min(512, t + (Screen.cornerRadius * 0.3).rounded(.up)), W: CGFloat = 1024
+            let q = W / CGFloat(img.width)
+            let parts = [CGRect(x: 0, y: 0, width: W, height: t), CGRect(x: 0, y: W - t, width: W, height: t),
+                         CGRect(x: 0, y: t, width: t, height: W - 2 * t), CGRect(x: W - t, y: t, width: t, height: W - 2 * t),
+                         CGRect(x: t, y: t, width: c - t, height: c - t), CGRect(x: W - c, y: t, width: c - t, height: c - t),
+                         CGRect(x: t, y: W - c, width: c - t, height: c - t), CGRect(x: W - c, y: W - c, width: c - t, height: c - t)]
+            for d in parts where d.width > 0 && d.height > 0 {
+                let x0 = (d.minX / q).rounded(), y0 = (d.minY / q).rounded()   // 各邊各自取整：相鄰兩塊不重疊
+                let src = CGRect(x: x0, y: y0, width: (d.maxX / q).rounded() - x0, height: (d.maxY / q).rounded() - y0)
+                if let part = img.cropping(to: src) {
+                    LiquidOrb.drawUprightImage(g, part, in: CGRect(x: src.minX * q, y: src.minY * q, width: src.width * q, height: src.height * q))
+                }
+            }
+        }
+        g.restoreGState()
     }
 }

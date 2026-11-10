@@ -128,7 +128,7 @@ extension Face {
         let A = HPTokens.Assistant.self
         let hasDetail = !h.detail.isEmpty
         let r = CGRect(x: A.rowInset, y: top, width: 1024 - 2 * A.rowInset, height: hasDetail ? 176 : 140)
-        let path = continuousRoundedRect(r, radius: 44)
+        let path = continuousRoundedRect(r, radius: HPTokens.Radius.concentric(rect: r))
         g.saveGState()
         if h.state == .done {
             g.setShadow(offset: CGSize(width: 0, height: -4), blur: 18, color: NSColor(white: 0, alpha: HPTokens.dark ? 0.4 : 0.12).cgColor)

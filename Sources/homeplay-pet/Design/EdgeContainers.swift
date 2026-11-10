@@ -39,6 +39,10 @@ enum EdgeContainers {
             Entry(name: "首次設定：權限卡", rect: SetupCards.permissions(rows: SetupPermission.allCases.count),   // l10n-ignore
                   radius: SetupCards.radius(SetupCards.permissions(rows: SetupPermission.allCases.count))),
             Entry(name: "即時動態展開大卡", rect: la, radius: LiveActivityStack.expandedRadius(la)),   // l10n-ignore
+            Entry(name: "手勢引導：字卡", rect: Face.introCaption, radius: Face.introRadius(Face.introCaption)),   // l10n-ignore
+            Entry(name: "手勢引導：其他手勢清單卡", rect: Face.introList, radius: Face.introRadius(Face.introList)),   // l10n-ignore
+            Entry(name: "手勢引導：桌寵本身動作表", rect: Face.introTable, radius: Face.introRadius(Face.introTable)),   // l10n-ignore
+            Entry(name: "手勢引導：升級提示卡", rect: IntroHint.card, radius: IntroHint.radius),   // l10n-ignore
         ]
         // 下面幾個在畫的地方寫 Screen.concentric(inset: card.minX)：登記它們的框，框改了讓 minX 不再是最近的那邊時這裡會擋
         for (name, r) in [("小工具圖庫 sheet", Shell.galleryCard), ("切換家人 sheet", Shell.sheetCard),   // l10n-ignore
@@ -46,6 +50,7 @@ enum EdgeContainers {
             list.append(Entry(name: name, rect: r, radius: Screen.concentric(inset: r.minX)))
         }
         list.append(Entry(name: "計時器橫幅", rect: HPTokens.bannerCard, radius: Face.bannerRadius))   // l10n-ignore
+        list.append(Entry(name: "世界時鐘地圖卡", rect: HPTokens.WorldClock.mapCard, radius: HPTokens.WorldClock.mapRadius))   // l10n-ignore
         return list
     }
 

@@ -165,3 +165,88 @@ extension NSColor {
         return 0.2126 * c.redComponent + 0.7152 * c.greenComponent + 0.0722 * c.blueComponent > 0.72
     }
 }
+
+// MARK: - 數字系統（錶面體系：海報配置的 numerals）
+// 官方海報配置有 numerals 欄位（出廠 "arabic" 🟢，docs/hv-reference/poster_descriptors.json）；iOS 鎖定畫面同一套系統字體
+// ADTNumeric.ttc 收了阿拉伯－印度、天城文、孟加拉、緬甸、高棉數字（本機 macOS 27 實測 CTFontGetGlyphsForCharacters，見 HVTruth.Numerals）。
+// 做法：字串照常用 ASCII 數字組，畫之前把 0–9 換成那一套的十個字；冒號、字母不動。
+
+extension PosterConfiguration.Numerals {
+    /// 這一套的「0」（Unicode 裡十個數字連號）
+    var zero: UInt32 {
+        switch self {
+        case .arabic: return 0x30
+        case .arabicIndic: return 0x0660
+        case .extendedArabicIndic: return 0x06F0
+        case .devanagari: return 0x0966
+        case .bengali: return 0x09E6
+        case .myanmar: return 0x1040
+        case .khmer: return 0x17E0
+        }
+    }
+    /// ICU／Locale 的數字系統代號
+    var icu: String {
+        switch self {
+        case .arabic: return "latn"
+        case .arabicIndic: return "arab"
+        case .extendedArabicIndic: return "arabext"
+        case .devanagari: return "deva"
+        case .bengali: return "beng"
+        case .myanmar: return "mymr"
+        case .khmer: return "khmr"
+        }
+    }
+    init?(icu: String) {
+        guard let n = Self.allCases.first(where: { $0.icu == icu }) else { return nil }
+        self = n
+    }
+    /// 配置有寫就照配置；沒寫跟著 Locale 的替代數字（例如 hi-IN@numbers=deva）；Locale 的系統不支援就 arabic
+    static func resolve(_ explicit: Self?, locale: Locale = .current) -> Self {
+        explicit ?? Self(icu: locale.numberingSystem.identifier) ?? .arabic
+    }
+}
+
+extension FaceType {
+    /// ASCII 0–9 換成 n 這一套（其他字元不動）
+    static func digits(_ s: String, _ n: PosterConfiguration.Numerals) -> String {
+        guard n != .arabic else { return s }
+        var out = String.UnicodeScalarView()
+        for u in s.unicodeScalars {
+            if (0x30...0x39).contains(u.value), let d = Unicode.Scalar(n.zero + u.value - 0x30) { out.append(d) } else { out.append(u) }
+        }
+        return String(out)
+    }
+    /// 這個字體有沒有整套 n 的數字；沒有就退回 arabic（不讓 CoreText 換別的字體補字，數字跟冒號會變成兩種字）
+    static func numerals(_ n: PosterConfiguration.Numerals, in font: NSFont) -> PosterConfiguration.Numerals {
+        guard n != .arabic else { return n }
+        var ch = (0..<10).map { UniChar(n.zero + UInt32($0)) }, gl = [CGGlyph](repeating: 0, count: 10)
+        return CTFontGetGlyphsForCharacters(font as CTFont, &ch, &gl, 10) ? n : .arabic
+    }
+}
+
+extension PosterConfiguration {
+    /// 這份配置實際用的數字系統（跟隨 Locale 已解開）
+    var resolvedNumerals: Numerals { .resolve(numerals) }
+}
+
+enum NumeralsSelfTest {
+    static func run(_ check: (Bool, String) -> Void) {
+        typealias N = PosterConfiguration.Numerals
+        let d1: Bool = FaceType.digits("10:09", .devanagari) == "\u{967}\u{966}:\u{966}\u{96F}"
+        let d2: Bool = FaceType.digits("10:09", .arabicIndic) == "\u{661}\u{660}:\u{660}\u{669}"
+        let d3: Bool = FaceType.digits("Sat 7", .arabic) == "Sat 7"
+        let d4: Bool = FaceType.digits("a1", .khmer) == "a\u{17E1}"
+        check(d1 && d2 && d3 && d4, "數字系統：0–9 換成那一套、其他字元不動")   // l10n-ignore
+        func loc(_ id: String) -> Locale { Locale(identifier: id) }
+        let r1: N = N.resolve(nil, locale: loc("en-US@numbers=deva")), r2: N = N.resolve(nil, locale: loc("ar-EG")), r3: N = N.resolve(nil, locale: loc("en-US"))
+        check(r1 == .devanagari && r2 == .arabicIndic && r3 == .arabic, "數字系統：沒設定就跟隨 Locale 的替代數字")   // l10n-ignore
+        let r4: N = N.resolve(nil, locale: loc("th-TH@numbers=thai")), r5: N = N.resolve(.arabic, locale: loc("en-US@numbers=deva")), r6: N = N.resolve(.devanagari, locale: loc("en-US"))
+        check(r4 == .arabic && r5 == .arabic && r6 == .devanagari, "數字系統：Locale 的系統不支援退回 arabic；配置有寫就覆蓋 Locale")   // l10n-ignore
+        check(N.allCases.allSatisfy { N(icu: $0.icu) == $0 }, "數字系統：ICU 代號來回一致")   // l10n-ignore
+        // 字體覆蓋：系統錶面數字字體有天城文；SF Pro 沒有 → 退回 arabic
+        let adt = ClockLook.Font.stencil.previewFont(100, weight: 0.5)
+        let c1: N = FaceType.numerals(.devanagari, in: adt), c2: N = FaceType.numerals(.devanagari, in: FaceType.sf(100, .medium))
+        check(c1 == .devanagari && c2 == .arabic,
+              "數字系統：字體沒有那一套數字就退回 arabic")   // l10n-ignore
+    }
+}

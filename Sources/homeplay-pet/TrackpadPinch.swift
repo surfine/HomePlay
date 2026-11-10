@@ -41,6 +41,11 @@ final class TrackpadPinch {
 
     /// 主线程回调；factor 是相对上一帧的倍率（1.02＝这一帧放大 2%）。
     var onMagnify: ((CGFloat) -> Void)?
+    /// 两指旋转（判成 twist 后每帧）：这一帧转了多少弧度（逆时针为正）；手指离开时叫 onRotateEnd（主线程）。
+    /// 2026-11-07 拍板：两指旋转＝桌宠原地转身；捏合与旋转在起手由 TwoFingerClassifier 互斥判定
+    var onRotate: ((CGFloat) -> Void)?
+    var onRotateEnd: (() -> Void)?
+    private var lastAngle: Double?
     /// 最近一次真正应用缩放的时间（main 线程读写），用来避免和本地 magnify 双倍缩放。
     private(set) var lastPinchAt: Double = 0
     func markApplied() { lastPinchAt = CACurrentMediaTime() }
@@ -72,6 +77,11 @@ final class TrackpadPinch {
     }
     /// 是否拿到了触控板接触帧（私有框架不可用时为 false，三指判断要退回旧行为）。
     var available: Bool { !devices.isEmpty }
+    /// 最近一次触控板上有手指的时刻（CACurrentMediaTime；任意线程可读）：点按到达时手指可能已经抬起（轻点），看时间不看当下手指数
+    var lastContactAt: Double {
+        pinchCallbackLock.lock(); defer { pinchCallbackLock.unlock() }
+        return trackpadLastContactAt
+    }
     /// 当前触控板上的手指数（任意线程可读）。
     var fingerCount: Int {
         pinchCallbackLock.lock(); defer { pinchCallbackLock.unlock() }
@@ -112,6 +122,18 @@ final class TrackpadPinch {
     /// 手指离开时只把状态清掉。
     fileprivate func resetGesture() {
         lastDistance = 0
+        if lastAngle != nil { lastAngle = nil; onRotateEnd?() }
+    }
+
+    /// 两指扭转帧（主线程）：两指连线的角度变化＝这一帧转了多少。触控板归一化坐标是长方形的，x 照宽高比（约 1.6）拉回再算角度
+    fileprivate func handleTwist(p0: MTPoint, p1: MTPoint, decidedNow: Bool) {
+        let a = atan2(Double(p1.y - p0.y), Double(p1.x - p0.x) * 1.6)
+        defer { lastAngle = a }
+        if decidedNow { appendDiag("gesture.log", "MT two-finger = twist") }
+        guard let last = lastAngle else { return }
+        var d = a - last
+        if d > .pi { d -= 2 * .pi } else if d < -.pi { d += 2 * .pi }
+        if abs(d) > 1e-4 { onRotate?(CGFloat(d)) }
     }
 
     /// 两指接触帧（主线程）。类型已在触控线程判好：只有捏合才缩放。
@@ -145,6 +167,7 @@ final class TrackpadPinch {
 private let pinchCallbackLock = NSLock()
 private var pinchFingers = -1
 private var lastTwoFingerAt = 0.0   // 最近一次觸控板上正好兩指（CACurrentMediaTime；智慧縮放用）
+private var trackpadLastContactAt = -1e9   // 最近一次觸控板上有手指（手勢引導判斷「這一下是觸控板」用）
 private var classifier = TwoFingerClassifier()   // pinchCallbackLock 保护
 
 private func mtPinchCallback(device: Int32, data: UnsafeMutableRawPointer?, nFingers: Int32,
@@ -154,6 +177,7 @@ private func mtPinchCallback(device: Int32, data: UnsafeMutableRawPointer?, nFin
         pinchCallbackLock.lock()
         let changed = pinchFingers != count
         pinchFingers = count
+        if count > 0 { trackpadLastContactAt = CACurrentMediaTime() }
         pinchCallbackLock.unlock()
         if changed { DispatchQueue.main.async { TrackpadPinch.shared.resetGesture() } }
         return 0
@@ -165,14 +189,21 @@ private func mtPinchCallback(device: Int32, data: UnsafeMutableRawPointer?, nFin
     if pinchFingers != 2 { classifier.reset() }
     pinchFingers = 2
     lastTwoFingerAt = CACurrentMediaTime()
+    trackpadLastContactAt = lastTwoFingerAt
     let before = classifier.kind
     let kind = classifier.feed(id0: a.identifier, x0: Double(a.normalized.position.x), y0: Double(a.normalized.position.y),
                                id1: b.identifier, x1: Double(b.normalized.position.x), y1: Double(b.normalized.position.y))
     pinchCallbackLock.unlock()
     let decidedNow = before == .undecided && kind != .undecided
-    // 只有捏合需要每帧回主线程（缩放）；其余只在判定那一刻通知一次（写日志）
-    guard kind == .pinch || decidedNow else { return 0 }
-    let p0 = a.normalized.position, p1 = b.normalized.position
+    // 捏合（缩放）与扭转（转身）需要每帧回主线程；其余只在判定那一刻通知一次（写日志）
+    guard kind == .pinch || kind == .twist || decidedNow else { return 0 }
+    // 照手指 id 排好（接触数组里的顺序会变，角度会跳 180°）
+    let (f0, f1) = a.identifier <= b.identifier ? (a, b) : (b, a)
+    let p0 = f0.normalized.position, p1 = f1.normalized.position
+    if kind == .twist {
+        DispatchQueue.main.async { TrackpadPinch.shared.handleTwist(p0: p0, p1: p1, decidedNow: decidedNow) }
+        return 0
+    }
     DispatchQueue.main.async { TrackpadPinch.shared.handle(p0: p0, p1: p1, kind: kind, decidedNow: decidedNow) }
     return 0
 }

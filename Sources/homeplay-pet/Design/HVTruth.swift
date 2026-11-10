@@ -61,6 +61,35 @@ enum HVTruth {
         static let groupingGap: CGFloat = 24
     }
 
+    // MARK: - 數字系統（錶面體系 numerals）
+    enum Numerals {
+        /// 🟢 官方海報配置的出廠值（docs/hv-reference/poster_descriptors.json：Calendar 四個預設 posterData.numerals）
+        static let factory = "arabic"
+        /// 🟢 本機實測（macOS 27 /System/Library/Fonts/ADTNumeric.ttc，CTFontGetGlyphsForCharacters 十個數字齊全）：
+        /// 系統錶面數字字體收的數字系統（ICU 代號）；泰文 thai 沒收。SF Pro 系統字體一套都沒有。
+        /// 🟡 HomeView 支援的數字系統＝這些（同一套字體；固件 posterData 只看得到 arabic）
+        static let fontCoverage = ["latn", "arab", "arabext", "deva", "beng", "mymr", "khmr"]
+    }
+
+    // MARK: - 官方水滴的分層透明度（ClioTalk 水滴；Faces/Capsule.swift 的 LiquidOrb）
+    /// 出處：docs/hv-reference/siri_orb.txt「一、圖標圖層結構」各層的「透明度」欄（深/淺兩個變體）。
+    /// 深淺不重繪形狀，只把這幾層的透明度互換。
+    enum OrbLayers {
+        /// 🟢 組「fill _ shadows」層 1 光暈：1 / 0
+        static let halo: (dark: CGFloat, light: CGFloat) = (1, 0)
+        /// 🟢 組「fill _ shadows」層 3 投影：0 / 0.225
+        static let shadow: (dark: CGFloat, light: CGFloat) = (0, 0.225)
+        /// 🟢 組「fill _ shadows」暗部：深色版層 2 的 0.8、淺色版層 4 的 0.95（兩層各在一種外觀出現，合成一個暗部值）
+        static let shade: (dark: CGFloat, light: CGFloat) = (0.8, 0.95)
+        /// 🟢 組「siri light _ caustic」焦散：深色版層 0 的 0.65、淺色版層 2 的 0.1
+        static let caustic: (dark: CGFloat, light: CGFloat) = (0.65, 0.1)
+        /// 🟢 同組波紋：深色版層 1、淺色版層 3 都是 1（加法混合）
+        static let wave: CGFloat = 1
+        /// 🟡 第二層波：圖層表兩個變體都是 0（運行時才打開）；相位錯開 0.5π、透明度 0.5 是推斷（同檔「三、配方」）
+        static let secondWave: CGFloat = 0.5
+        static let secondWavePhase: Double = .pi / 2
+    }
+
     /// 家庭警報類別：煙霧／一氧化碳／二氧化碳／水漏／門窗安全
     static let alertKinds: [String] = ["smoke", "carbonMonoxide", "carbonDioxide", "leak", "security"]
 }

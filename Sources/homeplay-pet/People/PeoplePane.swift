@@ -186,35 +186,40 @@ struct PeoplePane: View {
     /// 2.0 depth：開著卻還沒有主人的臉可比（沒錄過，或換了模型要重錄）：門其實沒鎖，照實說
     private var ownerUnset: String? {
         guard model.recognize, !PeopleRegistry.shared.matcherInput().contains(where: \.isOwner) else { return nil }
-        return PeopleRegistry.shared.hasAnyFaceData ? L("people.pane.recognize.stale", "脸部资料要重新录；录好之前个人内容不会上锁")
-                                                    : L("people.pane.recognize.noOwner", "还没录主人的脸；录好之后个人内容才会上锁")
+        return PeopleRegistry.shared.hasAnyFaceData ? L("people.pane.recognize.staleShort", "脸部资料要重录，暂不上锁")
+                                                    : L("people.pane.recognize.noOwnerShort", "还没录主人的脸，暂不上锁")
+    }
+
+    /// 原本頁首與第二行的兩段說明（只認臉、存在哪、每位家人有什麼），收進開關行尾的 ⓘ
+    private var recognizeInfo: String {
+        L("people.pane.note2", "只识别脸部，不识别声音（对 ClioTalk 说「我是…」只是换人，不验证身份）；脸部特征只存在这台 Mac，不录制、不上传")
+            + "\n\n" + L("people.pane.personal2", "每位家人有自己的主画面、外观、播放列表和提醒事项清单；信息、日历、FaceTime、通讯录只开给这台 Mac 的主人")
     }
 
     var body: some View {
         Form {
             Section {
-                Toggle(isOn: Binding(get: { model.recognize }, set: { WhoIsLooking.recognitionEnabled = $0; model.refresh() })) {
-                    RowLabel(title: L("people.pane.recognize", "认出谁在看"),
-                             subtitle: !m.gazeFollow ? L("people.pane.recognize.needsFollow", "需要先在「相机」里打开「跟随我」")
-                                : ownerUnset ?? L("people.pane.recognize.sub", "个人内容只给认出的主人看"))
-                }
-                // P09：照官網用語寫清楚——家人認出來有自己的一份主畫面，個人內容只開給主人，共享的相簿與音樂全家都看得到
-                InfoRow(title: L("people.pane.personal2", "每位家人有自己的主画面、外观、播放列表和提醒事项清单；信息、日历、FaceTime、通讯录只开给这台 Mac 的主人"))
+                ToggleRow(title: L("people.pane.recognize", "认出谁在看"),
+                          subtitle: !m.gazeFollow ? L("people.pane.recognize.needsFollow", "需要先在「相机」里打开「跟随我」")
+                             : ownerUnset ?? L("people.pane.recognize.sub", "个人内容只给认出的主人看"),
+                          symbol: "person.crop.square.fill", tint: SettingsSection.people.tint, info: recognizeInfo,
+                          isOn: Binding(get: { model.recognize }, set: { WhoIsLooking.recognitionEnabled = $0; model.refresh() }))
             } header: {
-                // P09：只宣稱臉部（沒有聲音辨識）；臉部特徵只在本機＝HomeView 用 Secure Exclaves 隔離處理的對應做法
-                Text(L("people.pane.note2", "只识别脸部，不识别声音（对 ClioTalk 说「我是…」只是换人，不验证身份）；脸部特征只存在这台 Mac，不录制、不上传"))
-                    .textCase(nil).font(.callout).foregroundStyle(.secondary).padding(.bottom, 4)
+                IllustrationHeader(scene: .people, note: L("people.pane.demoNote", "认出你，才显示你的那一份"))
             }
 
             Section {
+                // 一行一人：头像＋名字＋状态；操作收进行尾的「⋯」（录制脸部、头像、个人设置、删除）
                 ForEach(model.people) { p in
                     LabeledContent {
-                        HStack(spacing: 8) {
-                            if enrollment.personID == p.id {
+                        if enrollment.personID == p.id {
+                            HStack(spacing: 8) {
                                 ProgressView(value: enrollment.progress).frame(width: 80)
                                 Button(L("people.enroll.cancel", "取消")) { WhoIsLooking.shared.cancelEnrollment() }
-                            } else {
-                                let enrolled = (model.faceData[p.id] ?? .none) != .none
+                            }
+                        } else {
+                            let enrolled = (model.faceData[p.id] ?? .none) != .none
+                            RowMenu {
                                 Button(enrolled ? L("people.pane.reenroll", "重新录制") : L("people.pane.enroll", "录制脸部")) {
                                     guard let app = m.app else { return }
                                     WhoIsLooking.shared.beginEnrollment(personID: p.id, app: app)
@@ -222,6 +227,7 @@ struct PeoplePane: View {
                                 Button(L("people.pane.avatar", "头像…")) { editingAvatar = p }   // 2.0 第四輪
                                 Button(L("people.pane.profile", "个人设置…")) { editingProfile = p }   // 2.0 家人檔案
                                 if !p.isOwner {
+                                    Divider()
                                     Button(L("people.pane.delete", "删除…"), role: .destructive) { deleting = p }
                                         .disabled(enrollment.personID != nil)
                                 }
@@ -236,7 +242,7 @@ struct PeoplePane: View {
                     }
                 }
                 if let message = enrollment.message {
-                    InfoRow(title: message)
+                    InfoRow(title: message, symbol: "info.circle.fill", tint: .gray)
                 }
                 LabeledContent {
                     HStack(spacing: 8) {
@@ -247,7 +253,8 @@ struct PeoplePane: View {
                     }
                 } label: {
                     RowLabel(title: L("people.pane.addTitle", "添加家人"),
-                             subtitle: String(format: L("people.pane.limit", "最多 %d 人（现在 %d 人）"), PeopleRegistry.maxPeople, model.people.count))
+                             subtitle: String(format: L("people.pane.limit", "最多 %d 人（现在 %d 人）"), PeopleRegistry.maxPeople, model.people.count),
+                             symbol: "person.badge.plus", tint: SettingsSection.people.tint)
                 }
             } header: {
                 Text(L("people.pane.family", "家人"))

@@ -29,11 +29,13 @@ enum PersonalGate {
         var phonePresent: Bool?
         var hintIsOwner: Bool?             // 「換人」選的是不是主人；nil＝沒選
         var remoteGuest = false            // 2.0 idle: 訪客的 iPhone／iPad 一分鐘內點過（Remote/RemoteInput.swift）
+        var unlikeCount = 0                // 連續不像主人的次數；只在記憶體，主人出現就歸零
     }
 
     /// 「需要主人」鎖定頁下面那句說明的判定（純函數，selftest 直接測）。
     /// P09：眼前是認出的家人時，明白寫「個人內容只開給這台 Mac 的主人」——家人等不到「認出主人」，不要再叫家人盯著螢幕。
-    enum LockReason { case guestMode, remoteGuest, followOff, family, look, hint }
+    /// 連續三次不像主人才把「看著螢幕」改成請已配對的 iPhone 確認。門仍是 WhoIsLooking.gate 的 requirePhone／phonePresent，這裡不另做認證。
+    enum LockReason { case guestMode, remoteGuest, followOff, family, look, phone, hint }
 
     static func lockReason(_ i: Inputs, followOn: Bool) -> LockReason {
         if i.guestMode { return .guestMode }
@@ -41,6 +43,7 @@ enum PersonalGate {
         if i.recognitionActive && !followOn { return .followOff }
         if i.recognitionActive {
             if case .known = i.viewer { return .family }
+            if i.unlikeCount >= WhoIsLooking.UnlikeStrikes.askAfter { return .phone }
             return .look
         }
         return .hint
@@ -90,12 +93,20 @@ enum PersonalGate {
         }
     }()
 
+    /// 快照：--unlike-count N 把連續不像主人的次數定住，用來拍滿三次之後的那句話。不寫偏好。
+    nonisolated(unsafe) static var unlikeCountOverride: Int? = {
+        let a = CommandLine.arguments
+        guard let i = a.firstIndex(of: "--unlike-count"), i + 1 < a.count, let n = Int(a[i + 1]) else { return nil }
+        return max(0, n)
+    }()
+
     static var inputs: Inputs {
         let w = WhoIsLooking.shared
         let v = viewerOverride
         return Inputs(guestMode: Shell.guestMode, recognitionActive: v != nil || recognitionActive, viewer: v ?? w.viewer, contradictsOwner: w.contradictsOwner,
                       requirePhone: WhoIsLooking.requireOwnerPhone, phonePresent: w.phonePresence?(),
-                      hintIsOwner: hint.map { h in FamilyProfiles.roster.first { $0.id == h }?.isOwner ?? true }, remoteGuest: RemotePrivacy.guestActive)
+                      hintIsOwner: hint.map { h in FamilyProfiles.roster.first { $0.id == h }?.isOwner ?? true }, remoteGuest: RemotePrivacy.guestActive,
+                      unlikeCount: unlikeCountOverride ?? w.unlikeStrikes.count)
     }
 
     /// 主執行緒用
@@ -132,7 +143,11 @@ extension Shell {
     nonisolated(unsafe) static var peopleSheet = false
     nonisolated(unsafe) static var peopleSheetRows: [(String, CGRect)] = []
     /// 2.0 R4：直徑 96（影片 v1 0:45 右上 Memoji 圓：右距約 90、跟問候語兩行的中線齊）
-    static let avatarRect = CGRect(x: 1024 - 150 - HPTokens.Home.avatar / 2, y: 152 - HPTokens.Home.avatar / 2, width: HPTokens.Home.avatar, height: HPTokens.Home.avatar)   // 第三輪：直徑 100，中心照舊 (874, 152)
+    static var avatarRect: CGRect {
+        // 資料庫頁：跟搜索欄同一條中線（搜索欄讓位 👀 膠囊下移了，頭像跟著走）；其他頁中心 (874, 152) 照舊
+        let mid: CGFloat = Shell.nav.screen == .library ? SBUI.libraryHeaderMid : 152
+        return CGRect(x: 1024 - 150 - HPTokens.Home.avatar / 2, y: mid - HPTokens.Home.avatar / 2, width: HPTokens.Home.avatar, height: HPTokens.Home.avatar)
+    }
     /// 一列的間距：四個人以內 108；五、六個人收成 96（六個人也放得進畫面）
     static var sheetRowPitch: CGFloat { FamilyProfiles.roster.count > 4 ? 96 : 108 }
     /// 卡片貼著人數長高；左右離螢幕 72，圓角跟螢幕同心
@@ -205,6 +220,7 @@ extension Face {
         case .followOff: why = L("guest.why.follow", "打开「跟随我」，让 HomePlay 认出你")
         case .family: why = L("guest.why.family", "个人内容只开给这台 Mac 的主人")   // P09：家人有自己的一份主畫面，個人內容不屬於家人
         case .look: why = L("guest.why.look", "看着屏幕，认出主人后打开")
+        case .phone: why = L("guest.why.phone", "请在已经配对的 iPhone 上确认")
         case .hint: why = L("guest.why.member", "这是主人的个人内容；换回主人才看得到")   // 2.0 家人檔案：換成家人時
         }
         let f = Face.fitted(why, size: 36, weight: .semibold, maxWidth: 820, minScale: 0.7)

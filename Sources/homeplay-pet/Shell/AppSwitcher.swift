@@ -17,7 +17,10 @@ enum AppSwitcher {
     static var pitch: CGFloat { 1024 * cardScale + cardGap }
     static let maxRecents = 10
     /// 最近用過的 App（最新在前）
-    nonisolated(unsafe) static var recents: [String] = []
+    /// 持久化（使用者 2026-11-08：重啟後切換器只剩一張卡滾不動）——iOS 的切換器跨重啟都在
+    nonisolated(unsafe) static var recents: [String] = UserDefaults.standard.stringArray(forKey: "HomePlaySwitcherRecents") ?? [] {
+        didSet { if recents != oldValue { UserDefaults.standard.set(recents, forKey: "HomePlaySwitcherRecents") } }
+    }
     /// 每個 App 離開時的最後一格
     nonisolated(unsafe) static var shots: [String: CGImage] = [:]
     /// 橫向捲動（px，0＝第一張在正中）；拖著時跟手，放手停到最近的一張
@@ -80,8 +83,12 @@ final class CarPlayApp: PetApp {
 
     /// 平常看不到這一頁（直播蓋在上面）；過場、切換器、還在連線時才畫：CarPlay 的最後一格，沒有就是黑底＋圖示
     func render(into g: CGContext, face: Face, rect: CGRect, now: Double) {
-        if let s = AppSwitcher.shots[id] { face.drawUpright(g, s, in: rect); return }
-        g.setFillColor(NSColor.black.cgColor); g.fill(rect)
+        // 沒有直播會話：一律畫 standby，不用舊快照——會話結束後的快照是黑幀，卡片整塊黑（使用者 2026-11-08 錄影實錘）
+        if AppSwitcher.carPlayAlive(face), let s = AppSwitcher.shots[id] { face.drawUpright(g, s, in: rect); return }
+        let cs = CGColorSpace(name: CGColorSpace.sRGB)!
+        let grad = CGGradient(colorsSpace: cs, colors: [NSColor(srgbRed: 0.10, green: 0.11, blue: 0.14, alpha: 1).cgColor,
+                                                        NSColor(srgbRed: 0.04, green: 0.05, blue: 0.07, alpha: 1).cgColor] as CFArray, locations: [0, 1])!
+        g.drawLinearGradient(grad, start: CGPoint(x: rect.minX, y: rect.minY), end: CGPoint(x: rect.maxX, y: rect.maxY), options: [])
         let r = CGRect(x: 512 - 96, y: 360, width: 192, height: 192)
         Shell.drawAppIcon(g, face: face, icon: icon, in: r, appID: id)
         let live = AppSwitcher.carPlayAlive(face)

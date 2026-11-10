@@ -150,7 +150,7 @@ extension Face {
 
     private func homePlatters() -> [GlyphShape] {
         let M = Self.M
-        func rr(_ r: CGRect) -> GlyphShape { GlyphShape(path: continuousRoundedRect(r, radius: M.radius)) }
+        func rr(_ r: CGRect) -> GlyphShape { GlyphShape(path: continuousRoundedRect(r, radius: HPTokens.Radius.concentric(rect: r))) }   // 同心（拍板 2026-11-08）：磚離屏邊越近圓角越大，與機身一致
         return [rr(M.tile(0, 0, w: 2, h: 2)), GlyphShape(path: CGPath(ellipseIn: M.tile(2, 0), transform: nil)),
                 rr(M.tile(2, 1)), rr(M.tile(0, 2)), rr(M.tile(1, 2)), rr(M.tile(2, 2))]
     }

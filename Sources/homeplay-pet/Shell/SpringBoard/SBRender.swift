@@ -200,57 +200,123 @@ enum SBUI {
     static func pageCheck(_ thumb: CGRect) -> CGRect { CGRect(x: thumb.midX - 34, y: thumb.maxY + 18, width: 68, height: 68) }
 
     // App 資料庫
-    // 10-grid：左緣＝主畫面網格的 gridMargin（跟第一欄圖示同一條線）；y 讓膠囊中線對齊右上頭像的中線 152
-    static var librarySearch: CGRect { CGRect(x: HPTokens.Home.gridMargin, y: 152 - 44, width: 690, height: 88) }
-    static let libraryTop: CGFloat = 268           // 第一列的 y（2.0 depth：捲動量的基準）
-    // 使用者 2026-10-25：圖示和字不要那麼擠——圖示縮小、列距加大，字下面留出空氣（照 iOS App 資料庫的疏密）
-    static let libraryRowPitch: CGFloat = 228
-    static let libraryRowHeight: CGFloat = 196
-    /// 分區：HomePlay 的 App 照名字一區；iPhone App（有掃到、設定沒關）另一區「iPhone」，也照名字（照 Mac 的 App 瀏覽／Spotlight）。
-    /// 沒有 iPhone App 就沒有那一區（不留空殼）
-    static func librarySections(_ apps: [PetApp]) -> [(title: String?, apps: [PetApp])] {
-        let sorted = apps.sorted { $0.title.localizedStandardCompare($1.title) == .orderedAscending }
-        let own = sorted.filter { !($0 is PhoneCarPlayApp) }, phone = sorted.filter { $0 is PhoneCarPlayApp }
-        var out: [(title: String?, apps: [PetApp])] = []
-        if !own.isEmpty { out.append((nil, own)) }
-        if !phone.isEmpty { out.append((L("sb.library.iphone", "iPhone"), phone)) }
-        return out
+    // 10-grid：左緣＝主畫面網格的 gridMargin（跟第一欄圖示同一條線）；y 跟主畫面右上頭像同一條中線（152）。
+    // 藥丸在上方留 20 不重疊；資料庫沒有問候語，但不自己發明第二條頂線——使用者 2026-11-09：「資料庫對齊主畫面」。
+    static var libraryHeaderMid: CGFloat { max(152, Shell.pillRect(0).maxY + 20 + 44) }
+    /// 左緣跟第一欄同一條線，右緣停在第四欄的左緣（頭像佔第四欄）。高度 96，中線跟頭像對齊。
+    static var librarySearch: CGRect {
+        let h: CGFloat = 96
+        let right = HPGrid.Home.margin + 3 * HPTokens.Home.columnPitch
+        return CGRect(x: HPGrid.Home.margin, y: libraryHeaderMid - h / 2, width: right - HPGrid.Home.margin, height: h)
     }
+    /// 第一列圖示的頂＝主畫面第一列的頂（241）。搜尋欄在它上面，不另起一條頂線。
+    static var libraryTop: CGFloat { HPTokens.Home.gridTop }
+    /// 停在完整的豆莢列上。下一列豆莢的下半是主畫面第四列，在畫面外面；
+    /// 裁在這一列標籤的下緣，才不會切出半顆豆莢。
+    static var libraryPodClipBottom: CGFloat {
+        let room = panel.maxY - libraryTop + SBLPodGrid.rowGap
+        let fits = max(1, Int(room / SBLPodGrid.rowPitch))
+        return libraryTop + CGFloat(fits) * SBLPodGrid.rowPitch - SBLPodGrid.rowGap
+    }
+    /// 搜尋結果、展開頁跟主畫面同一條列距、同一格高（圖示 152，標籤在格子裡）。
+    static var libraryRowPitch: CGFloat { HPTokens.Home.rowPitch }
+    static var libraryRowHeight: CGFloat { Shell.rowH }
+    /// 分區：照 iPadOS App Library 的分類（`SBLibraryCategory`，DH 順序、空類別不畫）；
+    /// iPhone App（有掃到、設定沒關）另成一區「iPhone」（照 Mac 的 App 瀏覽／Spotlight）。
+    /// 搜尋時是單一結果清單（系統的搜尋是另一層，不分類）。
+    static func librarySections(_ apps: [PetApp]) -> [(title: String?, apps: [PetApp])] {
+        SBLibraryCategory.sections(apps, searching: !SB.libraryQuery.trimmingCharacters(in: .whitespaces).isEmpty)
+    }
+    /// 搜尋：前綴命中優先、其餘 A→Z（系統的 prefixComparator＋aToZComparator）
     private static func libraryHits() -> [PetApp] {
-        let q = SB.libraryQuery.trimmingCharacters(in: .whitespaces).lowercased()
-        let all = AppRegistry.visible
-        return q.isEmpty ? all : all.filter { $0.title.lowercased().contains(q) || $0.id.contains(q) }
+        SBLibraryCategory.hits(AppRegistry.visible, query: SB.libraryQuery)
     }
     /// 資源庫（含搜尋結果）照分區的順序
     static func libraryApps() -> [PetApp] { librarySections(libraryHits()).flatMap(\.apps) }
-    /// 分區標題那一列的高度（標題字＋底下的空氣）
-    static let librarySectionHeader: CGFloat = 76
+    /// 豆莢（瀏覽時；搜尋時是另一張表，不分類）
+    static func libraryPods() -> [SBLPod] { SBLPodGrid.pods(AppRegistry.visible, homeWidgetApps: homeWidgetApps()) }
+    /// 主畫面上有放小工具的 App（系統公式的 `hasHomescreenWidget * 3` 那一項）。
+    /// Smart Stack 裡的也算——它就在主畫面上。
+    static func homeWidgetApps() -> Set<String> {
+        var out: Set<String> = []
+        for page in SB.layout.pages {
+            for item in page.items {
+                switch item {
+                case .widget(let w):
+                    if let a = w.kind.appID { out.insert(a) }
+                case .stack(let s):
+                    for w in s.widgets { if let a = w.kind.appID { out.insert(a) } }
+                default:
+                    break
+                }
+            }
+        }
+        return out
+    }
+    /// 展開某一類時，那一類的 App（系統：`SBHLibraryPodFolderController`）。順序跟豆莢一致（啟動次數）
+    static func libraryExpandedApps() -> [PetApp] {
+        guard let cat = SB.libraryExpanded else { return [] }
+        let own = AppRegistry.visible.filter { !($0 is PhoneCarPlayApp) }
+        return AppLaunchCounts.order(own.filter {
+            SBLibraryCategory.category(for: $0) == cat
+                && SBLPodGrid.showsInCategory($0.id, homeScreenApps: SB.layout.appsOnHome)
+        })
+    }
+    /// 展開頁的格子（4 欄，標題佔第一條）
+    static func libraryExpandedCells() -> [CGRect] {
+        let apps = libraryExpandedApps()
+        return apps.indices.map { libraryCell($0 % 4, libraryTop + CGFloat($0 / 4) * libraryRowPitch) }
+    }
+    /// 展開中那一類的豆莢框：內容縮放的原點（豆莢中心）。自檢直接指定類別時可能沒有豆莢 ⇒ nil。
+    static func libraryExpandedPodFrame() -> CGRect? {
+        guard let cat = SB.libraryExpanded else { return nil }
+        for (i, pod) in libraryPods().enumerated() {
+            if case .category(let c) = pod.kind, c == cat { return SBLPodGrid.podFrame(i, top: libraryTop) }
+        }
+        return nil
+    }
+    /// 豆莢標題那一條的點按範圍（點它＝展開該類，跟系統一樣；點圖示才是開 App）
+    static func libraryPodTitle(at p: CGPoint, offset: CGFloat) -> SBLibraryCategory? {
+        for (i, pod) in libraryPods().enumerated() {
+            guard case .category(let cat) = pod.kind else { continue }
+            let f = SBLPodGrid.podFrame(i, top: libraryTop).offsetBy(dx: 0, dy: -offset)
+            let band = CGRect(x: f.minX, y: f.maxY, width: f.width, height: SBLPodGrid.labelHeight)
+            if band.contains(p) { return cat }
+        }
+        return nil
+    }
+    /// 每一顆豆莢圖示的位置（App id → 畫布座標，未含捲動位移）。同一個 App 可能同時出現在
+    /// 「建議」和它的分類裡，這裡保留分類那一顆（後蓋前）。
+    static func libraryPodIcons() -> [String: CGRect] {
+        var out: [String: CGRect] = [:]
+        for (i, p) in libraryPods().enumerated() {
+            let f = SBLPodGrid.podFrame(i, top: libraryTop)
+            for (slot, id) in p.large.enumerated() { out[id] = SBLPodGrid.largeFrame(slot, in: f) }
+            for (j, id) in p.cluster.enumerated() { out[id] = SBLPodGrid.miniFrame(j, in: f) }
+        }
+        return out
+    }
     /// 跟 libraryApps() 一一對應的格子，加上分區標題的位置（y＝那一列的上緣；搜尋結果也分區＝iPhone App 標著「iPhone」）
     static func libraryLayout() -> (cells: [CGRect], headers: [(title: String, y: CGFloat)]) {
         var cells: [CGRect] = [], headers: [(title: String, y: CGFloat)] = []
         var top = libraryTop
         for sec in librarySections(libraryHits()) {
-            if let t = sec.title { headers.append((t, top)); top += librarySectionHeader }
-            for i in sec.apps.indices {
-                cells.append(CGRect(x: HPTokens.Home.gridMargin + CGFloat(i % 4) * HPTokens.Home.columnPitch, y: top + CGFloat(i / 4) * libraryRowPitch,
-                                    width: HPTokens.Home.iconSide, height: libraryRowHeight))
-            }
+            if let t = sec.title { headers.append((t, top)); top += libraryRowPitch }
+            for i in sec.apps.indices { cells.append(libraryCell(i % 4, top + CGFloat(i / 4) * libraryRowPitch)) }
             top += CGFloat((sec.apps.count + 3) / 4) * libraryRowPitch
         }
         return (cells, headers)
     }
     static func libraryCells(_ n: Int) -> [CGRect] {
-        (0..<n).map { i in
-            CGRect(x: HPTokens.Home.gridMargin + CGFloat(i % 4) * HPTokens.Home.columnPitch, y: libraryTop + CGFloat(i / 4) * libraryRowPitch, width: HPTokens.Home.iconSide, height: libraryRowHeight)
-        }
+        (0..<n).map { libraryCell($0 % 4, libraryTop + CGFloat($0 / 4) * libraryRowPitch) }
     }
-    static let libraryIconSide: CGFloat = 120
-    // 網格：第一欄圖示左緣＝搜尋欄左緣、最後一欄右緣＝頭像右緣（gridMargin），四欄等距；點按範圍仍是整格
-    static func libraryIcon(_ cell: CGRect) -> CGRect {
-        let m = HPTokens.Home.gridMargin, col = ((cell.minX - m) / HPTokens.Home.columnPitch).rounded()
-        let pitch = (1024 - 2 * m - libraryIconSide) / 3
-        return CGRect(x: m + col * pitch, y: cell.minY, width: libraryIconSide, height: libraryIconSide)
+    /// 第 col 欄、那一列的圖示框：跟主畫面同一格（152／欄距 225）。y 要落在主畫面的列頂上。
+    static func libraryCell(_ col: Int, _ y: CGFloat) -> CGRect {
+        CGRect(x: HPTokens.Home.gridMargin + CGFloat(col) * HPTokens.Home.columnPitch, y: y,
+               width: HPTokens.Home.iconSide, height: HPTokens.Home.iconSide)
     }
+    /// 收的就是圖示框本身（點按範圍另外用 inset 放大）
+    static func libraryIcon(_ cell: CGRect) -> CGRect { cell }
 }
 
 extension SBWidgetKind {
@@ -273,6 +339,22 @@ extension SBWidgetKind {
 
 extension Face {
     // MARK: 入口（HomeScreen.drawHome 第一行叫）
+
+    /// 閒置預熱（拍板 2026-11-07：不能讓桌寵成為累贅）：人在錶面發呆時，把主畫面的三層快取分三個閒置幀先建好——
+    /// 第一次下拉不用當場冷建（實測首幀 ~226ms 的頓就來自這三層）。外觀／排列換了各處照舊清快取，重暖一次也便宜。
+    func warmSpringBoardIfIdle(_ now: Double) {
+        guard Shell.nav.screen == .face, Shell.nav.overlay == .none, !Shell.ambientPosterActive,
+              !sayingHello, !FaceOverview.active, !inOverview,
+              now - Shell.lastActive > 1.5, SB.warmStage < 3, SB.warmAt != now else { return }
+        SB.warmAt = now
+        let placed = SBLayout.pack(SB.displayItems(page: SB.page)).placed.filter { !$0.item.isSpacer }
+        switch SB.warmStage {
+        case 0: _ = sbBackdrop()
+        case 1: _ = sbIconGlassLayer(SB.page, placed)
+        default: _ = sbPageImage(SB.page, placed)
+        }
+        SB.warmStage += 1
+    }
 
     func drawSpringBoard(_ g: CGContext, _ now: Double, library: Bool) {
         HPIconPress.applySnapshotPress()
@@ -345,6 +427,7 @@ extension Face {
     // MARK: 頂端：問候語＋頭像；編輯模式＝筆刷膠囊＋ ✓
 
     private func drawSBTopBar(_ g: CGContext, _ now: Double, dx: CGFloat = 0, alpha: CGFloat = 1) {
+        if Shell.skipping("sbtop") { return }   // 二分：問候語＋頭像＋時間（HOMEPLAY_SKIP，同 nav/clock/pill）
         guard SB.editing else {
             let H = HPTokens.Home.self
             let sx = Shell.iconRect(in: Shell.cell(0, 0)).minX + H.greetingInset + dx   // 翻向資源庫時問候語、頭像跟著這一頁滑走（資源庫那頁有自己的頭像）
@@ -524,6 +607,7 @@ extension Face {
 
     /// 靜止頁上每幀要更新的：小工具內容（時鐘、天氣、正在播放…）
     private func drawSBLiveContent(_ g: CGContext, _ it: SBItem, _ r: CGRect, now: Double) {
+        if Shell.skipping("sblive") { return }   // 二分：小工具的逐幀內容（HOMEPLAY_SKIP，同 nav/clock/pill）
         switch it {
         case .widget(let w): drawSBWidget(g, w, r, now: now)
         case .stack(let s): drawSBStack(g, s, r, now: now)
@@ -734,7 +818,7 @@ extension Face {
         }
         let panel = m.panel
         let shown = HPMotion.reduceMotion ? panel : Shell.lerp(CGRect(x: panel.minX, y: panel.minY, width: panel.width * 0.6, height: panel.height * 0.4), panel, t)
-        HPGlass.add(continuousRoundedRect(shown, radius: 64), union: nil, presence: t) { [weak self] c in
+        HPGlass.add(continuousRoundedRect(shown, radius: HPTokens.Radius.concentric(rect: shown)), union: nil, presence: t) { [weak self] c in
             guard let self, t > 0.6 else { return }
             c.saveGState(); c.setAlpha((t - 0.6) / 0.4)
             if !m.sizes.isEmpty {
@@ -986,8 +1070,8 @@ extension Face {
     private func drawSBRemoveConfirm(_ g: CGContext, _ key: String) {
         g.setFillColor(NSColor.black.withAlphaComponent(0.4).cgColor); g.fill(SBUI.full)
         let card = SBUI.alertCard
-        if !ShellGlass.draw(g, face: self, path: continuousRoundedRect(card, radius: 72), key: "sbalert") {
-            g.addPath(continuousRoundedRect(card, radius: 72)); g.setFillColor(srgb(0x212121, 0.97).cgColor); g.fillPath()
+        if !ShellGlass.draw(g, face: self, path: continuousRoundedRect(card, radius: HPTokens.Radius.concentric(rect: card)), key: "sbalert") {
+            g.addPath(continuousRoundedRect(card, radius: HPTokens.Radius.concentric(rect: card))); g.setFillColor(srgb(0x212121, 0.97).cgColor); g.fillPath()
         }
         let name = SBUI.itemName(key)
         let isApp = key.hasPrefix("a:")
@@ -1007,6 +1091,51 @@ extension Face {
     // MARK: App 資料庫
 
     /// dx：從最後一頁翻過來時整頁的位移（0＝正中）；alpha：減少動態效果時的交叉淡化
+    /// 豆莢網格：一列兩顆，每顆佔主畫面的 2×2。標題在底板下面，基線跟主畫面圖示標籤同一條。
+    private func drawLibraryPods(_ g: CGContext) {
+        let pods = SBUI.libraryPods()
+        let lf = HPType.sf(HPType.Size.iconLabel, HPTokens.Home.iconLabelWeight)
+        for (i, p) in pods.enumerated() {
+            let f = SBLPodGrid.podFrame(i, top: SBUI.libraryTop)
+            // 底板：實測的等效白幕（系統用 vibrant 矩陣＋白染，見文件第九節的否證）
+            g.setFillColor(NSColor.white.withAlphaComponent(SBLPodGrid.veil * (HPAccessibility.increaseContrast ? 2 : 1)).cgColor)
+            // 圓角：圓弧（不是連續圓角）——實機圓擬合殘差 0.23 px 支持圓弧
+            g.addPath(CGPath(roundedRect: f, cornerWidth: SBLPodGrid.cornerRadius,
+                             cornerHeight: SBLPodGrid.cornerRadius, transform: nil))
+            g.fillPath()
+            for (slot, id) in p.large.enumerated() {
+                guard let app = AppRegistry.app(id) else { continue }
+                Shell.drawHomeIcon(g, face: self, app: app, in: SBLPodGrid.largeFrame(slot, in: f))
+            }
+            for (j, id) in p.cluster.enumerated() {
+                guard let app = AppRegistry.app(id) else { continue }
+                Shell.drawHomeIcon(g, face: self, app: app, in: SBLPodGrid.miniFrame(j, in: f))
+            }
+            let t = Face.clipped(p.title, lf, f.width)
+            drawLeft(g, t, font: lf, x: f.midX - Typo.width(t, lf) / 2,
+                     y: f.maxY + HPTokens.Home.labelBaseline, color: .white)
+        }
+    }
+
+    /// 展開的類別頁：類別名在最上面，下面是該類全部 App（4 欄）。點空白處回豆莢總覽。
+    private func drawLibraryExpanded(_ g: CGContext) {
+        guard let cat = SB.libraryExpanded else { return }
+        // 標題放在搜尋欄和第一列圖示中間那條縫裡，圖示本身仍從主畫面第一列（241）起。
+        let hf = HPType.sf(HPTokens.Home.greetingSize, HPTokens.Home.nameWeight)
+        let lf = HPType.sf(HPType.Size.iconLabel, HPTokens.Home.iconLabelWeight)
+        let gapTop = SBUI.librarySearch.maxY, gapBottom = HPTokens.Home.gridTop
+        let ink = hf.capHeight - hf.descender
+        let titleBaseline = gapTop + (gapBottom - gapTop - ink) / 2 + hf.capHeight
+        drawLeft(g, cat.title, font: hf, x: HPTokens.Home.gridMargin, y: titleBaseline,
+                 color: NSColor.white.withAlphaComponent(HPAccessibility.increaseContrast ? 1 : 0.92))
+        for (app, cell) in zip(SBUI.libraryExpandedApps(), SBUI.libraryExpandedCells()) {
+            Shell.drawHomeIcon(g, face: self, app: app, in: cell)
+            let t = Face.clipped(app.title, lf, cell.width + Shell.colGap - 6)
+            drawLeft(g, t, font: lf, x: cell.midX - Typo.width(t, lf) / 2,
+                     y: cell.maxY + HPTokens.Home.labelBaseline, color: .white)
+        }
+    }
+
     private func drawSBLibrary(_ g: CGContext, _ now: Double, dx: CGFloat = 0, alpha: CGFloat = 1) {
         let moving = dx != 0 || alpha < 1
         let s = SBUI.librarySearch.offsetBy(dx: dx, dy: 0)
@@ -1018,11 +1147,11 @@ extension Face {
         }
         HPGlass.addCapsule(s, interactive: true, presence: alpha) { [weak self] c in
             guard let self else { return }
-            self.drawSymbol(c, "magnifyingglass", in: CGRect(x: s.minX + 30, y: s.midY - 18, width: 36, height: 36), color: HPGlass.ink.withAlphaComponent(0.7))
-            let f = HPType.sf(36, .regular)
+            self.drawSymbol(c, "magnifyingglass", in: CGRect(x: s.minX + 24, y: s.midY - 16, width: 32, height: 32), color: HPGlass.ink.withAlphaComponent(0.7))
+            let f = HPType.sf(28, .regular)
             let caret = SB.librarySearching && Int(now * 2) % 2 == 0 ? "|" : ""
             let text = q.isEmpty && !SB.librarySearching ? L("sb.library", "App 资源库") : q + caret
-            self.drawLeft(c, Face.clipped(text, f, s.width - 120), font: f, x: s.minX + 84, y: s.midY + f.capHeight / 2, color: q.isEmpty && !SB.librarySearching ? HPGlass.ink.withAlphaComponent(0.6) : HPGlass.ink)
+            self.drawLeft(c, Face.clipped(text, f, s.width - 96), font: f, x: s.minX + 72, y: s.midY + f.capHeight / 2, color: q.isEmpty && !SB.librarySearching ? HPGlass.ink.withAlphaComponent(0.6) : HPGlass.ink)
         }
         g.translateBy(x: dx, y: 0)
         drawShellAvatar(g)   // 頭像跟著這一頁（翻的時候不會被搜尋欄蓋過去）
@@ -1035,29 +1164,61 @@ extension Face {
         // 2.0 depth：內容放不下就捲（拖、滾輪、觸控板）；搜尋欄底下裁掉，右緣一條暫態指示器（iOS 的資料庫捲動時有）
         let off = SB.libraryScrollNow
         let clipTop = SBUI.libraryTop - 32
+        let panel = SBUI.panel.offsetBy(dx: dx, dy: 0)
+        let overview = SB.libraryQuery.isEmpty && !SB.librarySearching && SB.libraryExpanded == nil
+        let clipBottom = overview ? SBUI.libraryPodClipBottom : panel.maxY
         let scrollable = SB.libraryMaxScroll > 0.5
+        // 內容一律裁在面板的同心圓角裡（不是到螢幕底的直角矩形）、搜尋欄以下；上下緣淡出（HIG 的捲動邊緣），
+        // 不讓圖示溢出面板、也不讓捲上去的圖示鑽進面板與螢幕之間的縫（2026-11-07 使用者截圖）
+        // 豆莢總覽再裁在完整的一列下緣：下一列的下半在畫面外，停著看不該切半顆。
         g.saveGState()
-        if scrollable {
-            g.clip(to: CGRect(x: 0, y: clipTop, width: 1024, height: 1024 - clipTop))
-            g.translateBy(x: 0, y: -off)
+        g.addPath(continuousRoundedRect(panel, radius: Screen.concentric(inset: HPTokens.Home.panelInset))); g.clip()
+        g.clip(to: CGRect(x: 0, y: clipTop, width: 1024, height: clipBottom - clipTop))
+        g.beginTransparencyLayer(auxiliaryInfo: nil)
+        if scrollable { g.translateBy(x: 0, y: -off) }
+        if SB.libraryQuery.isEmpty && !SB.librarySearching {
+            // 展開是 0.2 s 交叉淡化（+_defaultCrossfadeSettings 的 duration）＋內容從豆莢放大（SBLPodZoom：
+            // 0.05 s 延遲、臨界阻尼 0.4 s）。快照直接落在終點。
+            let k = SB.libraryReveal.value(now)
+            if SB.libraryExpanded != nil, k > 0.001 {
+                g.saveGState(); g.setAlpha(k)
+                let z = SB.libraryZoom.value(now)
+                if let src = SBUI.libraryExpandedPodFrame(), z < 0.999 {
+                    let s = SBLPodZoom.scale(at: z), c = CGPoint(x: src.midX, y: src.midY)
+                    g.translateBy(x: c.x, y: c.y); g.scaleBy(x: s, y: s); g.translateBy(x: -c.x, y: -c.y)
+                }
+                drawLibraryExpanded(g)
+                g.restoreGState()
+            }
+            if k < 0.999 {
+                g.saveGState(); g.setAlpha(1 - k); drawLibraryPods(g); g.restoreGState()
+            }
+        } else {
+            let lay = SBUI.libraryLayout()
+            let hf = HPType.sf(34, .semibold)
+            for h in lay.headers {   // 分區標題佔主畫面的一整列（iPhone），字在那一列的中線
+                drawLeft(g, h.title, font: hf, x: HPTokens.Home.gridMargin,
+                         y: h.y + SBUI.libraryRowPitch / 2 + hf.capHeight / 2,
+                         color: NSColor.white.withAlphaComponent(HPAccessibility.increaseContrast ? 1 : 0.85))
+            }
+            for (app, cell) in zip(apps, lay.cells) {
+                let ir = SBUI.libraryIcon(cell)
+                Shell.drawHomeIcon(g, face: self, app: app, in: ir)
+                let t = Face.clipped(app.title, lf, cell.width + Shell.colGap - 6)
+                drawLeft(g, t, font: lf, x: ir.midX - Typo.width(t, lf) / 2,
+                         y: ir.maxY + HPTokens.Home.labelBaseline, color: .white)
+            }
         }
-        let lay = SBUI.libraryLayout()
-        let hf = HPType.sf(34, .semibold)
-        for h in lay.headers {   // 分區標題（iPhone）
-            drawLeft(g, h.title, font: hf, x: HPTokens.Home.gridMargin, y: h.y + 44, color: NSColor.white.withAlphaComponent(HPAccessibility.increaseContrast ? 1 : 0.85))
-        }
-        for (app, cell) in zip(apps, lay.cells) {
-            let ir = SBUI.libraryIcon(cell)
-            Shell.drawHomeIcon(g, face: self, app: app, in: ir)
-            let t = Face.clipped(app.title, lf, cell.width + Shell.colGap - 6)
-            drawLeft(g, t, font: lf, x: ir.midX - Typo.width(t, lf) / 2, y: ir.maxY + 44, color: .white)
-        }
+        if scrollable { g.translateBy(x: 0, y: off) }
+        let bottomFade: CGFloat = (overview && off <= 0.5) ? 0 : SBUI.libraryEdgeFade
+        SBUI.fadeEdges(g, top: clipTop, topFade: off > 0.5 ? SBUI.libraryEdgeFade : 0, bottom: clipBottom, bottomFade: bottomFade)
+        g.endTransparencyLayer()
         g.restoreGState()
         if scrollable, SB.libraryScrollDragging || !SB.libraryScroll.done(now) {
-            let trackH = 1024 - clipTop
+            let trackH = panel.maxY - 40 - clipTop
             let h = max(120, trackH * trackH / (trackH + SB.libraryMaxScroll))
             let k = max(0, min(1, off / SB.libraryMaxScroll))
-            let bar = CGRect(x: 1000, y: clipTop + k * (trackH - h), width: 8, height: h)
+            let bar = CGRect(x: panel.maxX - 22, y: clipTop + k * (trackH - h), width: 8, height: h)   // 指示器在面板裡
             g.setFillColor(NSColor.white.withAlphaComponent(0.5).cgColor)
             g.addPath(CGPath(roundedRect: bar, cornerWidth: 4, cornerHeight: 4, transform: nil)); g.fillPath()
         }
@@ -1066,6 +1227,18 @@ extension Face {
 }
 
 extension SBUI {
+    /// 資料庫捲動邊緣的淡出高度（1024 畫布）
+    static let libraryEdgeFade: CGFloat = 36
+    /// 在透明圖層裡把上緣、下緣各 fade 高的內容淡掉（destinationOut 漸層）：捲動內容碰到邊時柔和收掉，不是一刀切
+    static func fadeEdges(_ g: CGContext, top: CGFloat, topFade: CGFloat, bottom: CGFloat, bottomFade: CGFloat) {
+        guard let cs = CGColorSpace(name: CGColorSpace.sRGB),
+              let grad = CGGradient(colorsSpace: cs, colors: [NSColor.black.cgColor, NSColor.black.withAlphaComponent(0).cgColor] as CFArray, locations: [0, 1]) else { return }
+        g.saveGState(); g.setBlendMode(.destinationOut)
+        if topFade > 0 { g.drawLinearGradient(grad, start: CGPoint(x: 0, y: top), end: CGPoint(x: 0, y: top + topFade), options: []) }
+        if bottomFade > 0 { g.drawLinearGradient(grad, start: CGPoint(x: 0, y: bottom), end: CGPoint(x: 0, y: bottom - bottomFade), options: []) }
+        g.restoreGState()
+    }
+
     static func itemName(_ key: String) -> String {
         switch SB.layout.item(key) {
         case .app(let id)?: return AppRegistry.app(id)?.title ?? id

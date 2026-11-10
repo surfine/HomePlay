@@ -61,6 +61,10 @@ final class TimersApp: PetApp {
         // 快照：--timers-chrome 把控制打開來拍；--timer-paused 讓這組暫停；--timer-done 直接是「完成」畫面
         let args = CommandLine.arguments
         chrome = HPComponents.Chrome(visible: args.contains("--timers-chrome"), idle: HPTokens.TimerFace.chromeIdle, now: CACurrentMediaTime(), name: "timers.chrome")
+        if args.contains("--timers-running"), Shell.timers.isEmpty {   // 快照診斷：種一個執行中的計時器（不寫偏好）
+            let id = Shell.timers.add(seconds: 600, label: L("timer.title", "计时器"), now: Self.wallNow)
+            selected = id; adding = false
+        }
         if args.contains("--timer-paused"), let t = current { selected = t.id; Shell.timers.pause(t.id, now: Self.wallNow) }
         // 快照：--timer-dial <分鐘> 直接打開「新计时器」並把轉盤設在那個值
         if let i = args.firstIndex(of: "--timer-dial"), i + 1 < args.count, let m = Int(args[i + 1]) {
@@ -275,14 +279,21 @@ final class TimersApp: PetApp {
         let v = HPMotionVariant.current(black: face.nightRed).onDarkSurface()
         let sp = AppMotion.interactive
         let m = CGFloat(Anim.track("timers.run", to: paused ? 1 : 0, spring: Spring(damping: sp.damping, response: sp.response * CGFloat(HPMotionVariant.durationScale(v)))))
-        let run = HPMotionVariant.tint(HPMotionVariant.Base.orange, v), resume = HPMotionVariant.tint(HPMotionVariant.Base.green, v)
-        let tint = run.blended(withFraction: max(0, min(1, m)), of: resume) ?? run
+        // 固件 CAML：同一份資產裡 play=白、pause=橘。讀法（拍板 2026-11-08）＝按狀態換底：
+        // 暫停中（顯示 play）橘底白符；執行中（顯示 pause）清玻璃＋橘符。
+        let run = HPMotionVariant.tint(HPMotionVariant.Base.orange, v)
+        let tint = run.withAlphaComponent(0.92 * CGFloat(max(0, min(1, m))))
         HPAX.note(g, r, .button, paused ? L("timer.resume", "继续") : L("timer.pause", "暂停"), shape: .circle)
         let s = (0.96 + 0.04 * k) * Press.scale(r), rr = s == 1 ? r : HPComponents.scaled(r, s)
         HPGlass.addCapsule(rr, tint: Press.brighten(tint, r), interactive: true, presence: k) { [weak face] c in
-            for (sym, w) in [("pause.fill", 1 - m), ("play.fill", m)] where w > 0.01 {
-                let z = r.width * 0.36 * (0.6 + 0.4 * min(1, w * 1.1))
-                face?.drawSymbol(c, sym, in: CGRect(x: r.midX - z / 2, y: r.midY - z / 2, width: z, height: z), color: NSColor.white.withAlphaComponent(k * w), weight: .semibold)
+            // 字形改用固件 CAML 原始曲線（Design/HVPlayPauseGlyph.swift）：取代 SF Symbols，形狀 1:1
+            for (isPlay, w) in [(false, 1 - m), (true, m)] where w > 0.01 {
+                let f = 0.6 + 0.4 * min(1, w * 1.1)
+                // 執行中（isPlay=false）橘符；暫停中（isPlay=true）白符（橘底）
+                let gc = isPlay ? NSColor.white : run
+                HVPlayPauseGlyph.draw(c, play: isPlay, center: CGPoint(x: r.midX, y: r.midY),
+                                      diameter: r.width * f,
+                                      color: gc.withAlphaComponent(k * w))
             }
         }
     }

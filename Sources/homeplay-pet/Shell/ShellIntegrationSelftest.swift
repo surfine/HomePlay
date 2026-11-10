@@ -38,11 +38,28 @@ enum ShellIntegrationSelftest {
         check(PersonalGate.lockReason(I(recognitionActive: true, viewer: .known("k")), followOn: true) == .family
               && PersonalGate.locks("calendar", I(recognitionActive: true, viewer: .known("k"))), "門：認出的家人＝個人 App 鎖，鎖定頁寫「只開給主人」")   // l10n-ignore：selftest 斷言
         check(PersonalGate.lockReason(I(recognitionActive: true, viewer: .guest), followOn: true) == .look
+              && PersonalGate.lockReason(I(recognitionActive: true, viewer: .guest, unlikeCount: 2), followOn: true) == .look
               && PersonalGate.lockReason(I(recognitionActive: true, viewer: .nobody), followOn: true) == .look
               && PersonalGate.lockReason(I(recognitionActive: true, viewer: .owner("o")), followOn: false) == .followOff
               && PersonalGate.lockReason(I(guestMode: true, recognitionActive: true, viewer: .known("k")), followOn: true) == .guestMode
               && PersonalGate.lockReason(I(remoteGuest: true), followOn: true) == .remoteGuest
               && PersonalGate.lockReason(I(hintIsOwner: false), followOn: true) == .hint, "門：鎖定頁的其他原因照舊")   // l10n-ignore：selftest 斷言
+        check(PersonalGate.lockReason(I(recognitionActive: true, viewer: .guest, unlikeCount: 3), followOn: true) == .phone
+              && PersonalGate.lockReason(I(recognitionActive: true, viewer: .nobody, unlikeCount: 3), followOn: true) == .phone
+              && PersonalGate.lockReason(I(recognitionActive: true, viewer: .known("k"), unlikeCount: 3), followOn: true) == .family
+              && !allow(I(recognitionActive: true, viewer: .guest, requirePhone: true, phonePresent: true, unlikeCount: 3))
+              && allow(I(recognitionActive: true, viewer: .owner("o"), requirePhone: true, phonePresent: true, unlikeCount: 3)), "門：滿三次改請 iPhone，門仍是原來的 requirePhone／phonePresent")   // l10n-ignore：selftest 斷言
+        typealias S = WhoIsLooking.UnlikeStrikes
+        func fold(_ g: [S.Glance]) -> S { g.reduce(S()) { $0.next($1) } }
+        check(fold([.unlike, .unlike, .unlike]).count == 1, "不像主人：同一回連續看著只算一次")
+        check(fold([.unlike, .idle, .unlike, .idle]).count == 2 && !fold([.unlike, .idle, .unlike, .idle]).asksPhone, "不像主人：看開再看，滿三次才改口")
+        check(fold([.unlike, .idle, .unlike, .idle, .unlike]).asksPhone, "不像主人：三次才改口")
+        check(fold([.unlike, .idle, .owner, .unlike]).count == 1, "不像主人：中間是主人就歸零")
+        check(S.glance(viewer: .owner("o"), contradictsOwner: false) == .owner
+              && S.glance(viewer: .owner("o"), contradictsOwner: true) == .unlike
+              && S.glance(viewer: .guest, contradictsOwner: false) == .unlike
+              && S.glance(viewer: .nobody, contradictsOwner: false) == .idle
+              && S.glance(viewer: .known("k"), contradictsOwner: false) == .idle, "不像主人：主人歸零，反證與認不出的臉算一次，沒人與家人先停")   // l10n-ignore：selftest 斷言
 
         let owner = Person(id: "o", name: "Aaron", colorIndex: 0, isOwner: true), kid = Person(id: "k", name: "Bo", colorIndex: 2, isOwner: false)
         let people = [owner, kid]

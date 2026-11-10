@@ -119,7 +119,6 @@ HPDS 是 HomePlay 2 所有畫面共用的那一層：外殼、內建 App、ClioT
 | `dot` | 14 | 所有頁點 |
 | `liveActivity` | 62 | 系統 Live Activity，不進階梯 |
 | `sourceBadge` | 24 | 藥丸右下的 CarPlay 角標（會話活著但在背景；≈ 12.7 pt） |
-| `sourceCapsule`、`sourceGap` | 232 × 90、48 | 長按藥丸拉出的「HomeView／CarPlay」兩顆；上面那顆在頂列 105 線上，下面那顆滴出來，中間 48（> HPDrip.merge 40，頸子斷） |
 
 內縮與節奏（`HPGrid.Inset` / `HPGrid.Rhythm`）：一個容器**只有一條左緣、一條右緣**——`card` 40（標題、清單、預覽、主按鈕都對它）、`nested` 24（卡片內行的內距）、`menu` 12（長按選單唯一的邊線）、`app` 64（沿用）。卡片內部只用 `rowGap` 8、`groupGap` 24、`sectionGap` 32。
 

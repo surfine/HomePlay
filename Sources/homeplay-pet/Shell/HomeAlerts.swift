@@ -1,7 +1,8 @@
 // 家庭警報（HomeView 對齊 WP5）：官方家庭警報詞彙——
 // 煙霧／一氧化碳／二氧化碳／水漏／門窗安全五類，文案照官方原文（標題＋「…detected in 房間」；
 // 門窗是「%@ opened at 時間」）。桌寵的數據源：HomeLink 快照裡對應的配件狀態；這裡只放
-// 純邏輯（種類、文案、過期）與橫幅資料，畫在 HomeApp 頂部。
+// 純邏輯（種類、文案、過期）與橫幅資料。畫面端兩處：家庭 App 頂部的橫幅（HomeApp.drawAlertBanner）、
+// 任何畫面都浮的警報卡（L2，Shell/HomeAlertCard.swift）。
 import AppKit
 
 enum HomeAlertKind: String, CaseIterable, Equatable {
@@ -184,7 +185,18 @@ enum HomeAlertsSelfTest {
         HomeAlerts.note(old: mk("s", "smoke", "Kitchen", false), new: mk("s", "smoke", "Kitchen", true), now: 2002)
         check(HomeAlerts.active.first?.kind == .smoke && HomeAlerts.active.first?.room == "Kitchen", "警報：煙霧碼直接生效（前向相容）")   // l10n-ignore
         HomeAlerts.active = []
+
+        // 警報卡（L2，Shell/HomeAlertCard.swift）：豁免、命中、家庭 App 讓位、版本觸發重畫
+        Shell.nav.screen = .face; Shell.nav.overlay = .none
+        HomeAlertCard.lastVersion = -1
+        HomeAlerts.fire(.leak, room: "Kitchen", now: 0)   // l10n-ignore
+        check(HomeAlertCard.tick(0.5), "警報卡：版本變化那一幀要重畫")   // l10n-ignore
+        check(HomeAlertCard.shown, "警報卡：有警報就顯示")   // l10n-ignore
+        check(HomeAlertCard.exempt(CGPoint(x: 0.5, y: 0.2)) && !HomeAlertCard.exempt(CGPoint(x: 0.9, y: 0.9)) && !HomeAlertCard.exempt(nil), "警報卡：豁免「第一下只喚醒」只在卡上")   // l10n-ignore
+        Shell.nav.screen = .app("home")
+        check(!HomeAlertCard.shown && !HomeAlertCard.exempt(CGPoint(x: 0.5, y: 0.2)), "警報卡：家庭 App 裡讓給自己的橫幅")   // l10n-ignore
+        Shell.nav.screen = .face; Shell.nav.overlay = .none
+        HomeAlerts.active = []
     }
 }
 
-extension Notification.Name { static let homeAlertFired = Notification.Name("HomePlayHomeAlertFired") }

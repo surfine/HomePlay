@@ -73,7 +73,8 @@ struct ClioVoiceSection: View {
                 ForEach(m.options) { Text(m.label($0)).tag($0.id) }
             } label: {
                 RowLabel(title: L("clio.voice.title", "声音"),
-                         subtitle: m.options.isEmpty ? L("clio.voice.none", "这台 Mac 还没有这种语言的声音") : L("clio.voice.sub", "这台 Mac 已装好的系统声音"))
+                         subtitle: m.options.isEmpty ? L("clio.voice.none", "这台 Mac 还没有这种语言的声音") : L("clio.voice.sub", "这台 Mac 已装好的系统声音"),
+                         symbol: "waveform", tint: .purple)
             }
             LabeledContent {
                 Slider(value: Binding(get: { Double(m.rate) }, set: { m.setRate(Float($0)) }),
@@ -86,15 +87,19 @@ struct ClioVoiceSection: View {
                 } onEditingChanged: { editing in if !editing { m.preview() } }
                 .frame(width: 220)
             } label: {
-                Text(L("clio.rate", "语速"))
+                RowLabel(title: L("clio.rate", "语速"), symbol: "speedometer", tint: .purple)
             }
             if let p = m.personal, p != .authorized {
                 LabeledContent {
-                    Button(L("clio.voice.personal.ask", "使用个人声音…")) { m.askPersonal() }.disabled(p == .denied)
+                    HStack(spacing: 10) {
+                        InfoButton(p == .denied ? L("clio.voice.personal.denied", "已拒绝 · 到「系统设置 › 辅助功能 › 个人声音」允许 HomePlay")
+                                                : L("clio.voice.personal.sub", "用你自己录的声音念回答；声音留在这台 Mac"))
+                        Button(L("clio.voice.personal.ask", "使用个人声音…")) { m.askPersonal() }.disabled(p == .denied)
+                    }
                 } label: {
                     RowLabel(title: L("clio.voice.personal", "个人声音"),
-                             subtitle: p == .denied ? L("clio.voice.personal.denied", "已拒绝 · 到「系统设置 › 辅助功能 › 个人声音」允许 HomePlay")
-                                                    : L("clio.voice.personal.sub", "用你自己录的声音念回答；声音留在这台 Mac"))
+                             subtitle: p == .denied ? L("clio.voice.personal.deniedShort", "已拒绝") : L("clio.voice.personal.short", "用你录的声音念回答"),
+                             symbol: "person.wave.2.fill", tint: .purple)
                 }
             }
         } header: {

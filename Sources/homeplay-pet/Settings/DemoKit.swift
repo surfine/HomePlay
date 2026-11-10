@@ -210,6 +210,8 @@ struct FlatHome {
     var dim = 0.0
     var tint: Color? = nil
     var room = false          // 房間裡：影子用中性黑
+    var lift = 0.0            // 拆開：螢幕往上離開底座（螢幕寬的倍數）
+    var screen: ((GraphicsContext) -> Void)? = nil   // 螢幕內容換成別的（主畫面、App…）；nil＝錶面
 
     struct Anchors { var eyes: CGPoint; var ground: CGPoint; var top: CGPoint }
 
@@ -217,6 +219,7 @@ struct FlatHome {
     func draw(_ g: GraphicsContext, _ pal: IllusPalette) -> Anchors {
         let S = self.S * scale
         let pr = HomeProjection(x: x, y: y, S: S, yaw: yaw)
+        let ps = lift == 0 ? pr : HomeProjection(x: x, y: y - lift * S, S: S, yaw: yaw)   // 螢幕那一半
         let ground = pr(0, 0, 0)
         // 影子：平塗橢圓
         g.fill(DemoShape.ellipse(ground, 0.5 * S, 0.075 * S), with: .color(room ? .black.opacity(0.14) : pal.shadow))
@@ -251,8 +254,8 @@ struct FlatHome {
             if let tint { c.fill(base, with: .color(tint)) }
         }
         // 螢幕：背面 → 側面 → 外框 → 黑邊 → 顯示 → 鏡頭
-        let back = DemoShape.frame.map { pr.screen($0.0, $0.1, -0.06) }
-        let front = DemoShape.frame.map { pr.screen($0.0, $0.1) }
+        let back = DemoShape.frame.map { ps.screen($0.0, $0.1, -0.06) }
+        let front = DemoShape.frame.map { ps.screen($0.0, $0.1) }
         g.fill(DemoShape.path(back), with: .color(Ink.side))
         g.fill(Path { p in
             for i in front.indices {
@@ -264,14 +267,14 @@ struct FlatHome {
         g.fill(framePath, with: .color(Ink.frame))
         if let tint { g.fill(framePath, with: .color(tint)) }
         g.stroke(framePath, with: .color(Ink.frameEdge), lineWidth: 0.6)
-        g.fill(DemoShape.path(DemoShape.bezel.map { pr.screen($0.0, $0.1) }), with: .color(Ink.bezel))
-        let TL = pr.screen(-0.43, 0.43), TR = pr.screen(0.43, 0.43), BL = pr.screen(-0.43, -0.43)
+        g.fill(DemoShape.path(DemoShape.bezel.map { ps.screen($0.0, $0.1) }), with: .color(Ink.bezel))
+        let TL = ps.screen(-0.43, 0.43), TR = ps.screen(0.43, 0.43), BL = ps.screen(-0.43, -0.43)
         do {
             var c = g
-            c.clip(to: DemoShape.path(DemoShape.display.map { pr.screen($0.0, $0.1) }))
+            c.clip(to: DemoShape.path(DemoShape.display.map { ps.screen($0.0, $0.1) }))
             c.concatenate(CGAffineTransform(a: (TR.x - TL.x) / 100, b: (TR.y - TL.y) / 100,
                                             c: (BL.x - TL.x) / 100, d: (BL.y - TL.y) / 100, tx: TL.x, ty: TL.y))
-            HomeScreens.face(c, look: look, blink: blink)
+            if let screen { screen(c) } else { HomeScreens.face(c, look: look, blink: blink) }
             if reveal > 0.001 {
                 var r = c
                 r.clip(to: DemoShape.circle(50, 64, reveal * 80))
@@ -279,9 +282,9 @@ struct FlatHome {
             }
             if dim > 0.001 { c.fill(Path(CGRect(x: 0, y: 0, width: 100, height: 100)), with: .color(.black.opacity(dim))) }
         }
-        let cam = pr.screen(0, 0.482)
+        let cam = ps.screen(0, 0.482)
         g.fill(DemoShape.circle(cam, max(0.8, S * 0.011)), with: .color(camOn ? Ink.mint : .demo(0x2A2A2E)))
-        return Anchors(eyes: pr.screen(0, -0.14), ground: ground, top: pr.screen(0, 0.5))
+        return Anchors(eyes: ps.screen(0, -0.14), ground: ground, top: ps.screen(0, 0.5))
     }
 }
 

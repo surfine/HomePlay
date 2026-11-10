@@ -26,9 +26,33 @@ enum LiveActivitySelftest {
         let greetingTop = HPTokens.Home.greetingBaseline - HPTokens.Home.greetingSize * 0.75
         check(abs(c.pill.midX - 512) < 0.01 && c.pill.height == S.height && c.leading.map { $0.width == c.trailing.width && $0.maxX <= 512 - eh } == true
               && c.trailing.minX >= 512 + eh && c.pill.maxY < greetingTop && c.pill.width < 440,
-              "Live Activity compact：👀 正中、左右同寬緊貼眼睛、62 高、比舊的 440 窄、不壓問候語（\(c.pill)）")   // l10n-ignore：selftest 訊息
+              "Live Activity compact：👀 正中、左右同寬緊貼眼睛、54 高、比舊的 440 窄、不壓問候語（\(c.pill)）")   // l10n-ignore：selftest 訊息
+        // 回歸 #15：換頁只從「乾淨」的上一幀取舊畫面
+        check(Face.transitionSource(dim: 0, pageDir: 0, status: .notConnected, hasLast: true, hasSettled: false) == .last
+              && Face.transitionSource(dim: 0.4, pageDir: 0, status: .notConnected, hasLast: true, hasSettled: true) == .settled
+              && Face.transitionSource(dim: 0, pageDir: 1, status: .notConnected, hasLast: true, hasSettled: true) == .settled
+              && Face.transitionSource(dim: 0, pageDir: 0, status: .live, hasLast: true, hasSettled: true) == .settled
+              && Face.transitionSource(dim: 0, pageDir: 0, status: .paused, hasLast: true, hasSettled: false) == .none,
+              "換頁來源：壓暗／換頁中／CarPlay 直播暫停都不用 lastFrame（回歸 #15）")   // l10n-ignore：selftest 訊息
+        // 回歸 #17b：iPhone 鏡像活動沒有可讀內容，不得把膠囊長成空的深色大藥丸
+        let phone = LiveActivity(kind: .iphone, title: "計時器", detail: "1:00", accent: .blue, progress: nil, appID: "bridge")   // l10n-ignore
+        let empty = LiveActivity(kind: .call, title: "", detail: " ", accent: .green, progress: nil, appID: "facetime")
+        let call = LiveActivity(kind: .call, title: "通話", detail: "1:00", accent: .green, progress: nil, appID: "facetime")   // l10n-ignore
+        let music = LiveActivity(kind: .music, title: "歌", detail: "人", accent: .blue, progress: 0.2, appID: "music")   // l10n-ignore
+        check(!Face.growsCapsule([phone], musicActive: false)
+              && Face.growsCapsule([call], musicActive: false)
+              && !Face.growsCapsule([empty], musicActive: false)
+              && !Face.growsCapsule([music], musicActive: true)
+              && Face.growsCapsule([music], musicActive: false)
+              && Face.growsCapsule([phone, call], musicActive: false),
+              "Live Activity：空內容與 iPhone 鏡像不長大；通話／有字的活動才長（回歸 #17b）")   // l10n-ignore：selftest 訊息
+        // 回歸 #18：再長的內容也不能把膠囊撐成巨物；槽與膠囊同一個上限
+        let huge = S.layout(eyesHalf: eh, top: 46, single: (40, 380), minimal: [])
+        check(huge.pill.width <= S.maxWidth + 0.01 && huge.trailing.width <= (S.maxWidth - 2 * (eh + S.gap + S.endPad)) / 2 + 0.01
+              && huge.trailing.width < 380,
+              "Live Activity compact：內容槽受上限約束（膠囊 ≤ \(S.maxWidth)、槽 ≤ \(huge.trailing.width)）")   // l10n-ignore：selftest 訊息
         // minimal：一個接在膠囊、兩個分離（右、左），寬內容是橢圓
-        let m = S.layout(eyesHalf: eh, top: 46, single: nil, minimal: [38, 34, 80])
+        let m = S.layout(eyesHalf: eh, top: 46, single: nil, minimal: [38, 26, 80])
         check(m.detached.count == 2 && m.detached[0].minX > m.pill.maxX && m.detached[1].maxX < m.pill.minX
               && m.detached[0].width == m.detached[0].height && m.detached[1].width > m.detached[1].height
               && m.trailing.minX >= 512 + eh && m.pill.maxY < greetingTop,

@@ -103,30 +103,45 @@ enum SettingsSection: String, CaseIterable, Identifiable {
         case .permissions: return L("settings.permissions", "权限")
         }
     }
-    /// 侧边栏符号：线条版，跟 WindowShade 一样由 source list 染成强调色
+    /// 侧边栏符号：系统设置那样的彩色圆角方块＋白色实心符号（同一个尺寸，文字左缘对齐）
     var symbol: String {
         switch self {
-        case .general: return "gearshape"
+        case .general: return "gearshape.fill"
         case .appearance: return "circle.lefthalf.filled"
-        case .gestures: return "hand.point.up.left"
-        case .carplay: return "car"
-        case .home: return "house"
-        case .cliotalk: return "bubble.left.and.text.bubble.right"
-        case .camera: return "camera"
-        case .people: return "person.2"
+        case .gestures: return "hand.point.up.left.fill"
+        case .carplay: return "car.fill"
+        case .home: return "house.fill"
+        case .cliotalk: return "bubble.left.and.text.bubble.right.fill"
+        case .camera: return "camera.fill"
+        case .people: return "person.2.fill"
         case .devices: return "ipad.and.iphone"
-        case .permissions: return "hand.raised"
+        case .permissions: return "hand.raised.fill"
+        }
+    }
+    /// 方块的颜色；这一页里每一行的符号也用它
+    var tint: Color {
+        switch self {
+        case .general: return .gray
+        case .appearance: return Color(white: 0.28)
+        case .gestures: return .teal
+        case .carplay: return .green
+        case .home: return .orange
+        case .cliotalk: return .purple
+        case .camera: return .indigo
+        case .people: return .pink
+        case .devices: return .cyan
+        case .permissions: return .blue
         }
     }
     /// 搜索用：这一页里每一行的标题（按当前语言）
     private var keywordKeys: [String] {
         switch self {
-        case .general: return ["settings.loginItem", "settings.alwaysOnTop", "settings.language", "settings.size", "prefs.nowPlaying", "settings.lyrics", "prefs.calendar.on", "prefs.hints"]
-        case .appearance: return ["settings.facing", "settings.angle", "settings.finish", "settings.face"]
-        case .gestures: return ["settings.gesture.pinch.title", "settings.gesture.slide.title", "settings.gesture.three.title", "settings.gesture.force.title",
-                                "settings.gesture.liveSlide", "settings.gesture.reset", "settings.gesture.apart", "settings.gesture.overview", "settings.gesture.keys"]
-        case .carplay: return ["prefs.plugConnect", "menu.iphone", "menu.pairNewPhone", "menu.wifiPassword", "handoff.header", "selfshare.header"]   // 2.0 promo
-        case .home: return ["settings.home.title", "settings.home.name", "settings.home.openApp"]
+        case .general: return ["settings.loginItem", "settings.alwaysOnTop", "settings.language", "settings.size", "prefs.nowPlaying", "settings.lyrics", "prefs.calendar.on", "la.settings.header"]
+        case .appearance: return ["settings.facing", "settings.angle", "settings.finish", "settings.face", "settings.capsule", "settings.clockLook", "settings.home.appearance", "settings.display.title", "sharedAlbums.title", "settings.textSize"]
+        case .gestures: return ["settings.gesture.home", "settings.gesture.switcher", "settings.gesture.control", "settings.gesture.page", "settings.gesture.turn",
+                                "settings.gesture.resize", "settings.gesture.moveWindow", "settings.gesture.apart.title", "settings.gesture.keys", "settings.intro", "settings.intro.input", "settings.intro.tips"]
+        case .carplay: return ["prefs.plugConnect", "settings.callVolume", "settings.corners", "menu.iphone", "menu.pairNewPhone", "menu.wifiPassword", "handoff.header", "selfshare.header"]   // 2.0 promo
+        case .home: return ["settings.home.name", "settings.home.openApp", "settings.home.test", "settings.home.helper.title"]
         case .cliotalk: return ["clio.provider", "clio.key", "clio.fast", "clio.deep", "clio.section.data", "clio.cap", "clio.speak", "clio.f5", "clio.clear"]
         case .camera: return ["settings.follow.title", "settings.followRange", "settings.followPitch", "settings.roomLight.title"]
         case .people: return ["people.pane.recognize", "people.pane.family", "people.pane.addTitle", "people.pane.deleteAll"]
@@ -156,6 +171,7 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
     private var timer: Timer?
 
     static func show(app: AppDelegate, pane: SettingsSection? = nil) {
+        if let pane { UserDefaults.standard.set(pane.rawValue, forKey: SettingsSection.key) }   // 新建窗口时第一帧就是这一页
         let c = shared ?? SettingsWindowController(app: app)
         shared = c
         c.model.refresh()
@@ -213,14 +229,12 @@ struct SettingsRoot: View {
     var body: some View {
         NavigationSplitView {
             List(visible, selection: Binding(get: { m.section }, set: { if let s = $0 { m.section = s } })) { s in
-                // 图示一律 14 pt、放在 20 pt 宽的同一栏里置中：车子和手一样宽，文字左缘对齐成一条线
-                Label {
-                    Text(s.title)
-                } icon: {
-                    Image(systemName: s.symbol).font(.system(size: 14, weight: .regular)).frame(width: 20, alignment: .center)
-                }
+                // 對齊 WindowShade（抄其 SettingsView：Label＋.listStyle(.sidebar)——側欄樣式決定行距、
+                // 選中條與符號渲染語意，不自訂字級與顏色）
+                Label { Text(s.title) } icon: { Image(systemName: s.symbol) }
                 .tag(s)
             }
+            .listStyle(.sidebar)
             .overlay { if visible.isEmpty { ContentUnavailableView.search(text: query) } }   // 2.0 depth：搜不到時照系統設定寫「沒有結果」
             .searchable(text: $query, placement: .sidebar, prompt: L("settings.search", "搜索"))
             .onChange(of: query) { _, _ in

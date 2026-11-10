@@ -215,7 +215,7 @@ final class MusicApp: PetApp {
         guard !rows.isEmpty else { return top }
         if card.maxY > 150, card.minY < 1024 {
             HPComponents.groupCard(g, card)
-            g.saveGState(); g.addPath(continuousRoundedRect(card, radius: 52)); g.clip()
+            g.saveGState(); g.addPath(continuousRoundedRect(card, radius: HPTokens.Radius.concentric(rect: card))); g.clip()
         }
         let tf = HPComponents.sf(40, weight: .regular), df = HPComponents.sf(30, weight: .regular)
         for (k, r) in rows.enumerated() {

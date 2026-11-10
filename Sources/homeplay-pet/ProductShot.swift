@@ -48,15 +48,16 @@ enum ProductShot {
     /// 外框寬 ÷ 螢幕寬（官圖 1.158）；螢幕寬用模型的 screenSize（cm）
     static let frameOverScreen: Float = 1.158
 
-    /// 鏡頭姿勢：沿顯示面法線（後仰 tilt）對準顯示面中心，回傳位置、俯仰（弧度）
-    static func camera(screenCenter c: SIMD3<Float>, tilt: Float, screenWidth: Float) -> (position: SIMD3<Float>, pitch: Float) {
+    /// 鏡頭姿勢：沿顯示面法線（後仰 tilt）對準顯示面中心，回傳位置、俯仰（弧度）。
+    /// dolly 1、aimUp 0 是官圖機位。dolly 越小越近；aimUp 以螢幕寬為單位，把對焦點往螢幕上方挪（眼睛在上緣）。
+    static func camera(screenCenter c: SIMD3<Float>, tilt: Float, screenWidth: Float, dolly: Float = 1, aimUp: Float = 0) -> (position: SIMD3<Float>, pitch: Float) {
         let viewW = screenWidth * frameOverScreen / frameOfWidth
         let viewH = viewW / Float(aspect)
-        let d = (viewH / 2) / tanf(fov / 2 * .pi / 180)
+        let d = (viewH / 2) / tanf(fov / 2 * .pi / 180) * max(0.2, dolly)
         let n = SIMD3<Float>(0, sinf(tilt), cosf(tilt))          // 螢幕法線
         let up = SIMD3<Float>(0, cosf(tilt), -sinf(tilt))       // 畫面的上方
         // 螢幕中心在畫面中線上方 (0.5 − 0.433)·viewH：鏡頭中心往下挪這麼多
-        let target = c - up * ((0.5 - screenCenterFromTop) * viewH)
+        let target = c - up * ((0.5 - screenCenterFromTop) * viewH) + up * (screenWidth * aimUp)
         return (target + n * d, tilt)
     }
 

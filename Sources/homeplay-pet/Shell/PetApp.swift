@@ -49,6 +49,8 @@ protocol PetApp: AnyObject {
     func handleLongPress(_ p: CGPoint, face: Face, now: Double) -> Bool
     /// 滾輪／觸控板（往上為正）；吃掉回 true
     func handleScroll(_ dy: CGFloat, now: Double) -> Bool
+    /// 觸控板橫滑（往右為正，照 NSEvent.scrollingDeltaX）；吃掉回 true。不實作＝橫滑照舊交給外殼（預設不吃）
+    func handleScrollX(_ dx: CGFloat, now: Double) -> Bool
     /// 打開前叫：回 true＝自己處理掉了（例如打開設定視窗），外殼不切到 App 畫面
     func launch(face: Face) -> Bool
     /// 有正在進行的事就回一個 Live Activity（頂端藥丸）
@@ -74,6 +76,7 @@ extension PetApp {
     func tick(_ now: Double) -> Bool { false }
     func handleTap(_ p: CGPoint, face: Face, now: Double) -> Bool { false }
     func handleScroll(_ dy: CGFloat, now: Double) -> Bool { false }
+    func handleScrollX(_ dx: CGFloat, now: Double) -> Bool { false }
     func handleLongPress(_ p: CGPoint, face: Face, now: Double) -> Bool { false }
     func launch(face: Face) -> Bool { false }
     func liveActivity(face: Face, now: Double) -> LiveActivity? { nil }

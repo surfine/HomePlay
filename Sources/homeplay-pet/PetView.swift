@@ -495,7 +495,8 @@ final class PetView: NSView {
     /// 窗口缩放后 ARView 始终铺满内容区（RealityKit 的相机投影按 bounds 算）。
     override func layout() {
         super.layout()
-        if render.frame != bounds { render.frame = bounds; requestFrame(); updateFaceScale() }
+        if render.frame != bounds { render.frame = bounds; requestFrame() }
+        updateFaceScale()   // 無條件重算（拍板 2026-11-07：放大後內容要依舊清晰）：autoresizing 在 layout 之前就把 render.frame 對齊 bounds，靠上面的相等判斷會漏掉整段捏合縮放，renderScale 停在啟動那刻＝放大後整張貼圖被拉大發糊
     }
     /// 換到不同解析度的螢幕（Retina ↔ 外接 1x）：貼圖跟著重算
     override func viewDidChangeBackingProperties() {
@@ -524,11 +525,18 @@ final class PetView: NSView {
             if face.renderScale != 1 { face.renderScale = 1; face.forceDirty = true }
             return
         }
-        // 螢幕佔視窗寬約 0.71（USDZ 量的）：貼圖像素要 ≥ 螢幕上實際像素，否則放大後發糊；上限 2048
-        let need = bounds.width * (window?.backingScaleFactor ?? 2) * 0.72
-        Typo.pointsPerUnit = max(80, bounds.width) * 0.72 / 1024   // 字體的光學尺寸與字距照螢幕上的實際大小（Typography.swift）
-        let sc = max(0.25, min(2, need / 1024))
-        if abs(sc - face.renderScale) > 0.02 { face.renderScale = sc; face.forceDirty = true }
+        // 螢幕佔視窗寬：桌座 0.72（USDZ 量的）、掛牆 0.95（螢幕模組近滿窗，Pet.wallAspect）——
+        // 貼圖像素要 ≥ 螢幕上實際像素，否則放大後發糊；上限 2048（900pt 窗 × 2× 螢幕也吃不滿，只當保險）
+        let fraction: CGFloat = model.wall ? 0.95 : 0.72
+        let need = bounds.width * (window?.backingScaleFactor ?? 2) * fraction
+        Typo.pointsPerUnit = max(80, bounds.width) * fraction / 1024   // 字體的光學尺寸與字距照螢幕上的實際大小（Typography.swift）
+        // 片頭近景把貼圖提到 textureScale；光學尺寸仍照視窗，字才不會跟著貼圖變大
+        let sc = HeroPull.on ? HeroPull.textureScale : max(0.25, min(2, need / 1024))
+        carVideo.displaySide = Int(need.rounded())   // CarPlay 直播的方圖跟著同一條顯示需求（CarVideo 自夾 1088–2048）
+        if abs(sc - face.renderScale) > 0.02 {
+            log(String(format: "face scale %.2f → %.2f（窗寬 %.0f、%@、%dx 螢幕）", face.renderScale, sc, bounds.width, model.wall ? "掛牆" : "桌座", window?.backingScaleFactor ?? 2))
+            face.renderScale = sc; face.forceDirty = true
+        }
     }
 
     /// RealityKit 快照（透明底）。ARView 与 PetView 同尺寸，直接取整张。
@@ -922,9 +930,15 @@ final class PetView: NSView {
             let t = Float(HomeViewModel.tilt), dz = 4.28 - HomeViewModel.rigHome.z
             let c = ProductShot.screenCenter(hinge: HomeViewModel.rigHome + SIMD3<Float>(0, Float(bob), 0),
                                              dy: Float(HomeViewModel.rigY - HomeViewModel.hingeY), dz: dz, tilt: t)
-            let shot = ProductShot.camera(screenCenter: c, tilt: ProductShot.elevation, screenWidth: HomeViewModel.screenSize)
+            let shot = ProductShot.camera(screenCenter: c, tilt: ProductShot.elevation, screenWidth: HomeViewModel.screenSize,
+                                          dolly: HeroPull.on ? HeroPull.dolly : 1, aimUp: HeroPull.on ? HeroPull.aimUp : 0)
             cameraEntity.position = shot.position
             cameraEntity.orientation = simd_quatf(angle: -shot.pitch, axis: SIMD3<Float>(1, 0, 0))
+            // 官圖 near=50 剛好在整機前面；拉近後機會穿進近裁面，畫面被切光
+            if HeroPull.on, var pc = cameraEntity.components[PerspectiveCameraComponent.self] {
+                let near: Float = 6
+                if abs(pc.near - near) > 0.5 { pc.near = near; cameraEntity.components.set(pc) }
+            }
         }
         updateAnatomyCallout(now)
 
@@ -1093,10 +1107,19 @@ final class PetView: NSView {
     private var system6Pending = false, system6Token = 0
     /// 觸控按在機身上：「戳一下」等放手確認是點按才算（Shell/TouchInput.swift 的 BodyPoke）
     private var pendingPoke = false
+    /// 家庭警報卡：按下只記住，放手沒拖才算點按（卡类 overlay 只拦点按、放行拖拽）
+    private var alertPress: (uv: CGPoint?, event: NSEvent)?
     private var wheelAcc: CGFloat = 0, lastFaceSwitch = 0.0
     /// 换錶面（滚轮、← →、菜单）：记住选择，岛眨一下眼
     func setFaceStyle(_ st: FaceStyle, remember: Bool = true) {
         face.textLayerCache = nil; face.staticCache = nil   // 换表盘后旧缓存不会再命中，直接放掉
+        // 目前這張海報記住螢幕上的錶面。快照（remember: false）不寫偏好。
+        let kind = st.inLineup.rawValue
+        if remember, PosterConfiguration.current.extras.faceKind != kind {
+            var c = PosterConfiguration.current
+            c.extras.faceKind = kind
+            PosterConfiguration.current = c
+        }
         guard st != face.style else { return }
         face.style = st
         if remember { UserDefaults.standard.set(st.rawValue, forKey: FaceStyle.defaultsKey) }
@@ -1336,10 +1359,17 @@ final class PetView: NSView {
         }
         if posterActive, mood.near || gazeEnabled { endPoster() }
         // 靠近就多显示：240 pt 外收起，20 pt 内全展开；摄像头看到人时直接全开
-        face.revealTarget = gazeHere ? 1
-            : (gazeRecent ? max(face.revealTarget, 0.65)
-               : (forceNear ? 1 : max(0, min(1, 1 - (dist - 20) / 220))))
-        face.flowActive = mood.near && face.expression != .asleep
+        // 快照：游標位置不參與（不然每一跑的背景／眼神都不一樣，金幀永遠漂）；--near 仍可明示要全展開
+        if Face.snapshotFreeze {
+            face.revealTarget = forceNear ? 1 : 0
+            face.flowActive = false
+            face.pointer = .zero
+        } else {
+            face.revealTarget = gazeHere ? 1
+                : (gazeRecent ? max(face.revealTarget, 0.65)
+                   : (forceNear ? 1 : max(0, min(1, 1 - (dist - 20) / 220))))
+            face.flowActive = mood.near && face.expression != .asleep
+        }
         if mood.near { mood.activity(now: now, hour: Calendar.current.component(.hour, from: Date())) }
         if gazeHere {
             face.pointer = CGPoint(x: max(-1, min(1, gazeX)), y: max(-1, min(1, gazeY)))
@@ -1493,6 +1523,9 @@ final class PetView: NSView {
 
     override func mouseDown(with event: NSEvent) {
         if TouchInput.dropsSystemEvent() { return }   // 系統從同一下觸控模擬出來的：觸控那邊已經處理（Shell/TouchInput.swift）
+        alertPress = nil   // 上一下沒收乾淨（視窗失焦等）：新的一下不繼承
+        if !TouchInput.synthesizing, !ShellInput.passThrough { TouchInput.scroll = nil; touchStopMomentum() }   // 滑鼠／觸控板的新一下：上一下螢幕拖的慣性停住（觸控在 touchBegan 做）
+        IntroGuide.notePointer(touch: TouchInput.synthesizing)   // 手勢引導「自動」：記下最近一次是滑鼠、觸控板還是手指
         endPoster()
         // 非激活面板收不到捏合/旋转这类手势事件：点一下就把 App 激活并把窗口立为 key
         // （makeKey 而不是只激活 App——面板只有成为 key window 才开始收手势）。
@@ -1506,26 +1539,47 @@ final class PetView: NSView {
             if let uv = screenUV(probePoint) { log(String(format: "click uv=(%.3f,%.3f)", uv.x, uv.y)) }
             else { log("click body hit=\(hitsModel(probePoint))") }
         }
-        // 2.0 首次設定開著：屏幕上的點擊都歸它（Setup/SetupFlow.swift）；權限說明卡蓋在上面時讓給卡片
-        if SetupFlow.active, !PermissionPrimer.visible, !showingVideo, let uv = screenUV(local(event)) {
-            drag = .none; SetupFlow.press(x: uv.x * 1024, y: uv.y * 1024); face.forceDirty = true; return
+        // 家庭警報卡畫在整個畫面的最上層（連首次設定、權限卡、休眠壓黑都蓋過）：輸入也先問它。
+        // 只攔「點按」（放手沒拖才進家庭 App）；拖動照樣交回底下的手勢，卡不該吃掉換頁／捲動。
+        if Shell.nav.screen != .switcher, !ShellInput.passThrough, HomeAlertCard.contains(screenUV(local(event))) {
+            alertPress = (screenUV(local(event)), event); drag = .none; return
         }
-        // 权限说明卡在屏幕上时，屏幕上的点击都归卡片（按钮：继续／以后／打开系统设置）
-        if PermissionPrimer.visible, !showingVideo {
-            if let uv = screenUV(local(event)) { drag = .none; PermissionPrimer.press(x: uv.x * 1024, y: uv.y * 1024); face.forceDirty = true; return }
+        // 按下之後的順序照「畫面的層級」由高到低：壓暗（只喚醒）→ 橫幅 → 換人 → 權限卡 → ClioTalk →
+        // 首次設定 → 手勢引導 → hello → 升級提示 → 總覽 → 外殼。畫得高的先收輸入，才不會點到看不見的東西。
+        let uv = screenUV(local(event))
+        ShellInput.wakeSwallow = false
+        if !ShellInput.passThrough, shellWakeGate(onScreen: uv != nil, uv: uv) { drag = .none; return }   // 休眠、海報、變暗：第一下只喚醒，吞到放手；警報卡豁免
+        // 「時間到了」橫幅畫在殼層之上（只低於警報卡與壓暗）：點在橫幅本身先收起它，不要打穿到下面的圖示／按鈕。
+        if face.bannerShowing, !showingVideo, let uv,
+           HPTokens.bannerCard.contains(CGPoint(x: uv.x * 1024, y: uv.y * 1024)) {
+            face.dismissBanner(); drag = .none; return
         }
-        if face.sayingHello, !showingVideo, screenUV(local(event)) != nil, face.skipHello(CACurrentMediaTime()) { drag = .none; return }   // 2.0 hello：点屏幕直接交给錶面（停着等设定卡时归卡片；拖机身照旧）
-        if PeopleOverlay.capturesClicks, !showingVideo, let uv = screenUV(local(event)) {   // 2.0: 录脸引导卡（取消钮）
+        if PeopleOverlay.capturesClicks, !showingVideo, let uv {   // 2.0: 錄臉引導卡（取消鈕）
             drag = .none; PeopleOverlay.press(x: uv.x * 1024, y: uv.y * 1024); face.forceDirty = true; return
         }
-        if ClioTalkPanel.visible, !showingVideo, let uv = screenUV(local(event)) {   // 2.0: ClioTalk 卡片上的點擊歸卡片
+        if PermissionPrimer.visible, !showingVideo, let uv {   // 權限說明卡：按鈕（繼續／以後／打開系統設定）
+            drag = .none; PermissionPrimer.press(x: uv.x * 1024, y: uv.y * 1024); face.forceDirty = true; return
+        }
+        if ClioTalkPanel.visible, !showingVideo, let uv {   // 2.0: ClioTalk 卡片上的點擊歸卡片
             drag = .none; ClioTalkPanel.press(x: uv.x * 1024, y: uv.y * 1024); face.forceDirty = true; return
         }
-        if shellMouseDown(event, uv: screenUV(local(event))) { return }      // 2.0: 主畫面、App、控制中心（Shell/ShellInput.swift）
-        if overviewMouseDown(event, uv: screenUV(local(event))) { return }   // 长按换錶面总览
-        if face.onboardingActive {   // 第一次的操作提示：点一下收起（并取消刚排上的长按）
-            face.dismissOnboarding(); FaceOverview.pressToken += 1; FaceOverview.pressAt = nil; return
+        // 2.0 首次設定開著：屏幕上的點擊都歸它（Setup/SetupFlow.swift）；權限說明卡在上面時已先讓給卡片
+        if SetupFlow.active, !PermissionPrimer.visible, !showingVideo, let uv {
+            drag = .none; SetupFlow.press(x: uv.x * 1024, y: uv.y * 1024); face.forceDirty = true; return
         }
+        // 2.0 手勢引導開著：屏幕上的點擊都歸它（Intro/IntroGuide.swift）；拖機身照舊轉身體
+        if Onboarding.active, !SetupFlow.active, !PermissionPrimer.visible, !showingVideo, let uv {
+            drag = .none; IntroGuide.press(x: uv.x * 1024, y: uv.y * 1024); face.forceDirty = true; return
+        }
+        if face.sayingHello, !showingVideo, uv != nil, face.skipHello(CACurrentMediaTime()) { drag = .none; return }   // 2.0 hello：点屏幕直接交给錶面（停着等设定卡时归卡片；拖机身照旧）
+        if face.introHintVisible, !showingVideo, let uv {   // 2.0：升級提示卡（點卡片開引導、✕ 關掉）
+            let p = CGPoint(x: uv.x * 1024, y: uv.y * 1024)
+            if IntroHint.closeRect.insetBy(dx: -16, dy: -16).contains(p) { drag = .none; introHintTap(open: false); return }
+            if IntroHint.cardRect.contains(p) { drag = .none; introHintTap(open: true); return }
+        }
+        // 總覽畫在外殼之上：先給它，不然頂端藥丸的舊命中區會把總覽的點按吃掉（選不到臉/外觀）
+        if overviewMouseDown(event, uv: uv) { return }
+        if shellMouseDown(event, uv: uv) { return }      // 2.0: 主畫面、App、控制中心（Shell/ShellInput.swift）
         let p = local(event)
         if face.bannerShowing && !showingVideo { face.dismissBanner(); return }   // 点一下收起「时间到了」
         // System 6 錶面：单击屏幕（没拖、也不是双击）才打开 AI System 6，放手后等过双击间隔再开
@@ -1580,7 +1634,7 @@ final class PetView: NSView {
         }
         dragVel = 0; lastDragT = event.timestamp
         if event.clickCount == 2, hitsModel(p) { resetOrientation(); drag = .none; return }
-        // 拖底座＝搬窗口（不用按 ⌘）；螢幕和鉸鏈以上照舊轉身體
+        // 拖底座＝搬窗口（不用按 ⌘）；機身轉身體；螢幕上的拖歸畫面（捲動、換頁；螢幕是內容、機身是物件，2026-11-07）
         if onStand {
             touring = false
             drag = .move; winStart = window?.frame ?? .zero; mouseStart = pointerScreenLocation
@@ -1589,11 +1643,19 @@ final class PetView: NSView {
             return
         }
         drag = .rotate; last = p; rotateMoved = false; rotateTravel = 0; rotLock.reset(); touring = false
-        _ = touchArmsScreenDrag(at: p)   // 觸控、而且按在螢幕上：這一下的拖歸外殼（捲動），點按照舊（拍板 4）
+        _ = touchArmsScreenDrag(at: p)   // 按在螢幕上：這一下的拖歸外殼（捲動），點按照舊（觸控、滑鼠、觸控板都一樣）
     }
 
     override func mouseDragged(with event: NSEvent) {
         if TouchInput.dropsSystemEvent() { return }
+        if ShellInput.wakeSwallow { return }   // 喚醒的那一下：拖動也不給
+        if let a = alertPress {   // 家庭警報卡：拖過 slop 就取消點按，從按下的位置把手勢交回底下（換頁／捲動）
+            let dx = event.locationInWindow.x - a.event.locationInWindow.x
+            let dy = event.locationInWindow.y - a.event.locationInWindow.y
+            if hypot(dx, dy) <= HomeAlertCard.tapSlop { return }
+            alertPress = nil
+            _ = shellMouseDown(a.event, uv: a.uv)
+        }
         lastNear = CACurrentMediaTime()
         hotUntil = CACurrentMediaTime() + 0.4
         if shellMouseDragged(event, uv: screenUV(local(event))) { return }   // 2.0
@@ -1607,7 +1669,7 @@ final class PetView: NSView {
             window?.setFrame(NSRect(x: winStart.minX, y: winStart.maxY - h, width: w, height: h), display: true)
             updateFaceScale()
         case .rotate:
-            if touchScreenDragged(event) { return }   // 觸控在螢幕上拖：捲動，不轉身體
+            if touchScreenDragged(event) { return }   // 在螢幕上拖：捲動，不轉身體
             let dx = p.x - last.x, dy = p.y - last.y; last = p
             rotateTravel += abs(dx) + abs(dy)
             // 单轴锁：起手判主轴（左右＝偏航、上下＝俯仰），被锁的轴不动
@@ -1635,11 +1697,24 @@ final class PetView: NSView {
 
     override func mouseUp(with event: NSEvent) {
         if TouchInput.dropsSystemEvent() { return }
+        if ShellInput.wakeSwallow { ShellInput.wakeSwallow = false; drag = .none; pressTarget = 1; pendingPoke = false; return }   // 喚醒的那一下到這裡結束
+        if let a = alertPress {   // 家庭警報卡：放手沒拖＝點按（拖動已在 mouseDragged 交回底下）
+            alertPress = nil
+            if let uv = a.uv { _ = HomeAlertCard.press(uv: uv, v: self) }
+            drag = .none; pressTarget = 1
+            return
+        }
         lastDragEndAt = CACurrentMediaTime()
         if pendingPoke {   // 觸控在機身上的點按：放手才戳一下（滑鼠在按下時已經算過）
             pendingPoke = false
             let travel = hypot(TouchInput.screenPoint.x - TouchInput.downScreen.x, TouchInput.screenPoint.y - TouchInput.downScreen.y)
             if BodyPoke.atRelease(pending: true, rotating: drag == .rotate, travel: travel), mood.poke(now: lastDragEndAt) { shake(lastDragEndAt) }
+        }
+        if IntroGuide.tracking {   // 2.0 手勢引導
+            let uv = screenUV(local(event))
+            IntroGuide.release(x: uv.map { $0.x * 1024 }, y: uv.map { $0.y * 1024 })
+            drag = .none; face.forceDirty = true
+            return
         }
         if SetupFlow.tracking {   // 2.0 首次設定（先於外殼：設定開著時外殼不收點按）
             let uv = screenUV(local(event))
@@ -1661,7 +1736,7 @@ final class PetView: NSView {
             return
         }
         if overviewMouseUp(event, uv: screenUV(local(event))) { drag = .none; pressTarget = 1; system6Pending = false; return }
-        if drag == .rotate, touchScreenReleased(event) { drag = .none; pressTarget = 1; system6Pending = false; return }   // 觸控：螢幕上捲過了（沒捲＝點按，照下面）
+        if drag == .rotate, touchScreenReleased(event) { drag = .none; pressTarget = 1; system6Pending = false; return }   // 螢幕上捲過了（沒捲＝點按，照下面）
         let p = local(event)
         switch drag {
         case .resize:
@@ -1679,8 +1754,17 @@ final class PetView: NSView {
             updateAnatomyCallout(CACurrentMediaTime())
             log("anatomy pin \(pinnedPart?.rawValue ?? "none")")
         case .rotate where !rotateMoved && !showingVideo && capsuleHit(p):
-            // 「正在播放」胶囊上点一下＝播放／暂停（控正在显示的那家：Music 或 Spotify）
-            NowPlayingPoller.shared.control(.playPause)
+            // 點在 👀 膠囊本體才動作（下三分之一的其他地方不再誤觸播放／暫停）：
+            // CarPlay 在背景＝切回 CarPlay；計時器長大中＝開計時器；在播音樂＝播放／暫停。
+            let onCapsule = screenUV(p).flatMap { uv in
+                face.capsuleCore.map { $0.insetBy(dx: -14, dy: -14).contains(CGPoint(x: uv.x * 1024, y: uv.y * 1024)) }
+            } ?? false
+            if onCapsule {
+                let now = CACurrentMediaTime()
+                if SourceSwitcher.capsuleTap(carPlayBehind: SourceSwitcher.carPlayBehind(face)) == .carPlay { onSwitchSource?() }
+                else if face.timerActive { shellOpenFromAnywhere("timers") }
+                else if face.musicActive(now) { NowPlayingPoller.shared.control(.playPause) }
+            }
         case .rotate where !rotateMoved && system6Pending:
             system6Pending = false; system6Token += 1
             let token = system6Token
@@ -1937,24 +2021,69 @@ final class PetView: NSView {
 
     override func magnify(with e: NSEvent) {
         if TouchInput.dropsSystemEvent() { return }   // 觸控的捏合走 NSMagnificationGestureRecognizer（Shell/TouchInput.swift）
+        IntroGuide.note(.trackpad)   // 手勢引導「自動」：本地捏合只會是觸控板
         endPoster()
         appendDiag("gesture.log", "local magnify mag=\(e.magnification) phase=\(e.phase.rawValue)")
         // 全局接触帧（TrackpadPinch）已经处理同一次捏合时别双倍缩放
         if CACurrentMediaTime() - TrackpadPinch.shared.lastPinchAt < 0.25 { return }
         // 触控板判定这次不是捏合（是双指滑动或扭转）：不缩放
         if TrackpadPinch.shared.available, TrackpadPinch.shared.twoFingerKind != .pinch { return }
+        if !TrackpadPinch.shared.available, e.phase == .began { if !fallbackTwisting { twoFingerFallback.reset() }; fallbackPinching = true }
         // 收尾事件常带一段残余值，别在松手时再跳一下
-        if e.phase == .ended || e.phase == .cancelled { endResize(); return }
+        if e.phase == .ended || e.phase == .cancelled {
+            if !TrackpadPinch.shared.available { fallbackPinching = false; if !fallbackTwisting { twoFingerFallback.reset() } }
+            endResize(); return
+        }
         guard abs(e.magnification) > 0.0001 else { return }
+        // 没有接触帧（退路）：跟两指旋转互斥，先超过门槛的胜
+        if !TrackpadPinch.shared.available, twoFingerFallback.feed(scale: e.magnification) != .pinch { return }
         hotUntil = CACurrentMediaTime() + 0.4
         // 增量语义（Chromium：incremental change values），单帧限幅防大跳
         let factor = min(1.06, max(0.94, 1 + e.magnification))
         resizeWindow(toWidth: bounds.width * factor, anchorCenter: true)
     }
+    /// 兩指旋轉＝原地轉身（2026-11-07 拍板，致敬 iPod nano 的兩指轉螢幕）。觸控板有接觸帧時由 TrackpadPinch 判定
+    /// 捏合／扭轉互斥並送 onRotate（AppDelegate 接到 twistYaw），這裡只是退路：沒有接觸帧時用系統的 rotate 事件，
+    /// 跟 magnify 一起過 TwoFingerLock（先超過門檻的勝）。以前整個不接，是因為捏合時的扭轉會帶著身體轉（2026-10-22）——互斥之後不會了。
     override func rotate(with e: NSEvent) {
-        // 两指旋转手势不再转身体：捏合时手指总会带一点扭转，系统就同时发旋转事件，
-        // 结果缩放时身体也跟着转（2026-10-22）。转身体只用双指滑动／拖动。
-        return
+        if TouchInput.dropsSystemEvent() { return }   // 觸控的旋轉走 NSRotationGestureRecognizer（Shell/TouchInput.swift）
+        guard !TrackpadPinch.shared.available else { return }
+        if e.phase == .began { if !fallbackPinching { twoFingerFallback.reset() }; fallbackTwisting = true }
+        if e.phase == .ended || e.phase == .cancelled {
+            fallbackTwisting = false
+            if twoFingerFallback.kind == .rotate { twistYawEnded(timestamp: e.timestamp) }
+            if !fallbackPinching { twoFingerFallback.reset() }
+            return
+        }
+        let rad = CGFloat(e.rotation) * .pi / 180
+        if twoFingerFallback.feed(angle: rad) == .rotate { twistYaw(by: rad, timestamp: e.timestamp) }
+    }
+    /// 觸控板退路（沒有接觸帧）：這一次兩指的捏合／旋轉互斥
+    private var twoFingerFallback = TwoFingerLock()
+    private var fallbackPinching = false, fallbackTwisting = false
+    private var twisting = false
+
+    /// 兩指旋轉這一幀轉了 radians（逆時針為正）：桌寵原地偏航跟著轉；速度記下來給放手的慣性
+    func twistYaw(by radians: CGFloat, timestamp: Double) {
+        let d = TwistYaw.delta(radians: radians)
+        guard d.isFinite, d != 0 else { return }
+        if !twisting {
+            twisting = true; touring = false; atHome = false; dragVel = 0; lastDragT = timestamp
+            mood.show(.surprised, for: 0.4, now: CACurrentMediaTime())
+            log("gesture twist-rotate")
+        }
+        let dt = max(0.004, timestamp - lastDragT); lastDragT = timestamp
+        dragVel = dragVel * 0.6 + (d / CGFloat(dt)) * 0.4
+        ty += d
+        hotUntil = CACurrentMediaTime() + 0.4
+    }
+    /// 兩指旋轉放手：照轉身體原本的慣性投射；減少動態效果時直接停
+    func twistYawEnded(timestamp: Double) {
+        guard twisting else { return }
+        twisting = false
+        ty += TwistYaw.release(velocity: dragVel, sinceLastMove: timestamp - lastDragT, reduceMotion: Motion.reduceMotion)
+        dragVel = 0
+        mood.show(.happy, for: 1.2, now: CACurrentMediaTime())
     }
     /// 智慧缩放（触控板两指轻点两下）＝拆开／组回；Magic Mouse 的「单指轻点两下」也会送这个事件、很容易误触——
     /// 拿得到接触帧时只认触控板上正好两指（2026-11-06 使用者：鼠标也别误触）
@@ -1996,6 +2125,7 @@ final class PetView: NSView {
     override func touchesCancelled(with event: NSEvent) { threeFinger = nil; pressTarget = 1 }
     override func scrollWheel(with e: NSEvent) {
         if TouchInput.dropsSystemScroll(e) { return }   // 系統把觸控的拖模擬成捲動：觸控那邊已經處理（手指按著時開始的那段連慣性一起丟）
+        if e.momentumPhase.isEmpty { IntroGuide.notePointer(touch: false, preciseScroll: e.hasPreciseScrollingDeltas) }   // 手勢引導「自動」
         endPoster()
         lastNear = CACurrentMediaTime()
         hotUntil = CACurrentMediaTime() + 0.4
@@ -2082,11 +2212,9 @@ final class PetView: NSView {
     /// 双指滑动的仲裁状态（见 GestureArbiter.swift）
     private(set) var scrollArb = ScrollArbiter()
     /// 起手点归谁：直播屏幕＝CarPlay；机身（逐零件碰撞盒）＝转身体；其余透明区＝不处理。
-    /// 不直播时屏幕也是机身的一部分。
+    /// 屏幕是内容、机身是物件（2026-11-07 拍板）：不直播时屏幕上的双指滑外壳没接的（錶面直滑、App 不捲的）也不转身体
     func classifyGesturePoint(_ p: NSPoint) -> GestureTarget {
-        if showingVideo, screenUV(p) != nil { return .carplay }
-        if hitsModel(p) || screenUV(p) != nil { return .rotate }
-        return .none
+        GestureTarget.route(onScreen: screenUV(p) != nil, onBody: hitsModel(p), live: showingVideo)
     }
 
     // 两指滑拖动的状态：画面坐标里的当前触点 + 闲置抬起计时
@@ -2461,7 +2589,19 @@ final class PetView: NSView {
     @objc private func menuRoomLightToggle() {
         (NSApp.delegate as? AppDelegate)?.toggleRoomLight()
     }
-    @objc private func menuShowHints() { Onboarding.armed = false; Onboarding.active = false; face.armOnboarding() }
+    /// 選單列「手勢引導」、設定「重看…」：從第一頁重播（升級提示卡一起收掉）
+    @objc func menuShowHints() {
+        if IntroHint.pending { IntroHint.finish() }
+        wakeFromPosterForGuide()
+        Onboarding.armed = false; Onboarding.active = false; face.armOnboarding()
+    }
+    /// 升級提示卡：點卡片＝開引導，✕＝關掉（都記下處理過）
+    func introHintTap(open: Bool) {
+        IntroHint.finish()
+        if open { menuShowHints() }
+        face.forceDirty = true
+        log("intro: upgrade hint \(open ? "opened" : "closed")")
+    }
     @objc func menuFaceOverview() {
         surfaceFromCarPlay("menu face overview")
         guard !showingVideo, !face.inOverview else { return }
@@ -2683,6 +2823,8 @@ final class PetView: NSView {
         if face.sayingHello, [49, 36, 53].contains(event.keyCode), face.skipHello(CACurrentMediaTime()) { return }   // 2.0 hello：空格、Return、Esc 跳过
         if SetupFlow.active, !PermissionPrimer.active, !event.modifierFlags.contains(.command), [36, 76].contains(event.keyCode),
            SetupFlow.key(event.keyCode) { face.forceDirty = true; return }   // 2.0 首次設定：Return＝主要按鈕
+        if Onboarding.active, !SetupFlow.active, !PermissionPrimer.active, !event.modifierFlags.contains(.command), !event.isARepeat,
+           IntroGuide.key(event.keyCode) { face.forceDirty = true; return }   // 2.0 手勢引導：→／Return 下一頁、← 上一頁、Esc 略過
         if shellKeyDown(event) { return }      // 2.0: Esc／↓ 回上一層、↑ 主畫面、C 控制中心
         if event.modifierFlags.contains(.command) {
             switch event.keyCode {
@@ -2708,7 +2850,6 @@ final class PetView: NSView {
             if PermissionPrimer.active { PermissionPrimer.dismiss() }
             else if SetupFlow.active { _ = SetupFlow.key(53); face.forceDirty = true }   // 2.0 首次設定：Esc＝上一頁
             else if ClioTalkController.shared.isOpen { ClioTalkController.shared.close() }   // 2.0: 收起 ClioTalk
-            else if face.onboardingActive { face.dismissOnboarding(); FaceOverview.pressToken += 1 }
             else if showingVideo { onCarPlayKnob?("back") }   // 像車機的 Back 鍵，不退出 CarPlay（回 HomeView＝空白鍵／👀 下拉／選單）
         case 49: if !event.isARepeat { eyesKey() }    // 空白鍵＝👀 的鍵盤版（焦點框顯示時由 shellFocusKeyDown 先按下焦點）
         case 18: setView(yaw: 0, pitch: 0.12, label: "front")      // 1 正面

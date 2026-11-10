@@ -1,26 +1,31 @@
 // 2.0 外殼的輸入：main.swift 的 PetView 滑鼠／滾輪／鍵盤各在開頭一行呼叫這裡（回 true＝外殼吃掉了）。
 //
-// 原本的手勢一律不變：拖機身＝轉、雙擊＝回正、長按螢幕＝錶面總覽、重按＝CarPlay、⌘拖＝搬視窗。
-// 外殼只認這幾種，而且先「暫時接住」，確定不是自己的就把按下那一下原封不動重播給原本的處理（轉身體、點膠囊、System 6…）。
+// 桌寵本身的手勢：拖機身＝轉、兩指旋轉＝原地轉身、雙擊＝回正、長按螢幕＝錶面總覽、重按＝CarPlay、⌘拖＝搬視窗。
+// 外殼只認這幾種，而且先「暫時接住」，確定不是自己的就把按下那一下原封不動重播給原本的處理（螢幕拖、點膠囊、System 6…）。
+//
+// 手勢語法（2026-11-07 拍板，docs/plans/gestures.md）：橫軸只有一條〔錶面們〕〔主畫面各頁〕〔資源庫〕、不繞圈；縱向＝深淺（底緣上拉只是往深一層：
+// 錶面→主畫面、主畫面→資源庫）；按住＝對手指下的東西做更多；螢幕是內容、機身是物件（螢幕上的拖只歸畫面，轉身體只認拖機身）；
+// 沒在互動時第一下只喚醒（休眠、海報期、閒置變暗：吞到放手）、慣性捲動中碰一下只停住（不點）。
+// 回主畫面的主次：觸控／觸控板以「👀 往下拉」為主、「點 👀」為快捷；鍵盤以空白鍵（＝👀）為主，↓／Esc 是回上一層。
 //
 // 手勢總表（2026-11-06 拍板：👀 膠囊兼任 Home Indicator，判定與歸屬在 Shell/HomeIndicator.swift）
 // | 區域                         | 錶面                     | 主畫面／切換器            | App                        | CarPlay 畫面               |
 // |------------------------------|--------------------------|---------------------------|----------------------------|----------------------------|
-// | 👀 膠囊（頂端中間、藥丸）     | 下拉＝主畫面；拉住停＝切換器；點＝照舊；長按＝ClioTalk | 拉住停＝切換器（資料庫、切換器下拉＝主畫面）；點＝Home 鍵／動態；長按＝ClioTalk（有動態時＝展開） | 下拉＝主畫面；拉住停＝切換器；點＝Home 鍵；長按同左 | 外圈帶上的膠囊：下拉＝主畫面（會話留背景）；拉住停＝切換器；長按＝ClioTalk；點＝Home 鍵（回主畫面，會話留背景） |
+// | 👀 膠囊（頂端中間、藥丸）     | 下拉＝主畫面；拉住停＝切換器；點＝已在最外層（眼神回應當確認）；長按＝ClioTalk | 拉住停＝切換器（資料庫、切換器下拉＝主畫面）；點＝Home 鍵／動態；長按＝ClioTalk（有動態時＝展開） | 下拉＝主畫面；拉住停＝切換器；點＝Home 鍵；長按同左 | 外圈帶上的膠囊：下拉＝主畫面（會話留背景）；拉住停＝切換器；長按＝ClioTalk；點＝Home 鍵（回主畫面，會話留背景） |
 // | 右上角往下拉                 | 控制中心                 | 控制中心                  | 控制中心                   | 給 iPhone（不變：CarPlay 上沒有控制中心手勢） |
-// | 底緣往上拉                   | 主畫面                   | 全部 App                  | （只做往上導覽）           | 給 iPhone                  |
+// | 底緣往上拉（往深一層）       | 主畫面                   | 全部 App                  | （不當回家）               | 給 iPhone                  |
 // | 左緣右滑／內容左側右滑       | 同中間起手：橫拖換錶面（錶面是最上層，沒有返回） | 主畫面：第一頁往右翻過頭＝回錶面（其他頁＝換頁）；切換器：沒有（同 iOS，點空白回主畫面） | 返回 | 給 iPhone |
 // | 其他點按                     | 交回原本的路（膠囊播放、System 6…） | 圖示、小工具、卡片 | App 自己的按鈕             | 給 iPhone                  |
-// | 其他拖動                     | 橫拖換錶面；其他轉身體   | 換頁（第一頁往右＝回錶面）／捲卡片、卡片上滑拿掉 | 轉身體       | 給 iPhone                  |
-// 優先序：AirDrop 卡片 → 疊層（控制中心、ClioTalk）→ 膠囊 → 控制中心角 → 底緣／左緣 → 畫面自己 → 轉身體。
+// | 其他拖動                     | 橫拖換錶面（第一個往右＝不動，最後一個往左＝主畫面）；其他不做事 | 換頁（第一頁往右＝回錶面）／捲卡片、卡片上滑拿掉 | App 捲動 | 給 iPhone |
+// 優先序：喚醒（沒在互動時）→ AirDrop 卡片 → 疊層（控制中心、ClioTalk）→ 慣性中只停 → 膠囊 → 控制中心角 → 底緣／左緣 → 畫面自己。螢幕上的拖到此為止，不轉身體。
 // 一個手勢從起手到放手只歸一個層級：膠囊一接住，CarPlay、轉身體、換頁都拿不到這一下。
-// - 滾輪：錶面頭尾再滾一格到主畫面、主畫面滾動換頁、切換器左右捲。
+// - 滾輪：錶面最後一個再滾一格到主畫面（第一個往回不動）、主畫面滾動換頁（資源庫再往後不動、第一頁往回＝錶面）、切換器左右捲。
 //
 // 鍵盤（2026-11-07 拍板，整套）
 // | 鍵            | 錶面／主畫面／App／切換器（外殼）                         | CarPlay 畫面（＝車上旋鈕，CarPlayKnobKeys） |
 // |---------------|-----------------------------------------------------------|---------------------------------------------|
 // | 空白鍵        | 👀：叫 CarPlay（背景叫回、沒連上去連、訪客＝需要主人）；焦點框顯示時＝按下焦點 | 👀：回主畫面（會話留背景）      |
-// | ← →           | 換頁（錶面頭尾到主畫面）；「鍵盤導航」開著時叫出焦點框、移焦點 | 搖桿左右（x），按住照鍵重複             |
+// | ← →           | 換頁（錶面最後一個 → 到主畫面，第一個 ← 不動）；「鍵盤導航」開著時叫出焦點框、移焦點 | 搖桿左右（x），按住照鍵重複             |
 // | ↑ ↓           | ↑ 主畫面／資源庫、↓ 回上一層；「鍵盤導航」開著時叫出焦點框、移焦點 | 搖桿上下（y），按住照鍵重複         |
 // | Tab／⇧Tab     | 叫出焦點框、換焦點（設定「鍵盤導航」開著）                | 轉動（wheel ±1），按住照鍵重複              |
 // | Return        | 打開焦點項目                                              | 選取（按下再放開）                          |
@@ -35,11 +40,14 @@
 // | 點、打開                 | 點一下                       | 點一下                         | 點一下（判定區外擴到 44 pt，重疊時中心最近的勝）    |
 // | 螢幕上直向捲（清單等）   | 滾輪                         | 兩指上下滑                     | 單指上下拖（帶慣性）                                |
 // | 換頁（錶面、主畫面、資源庫）| 橫拖、滾輪               | 兩指橫滑                       | 單指橫拖（同一套跟手、橡皮筋、速度判定）            |
-// | 螢幕上的其他拖動         | 轉身體                       | —                              | 歸外殼（不轉身體）                                  |
-// | 轉身體                   | 拖機身／拖螢幕               | 兩指滑（機身上）               | 單指拖機身；兩指拖機身                              |
+// | 螢幕上的其他拖動         | 歸畫面（捲動；不轉身體）     | 歸畫面（點按拖、兩指滑都不轉） | 歸畫面（不轉身體）                                  |
+// | 轉身體                   | 拖機身                       | 拖機身；兩指滑（機身上）；兩指旋轉 | 單指拖機身；兩指拖機身；兩指旋轉                |
+// | 回主畫面                 | 從 👀 往下拖（主）；點 👀（快捷）；空白鍵 | 同滑鼠             | 從 👀 往下拉（主）；點 👀（快捷）                   |
+// | 沒在互動時（休眠、海報、變暗）| 第一下只喚醒            | 同滑鼠                         | 同滑鼠                                              |
+// | 慣性捲動中碰一下         | 只停住、不點                 | 同滑鼠                         | 同滑鼠                                              |
 // | 長按（圖示選單、總覽、編輯模式拖圖示）| 按住            | 按住                           | 按住；按住再拖＝拖圖示                              |
 // | 右鍵選單                 | 右鍵                         | 兩指點                         | 機身上按住                                          |
-// | 縮放桌寵                 | ⌥＋滾輪、選單                | 捏合                           | 兩指捏合（同時只認捏合或兩指拖其中一個）            |
+// | 縮放桌寵                 | ⌥＋滾輪、選單                | 捏合（與兩指旋轉先過門檻者勝） | 兩指捏合（捏合、旋轉、兩指拖同時只認一個）          |
 // | 拆開／組回               | 選單                         | 兩指輕點兩下                   | 選單（機身上按住）                                  |
 // | 回正                     | 雙擊機身                     | 雙擊機身                       | 點兩下機身                                          |
 // | 返回（左緣、內容左側右滑）| 拖                          | 拖                             | 滑（系統設定關掉「滑動切換頁面」時不做）            |
@@ -76,8 +84,31 @@ enum ShellInput {
     /// 新的一下開始：上一下的按下、接住、重播旗標都清掉。回 true＝上一下的錶面換頁還掛著（重播交回、早退的路沒收到）——
     /// 不收的話，之後在控制中心橫拖會換掉後面的錶面、在 CarPlay 上放手被換頁吃掉（iPhone 那邊手指一直按著）
     static func beginPress() -> Bool {
-        replayed = false; claimed = false; down = nil
+        replayed = false; claimed = false; down = nil; coastStopped = false
         return FacePaging.drag != nil
+    }
+
+    // MARK: 手勢語法第 5 條：沒在互動時，第一下只喚醒；捲動慣性中碰一下只停住（2026-11-07）
+
+    /// 這一下按下只是喚醒：從按下吞到放手（PetView 的 mouseDown／Dragged／Up 開頭看它）
+    nonisolated(unsafe) static var wakeSwallow = false
+    /// 這一下按下停住了慣性捲動：照常可以接著拖，但放手不點、按住不出選單
+    nonisolated(unsafe) static var coastStopped = false
+    /// 最近一次送進外殼（錶面以外）的慣性捲動事件：觸控板的系統慣性、觸控放手後的慣性（手指一碰會補一個結束事件）
+    nonisolated(unsafe) static var lastMomentumAt = -1e9
+    /// 停住之後同一段慣性剩下的事件不再捲（下一手 began 才重新開始）
+    nonisolated(unsafe) static var momentumCut = false
+    /// 慣性事件之後多久內的按下算「慣性中」：觸控的按下要等 70 ms 確定是單指、觸控板輕點要等手指抬起才到
+    static let coastWindow = 0.2
+
+    /// 純邏輯：按下只喚醒、吞到放手？休眠、Ambient 海報期、閒置變暗（錶面 dim）時按在螢幕上；CarPlay 直播不算。
+    /// exempt：之後要越過喚醒直接打到的（家庭警報卡、來電），留這個口
+    static func wakeSwallows(asleep: Bool, poster: Bool, dim: CGFloat, onScreen: Bool, live: Bool, exempt: Bool) -> Bool {
+        onScreen && !live && !exempt && (asleep || poster || dim > 0.005)
+    }
+    /// 純邏輯：這一下按下是不是落在慣性捲動中（要先停住、不點）：剛有慣性事件，或清單自己的彈簧還在滑
+    static func pressStopsCoast(sinceMomentum: Double, springCoasting: Bool) -> Bool {
+        springCoasting || (sinceMomentum >= 0 && sinceMomentum < coastWindow)
     }
 
     /// 按下歸哪一種（純邏輯，自檢直接驗）：膠囊、控制中心角先；切換器整面是它自己的（同 iOS：切換器上沒有左緣返回）；
@@ -143,14 +174,17 @@ extension PetView {
         }
         if before.overlay == .clioTalk, Shell.nav.overlay != .clioTalk { ClioTalkController.shared.dismissFromShell() }
         if before.screen != Shell.nav.screen {
+            // App → App（例如從 A 開 B、或 CarPlay 回上一個 App）：中間沒有臉，不要起霧化過場
+            let appToApp: Bool
+            if case .app = before.screen, case .app = Shell.nav.screen { appToApp = true } else { appToApp = false }
             if case .app(let id) = before.screen, id != CarPlayApp.id, let shot = face.lastFrame { AppSwitcher.shots[id] = shot }   // 切換器卡片：離開時的最後一格
             if case .app(let id) = before.screen, Shell.nav.screen == .home || Shell.nav.screen == .library,
                let rect = shellItemRect(id, on: Shell.nav.screen) {
                 Shell.beginMorph(rect: rect, id: id, opening: false, now: now)   // App 縮回它的圖示（開到一半也從當下的大小縮回去）
-            } else if r.face == nil {
+            } else if r.face == nil, !appToApp {
                 if before.screen == .face {
-                    Shell.homeHue = Shell.hue(fromFace: face.lastFrame, face: face)
-                    Shell.captureHomeBackdrop(face.lastFrame)    // 2.0 R3：主畫面桌布＝剛才的錶面
+                    Shell.homeHue = Shell.hue(fromFace: face.backdropFrame, face: face)
+                    Shell.captureHomeBackdrop(face.backdropFrame)    // 2.0 R3：主畫面桌布＝剛才的錶面
                     if let ir = face.islandRect {                // 眼睛膠囊縮成頂端藥丸
                         let ch = ir.height / 1.9, cw = max(ch, ir.width - 1.2 * ch)
                         Shell.pillFrom = (CGRect(x: ir.midX - cw / 2, y: ir.midY - ch / 2, width: cw, height: ch), now)
@@ -190,8 +224,9 @@ extension PetView {
     func shellOpenApp(_ id: String, from rect: CGRect? = nil) {
         guard let app = AppRegistry.app(id) else { return }
         let locked = PersonalGate.locks(id)   // 2026-11-07：CarPlay 與 iPhone App 也在門後——鎖著就照常打開「需要主人」那一頁，不跳 CarPlay
-        if !locked, app.launch(face: face) { log("shell launch \(id)"); return }   // 設定：開原本的視窗；iPhone App：跳到 CarPlay 開它
         let before = Shell.nav.screen
+        AppLaunchCounts.note(id, fromLibrary: before == .library)   // App 資料庫的排序依據（系統：_appLaunchCounts／_libraryAppLaunchCounts）
+        if !locked, app.launch(face: face) { log("shell launch \(id)"); return }   // 設定：開原本的視窗；iPhone App：跳到 CarPlay 開它
         if id == CarPlayApp.id, !locked { CarPlayApp.shared.pendingFront = true }   // 過場走完把直播叫到前面（shellStep）
         AppSwitcher.note(id)
         if let rect, before == .home || before == .library || before == .switcher {
@@ -327,6 +362,7 @@ extension PetView {
         case .none: break
         }
         if face.bannerShowing { return false }                                  // 點一下收起橫幅：照舊
+        if shellStopCoast() { S.coastStopped = true }   // 慣性捲動中碰一下：先停住，這一下不選到東西（第 5 條後半）
         if sbMouseDown(e, uv: uv) { return true }   // 2.0 SpringBoard：按在主畫面的圖示／小工具／空白（長按、拖曳、換頁；Shell/SpringBoard/SBInput.swift）
         guard let uv, e.clickCount == 1, !e.modifierFlags.contains(.command) else { return false }   // 雙擊、⌘拖照舊
         let owner = HomeIndicator.owner(CGPoint(x: uv.x * 1024, y: uv.y * 1024), on: indicatorSurface,
@@ -335,7 +371,7 @@ extension PetView {
         facePageArm(e, uv: uv)   // 2.0：錶面上螢幕裡橫拖＝跟手換頁（Shell/FacePaging.swift）；邊緣手勢與轉身體照舊
         guard let kind else { return false }
         S.down = (e, uv, kind, at)
-        if kind == .tap, let p = shellPoint(uv) { HPGlass.pressDown(p); face.forceDirty = true }   // 2.0 R14：按下那一刻就變亮放大
+        if kind == .tap, !S.coastStopped, let p = shellPoint(uv) { HPGlass.pressDown(p); face.forceDirty = true }   // 2.0 R14：按下那一刻就變亮放大（停住慣性的那一下不亮）
         if kind == .indicator { indicatorArm(e) }   // 長按膠囊＝ClioTalk（取代 align D 的長按藥丸兩顆切換：CarPlay 改在切換器裡）
         if kind == .switcher { S.switcherAxis = 0; S.switcherSamples = [] }
         return true
@@ -346,7 +382,6 @@ extension PetView {
         S.dragUV = uv   // 動效包
         if S.passThrough || S.replayed { return false }
         if AirDropCard.pressed { return true }   // 按在 AirDrop 卡片上：拖動不轉身體
-        if sourceSwitcherDragged(uv: uv) { return true }   // 2.0 align D：拉開兩顆之後，拖到哪顆選哪顆
         if SBInputState.press != nil { return sbMouseDragged(e, uv: uv) }   // 2.0 SpringBoard
         if FacePaging.drag != nil {   // 2.0：錶面跟手換頁（直向交回下面原本的路）
             if S.claimed { FacePaging.drag = nil }   // 外殼已經接住這一下（膠囊下拉、控制中心）：半路轉橫也不改判成換頁
@@ -428,7 +463,6 @@ extension PetView {
             if let d = S.down { S.down = nil; if hypot(e.locationInWindow.x - d.at.x, e.locationInWindow.y - d.at.y) < 10 { airDropCardTap(d.uv) } }
             return true
         }
-        if sourceSwitcherReleased() { return true }   // 2.0 align D
         if SBInputState.press != nil { return sbMouseUp(e, uv: nil) }   // 放手的位置用最後一次拖到的點
         if FacePaging.drag != nil, facePageRelease(now: CACurrentMediaTime()) { ShellInput.down = nil; return true }   // 2.0：錶面跟手換頁
         FacePaging.drag = nil   // 2.0 SpringBoard
@@ -493,10 +527,57 @@ extension PetView {
             }
         case .tap: break
         }
-        // 沒拖：點按
+        // 沒拖：點按（停住慣性的那一下不點；切換器停在兩張之間就對齊最近一張）
+        if S.coastStopped, Shell.nav.screen.coversFace {
+            if Shell.nav.screen == .switcher { shellSnapSwitcher(now: CACurrentMediaTime()) }
+            return true
+        }
         if Shell.nav.screen.coversFace { shellTap(d.uv, long: e.timestamp - d.event.timestamp > 0.5); return true }   // 2.0: 按住 0.5 秒以上＝長按（家庭 App 調亮度）
         shellReplayClick(d.event, e)                                     // 錶面上點邊緣：照原本的點按（膠囊、System 6…）
         return true
+    }
+
+    /// 第 5 條前半（PetView.mouseDown 在卡片類之後、外殼之前叫）：休眠、海報、閒置變暗時按在螢幕上——只把畫面叫回活躍，
+    /// 這一下吞到放手（不打到底下的錶面、海報、主畫面）。拖機身照舊轉身體。回 true＝吞掉
+    func shellWakeGate(onScreen: Bool, uv: CGPoint?) -> Bool {
+        let S = ShellInput.self
+        guard S.wakeSwallows(asleep: Shell.displayAsleep, poster: Shell.ambientPosterActive, dim: face.cur.dim, onScreen: onScreen,
+                             live: showingVideo || carVideo.active, exempt: shellWakeExempt(uv)) else { return false }
+        let now = CACurrentMediaTime()
+        S.wakeSwallow = true
+        Shell.lastActive = now   // 意圖輸入：下一幀 shellStep 撤掉壓暗、收起海報（DisplayStage）
+        mood.activity(now: now, hour: Calendar.current.component(.hour, from: Date()))   // 閒置變暗（睡著的臉）也醒
+        face.forceDirty = true
+        log("wake: first press only wakes the screen")
+        return true
+    }
+    /// 之後要越過喚醒直接打到的東西（家庭警報卡、來電卡）：家庭警報卡在時、點在卡上（Shell/HomeAlertCard.swift）
+    func shellWakeExempt(_ uv: CGPoint?) -> Bool { HomeAlertCard.exempt(uv) }
+
+    /// 第 5 條後半：資源庫、App 清單、切換器還在慣性捲動時按下——立刻停住。回 true＝停住了（這一下不點、不長按）
+    func shellStopCoast() -> Bool {
+        let S = ShellInput.self, now = CACurrentMediaTime()
+        let screen = Shell.nav.screen
+        guard screen != .face, Shell.nav.overlay == .none else { return false }
+        let library = screen == .library && !SB.libraryScrollDragging && !SB.libraryScroll.done(now)
+        let switcher = screen == .switcher && (AppSwitcher.scrollAnim.map { !$0.done(now) } ?? false)
+        guard S.pressStopsCoast(sinceMomentum: now - S.lastMomentumAt, springCoasting: library || switcher) else { return false }
+        if library {   // 停在畫面上的位置（兩頭的橡皮筋夾回範圍內）
+            SB.libraryScroll.set(max(0, min(SB.libraryMaxScroll, SB.libraryScrollNow)), velocity: 0, now: now)
+            SBInputState.libWheel = nil
+        }
+        if let a = AppSwitcher.scrollAnim, screen == .switcher { AppSwitcher.scroll = a.value(now); AppSwitcher.scrollAnim = nil }
+        S.momentumCut = true; S.lastMomentumAt = -1e9
+        face.forceDirty = true
+        log("coast: press stopped scrolling on \(screen)")
+        return true
+    }
+    /// 切換器停住後放手沒拖：對齊最近的一張
+    private func shellSnapSwitcher(now: Double) {
+        let n = AppSwitcher.cards(face: face).count
+        let to = AppSwitcher.snap(AppSwitcher.scroll, velocity: 0, count: n)
+        AppSwitcher.scrollAnim = MotionValue("switcher", spring: .smooth, from: AppSwitcher.scroll, to: to, now: now)
+        face.forceDirty = true
     }
 
     /// 2.0 P10（HV-SPECS-65）：長按 👀 膠囊＝ClioTalk 立刻開始聽（膠囊直接變成聆聽的水滴，照錶面年代）；已經開著就不重來。
@@ -545,9 +626,13 @@ extension PetView {
             return
         }
         // 頂端藥丸＝Home 鍵（2.0 align C）：點＝回上一層（跟 Esc 同一條前置順序）、按住＝展開第一個活動、分體小藥丸點＝開它自己的活動、
-        // 大卡外面點一下＝收回（Shell/LiveActivityStack.swift）
+        // 大卡外面點一下＝收回（Shell/LiveActivityStack.swift）。2.0 兩邊互通（2026-11-09）：CarPlay 在背景（藥丸有綠色角標）時，
+        // 點藥丸＝切回 CarPlay；沒有背景會話才照舊當 Home 鍵。
         if LiveActivityStack.tap(p, long: long, now: now, face: face, open: { a in LiveActivityStack.open(a) { shellOpenApp($0) } },
-                                 home: { self.shellHomeKey(now: now) }) {
+                                 home: {
+                                     if SourceSwitcher.capsuleTap(carPlayBehind: SourceSwitcher.carPlayBehind(self.face)) == .carPlay { self.onSwitchSource?() }
+                                     else { self.shellHomeKey(now: now) }
+                                 }) {
             face.forceDirty = true; return
         }
         switch Shell.nav.screen {
@@ -679,6 +764,11 @@ extension PetView {
         }
         Shell.lastActive = now
         let precise = e.hasPreciseScrollingDeltas
+        if e.phase == .began { ShellInput.momentumCut = false }
+        if e.momentumPhase != [], Shell.nav.screen != .face {
+            ShellInput.lastMomentumAt = now
+            if ShellInput.momentumCut { return true }   // 慣性中被碰一下停住了：這段慣性剩下的不再捲
+        }
         switch Shell.nav.overlay {
         case .controlCenter:
             return ccScroll(e, shellPoint(uv))   // 2.0 cc：滑桿上調、圖庫捲、其他換頁
@@ -690,7 +780,9 @@ extension PetView {
         switch Shell.nav.screen {
         case .app:
             if Shell.far { Shell.far = false; Shell.lastActive = now; face.forceDirty = true; return true }   // 2.0 home-3：遠看時捲一下＝回到近看
-            if let a = Shell.currentApp, !PersonalGate.locks(a.id), a.handleScroll(precise ? e.scrollingDeltaY : e.scrollingDeltaY * 10, now: now) { face.forceDirty = true; return true }
+            if precise, abs(e.scrollingDeltaX) > abs(e.scrollingDeltaY), let a = Shell.currentApp, !PersonalGate.locks(a.id),
+               a.handleScrollX(e.scrollingDeltaX, now: now) { face.forceDirty = true; return true }   // 橫滑：App 要（世界時鐘換頁）才給
+            if let a = Shell.currentApp, !PersonalGate.locks(a.id), a.handleScroll((precise ? e.scrollingDeltaY : e.scrollingDeltaY * 10) * (e.isDirectionInvertedFromDevice ? -1 : 1), now: now) { face.forceDirty = true; return true }
             return !precise
         case .switcher:   // 左右捲卡片：觸控板跟手、滾輪一格一張；停下來對齊最近的一張
             let n = AppSwitcher.cards(face: face).count, maxS = CGFloat(max(0, n - 1)) * AppSwitcher.pitch
@@ -723,6 +815,12 @@ extension PetView {
         if e.modifierFlags.contains(.command), e.keyCode == 9, !shellBlocked, recipePaste() { return true }   // 2.0: 食譜 App 裡 ⌘V 貼上網址
         guard !shellBlocked, !e.modifierFlags.contains(.command), !PermissionPrimer.active, !face.onboardingActive else { return false }
         Shell.lastActive = CACurrentMediaTime()
+        // CarPlay 直播：鍵盤交給車上旋鈕（PetView.keyDown 的 CarPlayKnobKeys——方向鍵／Tab／Return），
+        // Esc 離開直播（跟 👀 點一下同一個終點）；不要讓外殼把方向鍵吃掉、導覽卻躲在直播後面動。
+        if showingVideo, !carVideo.active {
+            if e.keyCode == 53 { _ = carPlayToHome(reason: "Esc"); return true }
+            return false
+        }
         if sbKeyDown(e) { return true }   // 2.0 SpringBoard：編輯模式搬圖示、App 資料庫打字搜尋、資料夾改名
         if shellFocusKeyDown(e) { return true }   // 2.0 P05：鍵盤操作畫面（方向鍵移焦點、Return 打開；Shell/ShellAccessibility.swift）
         switch e.keyCode {
@@ -836,7 +934,6 @@ extension PetView {
         Shell.lastActive = CACurrentMediaTime() + 3600   // 快照不要中途回錶面
         face.forceDirty = true
         applySBSnapshotFlags()   // 2.0 SpringBoard：--home-page、--home-menu、--home-folder、--home-gallery、--home-drag…
-        if SourceSwitcher.demo == .carPlay { SourceSwitcher.open = (CACurrentMediaTime() - 10, .carPlay) }   // 2.0 align D：--source carplay 拍拉開的兩顆
         applyCarPlayDemo()   // --demo-carplay、--switcher（Shell/AppSwitcher.swift）
         applyIndicatorDemo()   // --indicator-pull（Shell/HomeIndicator.swift）
         applyTouchSnapshotFlags()   // --touch-tip、HOMEPLAY_TOUCH_EXPAND（Shell/TouchInput.swift）

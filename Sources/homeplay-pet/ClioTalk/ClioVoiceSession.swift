@@ -105,6 +105,7 @@ final class ClioVoiceSession {
     private func closeMic() {
         mic.stop()
         vad = ClioVAD()   // 下次重新量噪音底
+        micLevel = 0
         turnWanted = false; finishWanted = false
         download = nil
         onMicClosed()
@@ -213,8 +214,13 @@ final class ClioVoiceSession {
         perform(loop.turnDone(text: liveFinal + liveVolatile, now: t))
     }
 
+    /// 麥克風音量 0…1（−55 → −15 dBFS；起得快、落得慢）：水滴的液面跟著它起伏
+    private(set) var micLevel: CGFloat = 0
+
     private func level(_ db: Float, _ d: Double) {
         guard mic.running else { return }
+        let target = CGFloat(max(0, min(1, (db + 55) / 40)))
+        micLevel += (target - micLevel) * (target > micLevel ? 0.6 : 0.2)
         vad.strict = loop.state == .speaking || loop.state == .bargeCheck
         let t = now()
         switch vad.feed(db: db, duration: d) {

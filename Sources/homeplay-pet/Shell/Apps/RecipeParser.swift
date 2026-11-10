@@ -398,5 +398,9 @@ enum RecipeSelfTest {
         for i in 0..<12 { shelf.add(Recipe(title: "r\(i)", ingredients: ["x"], steps: [], sourceURL: "https://e.com/\(i)")) }
         shelf.add(Recipe(title: "r5 again", ingredients: ["x"], steps: [], sourceURL: "https://e.com/5"))
         check(shelf.items.count == 10 && shelf.items.first?.title == "r5 again" && shelf.items.filter { $0.sourceURL == "https://e.com/5" }.count == 1, "食谱釘选：最多 10 笔、同网址去重、最新在前")
+        check(RecipesApp.coverStart(steps: []) == nil, "封面开始：没有步骤留在封面")
+        check(RecipesApp.coverStart(steps: [RecipeStep(text: "Chop the onion.")]) == .step(0), "封面开始：第一步没有时间进步骤")
+        check(RecipesApp.coverStart(steps: [RecipeStep(text: "炒大约 8 分钟。")]) == .timer(0), "封面开始：第一步有时间进计时器")   // l10n-ignore
+        check(RecipesApp.coverStart(steps: [RecipeStep(text: "切块。"), RecipeStep(text: "煮 25 分钟。")]) == .step(0), "封面开始：只看第一步，不跳到后面有时间的那步")   // l10n-ignore
     }
 }

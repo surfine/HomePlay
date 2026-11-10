@@ -23,17 +23,21 @@ struct HomeAppearanceSection: View {
                 ForEach(HomeAppearance.allCases, id: \.self) { a in Label(a.title, systemImage: a.symbol).tag(a) }
             } label: {
                 RowLabel(title: L("settings.home.appearance", "主屏幕外观"),
-                         subtitle: L("settings.home.appearance.sub", "App 图标和小组件一起换"))
+                         subtitle: L("settings.home.appearance.sub", "App 图标和小组件一起换"), symbol: "square.grid.2x2.fill", tint: .blue)
             }
             if look == .tinted {
-                ColorPicker(L("settings.home.tint", "着色颜色"), selection: Binding(get: { tint }, set: { c in
+                ColorPicker(selection: Binding(get: { tint }, set: { c in
                     tint = c; HomeAppearance.setTint(NSColor(c)); m.app?.view.face.forceDirty = true
-                }), supportsOpacity: false)
+                }), supportsOpacity: false) {
+                    RowLabel(title: L("settings.home.tint", "着色颜色"), symbol: "paintbrush.fill", tint: .blue)
+                }
             }
             // 2.0 SpringBoard：大圖示（隱藏名稱，iOS 18 起）與還原這個人的主畫面排列
-            Toggle(L("sb.largeIcons", "大图标（隐藏名称）"), isOn: Binding(get: { large }, set: { v in
+            Toggle(isOn: Binding(get: { large }, set: { v in
                 large = v; SB.setLargeIcons(v); m.app?.view.face.forceDirty = true
-            }))
+            })) {
+                RowLabel(title: L("sb.largeIcons", "大图标（隐藏名称）"), symbol: "app.fill", tint: .blue)
+            }
             // 體驗追趕 P4-3：主畫面桌布——跟著錶面（預設）或照片牆的一張
             Picker(selection: Binding(get: { wallPhoto == nil ? 0 : 1 }, set: { v in
                 if v == 0 { wallPhoto = nil; HomeWallpaper.set(nil) }
@@ -44,23 +48,27 @@ struct HomeAppearanceSection: View {
                 Text(L("settings.home.wallpaper.face", "跟着表盘")).tag(0)
                 Text(L("settings.home.wallpaper.photo", "照片")).tag(1)
             } label: {
-                RowLabel(title: L("settings.home.wallpaper", "主屏幕墙纸"), subtitle: L("settings.home.wallpaper.sub", "跟着刚才的表盘，或从照片墙挑一张"))
+                RowLabel(title: L("settings.home.wallpaper", "主屏幕墙纸"), subtitle: L("settings.home.wallpaper.short", "跟着表盘，或挑一张照片"), symbol: "photo.fill", tint: .blue)
             }
             if wallPhoto != nil { wallpaperWall }
             // 照 Mac 的「顯示 iPhone App」：只管 App 資源庫與搜尋；放在主畫面上的不拿掉
-            Toggle(isOn: Binding(get: { phoneApps }, set: { v in phoneApps = v; PhoneAppProvider.setShow(v); m.app?.view.face.forceDirty = true })) {
-                RowLabel(title: L("settings.home.phoneApps", "显示 iPhone App"), subtitle: L("settings.home.phoneApps.sub", "在 App 资源库和搜索里列出 iPhone 上能用 CarPlay 的 App"))
-            }
-            Button(L("settings.home.reset", "还原主屏幕排列…")) { confirmReset = true }
-                .disabled(!PersonHome.canEdit)
+            ToggleRow(title: L("settings.home.phoneApps", "显示 iPhone App"), subtitle: L("settings.home.phoneApps.short", "在资源库和搜索里列出"), symbol: "iphone", tint: .blue,
+                      info: L("settings.home.phoneApps.sub", "在 App 资源库和搜索里列出 iPhone 上能用 CarPlay 的 App"),
+                      isOn: Binding(get: { phoneApps }, set: { v in phoneApps = v; PhoneAppProvider.setShow(v); m.app?.view.face.forceDirty = true }))
+            LabeledContent {
+                Button(L("settings.home.resetButton", "还原…")) { confirmReset = true }
+                    .disabled(!PersonHome.canEdit)
                 .confirmationDialog(L("settings.home.reset.title", "要把主屏幕还原成默认排列吗？"), isPresented: $confirmReset) {
                     Button(L("settings.home.reset.ok", "还原"), role: .destructive) { SB.resetLayout(); m.app?.view.face.forceDirty = true }
                     Button(L("sb.cancel", "取消"), role: .cancel) {}
                 } message: {
                     Text(L("settings.home.reset.body", "只还原现在这个人的主屏幕：App、小组件、文件夹和页面回到默认，App 都还在 App 资源库里。"))
                 }
-        } footer: {
-            Text(L("settings.home.appearance.note", "每位家人的主屏幕排列各自保存：在主屏幕上按住半秒进入编辑。"))
+            } label: {
+                RowLabel(title: L("settings.home.resetTitle", "主屏幕排列"), subtitle: L("settings.home.resetTitle.sub", "回到默认的排列"), symbol: "arrow.counterclockwise", tint: .blue)
+            }
+        } header: {
+            SectionTitle(title: L("settings.home.section", "主屏幕"), info: L("settings.home.appearance.note", "每位家人的主屏幕排列各自保存：在主屏幕上按住半秒进入编辑。"))
         }
     }
 

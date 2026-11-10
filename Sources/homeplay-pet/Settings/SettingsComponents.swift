@@ -82,6 +82,105 @@ struct IllustrationStage: View {
     }
 }
 
+/// 设置行与侧边栏的符号：系统设置那样的彩色圆角方块＋白色 SF Symbol（WindowShade design-system §4.11 的设置行零件）。
+/// 方块一律同一个尺寸、符号在方块里置中，所以车子和手一样宽，文字左缘切齐。
+struct SymbolTile: View {
+    let symbol: String
+    var tint: Color = .gray
+    var size: CGFloat = 22
+    @Environment(\.colorSchemeContrast) private var contrast
+    var body: some View {
+        RoundedRectangle(cornerRadius: size * 0.27, style: .continuous)
+            .fill(tint.gradient)
+            .overlay {
+                Image(systemName: symbol)
+                    .font(.system(size: size * 0.55, weight: .semibold))
+                    .symbolRenderingMode(.monochrome)
+                    .foregroundStyle(.white)
+                    .imageScale(.medium)
+            }
+            .overlay {   // 增加对比度：方块加一圈细边，跟卡片底色分开
+                if contrast == .increased {
+                    RoundedRectangle(cornerRadius: size * 0.27, style: .continuous).strokeBorder(Color.primary.opacity(0.5), lineWidth: 1)
+                }
+            }
+            .frame(width: size, height: size)
+            .accessibilityHidden(true)
+    }
+}
+
+/// 行尾的 ⓘ：一句话说不完的细节放进小气泡（WindowShade copy-guide 第 7 条）
+struct InfoButton: View {
+    let text: String
+    @State private var shown = false
+    init(_ text: String) { self.text = text }
+    var body: some View {
+        Button { shown.toggle() } label: {
+            Image(systemName: "info.circle").imageScale(.medium)
+        }
+        .buttonStyle(.borderless)
+        .foregroundStyle(.secondary)
+        .help(text)
+        .accessibilityLabel(L("settings.info", "更多说明"))
+        .accessibilityHint(text)
+        .popover(isPresented: $shown, arrowEdge: .bottom) {
+            Text(text)
+                .font(.callout)
+                .multilineTextAlignment(.leading)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(width: 280, alignment: .leading)
+                .padding(14)
+        }
+    }
+}
+
+/// 分组标题＋（可选的）ⓘ：原来写在页脚的整段说明收进这里
+struct SectionTitle: View {
+    let title: String
+    var info: String? = nil
+    var body: some View {
+        HStack(spacing: 6) {
+            Text(title)
+            if let info { InfoButton(info).font(.body) }
+        }
+    }
+}
+
+/// 开关行：符号＋名字＋一行副标题；有 ⓘ 时开关前面多一颗小气泡按钮
+struct ToggleRow: View {
+    let title: String
+    var subtitle: String? = nil
+    let symbol: String
+    var tint: Color = .gray
+    var info: String? = nil
+    @Binding var isOn: Bool
+    var body: some View {
+        if let info {
+            LabeledContent {
+                HStack(spacing: 10) {
+                    InfoButton(info)
+                    Toggle(title, isOn: $isOn).labelsHidden().toggleStyle(.switch).controlSize(.mini)
+                }
+            } label: { RowLabel(title: title, subtitle: subtitle, symbol: symbol, tint: tint) }
+        } else {
+            Toggle(isOn: $isOn) { RowLabel(title: title, subtitle: subtitle, symbol: symbol, tint: tint) }
+        }
+    }
+}
+
+/// 行尾的「⋯」：一行一个东西，操作收进选单（家人、设备、iPhone）
+struct RowMenu<Content: View>: View {
+    @ViewBuilder var content: Content
+    var body: some View {
+        Menu { content } label: { Image(systemName: "ellipsis.circle").imageScale(.large) }
+            .menuStyle(.borderlessButton)
+            .menuIndicator(.hidden)
+            .fixedSize()
+            .foregroundStyle(.secondary)
+            .accessibilityLabel(L("settings.rowMenu", "更多操作"))
+    }
+}
+
 /// 按下缩一点（0.94，100 ms 缓出），放开弹回
 struct PressScaleStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
@@ -125,6 +224,8 @@ struct SystemCircleButtonStyle: ViewModifier {
 struct ValueSlider: View {
     let title: String
     var subtitle: String? = nil
+    var symbol: String? = nil
+    var tint: Color = .gray
     @Binding var value: Double
     let range: ClosedRange<Double>
     var step: Double? = nil
@@ -139,7 +240,7 @@ struct ValueSlider: View {
                 Text(format(value)).monospacedDigit().foregroundStyle(.secondary)
                     .frame(minWidth: 44, alignment: .trailing)
             }
-        } label: { RowLabel(title: title, subtitle: subtitle) }
+        } label: { RowLabel(title: title, subtitle: subtitle, symbol: symbol, tint: tint) }
         .help(format(value))
     }
 

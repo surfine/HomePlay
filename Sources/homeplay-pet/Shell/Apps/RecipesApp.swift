@@ -78,6 +78,12 @@ final class RecipesApp: PetApp {
     // R15：封面的兩顆膠囊照官方 recipe-overview（HPTokens.RecipeCover.buttons：高 125、間距 22、四周內縮 61）
     private static var overviewButtons: [CGRect] { HPTokens.RecipeCover.buttons }
 
+    /// 封面底下的「開始」進第一步。那一步的文字裡有時間，就用計時器畫面，秒數照步驟讀，不寫死剩餘時間。沒有時間就進步驟頁。沒有步驟就留在封面。
+    static func coverStart(steps: [RecipeStep]) -> Screen? {
+        guard let first = steps.first else { return nil }
+        return StepDuration.find(in: first.text) != nil ? .timer(0) : .step(0)
+    }
+
     // 2.0 r2（R1）：封面頁是照片滿版——外殼的返回鈕與時間不畫，自己畫白色的；食材、步驟是子頁（‹）
     // R15：步驟頁也自己畫頂列（影片 v1 00:27.25：✕ 左上、中央小標＋頁點、右上時間）
     private var onStep: Bool { if case .step = screen { return true }; return false }
@@ -556,6 +562,13 @@ final class RecipesApp: PetApp {
         guard let t = Shell.timers.timer(id) else { stepTimers[i] = nil; return nil }
         return t.left(TimersApp.wallNow)
     }
+    /// 封面的「開始」：第一步有時間就開那一步的計時器（秒數來自步驟文字），否則進步驟頁。
+    private func beginCoverStart(now: Double) {
+        guard let dest = Self.coverStart(steps: recipe?.steps ?? []) else { return }
+        if case .timer = dest { startTimer(0, now: now); return }
+        go(.step(0), now: now, kind: .slideFromRight)
+    }
+
     private func startTimer(_ i: Int, now: Double) {
         guard let r = recipe, r.steps.indices.contains(i), let face else { return }
         if pausedLeft[i] != nil { resumeTimer(i) }
@@ -668,7 +681,7 @@ final class RecipesApp: PetApp {
             if hit(HPTokens.Media.shareButton) { SelfShare.share(recipe.map { .recipe($0) }); return true }
             let b = Self.overviewButtons
             if hit(b[0]) { go(.ingredients, now: now, kind: .blurFade); return true }
-            if hit(b[1]) { go(.step(0), now: now, kind: .slideFromRight); return true }
+            if hit(b[1]) { beginCoverStart(now: now); return true }
             return false
         case .ingredients:
             if HPComponents.hitMediaBack(p) { go(.overview, now: now, kind: .blurFade); return true }

@@ -29,6 +29,9 @@ enum AmbientPoster {
         CGRect(x: cardX, y: cardsTop + CGFloat(i) * (cardH + cardGap), width: cardW, height: cardH)
     }
 
+    /// 疊不疊 StandBy 卡：時鐘那一張換成別的版式（月格子、complication 槽）時不疊——下半已經是內容；天氣、照片照疊
+    static func showsCards(_ style: PosterConfiguration.Style, kind: Kind) -> Bool { kind != .clock || style == .time }
+
     /// 要上卡片的活動（頂端膠囊同一份，最多 maxCards 張）
     static func cards(_ acts: [LiveActivity]) -> [LiveActivity] { Array(acts.prefix(maxCards)) }
 
@@ -45,6 +48,41 @@ enum AmbientPoster {
     /// 輪得到哪幾張：時鐘永遠在；天氣有資料、照片架有照片才輪入（順序固定：時鐘 → 天氣 → 照片）
     static func available(weather: Bool, photos: Bool) -> [Kind] {
         [.clock] + (weather ? [.weather] : []) + (photos ? [.photos] : [])
+    }
+
+    // MARK: 近期使用優先（錶面體系：官方輪播照近期使用排序，rushmore／固件類別名見 docs/plans/firmware-alignment.md）
+    /// 「用過」＝進海報期之前人在用的那張錶面對應的海報（照片錶面→照片、天氣錶面→天氣、其他→時鐘）；記最後一次的時間
+    static let recencyKey = "HomePlayPosterRecency"
+    static func kind(for style: FaceStyle) -> Kind { style == .photos ? .photos : style == .weather ? .weather : .clock }
+    /// 近期用過的排前面（越近越前），沒用過的照原本順序排在後面；只排輪得到的那幾張
+    static func ordered(_ kinds: [Kind], lastUsed: [Kind: Double]) -> [Kind] {
+        kinds.enumerated().sorted { a, b in
+            switch (lastUsed[a.element], lastUsed[b.element]) {
+            case let (x?, y?) where x != y: return x > y
+            case (_?, nil): return true
+            case (nil, _?): return false
+            default: return a.offset < b.offset
+            }
+        }.map { $0.element }
+    }
+    static func loadRecency(_ d: UserDefaults = .standard) -> [Kind: Double] {
+        var out: [Kind: Double] = [:]
+        for (k, v) in (d.dictionary(forKey: recencyKey) as? [String: Double]) ?? [:] { if let kind = Kind(rawValue: k) { out[kind] = v } }
+        return out
+    }
+    static func recordUse(_ k: Kind, at t: Double, _ d: UserDefaults = .standard) {
+        var m = (d.dictionary(forKey: recencyKey) as? [String: Double]) ?? [:]
+        m[k.rawValue] = t
+        d.set(m, forKey: recencyKey)
+    }
+    /// 這一次海報期的排序：進場那一刻記一次「用過」、排好就凍住（輪到一半不重排）；快照不寫偏好
+    nonisolated(unsafe) static var session: (since: Double, lastUsed: [Kind: Double])?
+    static func sessionRecency(since: Double, style: FaceStyle, wall: Double) -> [Kind: Double] {
+        if let s = session, s.since == since { return s.lastUsed }
+        var m = loadRecency()
+        if !demo && !SnapshotPrivacy.active { m[kind(for: style)] = wall; recordUse(kind(for: style), at: wall) }
+        session = (since, m)
+        return m
     }
 
     /// 進入 Ambient 第 elapsed 秒：現在這張、交叉淡化中的上一張（nil＝沒在換）、新張的不透明度
@@ -65,6 +103,14 @@ enum AmbientPoster {
         return dwell - into
     }
 
+    /// 海報大時間的字體與實際數字系統：SF＋arabic＝原本的 SF Pro（像素不變）；其他走系統錶面數字字體（一般字寬），
+    /// 字體沒有那一套數字就退回 arabic
+    static func timeFont(_ cfg: PosterConfiguration, size: CGFloat) -> (NSFont, PosterConfiguration.Numerals) {
+        let n = cfg.resolvedNumerals
+        let f = cfg.typeface == .sf && n == .arabic ? FaceType.sf(size, .medium) : cfg.typeface.previewFont(size, weight: 0.5)
+        return (f, FaceType.numerals(n, in: f))
+    }
+
     static func parseSnapshotArgs(_ a: [String]) {
         if let i = a.firstIndex(of: "--ambient-poster"), i + 1 < a.count { forced = Kind(rawValue: a[i + 1]) }
         demo = a.contains("--demo-ambient")
@@ -76,9 +122,11 @@ enum AmbientPoster {
 // MARK: - 畫
 
 extension Face {
-    /// 現在輪得到的海報（天氣有資料、照片架有照片）
+    /// 現在輪得到的海報（天氣有資料、照片架有照片），近期用過的排前面（這一次海報期內順序固定）
     var ambientPosterKinds: [AmbientPoster.Kind] {
-        AmbientPoster.available(weather: WeatherSource.shared.data != nil, photos: photos.current != nil)
+        let kinds = AmbientPoster.available(weather: WeatherSource.shared.data != nil, photos: photos.current != nil)
+        guard let since = Shell.ambientSince else { return kinds }
+        return AmbientPoster.ordered(kinds, lastUsed: AmbientPoster.sessionRecency(since: since, style: style, wall: ClockKit.wall))
     }
 
     func drawAmbientPoster(_ g: CGContext, now: Double) {
@@ -88,15 +136,15 @@ extension Face {
         let s = AmbientPoster.slot(ambientPosterKinds, elapsed: now - (Shell.ambientSince ?? now),
                                    reduceMotion: Motion.reduceMotion, forced: AmbientPoster.forced)
         if let prev = s.prev {
-            drawAmbientPosterLayer(g, prev, look)
+            drawAmbientPosterLayer(g, prev, look, now: now)
             g.saveGState(); g.setAlpha(s.alpha); g.beginTransparencyLayer(auxiliaryInfo: nil)
-            drawAmbientPosterLayer(g, s.cur, look)
+            drawAmbientPosterLayer(g, s.cur, look, now: now)
             g.endTransparencyLayer(); g.restoreGState()
         } else {
-            drawAmbientPosterLayer(g, s.cur, look)
+            drawAmbientPosterLayer(g, s.cur, look, now: now)
         }
         // 4) StandBy 式活動堆疊：每張海報都照常疊上；卡片底＝numerals 半透明，字用 secondary／accent
-        let acts = AmbientPoster.cards(shellActivities(now))
+        let acts = AmbientPoster.showsCards(PosterConfiguration.active.style, kind: s.cur) ? AmbientPoster.cards(shellActivities(now)) : []
         for (i, a) in acts.enumerated() {
             let r = AmbientPoster.cardRect(i)
             let card = CGPath(roundedRect: r, cornerWidth: 40, cornerHeight: 40, transform: nil)
@@ -127,7 +175,7 @@ extension Face {
 
 extension Face {
     /// 一張海報的底與主文字（不含活動卡）
-    func drawAmbientPosterLayer(_ g: CGContext, _ kind: AmbientPoster.Kind, _ look: HVTruth.Look) {
+    func drawAmbientPosterLayer(_ g: CGContext, _ kind: AmbientPoster.Kind, _ look: HVTruth.Look, now: Double = CACurrentMediaTime()) {
         let full = CGRect(x: 0, y: 0, width: 1024, height: 1024)
         let date = Date(timeIntervalSinceReferenceDate: ClockKit.wall)
         let (h, m) = Self.hourMinute(date)
@@ -160,16 +208,24 @@ extension Face {
             if let cap = photos.caption { drawCentered(g, Self.clipped(cap, cf, 800), font: cf, y: AmbientPoster.dateBaseline, color: look.secondary_color) }
             HPAX.note(g, CGRect(x: 212, y: AmbientPoster.timeBaseline - 260, width: 600, height: 300), .text, "\(h):\(m) \(photos.caption ?? "")", shape: .rounded(40))
         case .clock:
+            // 錶面體系：版式照海報配置（month＝月視圖，Shell/AmbientPosterStyles.swift）
+            let cfg = PosterConfiguration.active
+            if cfg.style == .month { drawMonthPoster(g, look, cfg, date); break }
+            if cfg.style == .threeColumnSixItems { drawFamilyPoster(g, look, cfg, date, now: now); break }
             // 底：Look 的 background token
             g.setFillColor(look.background_color.cgColor); g.fill(full)
             // 大數字：numerals token（Look 聯動後 ClockLook 色票就是這個色；畫在同一個 token 上，兩邊永遠一致）
-            drawCentered(g, "\(h):\(m)", font: FaceType.sf(AmbientPoster.timeSize, .medium), y: AmbientPoster.timeBaseline,
+            // 錶面體系：字體照海報配置的 typeface、數字照 numerals（預設 SF＋arabic＝原本的樣子）
+            let (tf, nums) = AmbientPoster.timeFont(cfg, size: AmbientPoster.timeSize)
+            drawCentered(g, FaceType.digits("\(h):\(m)", nums), font: tf, y: AmbientPoster.timeBaseline,
                          color: look.numerals_color)
             // 日期：secondary token
-            drawCentered(g, Self.dateLine(date), font: FaceType.sf(AmbientPoster.dateSize, .semibold), y: AmbientPoster.dateBaseline,
+            // 錶面體系：日期行＝海報配置的頁首日期格式（預設「日期」＝原本的月日星期）
+            let header = cfg.headerText(date)
+            drawCentered(g, header, font: FaceType.sf(AmbientPoster.dateSize, .semibold), y: AmbientPoster.dateBaseline,
                          color: look.secondary_color)
             HPAX.note(g, CGRect(x: 212, y: AmbientPoster.timeBaseline - 260, width: 600, height: 300), .text,
-                      "\(h):\(m) \(Self.dateLine(date))", shape: .rounded(40))
+                      "\(h):\(m) \(header)", shape: .rounded(40))
         }
     }
 }
@@ -180,6 +236,9 @@ enum AmbientPosterSelfTest {
     private static let demoAct = LiveActivity(kind: .timer, title: "", detail: "", accent: .black, progress: nil, appID: "timers")
 
     static func run(_ check: (Bool, String) -> Void) {
+        let sc: [Bool] = [AmbientPoster.showsCards(.time, kind: .clock), AmbientPoster.showsCards(.month, kind: .clock), AmbientPoster.showsCards(.month, kind: .weather)]
+        check(sc == [true, false, true],
+              "海報：月視圖／家庭版式的時鐘海報不疊活動卡，天氣照片照疊")   // l10n-ignore
         check(AmbientPoster.cards([]).isEmpty && AmbientPoster.cards(Array(repeating: demoAct, count: 4)).count == AmbientPoster.maxCards,
               "海報：活動最多三張卡")   // l10n-ignore
         let last = AmbientPoster.cardRect(AmbientPoster.maxCards - 1)
@@ -202,6 +261,25 @@ enum AmbientPosterSelfTest {
               && P.slot(all, elapsed: 0.1, reduceMotion: false).prev == nil, "海報輪播：換張 0.4 s 交叉淡化；減少動態效果直接切；第一張不淡入")   // l10n-ignore
         check(P.slot([.clock], elapsed: 45, reduceMotion: false).cur == .clock && P.slot(all, elapsed: 45, reduceMotion: false, forced: .photos).cur == .photos,
               "海報輪播：只有時鐘不輪；快照旗標強制指定")   // l10n-ignore
+        // 近期使用優先（錶面體系）
+        let o1: [P.Kind] = P.ordered(all, lastUsed: [:])
+        let o2: [P.Kind] = P.ordered(all, lastUsed: [P.Kind.photos: 100.0])
+        let o3: [P.Kind] = P.ordered(all, lastUsed: [P.Kind.clock: 50.0, P.Kind.weather: 90.0])
+        let o4: [P.Kind] = P.ordered([P.Kind.clock, P.Kind.weather], lastUsed: [P.Kind.photos: 999.0])
+        let w2: [P.Kind] = [.photos, .clock, .weather], w3: [P.Kind] = [.weather, .clock, .photos], w4: [P.Kind] = [.clock, .weather]
+        check(o1 == all && o2 == w2 && o3 == w3 && o4 == w4, "海報輪播：近期用過的排前面，沒用過的照原順序；輪不到的不出現")   // l10n-ignore
+        let kf: [P.Kind] = [P.kind(for: .photos), P.kind(for: .weather), P.kind(for: .island), P.kind(for: .calendar)]
+        check(kf == [.photos, .weather, .clock, .clock],
+              "海報輪播：用過＝進海報前的錶面對應的那張")   // l10n-ignore
+        let suite = "homeplay.selftest.posterRecency"
+        let ud = UserDefaults(suiteName: suite)!
+        ud.removePersistentDomain(forName: suite)
+        P.recordUse(.weather, at: 10, ud); P.recordUse(.photos, at: 20, ud); P.recordUse(.weather, at: 30, ud)
+        let rec: [P.Kind: Double] = P.loadRecency(ud), wantRec: [P.Kind: Double] = [.weather: 30, .photos: 20]
+        let o5: [P.Kind] = P.ordered(all, lastUsed: rec), w5: [P.Kind] = [.weather, .photos, .clock]
+        check(rec == wantRec && o5 == w5,
+              "海報輪播：最後使用時間存得回來")   // l10n-ignore
+        ud.removePersistentDomain(forName: suite)
         check(P.untilNextChange([.clock], elapsed: 10, reduceMotion: false) == .infinity && abs(P.untilNextChange(all, elapsed: 10, reduceMotion: false) - 20) < 1e-9
               && P.untilNextChange(all, elapsed: 30.1, reduceMotion: false) == 0 && P.untilNextChange(all, elapsed: 30.1, reduceMotion: true) > 29,
               "海報輪播：重畫排在換點、淡化中每幀")   // l10n-ignore

@@ -77,44 +77,50 @@ struct RemoteDevicesPane: View {
     @StateObject private var m = RemotePaneModel()
     @State private var removing: RemoteDevice?
 
+    private let tint = SettingsSection.devices.tint
+
     var body: some View {
         Form {
             Section {
-                Toggle(isOn: Binding(get: { m.enabled }, set: { m.setEnabled($0) })) {
-                    RowLabel(title: L("remote.enable", "让 iPhone、iPad 显示 HomePlay"),
-                             subtitle: m.enabled && RemoteServer.shared.listenFailed ? L("remote.listenFailed", "现在连不进来：连接端口被别的程序占着。关掉再打开试试")
-                                                                                     : L("remote.enable.sub", "同一个 Wi‑Fi 里的设备才看得到这台 Mac"))
-                }
+                ToggleRow(title: L("remote.enable", "让 iPhone、iPad 显示 HomePlay"),
+                          subtitle: m.enabled && RemoteServer.shared.listenFailed ? L("remote.listenFailed.short", "端口被占用，关掉再打开试试")
+                                                                                  : L("remote.enable.short", "只在同一个 Wi‑Fi 里看得到"),
+                          symbol: "ipad.and.iphone", tint: tint,
+                          info: L("remote.footer", "串流的设备要这台 Mac 醒着。画面只在家里的网络里传，而且加密；没配对的设备什么都看不到。访客设备看不到信息、照片、日历这些个人内容。"),
+                          isOn: Binding(get: { m.enabled }, set: { m.setEnabled($0) }))
+            } header: {
+                IllustrationHeader(scene: .devices, note: L("remote.demoNote", "扫一下码，iPhone、iPad 也显示 HomePlay"))
             }
 
             Section {
                 if m.devices.isEmpty {
-                    InfoRow(title: L("remote.noDevices", "还没有设备"))
+                    InfoRow(title: L("remote.noDevices", "还没有设备"), symbol: "ipad", tint: .gray)
                 }
+                // 一行一台：名字＋状态；「显示个人内容」开关留在行上，移除收进「⋯」
                 ForEach(m.devices, id: \.id) { d in
                     LabeledContent {
-                        HStack(spacing: 12) {
+                        HStack(spacing: 10) {
+                            if d.personal {
+                                InfoButton(L("remote.device.personal.warning", "网页版走的是一般 http：同一个 Wi‑Fi 里有心人可能冒充这台设备，看到你的个人内容。只在你信任的家庭网络里打开。"))
+                            }
                             Toggle(L("remote.device.personal", "显示个人内容"), isOn: Binding(
                                 get: { d.personal },
                                 set: { RemoteServer.shared.setPersonal(d.id, $0); m.refresh() }))
                                 .toggleStyle(.switch).controlSize(.small)
                                 .help(L("remote.device.personal.help", "信息、照片、日历、提醒、FaceTime；只给你自己的设备打开"))
-                            Button(L("remote.device.remove", "移除…"), role: .destructive) { removing = d }
+                            RowMenu {
+                                Button(L("remote.device.remove", "移除…"), role: .destructive) { removing = d }
+                            }
                         }
                     } label: {
-                        RowLabel(title: d.name, subtitle: status(d))
-                            .help(L("remote.device.nameNote", "名称是这台设备自己报的，不一定是真的"))
-                    }
-                    if d.personal {
-                        Label(L("remote.device.personal.warning", "网页版走的是一般 http：同一个 Wi‑Fi 里有心人可能冒充这台设备，看到你的个人内容。只在你信任的家庭网络里打开。"),
-                              systemImage: "exclamationmark.triangle.fill")
-                            .font(.callout).foregroundStyle(.orange).fixedSize(horizontal: false, vertical: true)
+                        RowLabel(title: SnapshotPrivacy.mask(d.name), subtitle: status(d), symbol: SnapshotPrivacy.mask(d.name).localizedCaseInsensitiveContains("ipad") ? "ipad" : "iphone",
+                                 tint: m.connected.contains(d.id) ? tint : .gray)
+                            .help(detail(d))
                     }
                 }
                 if let r = RemoteServer.lastAutoRevoked {
-                    Label(String(format: L("remote.autoRevoke.body", "「%@」同时从两个网络地址连进来，可能有人复制了它的密钥。要继续用请重新配对。"), r.name),
-                          systemImage: "exclamationmark.shield.fill")
-                        .font(.callout).foregroundStyle(.red).fixedSize(horizontal: false, vertical: true)
+                    InfoRow(title: String(format: L("remote.autoRevoke.short", "「%@」已移除，要用请重新配对"), SnapshotPrivacy.mask(r.name)), symbol: "exclamationmark.shield.fill", tint: .red,
+                            info: String(format: L("remote.autoRevoke.body", "「%@」同时从两个网络地址连进来，可能有人复制了它的密钥。要继续用请重新配对。"), r.name))
                 }
             } header: {
                 Text(L("remote.section.devices", "设备"))
@@ -128,11 +134,10 @@ struct RemoteDevicesPane: View {
                                 .accessibilityLabel(L("remote.add.qr", "配对用的 QR 码"))
                         }
                         VStack(alignment: .leading, spacing: 6) {
-                            Text(L("remote.add.body", "用 iPhone／iPad 的相机扫这个码，在 Safari 打开网页版；或者在网页上输入配对码。"))
-                                .fixedSize(horizontal: false, vertical: true)
+                            Text(L("remote.add.short", "用相机扫码，或在网页输入配对码"))
                             if let c = m.code {
                                 Text(RemoteCrypto.display(c)).font(.system(.title3, design: .monospaced).weight(.semibold)).textSelection(.enabled)
-                                Text(String(format: L("remote.add.expires", "码里有一次性密码，%d 分钟后失效。"), m.minutesLeft))
+                                Text(String(format: L("remote.add.expiresShort", "%d 分钟后失效"), m.minutesLeft))
                                     .font(.callout).foregroundStyle(.secondary)
                             } else {
                                 Text(L("remote.add.expired", "这个码已失效")).foregroundStyle(.secondary)
@@ -145,20 +150,15 @@ struct RemoteDevicesPane: View {
                             ForEach(m.urls, id: \.self) { Text($0).textSelection(.enabled).foregroundStyle(.secondary) }
                         }
                     } label: {
-                        Text(L("remote.add.address", "网址"))
+                        RowLabel(title: L("remote.add.address", "网址"), symbol: "link", tint: .gray)
                     }
                 } header: {
-                    Text(L("remote.section.add", "新增设备"))
+                    SectionTitle(title: L("remote.section.add", "新增设备"),
+                                 info: L("remote.add.body", "用 iPhone／iPad 的相机扫这个码，在 Safari 打开网页版；或者在网页上输入配对码。") + "\n\n"
+                                     + String(format: L("remote.add.expires", "码里有一次性密码，%d 分钟后失效。"), m.minutesLeft))
                 } footer: {
                     FooterButtons { Button(L("remote.add.new", "产生新的码")) { m.newCode() } }
                 }
-            }
-
-            Section {
-            } footer: {
-                Text(L("remote.footer", "串流的设备要这台 Mac 醒着。画面只在家里的网络里传，而且加密；没配对的设备什么都看不到。访客设备看不到信息、照片、日历这些个人内容。"))
-                    .font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
-                    .multilineTextAlignment(.leading).frame(maxWidth: .infinity, alignment: .leading)
             }
         }
         .formStyle(.grouped)
@@ -173,16 +173,22 @@ struct RemoteDevicesPane: View {
         }
     }
 
+    /// 一行放得下的状态：已连接／上次／还没连过
     private func status(_ d: RemoteDevice) -> String {
-        var parts: [String] = []
-        if m.connected.contains(d.id) { parts.append(L("remote.device.live", "串流 · 已连接")) }
-        else if let t = d.lastSeen {
+        if m.connected.contains(d.id) { return L("remote.device.liveShort", "已连接") }
+        if let t = d.lastSeen {
             let rel = RelativeDateTimeFormatter()
             rel.unitsStyle = .short
-            parts.append(String(format: L("remote.device.last", "串流 · 上次 %@"), rel.localizedString(for: Date(timeIntervalSince1970: t), relativeTo: Date())))
-        } else { parts.append(L("remote.device.never", "串流 · 还没连过")) }
-        if let ip = d.lastIP { parts.append(String(format: L("remote.device.ip", "来自 %@"), ip)) }
-        parts.append(L("remote.device.nameSource", "名称由设备提供"))
+            return String(format: L("remote.device.lastShort", "上次 %@"), rel.localizedString(for: Date(timeIntervalSince1970: t), relativeTo: Date()))
+        }
+        return L("remote.device.neverShort", "还没连过")
+    }
+
+    /// 停在这一行上看得到的细节：来自哪个位址、名称是设备自己报的
+    private func detail(_ d: RemoteDevice) -> String {
+        var parts: [String] = []
+        if let ip = d.lastIP { parts.append(String(format: L("remote.device.ip", "来自 %@"), SnapshotPrivacy.maskIP(ip))) }
+        parts.append(L("remote.device.nameNote", "名称是这台设备自己报的，不一定是真的"))
         return parts.joined(separator: " · ")
     }
 }

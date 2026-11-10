@@ -133,6 +133,13 @@ if let i = CommandLine.arguments.firstIndex(of: "--home-set"), i + 2 < CommandLi
 }
 if CommandLine.arguments.contains("--fetch-official-icons") { runFetchOfficialIcons() }
 HPLook.parseSnapshotArgs()   // 快照：--look Slate（官方 12 種 Look 之一，不寫偏好；Shell/HPLook.swift）
+if CommandLine.arguments.contains("--poster-list") { print(PosterLibraryStore.listText); exit(0) }   // 多臉：列出每一張（目前那張標 ←）
+if let s = arg("--poster-select"), let n = Int(s), PosterLibraryStore.all.indices.contains(n) {   // 快照：選第 n 張，不寫偏好
+    PosterConfiguration.snapshotOverride = PosterLibraryStore.all[n]
+}
+if let s = arg("--poster") { PosterConfiguration.snapshotOverride = PosterConfiguration.parse(s) }   // 快照：--poster 'look=Blue-Orange,typeface=soft' 或 default-color-1…4（海報配置，不寫偏好；Shell/PosterConfiguration.swift）
+AppLaunchCounts.parseSnapshotArgs(CommandLine.arguments)   // 快照：--launch-counts timers=9,music=3（App 資料庫的排序依據，不寫偏好；Shell/SpringBoard/SBLibraryCategories.swift）
+AppInstallDates.bootstrap(AppRegistry.all.map(\.id))   // 安裝日期：第一次跑這本帳時全部記「早於這本帳」，之後才看到的 App 才算新安裝
 AmbientPoster.parseSnapshotArgs(CommandLine.arguments)   // 快照：--ambient-poster weather|photos|clock 強制指定 Ambient 海報（Shell/AmbientPoster.swift）
 if AmbientPoster.demo { Shell.ambientSince = CACurrentMediaTime() }   // 快照：--demo-ambient 一開就在 Ambient 海報期（輪播從這一刻起算）
 HomeAlerts.demoTrigger(CommandLine.arguments)   // HomeView 對齊 WP5 拍板：--demo-alert leak|smoke|co|co2|security [房間] 觸發警報橫幅（Shell/HomeAlerts.swift）   // 2.0: 抓官網的鬧鐘／計時器／世界時鐘／對講圖示（Shell/OfficialIcons.swift）
@@ -251,7 +258,7 @@ if CommandLine.arguments.contains("--selftest") {
     check(fp == .of(.surprised) && !fp.approach(.of(.surprised), 0.2), "表情插值收敛并停止重画")
     // 錶面切换与倒数显示
     check(FaceStyle.island.next(1) == .photos && FaceStyle.island.next(-1) == FaceStyle.lineup.last! && FaceStyle.lineup.last!.next(1) == .island, "錶面头尾相接")
-    check(FaceStyle.lineup.map(\.rawValue) == ["island", "photos", "modular", "analog", "flow", "weather", "calendar", "growth", "black", "system6", "cluster"], "錶面陣容十一款")
+    check(FaceStyle.lineup.map(\.rawValue) == ["island", "photos", "modular", "analog", "flow", "weather", "world", "calendar", "growth", "black", "system6", "cluster"], "錶面陣容十二款（天氣後面是世界）")
     check(FaceStyle.embossed.inLineup == .analog && FaceStyle.alarmClock.inLineup == .system6 && FaceStyle.about.inLineup == .system6 && FaceStyle.homeModular.inLineup == .modular, "舊錶面搬進新款")
     check(timerClock(299.2) == "5:00" && timerClock(59) == "0:59" && timerClock(0.3) == "0:01" && timerClock(3725) == "1:02:05", "倒数显示")
     let fct = Face(); fct.frozen = true; fct.startTimer(seconds: 2, now: 100)
@@ -608,6 +615,7 @@ if let s = arg("--style") {
     if let l = mig.layout { faceOptionSnapshotOverride.layout = l }
     delegate.faceStyle = CommandLine.arguments.contains("--style-raw") ? st : st.inLineup   // 2.0: 第三輪快照：不在陣容裡的舊款（homeModular）也拍得到
 }
+if arg("--demo-worldclock") == "face" { delegate.faceStyle = .world }   // 快照用：「世界」錶面（城市見 Shell/Apps/AppDemoFlags.swift）
 if let s = arg("--typograph-material") {   // 快照用：flat embossed
     guard let m = TypographMaterial(rawValue: s) else { log("--typograph-material 只认：flat embossed"); exit(2) }
     faceOptionSnapshotOverride.material = m
@@ -626,6 +634,10 @@ if let s = arg("--cluster-state") {   // 快照用：normal memory thermal batte
 }
 if CommandLine.arguments.contains("--cluster-live") { clusterSnapshotLive = true }   // 快照用：儀表不用設計稿的示範值，取兩次真讀值
 if let s = arg("--clock") { islandSnapshotOverride.clock = ClockStyle(rawValue: s) }
+if let s = arg("--numeral-glass") {   // 實驗：大數字玻璃 sdf|system（Faces/GlyphGlass.swift；同隱藏偏好 HomePlayNumeralGlass）
+    guard let m = NumeralGlassMode(rawValue: s) else { log("--numeral-glass 只认：sdf system"); exit(2) }
+    NumeralGlassMode.override = m
+}
 if let s = arg("--clock-look") { ClockLook.snapshotOverride = ClockLook.parse(s) }   // 快照用：字体与颜色   // 快照用：島錶面时钟样式 bold thin stacked compact
 if let s = arg("--bg") { islandSnapshotOverride.bg = IslandBackground(rawValue: s) }     // daytime flow photo solid black
 if let s = arg("--era") { islandSnapshotOverride.era = ["1988": Era.y1988, "2002": .y2002, "2026": .y2026][s] }
@@ -633,6 +645,8 @@ if let s = arg("--capsule"), let m = CapsuleMaterial(rawValue: s) { capsuleMater
 if CommandLine.arguments.contains("--increase-contrast") { HPAccessibility.forceIncreaseContrast = true }   // 快照用：增加對比（同 HOMEPLAY_INCREASE_CONTRAST=1，不碰系統設定）
 if let s = arg("--siri") { SiriOrbState.snapshotPhase = s }   // 快照用：listen | think
 if arg("--snapshot") != nil || arg("--screen-png") != nil || ProcessInfo.processInfo.environment["HOMEPLAY_DEMO"] != nil { Face.demoData = true }   // 快照：Home Modular 用示範資料
+// 快照：眼睛固定張開。眨眼是由執行時鐘決定的，控制中心的模糊背景會跟著每幀不同——金幀永遠對不上（2026-11-09 實測）。
+if arg("--screen-png") != nil { Face.blinkOverride = 1 }
 if let s = arg("--timer"), let t = Double(s) { delegate.timerSeconds = t }   // 快照用：开一个 t 秒的计时器
 if let s = arg("--music") { delegate.musicTest = s; NowPlayingPoller.disabled = true }   // 快照用：固定一个「正在播放」
 if CommandLine.arguments.contains("--connecting") { CarPlayOverlayState.forced = true }
@@ -662,6 +676,15 @@ if let s = arg("--demo-onboarding") {   // 2.0 快照用：首次設定的某一
     guard let p = SetupPage(rawValue: s) else { log("--demo-onboarding 只认：welcome language permissions carplay look done"); exit(2) }
     SetupFlow.demo = p; SetupFlow.active = true; SetupFlow.page = p; SetupFlow.refreshPermissions(force: true)
 }
+if let s = arg("--demo-intro") {   // 2.0 快照用：手勢引導的某一頁＋輸入方式（--demo-intro home,touch；不讀也不寫偏好；Intro/IntroGuide.swift）
+    let parts = s.split(separator: ",").map(String.init)
+    guard let p = IntroPage(rawValue: parts[0]), parts.count < 2 || IntroInput(rawValue: parts[1]) != nil else {
+        log("--demo-intro 只认：welcome home switcher control swipe pet more[,mouse|trackpad|touch]"); exit(2)
+    }
+    IntroGuide.demo = p; IntroGuide.demoInput = parts.count > 1 ? IntroInput(rawValue: parts[1]) : nil
+    Onboarding.forced = true; Onboarding.active = true; IntroGuide.begin()
+}
+if CommandLine.arguments.contains("--intro-hint") { IntroHint.forced = true }   // 快照用：升級提示卡（配 --home）
 if let s = arg("--event") { delegate.eventTest = s; CalendarSource.disabled = true }   // 快照用：固定一个「下一个行程」
 if CommandLine.arguments.contains("--banner") { delegate.showBanner = true }   // 快照用：显示「时间到了」横幅
 if CommandLine.arguments.contains("--messages-probe") { MessagesDemo.probe() }
@@ -704,7 +727,7 @@ if let s = arg("--gaze") {      // 快照用：模拟追人样本，例如 1,0�
 }
 if let s = arg("--time") {      // 快照用：固定屏幕上的时间，例如 23:12（夜里的氛围图才合理）
     let v = s.split(separator: ":").compactMap { Int($0) }
-    if v.count == 2 { snapshotDateOverride = Calendar.current.date(bySettingHour: v[0], minute: v[1], second: 0, of: Date()) }
+    if v.count >= 2 { snapshotDateOverride = Calendar.current.date(bySettingHour: v[0], minute: v[1], second: v.count > 2 ? v[2] : 0, of: Date()) }   // 也收 H:mm:ss（停走秒針）
 }
 if OfficialDemo.on { snapshotDateOverride = OfficialDemo.date(time: arg("--time")) }   // 2.0: 官方原圖的日期（2026-04-01 星期三 10:09）
 if CommandLine.arguments.contains("--near") { delegate.forceNear = true }

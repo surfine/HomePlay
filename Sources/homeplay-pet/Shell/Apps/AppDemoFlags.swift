@@ -1,6 +1,7 @@
 // 快照旗標（媒體類 App 的假資料，免得截圖要靠真的播放器與網路）：
 //   --demo-music [nowplaying|mac|library|library-off|library-bottom]   固定一首「正在播放」（來源 iPhone；mac＝Mac）
 //   --demo-recipe [overview|ingredients|step:N|home|home-recents|none|failed|loading]   內建樣本食譜（不連網、不寫入「最近」）
+//   --demo-worldclock [list|big[:N]|face] [--demo-worldclock-many] [--demo-worldclock-page N]   世界時鐘示範城市（記憶體裡）
 //   --demo-recipe promo[:ingredients|:step:N|:timer:N]   宣傳片那份食譜；--demo-promo [--promo-frames 資料夾]   整段宣傳片
 // 單獨給旗標就直接打開對應的 App（不必再加 --app）。
 
@@ -31,6 +32,11 @@ extension Shell {
         if let v = value("--demo-podcasts") {
             if !args.contains("--app") { open("podcasts") }
             if let p = AppRegistry.app("podcasts") as? PodcastsApp { p.applyDemo(v, face: face) }
+        }
+        // 世界時鐘：--demo-worldclock list|big[:序號]|face：示範清單（本地＋東京、倫敦、紐約，記憶體裡、不寫設定）；face 由 main.swift 換成「世界」錶面
+        if let v = value("--demo-worldclock") {
+            if WorldClockList.isDemo { WorldClockList.save(["Asia/Tokyo", "Europe/London", "America/New_York"] + (args.contains("--demo-worldclock-many") ? ["Europe/Paris", "Australia/Sydney"] : [])) }   // 只在快照／示範（記憶體）裡換，不碰真的清單
+            if (v ?? "list") != "face", !args.contains("--app") { open("worldclock") }
         }
         // 功能補齊：--demo-sing [lyrics|word|plain|none|loading|idle]：跟唱的示範曲目與歌詞（Shell/Apps/SingApp.swift）
         if let v = value("--demo-sing") {

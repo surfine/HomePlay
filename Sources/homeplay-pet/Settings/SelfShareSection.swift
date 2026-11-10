@@ -41,21 +41,18 @@ struct SelfShareSection: View {
                 if !m.candidates.isEmpty { Divider() }
                 ForEach(m.candidates, id: \.self) { Text($0).tag($0) }
             } label: {
-                RowLabel(title: L("selfshare.account", "传给自己的账户"), subtitle: subtitle)
+                RowLabel(title: L("selfshare.account", "传给自己的账户"), subtitle: subtitle, symbol: "message.fill", tint: .green)
             }
             .disabled(m.candidates.isEmpty)
             if m.loaded, m.candidates.isEmpty, m.access == .available {   // 「訊息」裡找不到：自己填一次
                 TextField(L("selfshare.manual", "电话或电子邮件"), text: Binding(get: { m.chosen }, set: { m.choose($0.trimmingCharacters(in: .whitespaces)) }))
             }
         } header: {
-            Text(L("selfshare.header", "传到 iPhone"))
+            SectionTitle(title: L("selfshare.header", "传到 iPhone"),
+                         info: L("selfshare.footer", "CarPlay 连着时 iPhone 不能用 AirDrop：照片、网页、食谱改用信息传给你自己，传之前会先问一次。"))
         } footer: {
-            VStack(alignment: .trailing, spacing: 6) {
-                Text(L("selfshare.footer", "CarPlay 连着时 iPhone 不能用 AirDrop：照片、网页、食谱改用信息传给你自己，传之前会先问一次。"))
-                    .font(.footnote).foregroundStyle(.secondary).frame(maxWidth: .infinity, alignment: .leading)
-                if m.access == .needsFullDiskAccess {
-                    FooterButtons { Button(L("msg.fda.open", "打开系统设置")) { NSWorkspace.shared.open(MessagesAccess.fullDiskAccessURL) } }
-                }
+            if m.access == .needsFullDiskAccess {
+                FooterButtons { Button(L("msg.fda.open", "打开系统设置")) { NSWorkspace.shared.open(MessagesAccess.fullDiskAccessURL) } }
             }
         }
         .onAppear { m.reload() }

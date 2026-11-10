@@ -37,6 +37,7 @@ final class Face {
     /// 錶面要眼睛看哪裡（App 原始單位，同 FaceParams.pdx/pdy）；只在平常表情時生效。錶面在 drawIsland 前設、畫完清掉
     var faceEyeLook: CGPoint?
     static var renderCount = 0
+    nonisolated(unsafe) static var lastStateLog: Double = 0
     static var ambientPaused = false      // 過熱／低電量時停掉 Flow 氛圍動畫
     /// 貼圖解析度倍率（0.5…1）：按視窗大小選，預設視窗只畫 512²，省 4 倍光柵與上傳
     var renderScale: CGFloat = 0.5
@@ -51,6 +52,8 @@ final class Face {
     /// 官網素材用：在同一格畫面強制眨眼／瞄一眼，第二張與第一張只差眼睛
     static var blinkOverride: CGFloat?
     static var glanceOverride = false
+    /// 快照（--screen-png）：游標位置、靠近程度不參與——眼神與背景固定，金幀／逐格才可重現
+    static let snapshotFreeze = CommandLine.arguments.contains("--screen-png")
     /// 官網素材用：固定好奇時的眼珠方向，不受拍照時滑鼠在哪影響
     static var pointerOverride: CGPoint?
     static var renderSeconds = 0.0
@@ -390,6 +393,10 @@ final class Face {
     var style: FaceStyle = .island { didSet { if style != oldValue { beginFaceTransition(); forceDirty = true } } }
     /// 換錶面的過場：舊的一張（清楚版＋霧化版）與開始時刻（Faces/ScreenGeometry.swift 的 drawFaceTransition）
     var lastFrame: CGImage?
+    /// 最後一張乾淨的錶面幀（見 render 結尾）；主畫面桌布用它，不用 lastFrame
+    var settledFrame: CGImage?
+    /// 拿來做主畫面桌布的那一格：有乾淨的就用乾淨的
+    var backdropFrame: CGImage? { settledFrame ?? lastFrame }
     /// 這一幀膠囊（眼睛）佔的範圍（1024 畫布）：海報補丁只補這裡面的變化（眨眼、瞄一眼）
     var islandRect: CGRect?
     var islandRectBuilding: CGRect?   // 2.0: 外殼的頂端藥丸也記進來（Shell/HomeScreen.swift）
@@ -399,6 +406,8 @@ final class Face {
     /// 橫滑開始時舊錶面的膠囊本體（Faces/ScreenGeometry.swift 的 PortalSlide）
     var portalCoreFrom: CGRect?
     var faceTransition: (sharp: CGImage, frosted: CGImage, start: Double, islandFrom: CGRect?)?   // islandFrom＝Portal 轉場的共享元素（👀 膠囊）
+    /// 診斷：同一個橫滑過場只記一行 FACETR slide（ScreenGeometry.endFaceTransitionFrame）
+    nonisolated(unsafe) static var slideLogToken = -1.0
     /// 島錶面的自由组合（见 IslandOptions.swift）
     var clockStyle: ClockStyle = .bold { didSet { if clockStyle != oldValue { forceDirty = true } } }
     var background: IslandBackground = .daytime { didSet { if background != oldValue { forceDirty = true } } }
@@ -474,7 +483,7 @@ final class Face {
             dirty = true
         }
         if bannerUntil > 0, now >= bannerUntil { bannerUntil = 0; dirty = true }
-        if tickOnboarding(now) { dirty = true }   // 第一次打开的操作提示（Onboarding.swift）
+        if tickOnboarding(now) { dirty = true }   // 第一次打开的引导排队、手势引导（Onboarding.swift、Intro/）
         if style == .photos || (style == .island && background == .photo) || FaceOverview.active || Shell.ambientPosterActive, photos.tick(now) { dirty = true }   // 後續 #6：Ambient 照片海報也要照片架
         if tickCarPlayOverlay(now, dt) { dirty = true }   // 连线中过场的淡入淡出与转圈
         if tickPermissionPrimer(now, dt) { dirty = true }   // 权限说明卡（PermissionPrimer.swift）
@@ -493,6 +502,7 @@ final class Face {
             case .about: if tickAboutFace(now) { dirty = true }
             }
         case .weather: if tickWeatherFace(now) { dirty = true }
+        case .world: if tickWorldFace(now) { dirty = true }
         case .modular: if tickModularFace(now) { dirty = true }
         case .calendar: if tickCalendarFace(now) { dirty = true }
         case .homeModular: if tickHomeModularFace(now) { dirty = true }
@@ -515,7 +525,7 @@ final class Face {
         let t0 = CACurrentMediaTime()
         defer { Face.renderSeconds += CACurrentMediaTime() - t0 }
         if wallpaper == nil { rebuildWallpaper() }
-        let sc = max(0.25, min(2, renderScale))
+        let sc = max(0.25, min(HeroPull.on ? HeroPull.textureScale : 2, renderScale))
         renderPixelScale = sc
         let px = Int((1024 * sc).rounded())
         let tr = faceTransitionProgress(now)
@@ -548,6 +558,7 @@ final class Face {
                 case .about: renderAboutFace(g, now)
                 }
             case .weather: renderWeatherFace(g, now)          // Faces/WeatherFace.swift
+            case .world: renderWorldFace(g, now)              // Faces/WorldFace.swift
             case .calendar: renderCalendarFace(g, now)        // Faces/CalendarFace.swift
             case .homeModular: renderHomeModularFace(g, now)  // Faces/HomeModularFace.swift
             case .embossed: renderEmbossedFace(g, now)        // Faces/EmbossedFace.swift
@@ -563,7 +574,7 @@ final class Face {
             drawCarPlayOverlay(g, now)   // 连线中过场（CarPlayOverlay.swift）
             if FaceOverview.active { drawOverview(g, now) }   // 长按换錶面总览盖在最上面
             if helloInHandoff(now), helloTime(now) < Self.helloDuration { drawHelloScene(g, helloTime(now)) }   // 2.0 hello：淡出、露出 👀 錶面
-            if Onboarding.active { drawOnboarding(g, now) }   // 第一次打开的操作提示
+            drawOnboarding(g, now)   // 2.0：開場手勢引導、升級提示卡（Onboarding.swift、Intro/）
             drawSetup(g, now)                                  // 2.0：首次設定（Setup/SetupScreen.swift）
             drawClioTalk(g, now)                               // 2.0: ClioTalk 回答卡（ClioTalk/ClioTalkPanel.swift）
             drawPermissionPrimer(g, now)                       // 权限说明卡盖在最上面（要点按钮）
@@ -575,10 +586,26 @@ final class Face {
                 g.setFillColor(NSColor.black.withAlphaComponent(cur.dim).cgColor)
                 g.fill(CGRect(x: 0, y: 0, width: 1024, height: 1024))
             }
+            drawAlertCard(g, now)                              // 家庭警報卡（L2）：連休眠壓黑、閒置變暗都蓋過（Shell/HomeAlertCard.swift）
+            if now - Face.lastStateLog > 1 {   // 除錯（換頁黑卡追蹤）：每秒一條狀態
+                Face.lastStateLog = now
+                appendDiag("gesture.log", String(format: "state screen=%@ style=%@ pageDir=%d hold=%@ morph=%@ takeover=%@ pillT=%.2f transition=%@",
+                    String(describing: Shell.nav.screen), String(describing: style), Face.pageDir,
+                    Face.pageHold.map { String(format: "%.2f", $0) } ?? "nil",
+                    Shell.appMorph != nil ? "Y" : "n", Shell.takeover != nil ? "Y" : "n", Shell.pillT,
+                    faceTransition != nil ? "Y" : "n"))
+            }
         }
         // 2.0 P07：True Tone——房間色溫偏移時整面微調白點（Faces/TrueTone.swift；HV-MAIN-36）
         if let tuned = TrueTone.apply(frame, warmth: TrueTone.forced ?? Shell.trueToneWarmth) { frame = tuned }
         lastFrame = frame
+        // 主畫面桌布只取「乾淨」的錶面幀：沒有過場、沒有換頁、沒有任何覆蓋層、畫面停在錶面——
+        // 2026-11-07 使用者截圖：資源庫四周露出半紅半黑的桌布與頂緣細線，是換頁半路的那一格被拿去當桌布
+        if faceTransition == nil, Face.pageDir == 0, Face.pageHold == nil, FacePaging.drag == nil,
+           Shell.nav.screen == .face, Shell.nav.overlay == .none, !FaceOverview.active, !Onboarding.active, !SetupFlow.active,
+           bannerUntil <= now, cur.dim <= 0.005 {
+            settledFrame = frame
+        }
         RemotePrivacy.noteRender(self, frame)   // 2.0: 網頁串流記下這一幀能不能給訪客看（Remote/RemoteInput.swift）
         return frame
     }
@@ -633,6 +660,11 @@ final class Face {
         if capsuleCoreBuilding == nil, let g2 = Self.capsuleGlideRect(to: rect, now: now) {
             let q = g2.height / rect.height
             s0 *= q; k0 *= q; cw = g2.width; ch = g2.height; c = CGPoint(x: g2.midX, y: g2.midY); rect = g2
+        }
+        // 診斷（回歸 #17b 還沒好）：任何「比正常島大」的膠囊都記一筆，含來源狀態
+        if rect.width > 620 || rect.height > 260 {
+            let acts = shellActivities(now).map { "\($0.kind):\($0.title)" }.joined(separator: "|")
+            appendDiag("gesture.log", "BIGCAP style=\(style.rawValue) rect=\(Int(rect.width))x\(Int(rect.height))@\(Int(rect.minX)),\(Int(rect.minY)) lt=\(String(format: "%.2f", lt)) look=\(capsuleLook()) status=\(status) pageDir=\(Self.pageDir) glide=\(Self.capsuleGlide != nil) transition=\(faceTransition != nil) acts=[\(acts)]")
         }
         let eyesArea = rect.insetBy(dx: -ch * 0.6, dy: -ch * 0.45)   // 臉頰紅暈、睡著的 z 會畫到膠囊外面一點
         islandRectBuilding = islandRectBuilding.map { $0.union(eyesArea) } ?? eyesArea

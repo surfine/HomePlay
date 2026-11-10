@@ -25,14 +25,21 @@ enum LiveActivityStack {
     static let maxShown = 3
     /// HIG：Live Activity 追蹤 8 小時內的事
     static let maxAge: Double = 8 * 3600
-    /// compact／minimal 的高＝沒有活動時的膠囊高（HIG 尺寸表：compact、minimal 都跟島同高）
-    static let height: CGFloat = 62
-    static let idleWidth: CGFloat = 208
+    /// compact／minimal 的高（HIG：compact、minimal 同高）
+    /// 待機膠囊（拍板 2026-11-08：全系統一致；2026-11-09：再收小一點，仍留在 CarPlay 安全帶裡）
+    /// 眼睛膠囊（idle）與 compact 分開：idle 48，長出活動時才回到 54 的 compact 高度。
+    static let height: CGFloat = 54
+    static let idleHeight: CGFloat = 48
+    static let idleWidth: CGFloat = 166
     static let gap: CGFloat = 14             // 眼睛 ↔ 內容（緊貼，不另外加 padding）
     static let endPad: CGFloat = 18          // 內容 ↔ 膠囊兩端（落在半圓裡）
     static let detachGap: CGFloat = 12
     static let minimalPad: CGFloat = 14      // 分離小藥丸：內容 ↔ 邊
     static let expandedInset: CGFloat = 46   // 大卡左右離螢幕邊＝膠囊上緣離螢幕頂（跟螢幕圓角同心）
+    /// compact 膠囊的硬上限（回歸 #18）：再長也要留得下螢幕邊距，且內容槽不得超過它
+    static let maxWidth: CGFloat = 900
+    /// 單一活動內容的最大文字寬；laWidths 與 laTrailing 共用，避免「量得寬、畫得窄」兩套數字
+    static let maxContentWidth: CGFloat = 140
 
     /// 每個 App 的活動第一次出現的牆上時間（超過 8 小時就收）
     nonisolated(unsafe) static var firstSeen: [String: Double] = [:]
@@ -75,8 +82,10 @@ enum LiveActivityStack {
     static func layout(eyesHalf eh: CGFloat, top: CGFloat, centerX cx: CGFloat = 512,
                        single: (lead: CGFloat, trail: CGFloat)?, minimal: [CGFloat]) -> Layout {
         if let s = single {
-            let side = max(s.lead, s.trail)
-            let w = max(idleWidth, 2 * (eh + gap + side + endPad))
+            // 回歸 #18：內容槽必須跟膠囊同一個上限。槽比膠囊大就會出現「本體巨大、內容小小」的巨膠囊。
+            let maxSide = max(0, (maxWidth - 2 * (eh + gap + endPad)) / 2)
+            let side = min(max(s.lead, s.trail), maxSide)
+            let w = min(maxWidth, max(idleWidth, 2 * (eh + gap + side + endPad)))
             return Layout(pill: CGRect(x: cx - w / 2, y: top, width: w, height: height),
                           leading: CGRect(x: cx - eh - gap - side, y: top, width: side, height: height),
                           trailing: CGRect(x: cx + eh + gap, y: top, width: side, height: height), detached: [])
@@ -275,7 +284,10 @@ extension Face {
     /// compact 的內容寬
     private func laWidths(_ a: LiveActivity) -> (lead: CGFloat, trail: CGFloat, mini: CGFloat) {
         switch a.kind {
-        case .timer, .alarm, .weather: return (40, Typo.width(a.detail, Self.laValueFont), 38)
+        case .timer, .alarm, .weather:
+            // 與 laTrailing 的 Face.clipped(..., 140) 對齊：量測用同一段被截斷的字，否則槽會比內容寬出好幾倍
+            let s = Face.clipped(a.detail, Self.laValueFont, LiveActivityStack.maxContentWidth)
+            return (40, min(LiveActivityStack.maxContentWidth, Typo.width(s, Self.laValueFont)), 38)
         case .music, .assistant: return (40, 40, 34)
         case .call: return (40, min(140, Typo.width(a.detail, Self.laValueFont)), min(110, Typo.width(a.detail, Self.laMiniFont)))
         case .message: return (40, min(150, Typo.width(a.title, Self.laNameFont)), 34)
@@ -580,7 +592,24 @@ extension Face {
 
     /// 錶面大膠囊除了計時器與音樂，還有沒有別的活動要它長大
     func faceHasOtherActivity(_ now: Double) -> Bool {
-        shellActivities(now).contains { a in a.kind == .call || a.kind == .message || a.kind == .assistant || a.kind == .iphone || a.kind == .alarm || a.kind == .weather || (a.kind == .music && !musicActive(now)) }
+        Face.growsCapsule(shellActivities(now), musicActive: musicActive(now))
+    }
+
+    /// 哪些活動值得把錶面膠囊長成 880×230（回歸 #17b，2026-11-08 錄影）：
+    /// 1. 沒有可讀文字（標題與細節都空）的活動不長大——長大後就是一顆空的深色藥丸；
+    /// 2. `.iphone`（iPhone 鏡像）只有 App 名＋經過時間，一律不長大，只走分離小藥丸；
+    /// 3. `.music` 由錶面自己畫「正在播放」，只有在沒有 musicActive 時才算別的活動。
+    static func growsCapsule(_ acts: [LiveActivity], musicActive: Bool) -> Bool {
+        acts.contains { a in
+            let hasText = !a.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                || !a.detail.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            guard hasText else { return false }
+            switch a.kind {
+            case .iphone: return false
+            case .music: return !musicActive
+            case .call, .message, .assistant, .alarm, .weather, .timer: return true
+            }
+        }
     }
 
     /// 錶面的大膠囊（rect，眼睛在 ex、大小 ke）長開時：主活動不是計時器／正在播放就由這裡畫；其他活動畫成膠囊下方的 minimal；
@@ -666,22 +695,37 @@ struct LiveActivitySettingsSection: View {
     var body: some View {
         Section {
             ForEach(LiveActivityStack.settingApps, id: \.self) { id in
-                Toggle(AppRegistry.app(id)?.title ?? id, isOn: Binding(
+                Toggle(isOn: Binding(
                     get: { _ = version; return LiveActivityStack.enabledSetting(id) },
-                    set: { LiveActivityStack.setEnabled($0, id); version += 1 }))
+                    set: { LiveActivityStack.setEnabled($0, id); version += 1 })) {
+                    RowLabel(title: AppRegistry.app(id)?.title ?? id, symbol: Self.symbol(id).0, tint: Self.symbol(id).1)
+                }
                 if id == "messages" {
                     Toggle(isOn: Binding(
                         get: { _ = version; return !UserDefaults.standard.bool(forKey: LiveActivityStack.noPreviewKey) },
                         set: { UserDefaults.standard.set(!$0, forKey: LiveActivityStack.noPreviewKey); version += 1 })) {
-                        RowLabel(title: L("la.settings.preview", "显示预览"), subtitle: L("la.settings.preview.sub", "关掉时只写「新信息」，不显示名字和内容"))
+                        RowLabel(title: L("la.settings.preview", "显示预览"), subtitle: L("la.settings.preview.short", "关掉时只写「新信息」"), symbol: "eye.fill", tint: .green)
                     }
                     .disabled(!LiveActivityStack.enabledSetting("messages"))
                 }
             }
         } header: {
-            Text(L("la.settings.header", "实时活动"))
-        } footer: {
-            Text(L("la.settings.footer", "正在进行的事会显示在顶端的 👀 胶囊里；按住胶囊可以展开。超过 8 小时会自动结束。"))
+            SectionTitle(title: L("la.settings.header", "实时活动"),
+                         info: L("la.settings.footer", "正在进行的事会显示在顶端的 👀 胶囊里；按住胶囊可以展开。超过 8 小时会自动结束。"))
+        }
+    }
+
+    /// 每个 App 那一行的符号（设置行零件：彩色圆角方块）
+    static func symbol(_ id: String) -> (String, Color) {
+        switch id {
+        case "timers": return ("timer", .orange)
+        case "alarms": return ("alarm.fill", .orange)
+        case "music": return ("music.note", .pink)
+        case "messages": return ("message.fill", .green)
+        case "facetime": return ("video.fill", .green)
+        case "cliotalk": return ("bubble.left.and.text.bubble.right.fill", .purple)
+        case "weather": return ("cloud.sun.fill", .blue)
+        default: return ("app.fill", .gray)
         }
     }
 }
