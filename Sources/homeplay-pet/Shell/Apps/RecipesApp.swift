@@ -12,7 +12,7 @@ import AppKit
 final class RecipesApp: PetApp {
     static let shared = RecipesApp()
     let id = "recipes"
-    var title: String { L("app.nowcooking", "烹飪") }   // HomeView 對齊 WP5：Now Cooking 是獨立 app
+    var title: String { L("app.nowcooking", "烹饪") }   // HomeView 對齊 WP5：Now Cooking 是獨立 app
     let icon = AppIcon(color: HPTokens.gray, symbol: "fork.knife")   // 實測 AccentColor＝systemGray
     /// 這次是不是從 Safari 的「開始烹飪」進來的：最外層返回回 Safari；獨立打開就照外殼回主畫面
     var enteredFromSafari = false
