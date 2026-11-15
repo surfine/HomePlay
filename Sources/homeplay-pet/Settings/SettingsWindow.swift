@@ -1,7 +1,7 @@
 import AppKit
 import SwiftUI
 
-// 设置窗口（⌘,）：系统标准的工具栏分页外观，各页用 SwiftUI。
+// 设置窗口（⌘,）：照系统设置——玻璃侧栏（彩色方块＋分组）、搜索列出符合的行、工具栏的上一页／下一页、右箭头进下一层。
 // 状态与动作全部接回原有实现（AppDelegate / PetView 的菜单动作），不另存一份，免得两边不一致。
 
 /// 设置窗口读写的那些状态。窗口打开、取得焦点时、以及每 1.5 秒刷新一次（权限状态会在系统设置里被改）。
@@ -10,6 +10,16 @@ final class SettingsModel: ObservableObject {
     @Published var section = SettingsSection(rawValue: UserDefaults.standard.string(forKey: SettingsSection.key) ?? "") ?? .general {
         didSet { UserDefaults.standard.set(section.rawValue, forKey: SettingsSection.key) }
     }
+    /// 这一页推进去的下一层（右箭头的行）；截图验收：HOMEPLAY_SETTINGS_PATH=faceOptions 直接开在那一层
+    @Published var path: [SettingsSub] = ProcessInfo.processInfo.environment["HOMEPLAY_SETTINGS_PATH"].flatMap(SettingsSub.init(rawValue:)).map { [$0] } ?? []
+    /// 搜索跳过去的那一行：闪一下、卷到看得见（flashToken 每跳一次加一，同一行再点也会再闪）
+    @Published var flash: String?
+    @Published private(set) var flashToken = 0
+
+    /// 上一页／下一页：跟系统设置一样记的是「去过的地方」（分页＋下一层），不是只有下一层
+    struct Place: Equatable { var section: SettingsSection; var path: [SettingsSub] }
+    @Published private(set) var backStack: [Place] = []
+    @Published private(set) var forwardStack: [Place] = []
 
     @Published var loginItem = false
     @Published var loginAvailable = false
@@ -36,6 +46,10 @@ final class SettingsModel: ObservableObject {
     var capsuleLocked: Bool { [.system6, .alarmClock, .about].contains(faceStyle) || (faceStyle == .island && era != .y2026) }
     /// 「字體與顏色」只作用在 2026 的島與照片錶面
     var clockLookApplies: Bool { (faceStyle == .island && era == .y2026) || faceStyle == .photos }
+    /// 這張錶面有沒有自己的選項（有才出現「這張錶面的選項」那一行）
+    var faceHasOptions: Bool {
+        [.island, .analog, .system6, .cluster, .photos].contains(faceStyle)
+    }
     @Published var viewMode = ViewMode.auto
     @Published var touring = false   // 2.0 P06: 自動環繞（從右鍵選單搬來）
 
@@ -82,77 +96,158 @@ final class SettingsModel: ObservableObject {
         app?.settingsPerform(selector, represented)
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in self?.refresh() }
     }
+
+    // MARK: 去哪一页（侧栏、右箭头、搜索结果都走这里，才记得住上一页）
+
+    func go(_ s: SettingsSection, _ p: [SettingsSub] = []) {
+        let here = Place(section: section, path: path), there = Place(section: s, path: p)
+        guard here != there else { return }
+        backStack.append(here); forwardStack.removeAll()
+        apply(there)
+    }
+    func goBack() {
+        guard let p = backStack.popLast() else { return }
+        forwardStack.append(Place(section: section, path: path)); apply(p)
+    }
+    func goForward() {
+        guard let p = forwardStack.popLast() else { return }
+        backStack.append(Place(section: section, path: path)); apply(p)
+    }
+    private func apply(_ p: Place) {
+        if section != p.section { section = p.section }
+        if path != p.path { path = p.path }
+    }
+
+    /// 搜索结果：跳到那一页（在下一层就推进去），那一行闪一下
+    func reveal(_ r: SettingsSearchRow) {
+        go(r.section, r.sub.map { [$0] } ?? [])
+        flash = r.key
+        flashToken += 1
+        let token = flashToken
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.4) { [weak self] in
+            guard let self, self.flashToken == token else { return }
+            withAnimation(.easeOut(duration: 0.35)) { self.flash = nil }
+        }
+    }
 }
 
-/// 侧边栏的分页（顺序＝显示顺序）；上次看到哪一页会记住
+/// 侧边栏的分页（顺序＝显示顺序，groups 是侧栏的分组）；上次看到哪一页会记住。
+/// 名称：系统设置里有同名、意思也一样的才用系统的（通用、显示器、辅助功能、家人、隐私与安全性），其余用自己的。
 enum SettingsSection: String, CaseIterable, Identifiable {
-    case general, appearance, gestures, carplay, home, cliotalk, camera, people, devices, permissions   // 2.0：ClioTalk、people＝家人、devices＝iPhone 與 iPad（網頁串流）；home＝家庭捷徑（B 方案）
+    case general, body, display, accessibility
+    case faces, homeScreen
+    case gestures, cliotalk, camera
+    case carplay, devices, home      // home＝家庭（捷徑）
+    case people, permissions         // permissions＝隱私權與安全性（rawValue 沿用，--open-settings 與舊偏好照舊）
     var id: String { rawValue }
     static let key = "HomePlaySettingsSection"
+    static let groups: [[SettingsSection]] = [[.general, .body, .display, .accessibility], [.faces, .homeScreen],
+                                              [.gestures, .cliotalk, .camera], [.carplay, .devices, .home], [.people, .permissions]]
+    /// 舊的「外觀」入口（右鍵選單「外觀設定…」）：朝向、視角、大小都搬到「機身」
+    static var appearance: SettingsSection { .body }
+
     var title: String {
         switch self {
         case .general: return L("settings.general", "通用")
-        case .appearance: return L("settings.appearance", "外观")
+        case .body: return L("settings.body", "机身")
+        case .display: return L("settings.displays", "显示器")
+        case .accessibility: return L("settings.a11y", "辅助功能")
+        case .faces: return L("settings.faces", "表盘与墙纸")
+        case .homeScreen: return L("settings.home.section", "主屏幕")
         case .gestures: return L("settings.gestures", "手势")
-        case .carplay: return L("settings.carplay", "CarPlay")
-        case .home: return L("settings.home", "家庭")
         case .cliotalk: return L("settings.cliotalk", "ClioTalk")
         case .camera: return L("settings.camera", "相机")
-        case .people: return L("settings.people", "家人")
+        case .carplay: return L("settings.carplay", "CarPlay")
         case .devices: return L("settings.devices", "iPhone 与 iPad")
-        case .permissions: return L("settings.permissions", "权限")
+        case .home: return L("settings.home", "家庭")
+        case .people: return L("settings.people", "家人")
+        case .permissions: return L("settings.privacySecurity", "隐私与安全性")
         }
     }
+    /// 头部卡那一句话（有示范舞台的四页不用）
+    var line: String {
+        switch self {
+        case .general: return L("settings.general.line", "HomePlay 什么时候出现、用哪种语言，以及表盘上可以显示哪些数据。")
+        case .body: return L("settings.body.line", "机身的配色、大小和摆放。")
+        case .display: return L("settings.displays.line", "屏幕多亮、什么时候暗下来。")
+        case .accessibility: return L("settings.a11y.line", "让屏幕上的字更大、用键盘操作屏幕，或让顶端的把手一直显示。")
+        case .faces: return L("settings.faces.line", "表盘、主题和墙纸。")
+        case .homeScreen: return L("settings.homeScreen.line", "App 和小组件的外观，以及主屏幕上会出现什么。")
+        case .gestures: return L("settings.gestures.line", "在屏幕和机身上怎么操作。")
+        case .cliotalk: return L("settings.cliotalk.line", "按住 F5 说话。这里决定谁来回答、它能用哪些数据、怎么跟你说话。")
+        case .camera: return L("settings.camera.line", "跟随你转头，以及房间光线。")
+        case .carplay: return L("settings.carplay.line", "用力按一下屏幕，就是 iPhone 的 CarPlay。这里管哪一部 iPhone、怎么连。")
+        case .devices: return L("settings.devices.line", "让其他设备显示 HomePlay，或把网页传给它。")
+        case .home: return L("settings.home.line", "用「捷径」控制家里的配件。")
+        case .people: return L("settings.people.line", "HomePlay 认得出谁在看，让每个人看到自己的那一份。")
+        case .permissions: return L("settings.privacy.line", "HomePlay 用到哪些权限，以及什么数据会离开这台 Mac。")
+        }
+    }
+    /// 只有这四页的页首是示范舞台（其余是头部卡）
+    var hasStage: Bool { [.body, .faces, .gestures, .camera].contains(self) }
     /// 侧边栏符号：系统设置那样的彩色圆角方块＋白色实心符号（同一个尺寸，文字左缘对齐）
     var symbol: String {
         switch self {
         case .general: return "gearshape.fill"
-        case .appearance: return "circle.lefthalf.filled"
+        case .body: return "display"
+        case .display: return "sun.max.fill"
+        case .accessibility: return "accessibility"
+        case .faces: return "clock.fill"
+        case .homeScreen: return "square.grid.2x2.fill"
         case .gestures: return "hand.point.up.left.fill"
-        case .carplay: return "car.fill"
-        case .home: return "house.fill"
         case .cliotalk: return "bubble.left.and.text.bubble.right.fill"
         case .camera: return "camera.fill"
-        case .people: return "person.2.fill"
+        case .carplay: return "car.fill"
         case .devices: return "ipad.and.iphone"
+        case .home: return "house.fill"
+        case .people: return "person.2.fill"
         case .permissions: return "hand.raised.fill"
         }
     }
-    /// 方块的颜色；这一页里每一行的符号也用它
+    /// 方块的颜色（照设计稿的色票）
     var tint: Color {
         switch self {
-        case .general: return .gray
-        case .appearance: return Color(white: 0.28)
-        case .gestures: return .teal
-        case .carplay: return .green
-        case .home: return .orange
-        case .cliotalk: return .purple
-        case .camera: return .indigo
-        case .people: return .pink
-        case .devices: return .cyan
-        case .permissions: return .blue
+        case .general: return Color(hex: 0x8e8e93)
+        case .body: return Color(hex: 0x5e6b78)
+        case .display: return Color(hex: 0x0a84ff)
+        case .accessibility: return Color(hex: 0x0a6cff)
+        case .faces: return Color(hex: 0x2c2c2e)
+        case .homeScreen: return Color(hex: 0x34aadc)
+        case .gestures: return Color(hex: 0x30b0c7)
+        case .cliotalk: return Color(hex: 0xaf52de)
+        case .camera: return Color(hex: 0x5856d6)
+        case .carplay: return Color(hex: 0x34c759)
+        case .devices: return Color(hex: 0x32ade6)
+        case .home: return Color(hex: 0xff9f0a)
+        case .people: return Color(hex: 0xff375f)
+        case .permissions: return Color(hex: 0x0a6cff)
         }
     }
-    /// 搜索用：这一页里每一行的标题（按当前语言）
-    private var keywordKeys: [String] {
+}
+
+/// 下一层（有右箭头的行推进去的页）
+enum SettingsSub: String, Hashable {
+    case faceOptions, liveActivities, webApps, addDevice
+    var title: String {
         switch self {
-        case .general: return ["settings.loginItem", "settings.alwaysOnTop", "settings.language", "settings.size", "prefs.nowPlaying", "settings.lyrics", "prefs.calendar.on", "la.settings.header"]
-        case .appearance: return ["settings.facing", "settings.angle", "settings.finish", "settings.face", "settings.capsule", "settings.clockLook", "settings.home.appearance", "settings.display.title", "sharedAlbums.title", "settings.textSize"]
-        case .gestures: return ["settings.gesture.home", "settings.gesture.switcher", "settings.gesture.control", "settings.gesture.page", "settings.gesture.turn",
-                                "settings.gesture.resize", "settings.gesture.moveWindow", "settings.gesture.apart.title", "settings.gesture.keys", "settings.intro", "settings.intro.input", "settings.intro.tips"]
-        case .carplay: return ["prefs.plugConnect", "settings.callVolume", "settings.corners", "menu.iphone", "menu.pairNewPhone", "menu.wifiPassword", "handoff.header", "selfshare.header"]   // 2.0 promo
-        case .home: return ["settings.home.name", "settings.home.openApp", "settings.home.test", "settings.home.helper.title"]
-        case .cliotalk: return ["clio.provider", "clio.key", "clio.fast", "clio.deep", "clio.section.data", "clio.cap", "clio.speak", "clio.f5", "clio.clear"]
-        case .camera: return ["settings.follow.title", "settings.followRange", "settings.followPitch", "settings.roomLight.title"]
-        case .people: return ["people.pane.recognize", "people.pane.family", "people.pane.addTitle", "people.pane.deleteAll"]
-        case .devices: return ["remote.enable", "remote.section.devices", "remote.section.add", "remote.device.personal"]
-        case .permissions: return ["settings.perm.camera", "settings.perm.mic", "settings.perm.input", "settings.perm.automation", "settings.perm.calendar"]
+        case .faceOptions: return L("settings.faceOptions", "这张表盘的选项")
+        case .liveActivities: return L("la.settings.header", "实时活动")
+        case .webApps: return L("webapp.settings.header", "Web App")
+        case .addDevice: return L("remote.section.add", "新增设备")
         }
     }
-    func matches(_ query: String) -> Bool {
-        let q = query.trimmingCharacters(in: .whitespaces)
-        guard !q.isEmpty else { return true }
-        return ([title] + keywordKeys.map { L10n.text($0, "") }).contains { $0.localizedCaseInsensitiveContains(q) }
+    var section: SettingsSection {
+        switch self {
+        case .faceOptions: return .faces
+        case .liveActivities, .webApps: return .homeScreen
+        case .addDevice: return .devices
+        }
+    }
+}
+
+extension Color {
+    init(hex: UInt32) {
+        self.init(.sRGB, red: Double(hex >> 16 & 0xff) / 255, green: Double(hex >> 8 & 0xff) / 255, blue: Double(hex & 0xff) / 255)
     }
 }
 
@@ -175,7 +270,7 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
         let c = shared ?? SettingsWindowController(app: app)
         shared = c
         c.model.refresh()
-        if let pane { c.model.section = pane }
+        if let pane, pane != c.model.section { c.model.go(pane) }
         NSApp.activate(ignoringOtherApps: true)
         c.showWindow(nil)
         c.window?.makeKeyAndOrderFront(nil)
@@ -219,47 +314,116 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
     func windowWillClose(_ notification: Notification) { timer?.invalidate(); timer = nil }
 }
 
-/// 侧边栏＋内容：原生 source list（单色线条图示，跟 WindowShade 一样）＋搜索；
-/// 标题栏「HomePlay 设置」，副标题是当前分页；内容是各页自己的分组表单（Form 自己滚动）。
+/// 侧边栏＋内容：系统的侧栏（彩色方块、分组；玻璃由系统画）＋搜索；
+/// 搜索时侧栏换成符合的行（标题＋在哪一页），点了跳过去、那一行闪一下；找不到就是系统的「没有结果」。
+/// 工具栏：上一页／下一页（系统的工具栏按钮），标题是现在这一页（或下一层）的名字。换分页不做转场。
 struct SettingsRoot: View {
     @EnvironmentObject var m: SettingsModel
-    @State private var query = ""
-    private var visible: [SettingsSection] { SettingsSection.allCases.filter { $0.matches(query) } }
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var query = ProcessInfo.processInfo.environment["HOMEPLAY_SETTINGS_SEARCH"] ?? ""   // 截图验收：开着搜索结果
+    private var trimmed: String { query.trimmingCharacters(in: .whitespaces) }
+    private var results: [SettingsSearchRow] { SettingsSearch.rows(matching: trimmed) }
 
     var body: some View {
         NavigationSplitView {
-            List(visible, selection: Binding(get: { m.section }, set: { if let s = $0 { m.section = s } })) { s in
-                // 對齊 WindowShade（抄其 SettingsView：Label＋.listStyle(.sidebar)——側欄樣式決定行距、
-                // 選中條與符號渲染語意，不自訂字級與顏色）
-                Label { Text(s.title) } icon: { Image(systemName: s.symbol) }
-                .tag(s)
-            }
-            .listStyle(.sidebar)
-            .overlay { if visible.isEmpty { ContentUnavailableView.search(text: query) } }   // 2.0 depth：搜不到時照系統設定寫「沒有結果」
-            .searchable(text: $query, placement: .sidebar, prompt: L("settings.search", "搜索"))
-            .onChange(of: query) { _, _ in
-                if let first = visible.first, !visible.contains(m.section) { m.section = first }
-            }
-            .navigationSplitViewColumnWidth(min: 200, ideal: 220, max: 260)
+            sidebar
+                .searchable(text: $query, placement: .sidebar, prompt: L("settings.search", "搜索"))
+                .navigationSplitViewColumnWidth(min: 200, ideal: 220, max: 260)
         } detail: {
-            Group {
-                switch m.section {
-                case .general: GeneralPane()
-                case .appearance: AppearancePane()
-                case .gestures: GesturesPane()
-                case .carplay: CarPlayPane()
-                case .home: HomePane()
-                case .cliotalk: ClioTalkPane()
-                case .camera: CameraPane()
-                case .people: PeoplePane()
-                case .devices: RemoteDevicesPane()
-                case .permissions: PermissionsPane()
+            ScrollViewReader { proxy in
+                NavigationStack(path: Binding(get: { m.path }, set: { m.go(m.section, $0) })) {
+                    pane(m.section)
+                        .navigationTitle(m.section.title)
+                        .navigationDestination(for: SettingsSub.self) { sub in
+                            subPane(sub)
+                                .navigationTitle(sub.title)
+                                .navigationBarBackButtonHidden(true)   // 回去用工具栏的上一页（系统设置也是这样）
+                        }
+                }
+                .id(m.section)   // 换分页：内容直接换（和系统设置一样），下一层从这一页的 path 重建
+                .defaultScrollAnchor(ProcessInfo.processInfo.environment["HOMEPLAY_SETTINGS_BOTTOM"] != nil ? .bottom : .top)   // 截图：从底部看
+                .onChange(of: m.flashToken) { _, _ in
+                    guard let key = m.flash else { return }
+                    // 等新的一页排好版再卷（换页、推进下一层都要一拍）
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
+                        if reduceMotion { proxy.scrollTo(key, anchor: .center) }
+                        else { withAnimation(.easeInOut(duration: 0.3)) { proxy.scrollTo(key, anchor: .center) } }
+                    }
                 }
             }
-            .id(m.section)
-            .defaultScrollAnchor(ProcessInfo.processInfo.environment["HOMEPLAY_SETTINGS_BOTTOM"] != nil ? .bottom : .top)   // 截图：从底部看
-            .navigationTitle(L("settings.windowTitle", "HomePlay 设置"))
-            .navigationSubtitle(m.section.title)
+            .toolbar {
+                ToolbarItemGroup(placement: .navigation) {
+                    ControlGroup {
+                        Button { m.goBack() } label: { Label(L("settings.back", "上一页"), systemImage: "chevron.backward") }
+                            .disabled(m.backStack.isEmpty)
+                            .keyboardShortcut("[", modifiers: .command)
+                        Button { m.goForward() } label: { Label(L("settings.forward", "下一页"), systemImage: "chevron.forward") }
+                            .disabled(m.forwardStack.isEmpty)
+                            .keyboardShortcut("]", modifiers: .command)
+                    }
+                    .controlGroupStyle(.navigation)
+                }
+            }
+        }
+    }
+
+    @ViewBuilder private var sidebar: some View {
+        if trimmed.isEmpty {
+            List(selection: Binding(get: { m.section }, set: { if let s = $0 { m.go(s) } })) {
+                ForEach(SettingsSection.groups.indices, id: \.self) { i in
+                    Section {
+                        ForEach(SettingsSection.groups[i]) { s in
+                            Label { Text(s.title) } icon: { SymbolTile(symbol: s.symbol, tint: s.tint, size: 20) }
+                                .tag(s)
+                        }
+                    }
+                }
+            }
+            .listStyle(.sidebar)
+        } else {
+            List {
+                ForEach(results) { r in
+                    Button { m.reveal(r) } label: {
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text(r.title).foregroundStyle(.primary)
+                            Text(r.place).font(.caption).foregroundStyle(.secondary)
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .listStyle(.sidebar)
+            .overlay { if results.isEmpty { ContentUnavailableView.search(text: trimmed) } }
+        }
+    }
+
+    @ViewBuilder private func pane(_ s: SettingsSection) -> some View {
+        switch s {
+        case .general: GeneralPane()
+        case .body: BodyPane()
+        case .display: DisplayPane()
+        case .accessibility: AccessibilityPane()
+        case .faces: FacesPane()
+        case .homeScreen: HomeScreenPane()
+        case .gestures: GesturesPane()
+        case .cliotalk: ClioTalkPane()
+        case .camera: CameraPane()
+        case .carplay: CarPlayPane()
+        case .devices: RemoteDevicesPane()
+        case .home: HomePane()
+        case .people: PeoplePane()
+        case .permissions: PermissionsPane()
+        }
+    }
+
+    @ViewBuilder private func subPane(_ sub: SettingsSub) -> some View {
+        switch sub {
+        case .faceOptions: FaceOptionsPane()
+        case .liveActivities: Form { LiveActivitySettingsSection() }.formStyle(.grouped)
+        case .webApps: Form { WebAppsSection() }.formStyle(.grouped)
+        case .addDevice: AddDevicePane()
         }
     }
 }

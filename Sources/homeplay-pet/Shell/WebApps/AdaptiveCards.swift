@@ -386,13 +386,17 @@ enum WebAppWidgets {
         return u.path.isEmpty ? c.path == "/" : u.path.hasPrefix(c.path)
     }
 
+    nonisolated(unsafe) private static var imageFailedAt: [URL: Double] = [:]
     static func image(_ u: URL) -> CGImage? {
         if let i = images[u] { return i }
         guard !imageLoading.contains(u) else { return nil }
+        // 這裡是繪製路徑：抓不到的圖（404、逾時、超過大小）一分鐘內不重抓，不然小工具每畫一次就發一個請求
+        if let t = imageFailedAt[u], Date().timeIntervalSinceReferenceDate - t < 60 { return nil }
         imageLoading.insert(u)
         WebFetch.get(u, limit: 2 << 20) { d in
             imageLoading.remove(u)
-            if let d, let img = WebFetch.image(d) { images[u] = img; redraw() }
+            if let d, let img = WebFetch.image(d) { images[u] = img; imageFailedAt[u] = nil; redraw() }
+            else { imageFailedAt[u] = Date().timeIntervalSinceReferenceDate }
         }
         return nil
     }

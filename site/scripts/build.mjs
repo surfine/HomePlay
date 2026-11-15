@@ -550,6 +550,9 @@ await writeFile(path.join(dist, '_headers'), `/*
   Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; object-src 'none'; base-uri 'self'; frame-ancestors 'none'
 /media/*
   Cache-Control: public, max-age=86400
+/history/dig/*
+  ! Content-Security-Policy
+  Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; frame-src https://infinitemac.org; object-src 'none'; base-uri 'self'; frame-ancestors 'none'
 `);
 await writeFile(path.join(dist, '_redirects'), [
   '/', ...LANGS.map((l) => l.path).filter((p) => p !== '/'),

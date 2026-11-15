@@ -292,19 +292,19 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Force Click the screen to enter or leave CarPlay. Right-click for the menu."
+            "value" : "Press Space to enter or leave CarPlay. Right-click for the menu."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "重按屏幕进出 CarPlay，右键打开菜单"
+            "value" : "按空格键进出 CarPlay，右键打开菜单"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "重按螢幕進出 CarPlay，右鍵開啟選單"
+            "value" : "按空白鍵進出 CarPlay，右鍵開啟選單"
           }
         }
       }
@@ -657,6 +657,28 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "返回上一層"
+          }
+        }
+      }
+    },
+    "a11y.pill.carplay" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Return to CarPlay"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "回到 CarPlay"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "回到 CarPlay"
           }
         }
       }
@@ -2460,7 +2482,7 @@
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "不鏽鋼，連線顯示器與鋁圓頂底座"
+            "value" : "不鏽鋼，連接顯示器與鋁圓頂底座"
           }
         }
       }
@@ -2835,28 +2857,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "CarPlay"
-          }
-        }
-      }
-    },
-    "app.comingSoon" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Coming Soon"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "即将推出"
-          }
-        },
-        "zh-Hant" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "即將推出"
           }
         }
       }
@@ -8845,28 +8845,6 @@
         }
       }
     },
-    "clio.f5" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "F5 opens ClioTalk"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "F5 叫 ClioTalk"
-          }
-        },
-        "zh-Hant" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "F5 叫 ClioTalk"
-          }
-        }
-      }
-    },
     "clio.fast" : {
       "localizations" : {
         "en" : {
@@ -10161,6 +10139,28 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "慢"
+          }
+        }
+      }
+    },
+    "clio.section.answer" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Who Answers"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "谁来回答"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "誰來回答"
           }
         }
       }
@@ -15885,50 +15885,6 @@
         }
       }
     },
-    "gaze.pitch.body" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Drag the slider to set the maximum head pitch. 0° turns the head without nodding. The setting is remembered."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "拖动滑块调整抬头/低头的最大角度；0° 只转头不点头。设置会记住。"
-          }
-        },
-        "zh-Hant" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "拖動滑桿調整抬頭/低下的最大角度；0° 只轉頭不點頭。設定會記住。"
-          }
-        }
-      }
-    },
-    "gaze.pitch.title" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Follow Me: Pitch"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "跟随我：俯仰角度"
-          }
-        },
-        "zh-Hant" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "跟隨我：俯仰角度"
-          }
-        }
-      }
-    },
     "growth.unit" : {
       "localizations" : {
         "en" : {
@@ -15991,50 +15947,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "需要主人"
-          }
-        }
-      }
-    },
-    "guest.title" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Guest Mode"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "访客模式"
-          }
-        },
-        "zh-Hant" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "訪客模式"
-          }
-        }
-      }
-    },
-    "guest.upNextHidden" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Events hidden"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "行程已隐藏"
-          }
-        },
-        "zh-Hant" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "行程已隱藏"
           }
         }
       }
@@ -18767,28 +18679,6 @@
         }
       }
     },
-    "home.gallery.reset" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Reset Home Screen"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "还原默认主屏幕"
-          }
-        },
-        "zh-Hant" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "還原預設主畫面"
-          }
-        }
-      }
-    },
     "home.gallery.title" : {
       "localizations" : {
         "en" : {
@@ -21276,24 +21166,24 @@
         }
       }
     },
-    "intro.control.title.drag" : {
+    "intro.control.title.mouse" : {
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Drag down from top right for Control Center"
+            "value" : "Point at the top-right corner and scroll down for Control Center"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "右上角往下拖，开控制中心"
+            "value" : "光标移到右上角，往下滚动，开控制中心"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "右上角往下拖，開控制中心"
+            "value" : "游標移到右上角，往下捲動，開控制中心"
           }
         }
       }
@@ -21316,6 +21206,28 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "右上角往下拉，開控制中心"
+          }
+        }
+      }
+    },
+    "intro.control.title.trackpad" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Point at the top-right corner and swipe down with two fingers for Control Center"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "光标移到右上角，双指往下滑，开控制中心"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "游標移到右上角，兩指往下滑，開控制中心"
           }
         }
       }
@@ -21562,6 +21474,28 @@
         }
       }
     },
+    "intro.do.preview" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Preview and menu"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "预览与菜单"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "預覽與選單"
+          }
+        }
+      }
+    },
     "intro.do.resize" : {
       "localizations" : {
         "en" : {
@@ -21694,24 +21628,24 @@
         }
       }
     },
-    "intro.home.body.click" : {
+    "intro.home.body.pointer" : {
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Works everywhere, even in CarPlay. Or just click 👀."
+            "value" : "The handle stays hidden and appears when the pointer is near. Dragging it down works too, also on CarPlay."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "在哪里都一样，CarPlay 也是。按一下 👀 也行。"
+            "value" : "把手平常藏着，光标靠近就出现；按住往下拖也可以。CarPlay 上也一样。"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "在哪裡都一樣，CarPlay 也是。按一下 👀 也行。"
+            "value" : "把手平常藏著，游標靠近就出現；按住往下拖也可以。CarPlay 上也一樣。"
           }
         }
       }
@@ -21721,41 +21655,41 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Works everywhere, even in CarPlay. Or just tap 👀."
+            "value" : "The handle hides, but you can still pull from it. Tap the top to go Home. In CarPlay, the first tap shows the handle."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "在哪里都一样，CarPlay 也是。点一下 👀 也行。"
+            "value" : "把手平常藏着，照样能拉；点一下顶端就回主屏幕。CarPlay 上第一下先让把手出现。"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "在哪裡都一樣，CarPlay 也是。點一下 👀 也行。"
+            "value" : "把手平常藏著，照樣能拉；點一下頂端就回主畫面。CarPlay 上第一下先讓把手出現。"
           }
         }
       }
     },
-    "intro.home.title.drag" : {
+    "intro.home.title.mouse" : {
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Drag down from 👀 to go Home"
+            "value" : "Point at the top centre and scroll down to go Home"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "从 👀 往下拖，回主屏幕"
+            "value" : "光标移到顶端中间，往下滚动，回主屏幕"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "從 👀 往下拖，回主畫面"
+            "value" : "游標移到頂端中間，往下捲動，回主畫面"
           }
         }
       }
@@ -21765,19 +21699,41 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Pull down from 👀 to go Home"
+            "value" : "Pull down from the top handle to go Home"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "从 👀 往下拉，回主屏幕"
+            "value" : "从顶端的把手往下拉，回主屏幕"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "從 👀 往下拉，回主畫面"
+            "value" : "從頂端的把手往下拉，回主畫面"
+          }
+        }
+      }
+    },
+    "intro.home.title.trackpad" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Point at the top centre and swipe down with two fingers to go Home"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "光标移到顶端中间，双指往下滑，回主屏幕"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "游標移到頂端中間，兩指往下滑，回主畫面"
           }
         }
       }
@@ -21963,19 +21919,19 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Press and hold 👀"
+            "value" : "Press and hold the top handle"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "按住 👀"
+            "value" : "按住顶端的把手"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "按住 👀"
+            "value" : "按住頂端的把手"
           }
         }
       }
@@ -21985,19 +21941,19 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Touch and hold 👀"
+            "value" : "Touch and hold the top handle"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "长按 👀"
+            "value" : "长按顶端的把手"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "長按 👀"
+            "value" : "長按頂端的把手"
           }
         }
       }
@@ -22046,6 +22002,50 @@
         }
       }
     },
+    "intro.more.smartZoom" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Double-tap with two fingers"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "双指轻点两下"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "兩指輕點兩下"
+          }
+        }
+      }
+    },
+    "intro.more.smartZoomDoes" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Zoom the pet in; again to zoom back"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "放大桌宠，再点两下回原来大小"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "放大桌寵，再點兩下回原本大小"
+          }
+        }
+      }
+    },
     "intro.more.space" : {
       "localizations" : {
         "en" : {
@@ -22073,19 +22073,19 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Same as 👀: CarPlay ⇄ Home"
+            "value" : "CarPlay ⇄ Home"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "同 👀：CarPlay ⇄ 主屏幕"
+            "value" : "CarPlay ⇄ 主屏幕"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "同 👀：CarPlay ⇄ 主畫面"
+            "value" : "CarPlay ⇄ 主畫面"
           }
         }
       }
@@ -22108,6 +22108,28 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "還有這些"
+          }
+        }
+      }
+    },
+    "intro.more.zoomKeys" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "⌘+ ⌘− ⌘0, the menu, or hold ⌥ and scroll"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "⌘+ ⌘− ⌘0、菜单，或按住 ⌥ 滚动"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "⌘+ ⌘− ⌘0、選單，或按住 ⌥ 捲動"
           }
         }
       }
@@ -22310,24 +22332,24 @@
         }
       }
     },
-    "intro.pet.forceClick" : {
+    "intro.pet.forceClickIcon" : {
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Force Click the screen"
+            "value" : "Force Click an icon or widget"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "用力按屏幕（重按）"
+            "value" : "用力按图标或小组件（重按）"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "用力按螢幕（重按）"
+            "value" : "用力按圖示或小工具（重按）"
           }
         }
       }
@@ -22750,24 +22772,24 @@
         }
       }
     },
-    "intro.switcher.title.drag" : {
+    "intro.switcher.title.mouse" : {
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Drag and hold for the App Switcher"
+            "value" : "Drag down from the top handle and pause for the App Switcher"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "拖住停一下，开 App 切换器"
+            "value" : "按住顶端的把手往下拖，停一下，开 App 切换器"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "拖住停一下，開 App 切換器"
+            "value" : "按住頂端的把手往下拖，停一下，開 App 切換器"
           }
         }
       }
@@ -22794,24 +22816,46 @@
         }
       }
     },
-    "intro.welcome.body" : {
+    "intro.switcher.title.trackpad" : {
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "The 👀 at the top is me.\nA few gestures, learned in half a minute."
+            "value" : "Swipe down with two fingers and pause for the App Switcher"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "顶端这颗 👀 就是我。\n几个手势，半分钟就会。"
+            "value" : "双指往下滑到一半停住，开 App 切换器"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "頂端這顆 👀 就是我。\n幾個手勢，半分鐘就會。"
+            "value" : "兩指往下滑到一半停住，開 App 切換器"
+          }
+        }
+      }
+    },
+    "intro.welcome.body" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "These 👀 are me.\nA few gestures, learned in half a minute."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "这颗 👀 就是我。\n几个手势，半分钟就会。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "這顆 👀 就是我。\n幾個手勢，半分鐘就會。"
           }
         }
       }
@@ -23239,19 +23283,19 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "What’s happening right now appears in the 👀 capsule at the top. Touch and hold the capsule to expand it. Live Activities end after 8 hours."
+            "value" : "What’s happening right now appears in a capsule at the top. Touch and hold the capsule to expand it. Live Activities end after 8 hours."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "正在进行的事会显示在顶端的 👀 胶囊里；按住胶囊可以展开。超过 8 小时会自动结束。"
+            "value" : "正在进行的事会显示在顶端的胶囊里；按住胶囊可以展开。超过 8 小时会自动结束。"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "正在進行的事會顯示在頂端的 👀 膠囊裡；按住膠囊可以展開。超過 8 小時會自動結束。"
+            "value" : "正在進行的事會顯示在頂端的膠囊裡；按住膠囊可以展開。超過 8 小時會自動結束。"
           }
         }
       }
@@ -23828,50 +23872,6 @@
         }
       }
     },
-    "menu.hint.forceClick" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Force Click"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "重按"
-          }
-        },
-        "zh-Hant" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "重按"
-          }
-        }
-      }
-    },
-    "menu.hint.liveToggle" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Force Click or Space"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "重按或空格"
-          }
-        },
-        "zh-Hant" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "重按或空白鍵"
-          }
-        }
-      }
-    },
     "menu.hint.longPress" : {
       "localizations" : {
         "en" : {
@@ -23934,28 +23934,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "空白鍵"
-          }
-        }
-      }
-    },
-    "menu.hint.twoFingerTap" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Two-Finger Double-Tap"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "两指轻点两下"
-          }
-        },
-        "zh-Hant" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "兩指輕點兩下"
           }
         }
       }
@@ -24242,6 +24220,28 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "呼叫 iPhone 的 Siri（F5）"
+          }
+        }
+      }
+    },
+    "menu.size" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Size"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "大小"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "大小"
           }
         }
       }
@@ -24554,50 +24554,6 @@
         }
       }
     },
-    "mic.allowed.body" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "ClioTalk, CarPlay calls and Siri on iPhone can use the microphone. Video and local playback are unaffected."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "ClioTalk、CarPlay 通话和 iPhone 的 Siri 可以使用麦克风；屏幕画面与本地播放不受影响。"
-          }
-        },
-        "zh-Hant" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "ClioTalk、CarPlay 通話和 iPhone 的 Siri 可以使用麥克風；螢幕畫面與本機播放不受影響。"
-          }
-        }
-      }
-    },
-    "mic.allowed.title" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Microphone is allowed"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "麦克风已允许"
-          }
-        },
-        "zh-Hant" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "麥克風已允許"
-          }
-        }
-      }
-    },
     "mic.denied.body" : {
       "localizations" : {
         "en" : {
@@ -24660,72 +24616,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "開啟系統設定"
-          }
-        }
-      }
-    },
-    "mic.status.ask" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Asked on first CarPlay connection"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "首次进入 CarPlay 时询问"
-          }
-        },
-        "zh-Hant" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "首次進入 CarPlay 時詢問"
-          }
-        }
-      }
-    },
-    "mic.status.off" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Off"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "已关闭"
-          }
-        },
-        "zh-Hant" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "已關閉"
-          }
-        }
-      }
-    },
-    "mic.status.on" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Allowed"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "已允许"
-          }
-        },
-        "zh-Hant" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "已允許"
           }
         }
       }
@@ -31044,6 +30934,28 @@
         }
       }
     },
+    "pointer.menu.home" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Home Screen"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "主屏幕"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "主畫面"
+          }
+        }
+      }
+    },
     "pomodoro.backToFocus" : {
       "localizations" : {
         "en" : {
@@ -36632,6 +36544,28 @@
         }
       }
     },
+    "sb.library.showAll" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Show all apps in %@"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "显示“%@”的全部 App"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "顯示「%@」的全部 App"
+          }
+        }
+      }
+    },
     "sb.locked" : {
       "localizations" : {
         "en" : {
@@ -37996,6 +37930,28 @@
         }
       }
     },
+    "settings.a11y.line" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Make text on the screen larger, control the screen with the keyboard, or keep the top handle visible."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "让屏幕上的字更大、用键盘操作屏幕，或让顶端的把手一直显示。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "讓螢幕上的字更大、用鍵盤操作螢幕，或讓頂端的把手一直顯示。"
+          }
+        }
+      }
+    },
     "settings.airplay" : {
       "localizations" : {
         "en" : {
@@ -38150,6 +38106,72 @@
         }
       }
     },
+    "settings.back" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Back"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "上一页"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "上一頁"
+          }
+        }
+      }
+    },
+    "settings.body" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Device"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "机身"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "機身"
+          }
+        }
+      }
+    },
+    "settings.body.line" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The device’s color, size and placement."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "机身的配色、大小和摆放。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "機身的配色、大小和擺放。"
+          }
+        }
+      }
+    },
     "settings.brightness" : {
       "localizations" : {
         "en" : {
@@ -38190,6 +38212,28 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "先在「權限」裡允許"
+          }
+        }
+      }
+    },
+    "settings.calendar.needsPrivacy" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Allow HomePlay to read your calendar first"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "先允许 HomePlay 读取日历"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "先允許 HomePlay 讀取行事曆"
           }
         }
       }
@@ -38282,6 +38326,28 @@
         }
       }
     },
+    "settings.camera.line" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Turning to follow you, and room lighting."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "跟随你转头，以及房间光线。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "跟隨你轉頭，以及房間光線。"
+          }
+        }
+      }
+    },
     "settings.capsule" : {
       "localizations" : {
         "en" : {
@@ -38322,6 +38388,50 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "這個錶面用它那個年代的樣子"
+          }
+        }
+      }
+    },
+    "settings.carplay.av" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sound & Video"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "声音与视频"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "聲音與影片"
+          }
+        }
+      }
+    },
+    "settings.carplay.line" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Press firmly on the screen for your iPhone’s CarPlay. Choose which iPhone and how it connects."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "用力按一下屏幕，就是 iPhone 的 CarPlay。这里管哪一部 iPhone、怎么连。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "用力按一下螢幕，就是 iPhone 的 CarPlay。這裡管哪一支 iPhone、怎麼連。"
           }
         }
       }
@@ -38432,6 +38542,28 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "ClioTalk"
+          }
+        }
+      }
+    },
+    "settings.cliotalk.line" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hold F5 to talk. Choose who answers, what data it can use, and how it talks to you."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "按住 F5 说话。这里决定谁来回答、它能用哪些数据、怎么跟你说话。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "按住 F5 說話。這裡決定誰來回答、它能用哪些資料、怎麼跟你說話。"
           }
         }
       }
@@ -38634,6 +38766,28 @@
         }
       }
     },
+    "settings.count" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%d"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%d 个"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%d 個"
+          }
+        }
+      }
+    },
     "settings.demo.play" : {
       "localizations" : {
         "en" : {
@@ -38674,6 +38828,28 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "iPhone 與 iPad"
+          }
+        }
+      }
+    },
+    "settings.devices.line" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Show HomePlay on other devices, or send web pages to it."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "让其他设备显示 HomePlay，或把网页传给它。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "讓其他裝置顯示 HomePlay，或把網頁傳給它。"
           }
         }
       }
@@ -38854,6 +39030,50 @@
         }
       }
     },
+    "settings.displays" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Displays"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "显示器"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "顯示器"
+          }
+        }
+      }
+    },
+    "settings.displays.line" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "How bright the screen is, and when it dims."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "屏幕多亮、什么时候暗下来。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "螢幕多亮、什麼時候暗下來。"
+          }
+        }
+      }
+    },
     "settings.face" : {
       "localizations" : {
         "en" : {
@@ -38872,6 +39092,94 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "錶面"
+          }
+        }
+      }
+    },
+    "settings.faceOptions" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Options for This Face"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "这张表盘的选项"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "這張錶面的選項"
+          }
+        }
+      }
+    },
+    "settings.faceOptions.footer" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Only this face has these options."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "只有这张表盘有这些选项。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "只有這張錶面有這些選項。"
+          }
+        }
+      }
+    },
+    "settings.faces" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Faces & Wallpaper"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "表盘与墙纸"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "錶面與桌布"
+          }
+        }
+      }
+    },
+    "settings.faces.line" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Faces, themes and wallpaper."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "表盘、主题和墙纸。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "錶面、主題和桌布。"
           }
         }
       }
@@ -39184,6 +39492,28 @@
         }
       }
     },
+    "settings.forward" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Forward"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "下一页"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "下一頁"
+          }
+        }
+      }
+    },
     "settings.general" : {
       "localizations" : {
         "en" : {
@@ -39224,6 +39554,182 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "陪你待在桌面上"
+          }
+        }
+      }
+    },
+    "settings.general.line" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "When HomePlay appears, which language it uses, and what the face can show."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "HomePlay 什么时候出现、用哪种语言，以及表盘上可以显示哪些数据。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "HomePlay 什麼時候出現、用哪種語言，以及錶面上可以顯示哪些資料。"
+          }
+        }
+      }
+    },
+    "settings.gesture.apart.menu" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Choose Take Apart from the menu"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在菜单里选「拆开看看」"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在選單裡選「拆開看看」"
+          }
+        }
+      }
+    },
+    "settings.gesture.control.mouse" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Point at the top-right corner and scroll down, or drag down"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "光标移到右上角往下滚动；也可以往下拖"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "游標移到右上角往下捲動；也可以往下拖"
+          }
+        }
+      }
+    },
+    "settings.gesture.control.trackpad" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Point at the top-right corner and swipe down with two fingers, or drag down"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "光标移到右上角，双指往下滑；也可以往下拖"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "游標移到右上角，兩指往下滑；也可以往下拖"
+          }
+        }
+      }
+    },
+    "settings.gesture.hold.rightClick" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Right-click, or click and hold on the screen"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "按右键，或在屏幕上按住"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "按右鍵，或在螢幕上按住"
+          }
+        }
+      }
+    },
+    "settings.gesture.hold.trackpad" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Click with two fingers. On icons and widgets you can also Force Click, or click and hold"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "双指点按；图标和小组件上也可以重按，或按住"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "兩指點按；圖示和小工具上也可以重按，或按住"
+          }
+        }
+      }
+    },
+    "settings.gesture.home.mouse" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Point at the top centre and scroll down, or drag the handle down"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "光标移到顶端中间往下滚动；也可以按住把手往下拖"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "游標移到頂端中間往下捲動；也可以按住把手往下拖"
+          }
+        }
+      }
+    },
+    "settings.gesture.home.trackpad" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Point at the top centre and swipe down with two fingers, or drag the handle down"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "光标移到顶端中间，双指往下滑；也可以按住把手往下拖"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "游標移到頂端中間，兩指往下滑；也可以按住把手往下拖"
           }
         }
       }
@@ -39272,6 +39778,72 @@
         }
       }
     },
+    "settings.gesture.resize.keys" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "⌘+ ⌘− ⌘0, the menu, or hold ⌥ and scroll"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "⌘+ ⌘− ⌘0、菜单，或按住 ⌥ 滚动"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "⌘+ ⌘− ⌘0、選單，或按住 ⌥ 捲動"
+          }
+        }
+      }
+    },
+    "settings.gesture.resize.trackpad" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pinch, or double-tap with two fingers. Also ⌘+ ⌘− ⌘0, the menu, or hold ⌥ and scroll"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "双指张合，或双指轻点两下；也可以 ⌘+ ⌘− ⌘0、菜单，或按住 ⌥ 滚动"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "兩指張合，或兩指輕點兩下；也可以 ⌘+ ⌘− ⌘0、選單，或按住 ⌥ 捲動"
+          }
+        }
+      }
+    },
+    "settings.gesture.switcher.trackpad" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "With the pointer at the top centre, swipe down with two fingers and pause"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "光标在顶端中间，双指往下滑到一半停住"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "游標在頂端中間，兩指往下滑到一半停住"
+          }
+        }
+      }
+    },
     "settings.gestures" : {
       "localizations" : {
         "en" : {
@@ -39290,6 +39862,138 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "手勢"
+          }
+        }
+      }
+    },
+    "settings.gestures.input" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "I’m Using"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "我用的是"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "我用的是"
+          }
+        }
+      }
+    },
+    "settings.gestures.input.sub" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The demo changes to match"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "示范会跟着换"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "示範會跟著換"
+          }
+        }
+      }
+    },
+    "settings.gestures.line" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "How to control the screen and the device."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在屏幕和机身上怎么操作。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在螢幕和機身上怎麼操作。"
+          }
+        }
+      }
+    },
+    "settings.haptics" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Haptic Feedback"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "触觉反馈"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "觸覺回饋"
+          }
+        }
+      }
+    },
+    "settings.haptics.short" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "A light tap when a trackpad drag crosses a threshold"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "用触控板拖动越过界线时轻震一下"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "用觸控板拖曳越過界線時輕震一下"
+          }
+        }
+      }
+    },
+    "settings.haptics.sub" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Used in three places only: pulling the handle past the point where letting go returns Home, an icon settling into a slot while you edit the Home Screen, and the pet reaching its largest or smallest size. Requires a Force Touch trackpad."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "只在三个地方：把手下拉到「松开就回主屏幕」的位置、编辑主屏幕时图标进到格子里、桌宠放大或缩小到极限。需要支持力度触控的触控板。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "只在三個地方：把手下拉到「放開就回主畫面」的位置、編輯主畫面時圖示進到格子裡、桌寵放大或縮小到極限。需要支援力度觸控的觸控板。"
           }
         }
       }
@@ -39378,6 +40082,50 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "App 圖像和小工具一起換"
+          }
+        }
+      }
+    },
+    "settings.home.content" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Content"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "内容"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "內容"
+          }
+        }
+      }
+    },
+    "settings.home.line" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Control your home accessories with Shortcuts."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "用「捷径」控制家里的配件。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "用「捷徑」控制家裡的配件。"
           }
         }
       }
@@ -39752,6 +40500,28 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "著色顏色"
+          }
+        }
+      }
+    },
+    "settings.homeScreen.line" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "How apps and widgets look, and what appears on the Home Screen."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "App 和小组件的外观，以及主屏幕上会出现什么。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "App 和小工具的外觀，以及主畫面上會出現什麼。"
           }
         }
       }
@@ -40350,6 +41120,28 @@
         }
       }
     },
+    "settings.people.line" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "HomePlay recognizes who’s looking, so everyone sees their own things."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "HomePlay 认得出谁在看，让每个人看到自己的那一份。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "HomePlay 認得出誰在看，讓每個人看到自己的那一份。"
+          }
+        }
+      }
+    },
     "settings.perm.allow" : {
       "localizations" : {
         "en" : {
@@ -40680,6 +41472,72 @@
         }
       }
     },
+    "settings.placement" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Position"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "位置"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "位置"
+          }
+        }
+      }
+    },
+    "settings.placement.desk" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Desk"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "桌上"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "桌上"
+          }
+        }
+      }
+    },
+    "settings.placement.header" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Placement"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "摆放"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "擺放"
+          }
+        }
+      }
+    },
     "settings.privacy" : {
       "localizations" : {
         "en" : {
@@ -40724,6 +41582,50 @@
         }
       }
     },
+    "settings.privacy.data" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Data That Leaves This Mac"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "会离开这台 Mac 的数据"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "會離開這台 Mac 的資料"
+          }
+        }
+      }
+    },
+    "settings.privacy.line" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The permissions HomePlay uses, and what data leaves this Mac."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "HomePlay 用到哪些权限，以及什么数据会离开这台 Mac。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "HomePlay 用到哪些權限，以及什麼資料會離開這台 Mac。"
+          }
+        }
+      }
+    },
     "settings.privacy.note" : {
       "localizations" : {
         "en" : {
@@ -40742,6 +41644,72 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "行事曆、提醒事項、訊息、FaceTime、尋找只在認出主人時顯示。遠端訪客的裝置只能開關燈。"
+          }
+        }
+      }
+    },
+    "settings.privacy.off" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Off"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "关闭"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "關閉"
+          }
+        }
+      }
+    },
+    "settings.privacy.on" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "On"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "开启中"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "開啟中"
+          }
+        }
+      }
+    },
+    "settings.privacy.open" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Privacy & Security…"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "隐私与安全性…"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "隱私權與安全性…"
           }
         }
       }
@@ -40790,6 +41758,28 @@
         }
       }
     },
+    "settings.privacy.perms" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Permissions HomePlay Uses"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "HomePlay 用到的权限"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "HomePlay 用到的權限"
+          }
+        }
+      }
+    },
     "settings.privacy.shared" : {
       "localizations" : {
         "en" : {
@@ -40808,6 +41798,28 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "家庭、音樂、計時器"
+          }
+        }
+      }
+    },
+    "settings.privacySecurity" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Privacy & Security"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "隐私与安全性"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "隱私權與安全性"
           }
         }
       }
@@ -41006,6 +42018,490 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "房間光線"
+          }
+        }
+      }
+    },
+    "settings.screen.ambient.sub" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Shows only the time and a picture when dimmed"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "调暗时只留时间与一张图"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "調暗時只留時間與一張圖"
+          }
+        }
+      }
+    },
+    "settings.screen.autoDim" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Auto-Dim"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "自动调暗"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "自動調暗"
+          }
+        }
+      }
+    },
+    "settings.screen.callVolume" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CarPlay Call Volume"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CarPlay 通话音量"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CarPlay 通話音量"
+          }
+        }
+      }
+    },
+    "settings.screen.currentFace" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Current Face"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "当前的表盘"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "目前的錶面"
+          }
+        }
+      }
+    },
+    "settings.screen.display" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Display & Brightness"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "显示与亮度"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "顯示與亮度"
+          }
+        }
+      }
+    },
+    "settings.screen.faces" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Faces & Wallpaper"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "表盘与墙纸"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "錶面與桌布"
+          }
+        }
+      }
+    },
+    "settings.screen.faces.note" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "To change the font or layout, touch and hold the face."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "要改字体或版式，在表盘上按住。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "要改字體或版式，在錶面上按住。"
+          }
+        }
+      }
+    },
+    "settings.screen.iconLook" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Icon Appearance"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "图标外观"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "圖示外觀"
+          }
+        }
+      }
+    },
+    "settings.screen.largeIcons" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Large Icons"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "大图标"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "大圖示"
+          }
+        }
+      }
+    },
+    "settings.screen.largeIcons.sub" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hides app names"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "隐藏 App 名称"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "隱藏 App 名稱"
+          }
+        }
+      }
+    },
+    "settings.screen.more" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "More Settings on Mac"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "更多设置在 Mac 上"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "更多設定在 Mac 上"
+          }
+        }
+      }
+    },
+    "settings.screen.needOwner" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The owner of this Mac needs to be here to view or change this."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "要这台 Mac 的主人在场才能查看和更改。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "要這台 Mac 的主人在場才能查看和更改。"
+          }
+        }
+      }
+    },
+    "settings.screen.owner" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Owner"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "主人"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "主人"
+          }
+        }
+      }
+    },
+    "settings.screen.people.note" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Add family members and record faces in Settings › Family on your Mac."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "添加家人、录制脸部在 Mac 的「设置 › 家人」。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "加入家人、錄製臉部在 Mac 的「設定 › 家人」。"
+          }
+        }
+      }
+    },
+    "settings.screen.phoneApps" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Show iPhone Apps"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "显示 iPhone 上的 App"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "顯示 iPhone 上的 App"
+          }
+        }
+      }
+    },
+    "settings.screen.room" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This Room"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "这个房间"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "這個房間"
+          }
+        }
+      }
+    },
+    "settings.screen.sound" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sound"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "声音"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "聲音"
+          }
+        }
+      }
+    },
+    "settings.screen.sound.note" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Call volume appears only while your iPhone is connected to CarPlay."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "通话音量只在 iPhone 连着 CarPlay 时出现。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "通話音量只在 iPhone 連著 CarPlay 時出現。"
+          }
+        }
+      }
+    },
+    "settings.screen.speak" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Speak ClioTalk Answers"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "念出 ClioTalk 的回答"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "唸出 ClioTalk 的回答"
+          }
+        }
+      }
+    },
+    "settings.screen.textSize" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Text Size"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "文字大小"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "文字大小"
+          }
+        }
+      }
+    },
+    "settings.screen.theme" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Theme"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "主题"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "主題"
+          }
+        }
+      }
+    },
+    "settings.screen.wallpaper.note" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "To pick a different photo, use Settings on your Mac."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "要换成别的照片，在 Mac 的「设置」里挑。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "要換成別的照片，在 Mac 的「設定」裡挑。"
           }
         }
       }
@@ -41230,6 +42726,28 @@
         }
       }
     },
+    "settings.stage.a11y" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Device preview"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "机身示范"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "機身示範"
+          }
+        }
+      }
+    },
     "settings.textSize" : {
       "localizations" : {
         "en" : {
@@ -41336,6 +42854,28 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "這台 HomeView"
+          }
+        }
+      }
+    },
+    "settings.thisFace" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This Face"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "这张表盘"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "這張錶面"
           }
         }
       }
@@ -43149,19 +44689,19 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "CarPlay in background · press to return"
+            "value" : "CarPlay in background · press Space to return"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "CarPlay 在后台 · 重按返回"
+            "value" : "CarPlay 在后台 · 按空格键返回"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "CarPlay 在背景 · 重按返回"
+            "value" : "CarPlay 在背景 · 按空白鍵返回"
           }
         }
       }
@@ -44095,19 +45635,19 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "CarPlay not connected · Force Click to enter"
+            "value" : "CarPlay not connected · press Space to enter"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "CarPlay 未连接 · 重按进入"
+            "value" : "CarPlay 未连接 · 按空格键进入"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "CarPlay 未連線 · 重按進入"
+            "value" : "CarPlay 未連線 · 按空白鍵進入"
           }
         }
       }
@@ -44117,19 +45657,19 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Force Click to connect"
+            "value" : "Press Space to connect"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "重按连上 iPhone"
+            "value" : "按空格键连上 iPhone"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "重按連上 iPhone"
+            "value" : "按空白鍵連上 iPhone"
           }
         }
       }
@@ -49810,28 +51350,6 @@
         }
       }
     },
-    "sideshow.justNow" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Just now"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "刚刚"
-          }
-        },
-        "zh-Hant" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "剛剛"
-          }
-        }
-      }
-    },
     "sideshow.qr.a11y" : {
       "localizations" : {
         "en" : {
@@ -51487,41 +53005,19 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Pull down from 👀, or tap 👀"
+            "value" : "Pull down from the top handle, or tap the handle when it’s showing"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "从 👀 往下拉；点一下 👀 也行"
+            "value" : "从顶端的把手往下拉；把手看得见时点一下也行"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "從 👀 往下拉；點一下 👀 也行"
-          }
-        }
-      }
-    },
-    "settings.gesture.home.drag" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Drag down from 👀, or click 👀"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "从 👀 往下拖；按一下 👀 也行"
-          }
-        },
-        "zh-Hant" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "從 👀 往下拖；按一下 👀 也行"
+            "value" : "從頂端的把手往下拉；把手看得見時點一下也行"
           }
         }
       }
@@ -51553,19 +53049,19 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Pull down from 👀 and pause"
+            "value" : "Pull down from the top handle and pause"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "从 👀 往下拉，停一下"
+            "value" : "从顶端的把手往下拉，停一下"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "從 👀 往下拉，停一下"
+            "value" : "從頂端的把手往下拉，停一下"
           }
         }
       }
@@ -51575,19 +53071,19 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Drag down from 👀 and pause"
+            "value" : "Drag down from the top handle and pause"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "从 👀 往下拖，停一下"
+            "value" : "从顶端的把手往下拖，停一下"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "從 👀 往下拖，停一下"
+            "value" : "從頂端的把手往下拖，停一下"
           }
         }
       }
@@ -51632,28 +53128,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "從右上角往下拉"
-          }
-        }
-      }
-    },
-    "settings.gesture.control.drag" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Drag down from the top right"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "从右上角往下拖"
-          }
-        },
-        "zh-Hant" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "從右上角往下拖"
           }
         }
       }
@@ -51900,28 +53374,6 @@
         }
       }
     },
-    "settings.gesture.hold.mouse" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Click and hold on the screen"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "在屏幕上按住"
-          }
-        },
-        "zh-Hant" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "在螢幕上按住"
-          }
-        }
-      }
-    },
     "settings.gesture.hold.touch" : {
       "localizations" : {
         "en" : {
@@ -52050,28 +53502,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "放大縮小"
-          }
-        }
-      }
-    },
-    "settings.gesture.resize.mouse" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "⌘+ ⌘−, or ⌥-scroll"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "⌘+ ⌘−，或按住 ⌥ 滚动"
-          }
-        },
-        "zh-Hant" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "⌘+ ⌘−，或按住 ⌥ 捲動"
           }
         }
       }
@@ -52296,28 +53726,6 @@
         }
       }
     },
-    "settings.gesture.carplay.force" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Force Click the screen"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "用力按屏幕（重按）"
-          }
-        },
-        "zh-Hant" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "用力按螢幕（重按）"
-          }
-        }
-      }
-    },
     "settings.gesture.menu.trackpad" : {
       "localizations" : {
         "en" : {
@@ -52358,28 +53766,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "拆開看看"
-          }
-        }
-      }
-    },
-    "settings.gesture.apart.how" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Two-finger double-tap; again to rebuild"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "双指轻点两下；再点两下组回来"
-          }
-        },
-        "zh-Hant" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "雙指輕點兩下；再點兩下組回來"
           }
         }
       }
@@ -52477,19 +53863,19 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Space, same as 👀"
+            "value" : "Space"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "空格键，跟 👀 同一条路"
+            "value" : "空格键"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "空白鍵，跟 👀 同一條路"
+            "value" : "空白鍵"
           }
         }
       }
@@ -53700,28 +55086,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "這是估算，以帳單為準"
-          }
-        }
-      }
-    },
-    "clio.f5.short" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "During CarPlay, F5 goes to Siri"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "CarPlay 直播时 F5 仍给 Siri"
-          }
-        },
-        "zh-Hant" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "CarPlay 直播時 F5 仍給 Siri"
           }
         }
       }
@@ -55328,6 +56692,292 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "這個瀏覽器太舊，不支援 WebCrypto（需要 iOS 15 以上）"
+          }
+        }
+      }
+    },
+    "overview.field.name" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Name"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "名字"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "名字"
+          }
+        }
+      }
+    },
+    "overview.delete" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Delete"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "删除"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "刪除"
+          }
+        }
+      }
+    },
+    "overview.delete.confirm" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tap again to delete"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "再点一次删除"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "再點一次刪除"
+          }
+        }
+      }
+    },
+    "overview.rename.hint" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Type a name · Return to save · Esc to cancel"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "输入名字 · Return 完成 · Esc 取消"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "輸入名字 · Return 完成 · Esc 取消"
+          }
+        }
+      }
+    },
+    "poster.slots.title" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Complications"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "格子"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "格子"
+          }
+        }
+      }
+    },
+    "poster.slots.placeholder" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Placeholder"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "占位"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "佔位"
+          }
+        }
+      }
+    },
+    "poster.slots.reserve" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Reserve · not shown"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "后备 · 画面不画"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "後備 · 畫面不畫"
+          }
+        }
+      }
+    },
+    "poster.slots.hint" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tap a slot to set it · first six show on the Home layout"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "点一格换内容 · 前六格画在家庭版式"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "點一格換內容 · 前六格畫在家庭版式"
+          }
+        }
+      }
+    },
+    "touch.tip.title.handle" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pull down from the top handle to go to the Home Screen"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "从顶端的把手往下拉，回到主屏幕"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "從頂端的把手往下拉，回到主畫面"
+          }
+        }
+      }
+    },
+    "a11y.handle" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Home handle"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "主屏幕把手"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "主畫面把手"
+          }
+        }
+      }
+    },
+    "settings.alwaysHandle" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Always Show Handle"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "一律显示把手"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "一律顯示把手"
+          }
+        }
+      }
+    },
+    "settings.alwaysHandle.short" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Keep the Home handle at the top visible"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "顶端的主屏幕把手不自动隐藏"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "頂端的主畫面把手不自動隱藏"
+          }
+        }
+      }
+    },
+    "settings.alwaysHandle.sub" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The handle normally shows for 2 seconds after the screen changes, and when the pointer or a finger is near the top center. Turn this on to keep it visible. You can pull down from the top even when it’s hidden."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "把手平常在换画面后显示 2 秒，光标或手指靠近顶端中间时也会出现。打开后一直显示。隐藏时照样可以从顶端往下拉。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "把手平常在換畫面後顯示 2 秒，游標或手指靠近頂端中間時也會出現。打開後一直顯示。隱藏時照樣可以從頂端往下拉。"
           }
         }
       }

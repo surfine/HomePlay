@@ -9,7 +9,7 @@ import AppKit
 extension HPTokens {
     /// 跟唱（8-pt 網格）：目前那句 SF Pro bold 80、列高 104；上下句 48、列高 64；左緣對內容邊線
     enum Sing {
-        static let x: CGFloat = HPTokens.Space.margin
+        static let x: CGFloat = HPTokens.Space.content
         static var width: CGFloat { 1024 - 2 * x }
         static let currentSize: CGFloat = 80
         static let currentLine: CGFloat = 104
@@ -130,6 +130,7 @@ final class SingApp: PetApp {
     private var blurKey: ObjectIdentifier?
     private var blurImage: CGImage?
 
+    /// 外殼的時間是 label 色（淺色時黑字），壓在深色的糊封面上看不見：時間與標題自己畫白色的（drawChrome）
     var showsClock: Bool { false }
 
     func didOpen(now: Double) { shownIndex = Int.min; shift.set(0, now: now) }
@@ -167,6 +168,7 @@ final class SingApp: PetApp {
     func render(into g: CGContext, face: Face, rect: CGRect, now: Double) {
         self.face = face
         openButton = .zero
+        defer { drawChrome(g, face) }
         guard let s = current(face) else { drawBackdrop(g, face, info: nil); drawIdle(g, face); return }
         let i = s.info
         drawBackdrop(g, face, info: i)
@@ -312,6 +314,12 @@ final class SingApp: PetApp {
             }
         }
         HPAX.note(g, CGRect(x: 112, y: 300, width: 800, height: 340), .text, t, value: body, shape: .rounded(24))
+    }
+
+    /// 下一層頁首（shell-layout.md 第 3 節）：返回鈕由外殼畫；標題與右上時間在深色底上用白字
+    private func drawChrome(_ g: CGContext, _ face: Face) {
+        HPComponents.clock(g, face, color: .white)
+        HPComponents.bigTitle(g, face, title, color: .white)
     }
 
     private func drawIdle(_ g: CGContext, _ face: Face) {

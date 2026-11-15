@@ -80,9 +80,6 @@ struct SystemGlassParams {
         p.control = true
         return p
     }()
-    static let bubble = SystemGlassParams(refractionHeight: 1.0, refractionAmount: -3.4, blurRadius: 3, highlight: 0.55,
-                                          white: 1.0, black: 0.12, saturation: 1.3, fill: 0.06, rim: 1.0,
-                                          keyAmount: 1.0, fillAmount: 0.6, ringShadow: 0.5)
 }
 
 final class SystemGlass {

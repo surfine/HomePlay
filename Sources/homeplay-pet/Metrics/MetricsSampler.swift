@@ -77,8 +77,6 @@ final class MetricsSampler {
     var latest: MetricSnapshot? { lock.lock(); defer { lock.unlock() }; return _latest }
     /// 最近一次平滑後的讀值，錶面用這個
     var latestSmoothed: MetricSnapshot? { lock.lock(); defer { lock.unlock() }; return _smoothed }
-    /// 上一次實際量到的取樣間隔（秒）
-    var measuredInterval: TimeInterval? { lock.lock(); defer { lock.unlock() }; return _measured }
     /// 實際在用的資料源（start() 回 false 的已剔除）；第一次取樣前是空的
     /// 走 lock 不走 queue.sync：主執行緒讀它時不必等第一次 tick 裡 IOReport/SMC 的 start()
     var activeSourceNames: [String] { lock.lock(); defer { lock.unlock() }; return _activeNames }

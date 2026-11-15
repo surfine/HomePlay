@@ -372,17 +372,17 @@ enum CarPlayStatus {
         switch self {
         case .notConnected:
             // 从没配过手机：引导「重按开始」；已有手机但没连：显示在等谁，别用技术词吓人
-            if CarPlayPhoneBook.phones.isEmpty { return L("status.notSetup", "重按连上 iPhone") }
+            if CarPlayPhoneBook.phones.isEmpty { return L("status.notSetup", "按空格键连上 iPhone") }
             if let name = CarPlayPhoneBook.currentName {
                 return String(format: L("status.waitingNamed", "正在等待「%@」"), name)
             }
-            return L("status.notConnected", "CarPlay 未连接 · 重按进入")
+            return L("status.notConnected", "CarPlay 未连接 · 按空格键进入")
         case .live: return L("status.live", "CarPlay 显示中")
         case .paused: return L("status.paused", "CarPlay 已暂停")
         case .reconnecting: return L("status.reconnecting", "稍后重新连接")
         case .connecting: return L("status.connecting", "CarPlay 连接中…")
         case .pausedResume: return L("status.pausedResume", "CarPlay 已暂停 · 空格继续")
-        case .background: return L("status.background", "CarPlay 在后台 · 重按返回")
+        case .background: return L("status.background", "CarPlay 在后台 · 按空格键返回")
         }
     }
 }

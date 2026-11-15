@@ -162,6 +162,9 @@ enum FaceTimeMic {
     }
     /// 靜音／取消；我們設的才記下來（之後要還原），使用者原本就靜音的不碰
     static func setMuted(_ on: Bool) {
+        // 取消靜音要還給當初靜音的那一顆：通話中換了輸入裝置（接上 AirPods）時，預設輸入已經不是它，
+        // 只解新的那顆會讓原本的麥克風一直靜音，記錄也被清掉、開機還原補不回來
+        if !on, UserDefaults.standard.object(forKey: restoreKey) != nil { restoreIfNeeded(); return }
         guard let dev = defaultInput() else { return }
         if on, isMuted, !mutedByUs { return }
         var a = muteAddress(); var v: UInt32 = on ? 1 : 0

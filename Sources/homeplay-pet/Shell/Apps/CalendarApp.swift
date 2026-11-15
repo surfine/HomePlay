@@ -237,14 +237,16 @@ final class CalendarApp: PetApp {
 
     // MARK: 版面
     // 大標題不畫（返回膠囊寫了「日历」）；分段控制放在膠囊和時間下面那一行的中間
-    private static let tabBar = CGRect(x: 512 - 220, y: 214, width: 440, height: 92)
+    /// 2026-11-12 外殼版面規格：內容頂 220（shell-layout.md 第 4 節），高 88（點按底線）
+    private static let tabBar = CGRect(x: 512 - 220, y: HPTokens.contentTop, width: 440, height: HPGrid.tap)
     private static func tabRect(_ i: Int) -> CGRect { CGRect(x: tabBar.minX + CGFloat(i) * tabBar.width / 2, y: tabBar.minY, width: tabBar.width / 2, height: tabBar.height) }
-    private static let listTop: CGFloat = 330
+    /// 分段控制底下：議程清單隔 24（兩組之間）、月曆的上／下月鈕隔 16；議程每天一段，段與段之間 32（shell-layout.md 第 5 節）
+    private static let listTop: CGFloat = tabBar.maxY + 24
     /// P12：頂端柔邊（scroll edge effect）：實心蓋到分段控制底下（fadeSolid）、柔邊接到第一列（listTop）
-    private static let fadeSolid: CGFloat = 308
-    private static let rowH: CGFloat = 120, headH: CGFloat = 64, sectionGap: CGFloat = 36
-    private static let prevRect = CGRect(x: 64, y: 320, width: 96, height: 96)
-    private static let nextRect = CGRect(x: 864, y: 320, width: 96, height: 96)
+    private static let fadeSolid: CGFloat = tabBar.maxY
+    private static let rowH: CGFloat = 120, headH: CGFloat = 64, sectionGap: CGFloat = 32
+    private static let prevRect = CGRect(x: HPGrid.Content.leading, y: tabBar.maxY + 16, width: 96, height: 96)
+    private static let nextRect = CGRect(x: HPGrid.Content.trailing - 96, y: tabBar.maxY + 16, width: 96, height: 96)
     private static let gridTop: CGFloat = 494, cellW: CGFloat = 128, cellH: CGFloat = 76
 
     /// 每天一段：段標題＋一張 inset grouped 卡（列跟列之間是分隔線，不留縫）
@@ -307,7 +309,7 @@ final class CalendarApp: PetApp {
         }
         let secs = agendaSections
         let lay = layout(secs)
-        scroll.clamp(contentHeight: lay.height + HPTokens.Size.pill + HPGrid.Inset.app, viewport: 944 - Self.listTop + 20)
+        scroll.clamp(contentHeight: lay.height + HPTokens.Size.pill + HPGrid.Content.leading, viewport: 944 - Self.listTop + 20)
         g.saveGState()
         g.clip(to: CGRect(x: 0, y: 0, width: 1024, height: 960))   // P12：上緣交給柔邊蓋，不用硬裁切
         // 2.0 r2：照影片 v2 00:21.25 的日視圖——每個行程一張淡色卡（日曆顏色約 20%）＋左側同色細直條，不再是一整組白卡
@@ -409,8 +411,8 @@ final class CalendarApp: PetApp {
     }
 
     private func renderDetail(_ g: CGContext, _ face: Face, _ e: AgendaEvent) {
-        let r = CGRect(x: 64, y: 224, width: 896, height: 680)
-        AppUI.group(g, r, radius: Screen.concentric(inset: 64))
+        let r = CGRect(x: HPGrid.Content.leading, y: HPTokens.contentTop, width: HPGrid.Content.width, height: 680)
+        AppUI.group(g, r)
         AppUI.fillPill(g, CGRect(x: r.minX + 36, y: r.minY + 40, width: 10, height: 92), color: srgb(e.color))
         let tf = AppUI.font(52, .bold)
         let lines = Face.wrap(e.title.isEmpty ? L("calendar.untitled", "（无标题）") : e.title, tf, 720, maxLines: 2)
@@ -444,7 +446,7 @@ final class CalendarApp: PetApp {
             }
             spoken.append(notes)
         }
-        HPAX.note(g, r, .text, spoken.joined(separator: ", "), shape: .rounded(Screen.concentric(inset: 64)))
+        HPAX.note(g, r, .text, spoken.joined(separator: ", "), shape: .rounded(AppUI.groupRadius(r)))
     }
 
     /// 中英混排的備註：有中日韓字就逐字折行（Face.wrap 遇到空白只照詞切，整句中文不會折），否則照詞

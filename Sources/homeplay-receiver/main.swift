@@ -129,10 +129,8 @@ final class WindowSource: NSObject, SCStreamOutput {
                 FileHandle.standardError.write("找不到标题含 \"\(titleQuery)\" 的窗。现有窗口标题：\n  \(titles.joined(separator: "\n  "))\n".data(using: .utf8)!)
                 exit(3)
             }
-            let scale = Int(window.frame.width > 0 ? 2 : 2) // Retina；SCStream 的 width/height 是像素
             let pxW = Int(window.frame.width) * (NSScreen.main?.backingScaleFactor != nil ? Int(NSScreen.main!.backingScaleFactor) : 2)
             let pxH = Int(window.frame.height) * (NSScreen.main?.backingScaleFactor != nil ? Int(NSScreen.main!.backingScaleFactor) : 2)
-            _ = scale
             let enc = Encoder(width: pxW, height: pxH, fps: fps)
             enc.onConfig = { [weak self] avcC in
                 let cfg = Wire.videoConfig(width: pxW, height: pxH, avcC: avcC)
@@ -611,12 +609,11 @@ if sourceKind == "wireless" || sourceKind == "usb" || sourceKind == "auto" {
     // --address 不给＝自动匹配：扫已配对设备的 iAP2 服务（iPhone 签名），连谁记谁。
     guard let dir = flag("--identity-dir")
           ?? ProcessInfo.processInfo.environment["HOMEPLAY_IDENTITY_DIR"]
-          ?? defaultIdentityDir(),
-          sourceKind != "wireless" || flag("--ssid") != nil else {
+          ?? defaultIdentityDir() else {
         FileHandle.standardError.write("""
-        --source wireless 需要：
+        找不到 MFi 身份目录。--source wireless：
           --address <蓝牙地址>    可选：不给就自动匹配（iap2-probe --list 可列已配对设备）
-          --ssid <名称>           iPhone 所连 Wi-Fi（和 Mac 同一个局域网）
+          --ssid <名称>           可选：iPhone 所连 Wi-Fi；不给就读 wireless.json，再不行自动取当前 Wi-Fi
           身份：默认用仓库自带的 identity/，或 --identity-dir <目录> 指定自己的 identity.pk8 + certificate.p7b
           密码：环境变量 HOMEPLAY_WIFI_PASSPHRASE 或 --passphrase
           可选：--channel N  --iface en0  --control-port 17000  --size 1200x1200  --security wpa2|wpa3|wpa3-only|none
@@ -702,6 +699,19 @@ if sourceKind == "wireless" || sourceKind == "usb" || sourceKind == "auto" {
         // 一个不存在的网络，0x4300 永远不会来。宁可当作未知、提示用户填。
         Wireless.note("保存的 SSID 是系统脱敏占位符（\(o.ssid)），已忽略；请在桌宠右键「Wi-Fi 设置」填 iPhone 所连网络名")
         o.ssid = ""
+    }
+    // 斷網實驗（路線 B）：HOMEPLAY_WIFI_HANDOFF=blank|omit 時不把 Wi-Fi 名稱與密碼交給 iPhone（過濾在 Iap2Csm.handoffFiltered）
+    // 也可寫在狀態資料夾的 wifi-handoff.txt（內容 blank 或 omit）：桌寵重寫 LaunchAgent 時只保留自己的環境變數、
+    // 重寫 wireless.json 時只留它認得的欄位，所以實驗開關放在一個沒人會重寫的檔案；刪掉檔案就回到現狀
+    let handoffFile = HomePlayState.directory.appendingPathComponent("wifi-handoff.txt")
+    let handoffRaw = ProcessInfo.processInfo.environment["HOMEPLAY_WIFI_HANDOFF"]
+        ?? (try? String(contentsOf: handoffFile, encoding: .utf8))?.trimmingCharacters(in: .whitespacesAndNewlines)
+    Iap2Csm.wifiHandoff = Iap2Csm.WiFiHandoff.parse(handoffRaw)
+    if let raw = handoffRaw, !raw.isEmpty, Iap2Csm.WiFiHandoff(rawValue: raw) == nil {
+        Wireless.note("實驗：Wi-Fi 交接模式「\(raw)」看不懂（只認 normal／blank／omit），照常交接")
+    }
+    if Iap2Csm.wifiHandoff != .normal {
+        Wireless.note("實驗：Wi-Fi 交接模式 \(Iap2Csm.wifiHandoff.rawValue)（不把 Wi-Fi 名稱與密碼交給 iPhone；日誌裡「回 …」那幾行印的是本機記住的名稱，實際送出的是空的）")
     }
     // SSID 留空＝自动取当前 Wi-Fi（免权限）。取不到也继续：同网手机照样能连。
     if o.ssid.isEmpty, let s = detectSSID(o.iface) {

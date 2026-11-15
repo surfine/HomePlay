@@ -23,7 +23,6 @@ enum HelloTimeline {
 
     /// 寫字的節點：(影格, 寫到第幾段開頭)。字母之間照影片量的時間，字母裡面筆速固定
     static let writeKnots: [(frame: Double, curve: Int)] = [(85, 0), (108, 6), (112, 9), (119, 12), (126, 15), (135, 21)]
-    static var writeStart: Double { f(writeKnots.first!.frame) }
     static var writeEnd: Double { f(writeKnots.last!.frame) }
     /// t 時寫到的弧長（設計座標）
     static func written(_ t: Double) -> CGFloat {

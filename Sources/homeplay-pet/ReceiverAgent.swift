@@ -97,16 +97,6 @@ enum ReceiverAgent {
         }
     }
 
-    /// 用户换了手机：更新已安装的 LaunchAgent 参数（不 bootout，避免打断正在跑的 receiver）。
-    /// 已加载的 launchd job 仍用旧参数，但下次登录会读新 plist；当前进程靠 WS 命令切换。
-    static func syncPhone() {
-        guard isInstalled else { return }
-        guard let bin = ReceiverLauncher.receiverBinary(),
-              let data = try? Data(contentsOf: ReceiverLauncher.configURL()),
-              let cfg = try? JSONDecoder().decode(ReceiverLauncher.Config.self, from: data) else { return }
-        try? plistText(cfg: cfg, bin: bin).data(using: .utf8)?.write(to: plistURL, options: .atomic)
-    }
-
     private static func plistText(cfg: ReceiverLauncher.Config, bin: URL) -> String {
         // 不把 SSID/手机地址写进 launchd 参数：这两个值会随用户操作变化，而 launchd 只在
         // bootstrap 时读一次参数——写死就会出现「配置已改、重启后仍用旧 SSID/旧手机」的故障

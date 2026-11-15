@@ -40,7 +40,7 @@ extension Shell {
     /// 遠看的畫法（整面）
     static func drawFar(_ g: CGContext, face: Face, _ m: FarGlance) {
         g.setFillColor(HPComponents.bg.cgColor); g.fill(CGRect(x: 0, y: 0, width: 1024, height: 1024))
-        let x = HPGrid.App.leading, w = HPGrid.App.trailing - x
+        let x = HPGrid.Content.leading, w = HPGrid.Content.trailing - x
         let tf = HPType.sf(48, .semibold)
         face.drawLeft(g, Face.clipped(m.title, tf, w), font: tf, x: x, y: 330, color: HPComponents.secondary)
         var y: CGFloat = 330

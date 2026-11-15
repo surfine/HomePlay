@@ -72,7 +72,7 @@ extension ControlCenter {
     private struct Row { var symbol: String; var title: String; var trailing: String?; var check: Bool; var tint: NSColor?; var action: CCHit.Action; var toggle: Bool? = nil }
 
     /// 2.0 align：列與標題列同一條內縮 40；列圖示對標題圖示（rr.minX）、字對標題（rr.minX+112）、
-    /// 右緣對標題列的開關（rr.maxX）；列高 row 88（原本 92，5 列會壓到設定列）。
+    /// 右緣對標題列的開關（rr.maxX）；列高 row（2026-11-12 起 96）。
     private static func rows(_ c: CGContext, _ face: Face, _ E: CGRect, top: CGFloat, _ list: [Row], record: Bool, rowH: CGFloat = HPTokens.Size.row) {
         let ink = HPGlass.ink, lightGlass = !HPGlass.inkIsLight
         for (i, row) in list.enumerated() {
@@ -228,10 +228,11 @@ extension ControlCenter {
         for s in HomeAppModel.scenes(snap).prefix(4) {
             let w = Typo.width(s.name, chipF) + 48
             guard x + w < E.maxX - 40 else { break }
-            let r = CGRect(x: x, y: E.minY + 160, width: w, height: 68)
+            let r = CGRect(x: x, y: E.minY + 160, width: w, height: HPTokens.Size.chip)
             AppUI.fillPill(c, r, color: ink.withAlphaComponent(lightGlass ? 0.08 : 0.16))
             face.drawLeft(c, s.name, font: chipF, x: r.minX + 24, y: r.midY + 10, color: ink)
-            if record { hits.append(CCHit(rect: r, action: .scene(s.id), label: s.name)) }
+            // 外觀 68，點按範圍補到 88 × 88（shell-layout.md 第 2 節）
+            if record { hits.append(CCHit(rect: HPGrid.hitRect(r), action: .scene(s.id), label: s.name)) }
             x = r.maxX + 16
         }
         // 配件磚（3 × 2；開著白底，照家庭 App）
@@ -239,7 +240,8 @@ extension ControlCenter {
         let tw = (E.width - 80 - 2 * 24) / 3, th: CGFloat = 132
         for (i, t) in tiles.enumerated() {
             let col = i % 3, row = i / 3
-            let r = CGRect(x: E.minX + 40 + CGFloat(col) * (tw + 24), y: E.minY + 256 + CGFloat(row) * (th + 24), width: tw, height: th)
+            // 晶片底（E.minY + 228）到配件磚隔 24（兩組之間，shell-layout.md 第 5 節；原本 28）
+            let r = CGRect(x: E.minX + 40 + CGFloat(col) * (tw + 24), y: E.minY + 160 + HPTokens.Size.chip + 24 + CGFloat(row) * (th + 24), width: tw, height: th)
             AppUI.fillRound(c, r, radius: 40, color: t.on ? NSColor.white.withAlphaComponent(0.94) : ink.withAlphaComponent(lightGlass ? 0.08 : 0.16))
             let ti = t.on ? srgb(0x1d1d1f) : ink
             face.drawSymbol(c, t.symbol, in: CGRect(x: r.minX + 24, y: r.minY + 22, width: 44, height: 40), color: t.on ? HPTokens.orange : ti)
@@ -287,12 +289,16 @@ extension ControlCenter {
         face.drawLeft(c, L("cc.output", "输出"), font: HPType.sf(30, .bold), x: E.minX + 40, y: E.minY + 410, color: ink.withAlphaComponent(0.62))
         rows(c, face, E, top: E.minY + 432, (outputsLocked ? [] : CCSystem.shared.outputs).prefix(3).map {
             Row(symbol: $0.symbol, title: $0.name, trailing: nil, check: $0.selected, tint: HPTokens.blue, action: .output($0.id))
-        }, record: record, rowH: 88)
+        }, record: record)
     }
 
     // MARK: 加入控制項目（圖庫）
 
-    static var galleryRect: CGRect { CGRect(x: 14, y: 40, width: 996, height: 1024 - 40 - 14) }
+    /// 浮層卡：裡面的內容邊線（卡片 + 40）落在 98.5／925.5（shell-layout.md 第 3、6 節；原本卡片 14…1010）
+    static var galleryRect: CGRect {
+        let x = HPGrid.Content.leading - HPGrid.Inset.card
+        return CGRect(x: x, y: 40, width: 1024 - 2 * x, height: 1024 - 40 - 14)
+    }
     static var galleryRadius: CGFloat { Screen.concentric(inset: 14) }
     static func categorySymbol(_ c: CCCategory) -> String {
         switch c {

@@ -14,7 +14,7 @@ enum HPSelfTest {
         check(b.width == HPTokens.Size.backButton && b.midX == HPTokens.cornerControlCenter && b.midY == HPTokens.cornerControlCenter && inside, "HPDS：返回圓鈕在官方的位置、沒被螢幕圓角切到")
         check(HPTokens.Size.action >= HPTokens.Size.tap && HPTokens.Size.backButton >= HPTokens.Size.tap, "HPDS：可點的元件 ≥ 88")
         // 舊名轉發（Theme／AppMotion）數值不變
-        check(Theme.backButton == HPTokens.backButton && AppUI.margin == HPTokens.Space.margin && RealUI.contentTop == HPTokens.contentTop, "HPDS：舊名轉發到 HPTokens")
+        check(Theme.backButton == HPTokens.backButton && AppUI.margin == HPTokens.Space.content && RealUI.contentTop == HPTokens.contentTop, "HPDS：舊名轉發到 HPTokens")
         let am = AppMotion.appleSmooth == Spring.smooth && AppMotion.interactive == Spring.interactive && AppMotion.critical(settle: 0.17) == Spring.settling(0.17)
         check(am, "HPDS：AppMotion 轉發到 HPMotion")
         check(abs(AppMotion.project(1000) - HPMotion.project(1000)) < 1e-9 && abs(AppMotion.rubberBand(100, 300) - HPMotion.rubberBand(100, 300)) < 1e-9, "HPDS：投射與 rubber band 兩邊一樣")

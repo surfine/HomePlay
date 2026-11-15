@@ -26,7 +26,7 @@ final class PodcastsApp: PetApp {
     // 2.0 逼真化：不重複膠囊上的 App 名稱；說明＝系統空狀態（符號、標題、灰字），主要動作紫色實心、次要玻璃
     private static let primary = CGRect(x: 512 - 300, y: 700, width: 600, height: 104)
     private static let secondary = CGRect(x: 512 - 300, y: 828, width: 600, height: HPTokens.Size.pill)   // 2.0 align F：100 → pill 104，跟主要動作同高、間距 24
-    private static let rowH: CGFloat = 124, x0: CGFloat = 64, top: CGFloat = 206
+    private static let rowH: CGFloat = 124, x0: CGFloat = HPGrid.Content.leading, top: CGFloat = 206
 
     /// CarPlay 連著（畫面在播、暫停、在背景，或手機的正在播放資料正在進來）
     /// 快照：`--carplay-connected` 直接當成連著，用來拍「在 iPhone 上播放」那一版（不然要有真手機）
@@ -182,7 +182,7 @@ final class PodcastsApp: PetApp {
         guard !list.isEmpty else { return top }
         let card = CGRect(x: Self.x0, y: top, width: 1024 - Self.x0 * 2, height: CGFloat(list.count) * Self.rowH)
         let visible = card.maxY > 150 && card.minY < 1024
-        if visible { HPComponents.groupCard(g, card); g.saveGState(); g.addPath(continuousRoundedRect(card, radius: 52)); g.clip() }
+        if visible { HPComponents.groupCard(g, card); g.saveGState(); g.addPath(continuousRoundedRect(card, radius: HPTokens.Radius.group)); g.clip() }
         let tf = HPComponents.sf(38, weight: .regular), df = HPComponents.sf(30, weight: .regular)
         for (k, r) in list.enumerated() {
             let rr = CGRect(x: card.minX, y: top + CGFloat(k) * Self.rowH, width: card.width, height: Self.rowH)

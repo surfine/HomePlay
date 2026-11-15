@@ -92,12 +92,6 @@ enum ReceiverLauncher {
         writeConfig(cfg)
     }
 
-    static func savePassphrase(_ value: String) {
-        var cfg = loadConfig()
-        cfg.passphrase = value
-        writeConfig(cfg)
-    }
-
     static func saveWiFi(ssid: String, passphrase: String) {
         var cfg = loadConfig()
         cfg.ssid = ssid

@@ -1,7 +1,7 @@
 import SwiftUI
 
 // 手勢頁的插畫：選中哪一行就播哪一個手勢。左格線稿畫「手在哪裡做什麼」（滑鼠＝游標、觸控板＝軌跡板上的手指、觸控＝螢幕上的手指），
-// 右格平塗畫桌寵的回應。語法照 docs/plans/gestures.md 二：螢幕上的拖動只歸畫面，轉身體只拖機身；👀 往下拉＝回主畫面。
+// 右格平塗畫桌寵的回應。語法照 docs/plans/gestures.md 二：螢幕上的拖動只歸畫面，轉身體只拖機身；頂端把手往下拉＝回主畫面。
 // 畫具在 DemoKit.swift，t 是秒。
 
 private typealias M = DemoMath
@@ -334,10 +334,9 @@ extension HomeScreens {
                with: .linearGradient(Gradient(colors: [.demo(0x3557C6), .demo(0x5B80E6)]), startPoint: .zero, endPoint: CGPoint(x: 0, y: 100)))
     }
 
-    /// 頂端的 👀 膠囊（往下拉的那一顆）
+    /// 頂端的把手（往下拉的那一條；2026-11-12 從 👀 膠囊換成把手。示範裡畫粗一點才看得見）
     static func pill(_ c: GraphicsContext, dy: Double = 0) {
-        c.fill(DemoShape.round(39, 3 + dy, 22, 9, 4.5), with: .color(.demo(0x0E1430, 0.92)))
-        for dx in [-3.6, 3.6] { c.fill(DemoShape.ellipse(CGPoint(x: 50 + dx, y: 7.5 + dy), 2.2, 2.7), with: .color(.white)) }
+        c.fill(DemoShape.round(41, 3.4 + dy, 18, 1.8, 0.9), with: .color(.white.opacity(0.85)))
     }
 
     /// 主畫面：四欄圖示＋Dock

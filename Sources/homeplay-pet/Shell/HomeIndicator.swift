@@ -1,10 +1,13 @@
-// 2.0：👀 膠囊兼任 Home Indicator（拍板 2026-11-06）——CarPlay 與 HomeView 一體化。
+// 2.0：頂端的 Home Indicator（拍板 2026-11-06：👀 膠囊兼任）——CarPlay 與 HomeView 一體化。
+// 2026-11-12：外殼畫面（主畫面、App、資料庫、切換器、CarPlay）上換成一條預設隱藏的把手（Shell/HomeHandle.swift）；
+// 這裡的判定、歸屬、門檻都沒動，把手隱藏時照樣成立。只多一條：把手隱藏時原地點一下只讓它現身（HomeHandle.tap）。
 //
-// 膠囊在螢幕頂端中間（主畫面、App 上就是頂端藥丸；錶面上是頂端中間那一塊；CarPlay 畫面上是外圈 80 px 那條帶）。
+// 把手在螢幕頂端中間（主畫面、App 上是把手或即時動態的藥丸；錶面上是錶面自己的 👀 膠囊；CarPlay 畫面上是外圈 80 px 那條帶）。
 // 語法照 iOS 的 Home Indicator，只是方向反過來（往下拉）：
 // - 往下拉一段放手＝回主畫面（距離過 commit，或過四成而且甩得快）；
 // - 往下拉住、停一下＝App 切換器（拉過 armDistance、手指幾乎不動 holdTime）；
 // - 拉回去（距離退到門檻以下）＝取消，放手彈回原處；拖曳全程跟手；
+// 2026-11-12：觸控板與滑鼠不必按住——游標在命中區起手往下捲也是同一個下拉（Shell/PointerInput.swift 的 ScrollPull，門檻與卡片都用這裡的）。
 // - 點＝照舊（錶面交回原本的點按、主畫面／App 上是 Home 鍵與即時動態）；長按＝ClioTalk 開始聽（原本「頂端中間往下拉」那一招）。
 // CarPlay 畫面上只有膠囊那條帶歸外殼，其餘觸控照舊全部送給 iPhone。減少動態效果：卡片不縮放，只淡入淡出。
 // 鍵盤版（2026-11-07）：空白鍵＝👀（eyesKey）——CarPlay 在前面＝回主畫面、其他時候＝叫 CarPlay；CarPlay 畫面上其他鍵＝車上旋鈕（CarPlayKnobKeys）。
@@ -50,6 +53,8 @@ enum HomeIndicator {
     }
     /// 開始拉：CarPlay 上要先把直播收到背景，收不到（交接凍結、還沒真的連上）就不開始——不然導覽改了、畫面還是直播
     static func pullBegins(surface: Surface, demo: Bool, backgrounded: Bool) -> Bool { surface != .carPlay || demo || backgrounded }
+    /// 「放開就回主畫面」那條界線在這裡有沒有意義：已經在主畫面時沒有（放開只會彈回）——不震、把手也不亮
+    static func commitMatters(surface: Surface, screen: ShellScreen) -> Bool { !(surface == .home && screen == .home) }
     /// 拉住停一下：距離夠、而且停了夠久
     static func shouldArm(distance: CGFloat, sinceMove: Double) -> Bool { distance >= armDistance && sinceMove >= holdTime }
     /// 停住之後又拉回去：退到這裡以下就不算切換器了（中途反悔）
@@ -73,28 +78,22 @@ enum HomeIndicator {
     }
     /// 外圈那條帶在 1024 畫布上有多高
     static func bandHeight(inset: Int?) -> CGFloat { CGFloat(inset ?? 80) * 1024 / videoSide }
-    /// CarPlay 畫面上的膠囊：同一顆「大小」（idle 的 height），位置貼安全帶中線——
+    /// CarPlay 上歸外殼的那一塊：把手（跟其他畫面同一條、同一個位置，HomeHandle.rect）左右各寬 64（手指好按），高到帶的下緣。
     /// 安全區是底線（使用者裁定 2026-11-08），任何縱橫比的流都不蓋內容
-    static func carPlayCapsule(inset: Int?) -> CGRect {
-        let h = LiveActivityStack.idleHeight, w = LiveActivityStack.idleWidth
-        let cy = max(h / 2 + 6, bandHeight(inset: inset) / 2)
-        return CGRect(x: 512 - w / 2, y: cy - h / 2, width: w, height: h)
-    }
-    /// CarPlay 上歸外殼的那一塊：膠囊左右各寬 64（手指好按），高到帶的下緣
     static func carPlayHit(inset: Int?) -> CGRect {
-        let c = carPlayCapsule(inset: inset)
+        let c = HomeHandle.rect
         return CGRect(x: c.minX - 64, y: 0, width: c.width + 128, height: max(bandHeight(inset: inset), c.maxY + 8))
     }
 
     // MARK: 手勢歸屬（HIG：一個手勢從起手到結束只歸一個層級）
 
-    /// p：1024 畫布座標；pill：主畫面／App 上頂端藥丸的命中框（錶面上沒有）
+    /// p：1024 畫布座標；pill：主畫面／App 上頂端的點按命中框（即時動態的藥丸或把手的點按範圍；錶面上沒有）
     static func owner(_ p: CGPoint, on s: Surface, pill: CGRect?, inset: Int?) -> Owner {
         if s == .carPlay { return carPlayHit(inset: inset).contains(p) ? .indicator : .carPlay }
         let u = p.x / 1024, v = p.y / 1024
         if v < 0.13 && u > 0.70 { return .controlCenter }                     // 右上角往下拉＝控制中心（不變）
         if let pill, pill.contains(p) { return .indicator }
-        // 頂端中央的備用命中區只在「有畫藥丸」的外殼頁成立；錶面沒有藥丸，不藏一個看不見的下拉把手——
+        // 頂端中央的命中區只在外殼頁成立（那裡有把手，隱藏時也收下拉與長按）；錶面沒有把手，不藏一個看不見的——
         // 錶面頂端照手勢語法走橫滑換頁（2026-11-09 整理）
         if s != .face, v < 0.12 && u > 0.32 && u < 0.68 { return .indicator }
         return .shell
@@ -175,6 +174,10 @@ extension Face {
             alpha = 1 + (s.fadeTo - 1) * e
         }
         drawIndicatorCard(g, p?.shot ?? s?.shot, rect: rect, alpha: alpha)
+        // 把手固定畫在頂端；越過界線全亮（Shell/HomeHandle.swift）。錶面起手的沒有把手（那裡是錶面自己的膠囊）
+        if let p, surface != .face {
+            HomeHandle.drawPulling(g, past: p.distance >= HomeIndicator.commit && HomeIndicator.commitMatters(surface: surface, screen: Shell.nav.screen), now: now)
+        }
     }
 
     /// 放手回主畫面／進切換器之後：卡片蓋在新畫面上走完（renderShell 在畫藥丸之前叫）
@@ -215,6 +218,16 @@ extension PetView {
         }
     }
 
+    /// 游標在不在頂端中間的命中區裡（uv＝螢幕上的位置；不在螢幕上＝nil）。錶面上沒有把手
+    func shellHandleHover(_ uv: CGPoint?) {
+        let surface = indicatorSurface
+        var on = false
+        if let uv, surface != .face {
+            on = HomeIndicator.owner(CGPoint(x: uv.x * 1024, y: uv.y * 1024), on: surface, pill: nil, inset: HomeIndicator.inset) == .indicator
+        }
+        HomeHandle.hover = on
+    }
+
     /// 按在膠囊上：排一個長按（0.5 s 沒動、還按著＝ClioTalk 開始聽）
     func indicatorArm(_ e: NSEvent) {
         HomeIndicator.consumed = false; HomeIndicator.moved = false
@@ -224,6 +237,7 @@ extension PetView {
                   !ShellInput.claimed, !HomeIndicator.moved, HomeIndicator.pull == nil else { return }
             // 主畫面／App 上藥丸長成即時動態時：長按＝展開（照舊，放手時由 LiveActivityStack 處理）
             if !self.showingVideo, Shell.nav.screen.coversFace, Shell.pillT > 0.02 { return }
+            // 把手隱藏時長按照樣成立（不必先看到它）
             HomeIndicator.consumed = true
             HPGlass.pressUp()
             log("indicator long press → ClioTalk")
@@ -259,6 +273,12 @@ extension PetView {
             Shell.captureHomeBackdrop(face.backdropFrame)
         }
         HPGlass.pressUp()
+        if surface == .home || surface == .app {   // 卡片的那一格重拍一張不帶把手的：把手改成固定畫在頂端（越過界線時全亮）
+            HomeHandle.suppressed = true
+            shot = face.render()
+            HomeHandle.suppressed = false
+            HomeHandle.lit = HomeHandle.Lit()
+        }
         HomeIndicator.pull = HomeIndicator.Pull(surface: surface, shot: shot, appID: appID, lastMoveAt: now)
         HomeIndicator.settle = nil
         let sent = surface == .carPlay && !CarPlayDemo.active ? ((NSApp.delegate as? AppDelegate)?.carPlayToBackgroundForShell() ?? false) : true   // 卡片準備好才切，切過去第一格就是卡片
@@ -277,6 +297,9 @@ extension PetView {
     func indicatorTrack(_ d: CGFloat, t: Double) {
         guard var p = HomeIndicator.pull else { return }
         if abs(d - p.distance) > HomeIndicator.holdJitter { p.lastMoveAt = t }
+        // 震動三處之一：越過「放開就回主畫面」的那一點（已經在主畫面時這一點沒有意義，不震）
+        if PointerHaptics.crossesUp(from: p.distance, to: d, threshold: HomeIndicator.commit),
+           HomeIndicator.commitMatters(surface: p.surface, screen: Shell.nav.screen) { PointerHaptics.perform(.pullCommit) }
         p.distance = d
         p.samples.append((t, d)); if p.samples.count > 6 { p.samples.removeFirst(p.samples.count - 6) }
         if p.armed, HomeIndicator.disarms(distance: d) { p.armed = false }   // 拉回去：不算切換器了
@@ -318,7 +341,7 @@ extension PetView {
                 else { to = CGRect(x: 512 - 120, y: 400, width: 240, height: 240); fadeTo = 0 }
             } else {
                 Shell.nav.screen = .home; Shell.nav.overlay = .none
-                to = Shell.pillRect(0); fadeTo = 0   // 錶面：收進頂端的膠囊
+                to = HomeHandle.rect; fadeTo = 0   // 錶面：收進頂端的把手
             }
             Shell.pillFrom = nil
             Shell.carPlayPeek = false
@@ -452,12 +475,7 @@ enum HomeIndicatorSelfTest {
         check(H.cardScale(0, armed: false) == 1 && H.cardScale(200, armed: false) < H.cardScale(100, armed: false) && H.cardScale(5000, armed: false) == 0.5,
               "膠囊：卡片拉越遠越小，有下限")   // l10n-ignore
         check(H.cardScale(80, armed: true) == AppSwitcher.cardScale, "膠囊：停住時卡片縮成切換器卡片的大小")   // l10n-ignore
-        // CarPlay 上：大小＝全系統同一顆（208×62），整顆收在安全帶內
-        let cap = H.carPlayCapsule(inset: 80)
-        let band = H.bandHeight(inset: 80)
-        check(cap.width == LiveActivityStack.idleWidth && cap.height == LiveActivityStack.idleHeight
-              && cap.maxY <= band && cap.minY > 0,
-              "膠囊：CarPlay 上同大小（166×48）且整顆收在安全帶內")   // l10n-ignore
+        // CarPlay 上的把手：大小、位置、安全帶內在 HomeHandleSelfTest
         // 歸屬：CarPlay 上只有膠囊那條帶歸外殼
         let inset = 80
         check(H.owner(CGPoint(x: 512, y: 30), on: .carPlay, pill: nil, inset: inset) == .indicator, "歸屬：CarPlay 上按在膠囊＝外殼")   // l10n-ignore
@@ -466,10 +484,10 @@ enum HomeIndicatorSelfTest {
               && H.owner(CGPoint(x: 100, y: 30), on: .carPlay, pill: nil, inset: inset) == .carPlay,
               "歸屬：CarPlay 上帶外、帶的兩端（含右上角）全部給 iPhone")   // l10n-ignore
         check(H.owner(CGPoint(x: 900, y: 40), on: .face, pill: nil, inset: nil) == .controlCenter
-              && H.owner(CGPoint(x: 900, y: 40), on: .app, pill: Shell.pillRect(0), inset: nil) == .controlCenter, "歸屬：錶面／App 上右上角往下拉＝控制中心（不變）")   // l10n-ignore
+              && H.owner(CGPoint(x: 900, y: 40), on: .app, pill: HomeHandle.tapZone, inset: nil) == .controlCenter, "歸屬：錶面／App 上右上角往下拉＝控制中心（不變）")   // l10n-ignore
         check(H.owner(CGPoint(x: 512, y: 60), on: .face, pill: nil, inset: nil) == .shell
               && H.owner(CGPoint(x: 512, y: LiveActivityStack.pillHit.midY), on: .home, pill: LiveActivityStack.pillHit, inset: nil) == .indicator,
-              "歸屬：錶面頂端不藏下拉把手（照樣橫滑換頁）；主畫面的藥丸＝膠囊")   // l10n-ignore
+              "歸屬：錶面頂端不藏下拉把手（照樣橫滑換頁）；主畫面頂端的把手歸外殼")   // l10n-ignore
         check(H.owner(CGPoint(x: 512, y: 500), on: .face, pill: nil, inset: nil) == .shell, "歸屬：螢幕其他地方照原本的路（換頁、轉身體、點按）")   // l10n-ignore
         // 放手：拖離藥丸（沒往下拉）再放開＝取消，不是 Home 鍵；原地點照舊；拉著照距離收；長按用掉了不再做事
         check(H.releaseAction(consumed: false, claimed: false, moved: true, onCarPlay: false) == .none
@@ -485,6 +503,6 @@ enum HomeIndicatorSelfTest {
               "膠囊：CarPlay 收不到背景（交接凍結）就不開始拉，畫面與導覽一致")   // l10n-ignore
         // 2.0 兩邊互通（2026-11-09）：👀 點一下的歸屬——CarPlay 在背景切回 CarPlay，否則留給 HomePlay
         check(SourceSwitcher.capsuleTap(carPlayBehind: true) == .carPlay && SourceSwitcher.capsuleTap(carPlayBehind: false) == .home,
-              "👀 膠囊：CarPlay 在背景時點一下＝切回 CarPlay；沒有背景會話＝Home 鍵／播放暫停")   // l10n-ignore
+              "錶面的 👀 膠囊：CarPlay 在背景時點一下＝切回 CarPlay；沒有背景會話＝播放暫停")   // l10n-ignore
     }
 }

@@ -93,12 +93,6 @@ enum Shell {
     static func homeItems() -> [(CGRect, HomeItem)] { SB.homeItems() }   // 2.0 SpringBoard：多頁、資料夾、各大小小工具（Shell/SpringBoard/SBBoard.swift）
     /// 全部 App：4 欄照順序排
     static func libraryItems() -> [(CGRect, HomeItem)] { SB.libraryItems() }   // 2.0 SpringBoard：App 資料庫（排序、搜尋）
-    static func libraryItemsP02() -> [(CGRect, HomeItem)] {
-        // 全部 App 有 4 列：從頭像底下（192）開始，列距 202（圖示 150＋名稱）
-        AppRegistry.visible.enumerated().map {   // 2.0 P10：食譜在 Safari 裡，不另外一格
-            (CGRect(x: margin + CGFloat($0.offset % 4) * (colW + colGap), y: 192 + CGFloat($0.offset / 4) * 202, width: colW, height: 194), .app($0.element.id))
-        }
-    }
     /// 圖示在格子裡的方塊（標籤在下面）
     static func iconRect(in cell: CGRect) -> CGRect {
         CGRect(x: cell.midX - iconSide / 2, y: cell.minY, width: iconSide, height: iconSide)
@@ -111,35 +105,18 @@ enum Shell {
     }
     static let widgetRadius: CGFloat = HPTokens.Radius.widget   // 第五輪：官方 Photos 小工具量到約 56
 
-    // 頂端藥丸：待機 166×48（眼睛膠囊，2026-11-09 收小一號、仍在安全帶裡）；長成 Live Activity 時照內容變寬、高度回到 54（compact／minimal，Shell/LiveActivityStack.swift），上緣不動
-    /// 頂端藥丸跟 CarPlay 同一顆（166×48）。CarPlay 的上緣貼安全帶中線；主畫面再往下，
-    /// 整顆落在玻璃面板裡。面板上緣以上是黑的，膠囊貼著那條線時圓頂會融進去，眼睛看起來被切掉。
-    static var pillTop: CGFloat {
-        let onCarPlay = HomeIndicator.carPlayCapsule(inset: HomeIndicator.inset).minY
-        let onGlass = HPTokens.Home.panelInset + 8   // 面板內再留一檔最小間距
-        return max(onCarPlay, onGlass)
-    }
-    static func pillRect(_ t: CGFloat) -> CGRect {
-        lerp(CGRect(x: 512 - LiveActivityStack.idleWidth / 2, y: pillTop, width: LiveActivityStack.idleWidth, height: LiveActivityStack.idleHeight), LiveActivityStack.compactPill, t)
-    }
+    // 頂端中間（2026-11-12）：待機時是把手（Shell/HomeHandle.swift，預設隱藏）；有 Live Activity 時才長出藥丸，
+    // 照內容變寬、高 54（compact／minimal，Shell/LiveActivityStack.swift），位置在「藥丸槽」。
+    /// 藥丸槽的上緣：整顆落在主畫面的玻璃面板裡（面板內再留一檔最小間距）
+    static var pillTop: CGFloat { HPTokens.Home.panelInset + 8 }
+    /// 藥丸槽：即時動態的藥丸出現的那一塊（最窄 166）。頁面內容讓位給它，不讓位給把手
+    static var pillSlot: CGRect { CGRect(x: 512 - LiveActivityStack.idleWidth / 2, y: pillTop, width: LiveActivityStack.idleWidth, height: LiveActivityStack.height) }
+    /// App（含設定）的深淺色：暗處（夜裡或房間光很暗）、控制中心的「深色模式」，或主畫面外觀選了深色（2026-11-12 定案：跟主畫面外觀）
+    static func appsDark(_ face: Face) -> Bool { lowLight(face) || CCSystem.darkAppearance || HomeAppearance.current == .dark }
+    /// 這一幀的藥丸：t＝0 是把手的位置，t＝1 長成 compact／minimal（從把手長出來）
+    static func pillRect(_ t: CGFloat) -> CGRect { lerp(HomeHandle.rect, LiveActivityStack.compactPill, t) }
     /// 2.0 R1：App 左上的返回鈕＝88 px 玻璃圓鈕（✕／‹），圓心在螢幕圓角的圓心上（HPTokens.backButton）；大標題由 App 自己畫在旁邊
-    static let navHeight: CGFloat = 88
     static var closeButton: CGRect { HPTokens.backButton }
-    /// 玻璃膠囊（控制層）：半透明白、上緣亮邊、底下一點陰影
-    static func drawGlassCapsule(_ g: CGContext, _ r: CGRect, dark: Bool = true) {
-        let path = CGPath(roundedRect: r, cornerWidth: r.height / 2, cornerHeight: r.height / 2, transform: nil)
-        g.saveGState()
-        g.setShadow(offset: CGSize(width: 0, height: 4), blur: 18, color: NSColor(white: 0, alpha: dark ? 0.35 : 0.12).cgColor)
-        g.addPath(path); g.setFillColor(NSColor(white: dark ? 0.32 : 1, alpha: dark ? 0.55 : 0.72).cgColor); g.fillPath()
-        g.restoreGState()
-        g.saveGState()
-        g.addPath(path); g.setLineWidth(2.5); g.replacePathWithStrokedPath(); g.clip()
-        let rim = CGGradient(colorsSpace: CGColorSpace(name: CGColorSpace.sRGB),
-                             colors: [NSColor(white: 1, alpha: 0.5).cgColor, NSColor(white: 1, alpha: 0.06).cgColor, NSColor(white: 1, alpha: 0.22).cgColor] as CFArray,
-                             locations: [0, 0.5, 1])!
-        g.drawLinearGradient(rim, start: CGPoint(x: r.minX, y: r.minY), end: CGPoint(x: r.maxX, y: r.maxY), options: [])
-        g.restoreGState()
-    }
 
     static var currentApp: PetApp? {
         if case .app(let id) = nav.screen { return AppRegistry.app(id) }
@@ -234,24 +211,6 @@ enum Shell {
         if let k = appID.flatMap(HPIcons.kind(forID:)) ?? HPIcons.kind(forSymbol: icon.symbol) { HPIcons.draw(k, g, in: r); return }
         if icon.calendarDate { HPIcons.draw(.calendar, g, in: r); return }
         AppIconArt.drawGlassy(g, face: face, icon: icon, in: r)
-    }
-    static func drawAppIconFlat(_ g: CGContext, face: Face, icon: AppIcon, in r: CGRect) {
-        let path = continuousRoundedRect(r, radius: r.width * 0.2237)   // App 圖示的連續圓角比例
-        g.saveGState()
-        g.setShadow(offset: CGSize(width: 0, height: -r.height * 0.04), blur: r.height * 0.12, color: NSColor(white: 0, alpha: 0.22).cgColor)
-        g.addPath(path); g.setFillColor(icon.color.cgColor); g.fillPath()
-        g.restoreGState()
-        g.saveGState(); g.addPath(path); g.clip()
-        let cs = CGColorSpace(name: CGColorSpace.sRGB)
-        let sheen = CGGradient(colorsSpace: cs, colors: [NSColor(white: 1, alpha: 0.18).cgColor, NSColor(white: 1, alpha: 0).cgColor] as CFArray, locations: [0, 1])!
-        g.drawLinearGradient(sheen, start: CGPoint(x: 0, y: r.minY), end: CGPoint(x: 0, y: r.midY), options: [])
-        g.restoreGState()
-        face.drawSymbol(g, icon.symbol, in: r.insetBy(dx: r.width * 0.22, dy: r.height * 0.24), color: icon.glyph)
-    }
-
-    static func drawRoundButton(_ g: CGContext, face: Face, _ r: CGRect, symbol: String, tint: NSColor, glyph: NSColor) {
-        g.setFillColor(tint.cgColor); g.fillEllipse(in: r)
-        face.drawSymbol(g, symbol, in: r.insetBy(dx: r.width * 0.32, dy: r.height * 0.32), color: glyph, weight: .bold)
     }
 
     /// 一張圖的平均色（縮到 4×4 再平均）
@@ -412,20 +371,21 @@ extension Face {
         if HPGlass.animating(now) || Anim.active { dirty = true }   // 動效包：sheet、數字轉場、清單也在動
         // 2.0 R2／R12：暗處（夜裡或房間光很暗）App 轉深色、錶面轉紅
         if !Shell.appearanceForced {
-            let d = Shell.lowLight(self) || CCSystem.darkAppearance   // 2.0 cc：控制中心的「深色模式」
+            let d = Shell.appsDark(self)   // 暗處、控制中心的「深色模式」、主畫面外觀選了深色
             if d != HPTokens.dark { HPTokens.dark = d; Shell.homeLayer = nil; dirty = true }
         }
         if let p = Shell.pillFrom, now - p.start >= Face.transitionDuration { Shell.pillFrom = nil }
-        if HomeIndicator.pull != nil || HomeIndicator.settle != nil || Face.capsuleGlide != nil || AppSwitcher.scrollAnim != nil { dirty = true }   // 膠囊跟手、放手、共享元素、切換器捲動
+        if HomeIndicator.pull != nil || HomeIndicator.settle != nil || Face.capsuleGlide != nil || AppSwitcher.scrollAnim != nil { dirty = true }   // 把手下拉跟手、放手、共享元素、切換器捲動
         // 藥丸：有 Live Activity 就長大
         let act = covers ? shellActivity(now) : nil
-        let goal: CGFloat = act == nil ? 0 : 1
+        let goal: CGFloat = act != nil || (covers && !pillActivities(now).isEmpty) ? 1 : 0   // 含 CarPlay 在背景的那一則
         if Shell.pillT != goal {
             Shell.pillT += (goal - Shell.pillT) * CGFloat(1 - exp(-dt / 0.12))
             if abs(goal - Shell.pillT) < 0.003 { Shell.pillT = goal }
             dirty = true
         }
         if LiveActivityStack.tick(self, now) { dirty = true }   // 2.0 P03：展開的彈簧、音量條
+        if covers, HomeHandle.alpha(now: now) != HomeHandle.drawnAlpha { dirty = true }   // 頂端把手的淡入淡出（Shell/HomeHandle.swift）
         if AirDrop.tick(now) { dirty = true }   // AirDrop 收件卡片的出入、訪客臨時接收到期（Shell/AirDrop/）
         if HomeAlertCard.tick(now) { dirty = true }   // 家庭警報卡：出入、過期收卡（生產端本來沒人叫 HomeAlerts.tick）、版本變化（Shell/HomeAlertCard.swift）
         warmSpringBoardIfIdle(now)   // 主畫面三層快取的閒置預熱（SpringBoard/SBRender.swift）   // 家庭警報卡：出入、過期收卡（生產端本來沒人叫 HomeAlerts.tick）、版本變化（Shell/HomeAlertCard.swift）
@@ -522,7 +482,7 @@ extension Face {
                 if let a = Shell.currentApp, a.showsClock, !Shell.skipping("clock") { drawShellClock(g) }
             }
         }
-        drawIndicatorSettle(g, now)   // 👀 膠囊放手後：卡片縮回圖示／切換器那一格（Shell/HomeIndicator.swift）
+        drawIndicatorSettle(g, now)   // 把手放手後：卡片縮回圖示／切換器那一格（Shell/HomeIndicator.swift）
         if !Shell.skipping("pill") { drawShellPill(g, now) }
     }
 
@@ -567,87 +527,10 @@ extension Face {
         return out
     }
 
-    /// 靜態層（桌布＋小工具玻璃＋圖示＋標籤＋頁點）：色相、語言、解析度不變就重用
-    private func homeStaticLayer(library: Bool) -> CGImage {
-        let sc = renderPixelScale
-        let wall = shellWallpaper()
-        let day = Shell.homeDayKey(Face.displayDate)   // 第五輪 C：行事曆圖示畫的是今天；換日就整層重畫
-        Shell.homeDrawnDay = day
-        let look = HomeAppearance.current   // P02：主畫面外觀、這個人的排列、編輯模式都進 key
-        let key = "\(library)|\(ObjectIdentifier(wall).hashValue)|\(Typo.language)|\(Int(sc * 100))|\(FaceStyle.lineup.count)|\(day)|\(look.cacheKey)|\(library ? "" : PersonHome.current.fingerprint)"
-        if let c = Shell.homeLayer, c.key == key { return c.image }
-        let px = Int((1024 * sc).rounded())
-        let items = library ? Shell.libraryItems() : Shell.homeItems()
-        let img = makeImage(px, px) { g in
-            g.scaleBy(x: sc, y: sc)
-            let full = CGRect(x: 0, y: 0, width: 1024, height: 1024)
-            drawUpright(g, wall, in: full)
-            if look.wallpaperShade > 0 { g.setFillColor(NSColor(white: 0, alpha: look.wallpaperShade).cgColor); g.fill(full) }   // P02：深色／染色外觀壓暗桌布
-            let wallShot = look.glassBase ? g.makeImage() : nil   // P02：清透／染色的圖示玻璃取樣面板之前的桌布（玻璃不取樣玻璃）
-            // 2.0 R3：內縮 14 px 的玻璃面板（影片 v2 00:11.5：面板邊一道細亮邊），圓角跟螢幕同心
-            let inset = HPTokens.Home.panelInset
-            let panelPath = continuousRoundedRect(full.insetBy(dx: inset, dy: inset), radius: Screen.concentric(inset: inset))
-            HPGlass.add(panelPath) { _ in }
-            HPGlass.flush(g, face: self, clear: true)   // 模糊的錶面＝媒體上：Clear
-            // 第五輪：系統的 Clear 把整面提亮約 25%，官方的面板只比外面亮 7%（152 對 142）：面板裡壓回去，再畫厚玻璃的亮邊
-            g.saveGState(); g.addPath(panelPath); g.setFillColor(NSColor(white: 0, alpha: HPTokens.Home.panelShade).cgColor); g.fillPath(); g.restoreGState()
-            HPGlass.panelRim(g, panelPath)              // 厚玻璃的亮邊（官方邊上 +64、往內 24 px 漸回）
-            Shell.drawAccentedGlassBases(g, face: self, items: items, backdrop: wallShot)   // P02：清透／染色＝圖示與小工具的底換成 Liquid Glass
-            // 小工具：iOS 的液態玻璃 Regular（一個容器、一起算；2.0 iosglass：原本自拼 NSGlassEffectView .clear 的參數）
-            let widgets = items.filter { if case .app = $0.1 { return false }; return true }.map(\.0)
-            if !widgets.isEmpty, library {
-                HPGlass.drawNow(g, face: self, widgets.map { continuousRoundedRect($0, radius: Shell.widgetRadius) }, clear: false, container: "home.widgets")
-            }
-            // 第五輪：圖示標籤 regular 30、白、沒有投影（官方直筆畫 2 px、字外沒有暗暈）
-            let lf = HPType.sf(HPType.Size.iconLabel, HPTokens.Home.iconLabelWeight)
-            let lb = HPTokens.Home.labelBaseline
-            for (r, item) in items {
-                guard let s = HomeWidgetKind.from(item)?.title else { continue }   // P02：小工具標籤照這格放的是哪一個
-                drawLeft(g, s, font: lf, x: r.midX - Typo.width(s, lf) / 2, y: r.maxY + lb, color: .white)
-            }
-            for (r, item) in items {
-                guard case .app(let id) = item, let app = AppRegistry.app(id) else { continue }
-                let ir = Shell.iconRect(in: r)
-                Shell.drawHomeIcon(g, face: self, app: app, in: ir)   // P02：照主畫面外觀出圖示變體（Shell/HomeWidgets.swift）
-                let s = Face.clipped(app.title, lf, r.width + Shell.colGap - 6)
-                drawLeft(g, s, font: lf, x: r.midX - Typo.width(s, lf) / 2, y: ir.maxY + lb, color: .white)
-            }
-            // 2.0 R4：影片裡沒有頁點（錶面之間照樣可以滑）
-        }
-        Shell.homeLayer = (key, img)
-        return img
-    }
-
     private func drawHome(_ g: CGContext, _ now: Double, library: Bool) {
         if Shell.homeHue == nil { Shell.homeHue = Shell.hue(fromFace: nil, face: self) }
         if Shell.homeBackdrop == nil, HomeWallpaper.photoPath != nil { Shell.captureHomeBackdrop(nil) }   // 體驗追趕 P4-3：照片桌布不必等錶面截圖
         drawSpringBoard(g, now, library: library)   // 2.0 SpringBoard：主畫面與 App 資料庫改由 Shell/SpringBoard/SBRender.swift 畫（P02 的靜態層留著不用）
-    }
-
-    private func drawHomeP02(_ g: CGContext, _ now: Double, library: Bool) {
-        _ = shellWallpaper()
-        drawUpright(g, homeStaticLayer(library: library), in: CGRect(x: 0, y: 0, width: 1024, height: 1024))
-        // 2.0 R4：左上全大寫問候語（影片 v1 0:45「GOOD MORNING, / MARGOT」：medium、字距放寬、白 80%），跟第一欄圖示左緣對齊
-        if !library, !Shell.homeEditing {   // P02：編輯模式時左上換成「＋」
-            // 第五輪：第一行 regular 32 白 60%、名字那行 semibold 32 白 82%；原點比圖示左緣內縮 9（官方主畫面）
-            let H = HPTokens.Home.self
-            let sx = Shell.iconRect(in: Shell.cell(0, 0)).minX + H.greetingInset
-            for (i, line) in Shell.greeting(hour: Shell.greetingHour(self)).enumerated() {
-                let isName = i > 0
-                let sf = HPType.sf(H.greetingSize, isName ? H.nameWeight : H.greetingWeight)
-                drawLeft(g, Face.clipped(line, sf, 660), font: sf, x: sx, y: H.greetingBaseline + CGFloat(i) * H.greetingLeading,
-                         color: NSColor.white.withAlphaComponent((isName ? H.nameAlpha : H.greetingAlpha) * LiveActivityStack.greetingAlpha(now)), kern: H.greetingKern)   // P03：大卡展開時淡出
-            }
-        }
-        if library || !Shell.homeEditing { drawShellAvatar(g) }   // 2.0: 誰在看（Shell/PersonalGate.swift）；P02：編輯模式時右上是「完成」
-        if !library { drawHomeWidgets(g, now) }
-    }
-
-    private func drawHomeWidgets(_ g: CGContext, _ now: Double) {
-        // 第六輪：照官方，右上是「照片」小工具（Shell/PhotosWidget.swift）；P02：照這個人的排列放（天氣、世界時鐘、或不放），編輯模式疊上「−」「＋」「完成」
-        let layout = PersonHome.current
-        if let w = layout.widget { drawHomeWidget(g, w, Shell.widgetRect(col: 2, row: 0), now: now) }
-        drawHomeEditChrome(g, items: layout.items())
     }
 
     /// 2.0 R1：左上 88 px 玻璃圓鈕（影片 v1 0:47 行事曆、0:52 食譜：✕；子頁 ‹），系統玻璃（GlassPass，render 尾端一起算）
@@ -688,45 +571,52 @@ extension Face {
         g.restoreGState()
     }
 
-    // MARK: 頂端藥丸（Live Activities）
+    // MARK: 頂端把手與藥丸（Live Activities）
 
-    /// from：從錶面上的眼睛膠囊（rect）長過來，e＝進度（ClioTalk 打開時用）
-    func drawShellPill(_ g: CGContext, _ now: Double, from: (rect: CGRect, e: CGFloat)? = nil) {
-        let t = from == nil ? Shell.pillT : 0
+    /// 外殼畫面的頂端中間：待機是把手（預設隱藏），有 Live Activity 時是藥丸（不帶眼睛）。
+    /// 剛從錶面過來（Shell.pillFrom）：錶面上的眼睛膠囊縮向把手並淡出——眼睛只留在錶面與 ClioTalk
+    func drawShellPill(_ g: CGContext, _ now: Double) {
+        let t = Shell.pillT
         // 2.0 P03：先照這一幀的活動排好 compact／minimal（pillRect 照它長大）
-        var acts = t > 0.02 ? shellActivities(now) : []
+        var acts = t > 0.02 ? pillActivities(now) : []   // CarPlay 在背景也是一則（車子圖示的小藥丸，取代原本掛在把手／藥丸上的綠色角標）
         for i in acts.indices { acts[i].accent = Shell.nightTint(acts[i].accent, self) }   // 第四輪：夜間的 Live Activity 也是紅的
         if !acts.isEmpty { LiveActivityStack.compactPill = laLayout(acts).pill }
-        var r = Shell.pillRect(t)
-        var k: CGFloat = 0.5 * LiveActivityStack.idleHeight / LiveActivityStack.height   // 眼睛大小（drawEye 的 k；錶面上的膠囊是 1.4×scale）；P03：長成活動時眼睛不變大
-        if let f = from {
-            r = Shell.lerp(f.rect, r, f.e)
-            k = (f.rect.height / 156) + (k - f.rect.height / 156) * f.e
-        } else if let pf = Shell.pillFrom {
-            // 從錶面上的眼睛膠囊縮過來
-            let e = ClioTalkPanel.progress(Shell.pillSpring, CGFloat(now - pf.start))   // 2.0 R14：彈簧
-            r = Shell.lerp(pf.rect, r, e)
-            k = (pf.rect.height / 156) + (k - pf.rect.height / 156) * e
-        }
+        Shell.nightKeep = nil; LiveActivityStack.homeKeep = nil   // 藥丸上沒有眼睛：夜間整顆跟著轉紅
         if t > 0.02 {
+            let r = Shell.pillRect(t), a = min(1, t / 0.35)   // 從把手的位置長出來，同時淡入
+            g.saveGState()
+            if a < 1 { g.setAlpha(a); g.beginTransparencyLayer(auxiliaryInfo: nil) }
             drawActivityStack(g, r, t: t, acts: acts, now: now)   // 2.0 P03：compact／minimal／expanded（Shell/LiveActivityStack.swift）
+            if a < 1 { g.endTransparencyLayer() }
+            g.restoreGState()
         } else {
             LiveActivityStack.hits = []; LiveActivityStack.shown = []
-            // 2.0 align A1：飛行中也用真的玻璃（以前飛行用暗色仿製品，0.45 s 一到整顆從暗灰跳成白玻璃，像一顆白膠囊突然壓上頂列）
-            drawCapsuleBody(g, r, look: capsuleLook() == .system ? .black : capsuleLook(), animating: false)
         }
-        // P03：眼睛＝鏡頭，長成活動時留在正中、上緣不動（展開時也一樣，大卡從兩側與下方包住它）
-        let ex = r.midX + (512 - r.midX) * t
-        let ey = t > 0.02 ? r.minY + LiveActivityStack.height / 2 : r.midY
-        let bf = blinkFactor(now)
-        for s: CGFloat in [-1, 1] { drawEye(g, cx: ex + s * cur.sep * k, cy: ey, side: s, blinkF: bf, k: k) }
-        // 第四輪：夜間整面轉紅時只把眼睛那一段貼回原樣（Live Activity 的內容、分離的小藥丸、大卡一起變紅）
-        Shell.nightKeep = t > 0.02 ? CGRect(x: ex - laEyesHalf - 6, y: r.minY, width: 2 * laEyesHalf + 12, height: LiveActivityStack.height) : nil
-        LiveActivityStack.homeKeep = t > 0.02 ? LiveActivityStack.eyesPath(cx: ex, cy: ey, sep: cur.sep * k, rx: cur.rx * k, ry: cur.ry * k) : nil
-        if from == nil, !HeroPull.on, SourceSwitcher.carPlayBehind(self) { drawSourceBadge(g, pill: r) }   // 2.0 align D：CarPlay 在背景；片頭不跟這台 Mac 有沒有接上手機
-        let eyes = r.insetBy(dx: -12, dy: -10)
-        islandRectBuilding = islandRectBuilding.map { $0.union(eyes) } ?? eyes
-        if capsuleCoreBuilding == nil { capsuleCoreBuilding = r }   // 後續 #7：橫滑 Portal 的共享元素
+        // 錶面 → 主畫面／App：眼睛膠囊縮進把手（0 起飛 … 1 到位）
+        var landed: CGFloat = 1
+        if t <= 0.02, let pf = Shell.pillFrom {
+            landed = ClioTalkPanel.progress(Shell.pillSpring, CGFloat(now - pf.start))   // 2.0 R14：彈簧
+            if landed < 0.999 {
+                let r = Shell.lerp(pf.rect, HomeHandle.rect, landed)
+                let k = r.height / 156   // 眼睛跟著膠囊一起縮（錶面上的膠囊是高 ÷ 156）
+                g.saveGState(); g.setAlpha(1 - landed); g.beginTransparencyLayer(auxiliaryInfo: nil)
+                // 2.0 align A1：飛行中也用真的玻璃
+                drawCapsuleBody(g, r, look: capsuleLook() == .system ? .black : capsuleLook(), animating: false)
+                let bf = blinkFactor(now)
+                for s: CGFloat in [-1, 1] { drawEye(g, cx: r.midX + s * cur.sep * k, cy: r.midY, side: s, blinkF: bf, k: k) }
+                g.endTransparencyLayer(); g.restoreGState()
+                let eyes = r.insetBy(dx: -12, dy: -10)
+                islandRectBuilding = islandRectBuilding.map { $0.union(eyes) } ?? eyes
+                if capsuleCoreBuilding == nil { capsuleCoreBuilding = r }   // 後續 #7：橫滑 Portal 的共享元素
+            }
+        }
+        // 把手：有藥丸時讓位
+        let shown = HomeHandle.alpha(now: now)
+        HomeHandle.drawnAlpha = shown
+        let ha = HomeHandle.suppressed ? 0 : shown * max(0, 1 - t / 0.2) * landed   // suppressed：下拉起手時拍卡片用的那一格不帶把手
+        if ha > 0.003 {
+            HomeHandle.fill(g, HomeHandle.rect, dark: HomeHandle.resolveDark(backdrop: g.makeImage()), alpha: ha)
+        }
     }
 
     // MARK: 疊在最上面的：亮度、控制中心、ClioTalk（render 在錶面／外殼畫完後叫）

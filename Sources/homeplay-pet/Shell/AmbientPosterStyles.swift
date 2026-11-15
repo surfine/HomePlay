@@ -277,6 +277,10 @@ enum AmbientPosterStylesSelfTest {
         let famIn: Bool = s0.minX == P.cardX && s5.maxX == P.cardX + P.cardW && s5.maxY <= 960 && s3.minY > s0.maxY && P.slotsTop > P.familyHeaderBaseline
         check(famIn && fam8,
               "家庭版式：三欄兩列剛好 800 寬、在畫布內、在頁首下方、照 8 格線")   // l10n-ignore
+        // W3（2026-11-10）：固件 items[] 九格，但風格名＝threeColumnSixItems 且實測第三排出畫布——
+        // 結論：畫面只畫前六格；第七到九格是資料形狀（編輯器可編、標「後備」），不是回歸。
+        check(P.slotRect(6).maxY > 1024 && P.slotRect(8).maxY > 1024,
+              "家庭版式：第三排超出 1024 畫布——七到九格畫不下（只畫前六格的幾何證據）")   // l10n-ignore
         let ws: [String] = [Face.posterWeatherSymbol(0), Face.posterWeatherSymbol(63), Face.posterWeatherSymbol(3)]
         check(ws == ["sun.max.fill", "cloud.rain.fill", "cloud.fill"],
               "家庭版式：天氣格的符號照條件分段")   // l10n-ignore

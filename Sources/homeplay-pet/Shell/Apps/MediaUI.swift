@@ -7,8 +7,6 @@ import ImageIO
 
 enum MediaUI {   // 音樂、播客、食譜共用的畫法（和 AppsKit 的 AppUI 分開）
     static let full = CGRect(x: 0, y: 0, width: 1024, height: 1024)
-    /// 最小點按範圍（1024 畫布上）
-    static let minTap: CGFloat = 88
 
     // MARK: 玻璃
 

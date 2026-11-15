@@ -125,8 +125,12 @@ struct ClioVoiceLoop: Equatable {
         return max(1, Int(ceil(until - now)))
     }
 
+    /// 這一輪是朗讀當中開始、朗讀結束時還沒判定是不是回音就接成下一輪的：收尾時要再比一次，
+    /// 不然麥克風聽到的整段朗讀會被當成使用者的話送出去，回答又被聽進去，自己跟自己講個不停（2026-11-11 實機）。
+    private(set) var echoSuspect = false
+
     private mutating func begin(_ mode: Mode, now: Double, heard h: Bool = false) {
-        state = .listening(mode); turnAt = now; heard = h
+        state = .listening(mode); turnAt = now; heard = h; echoSuspect = false
     }
 
     /// F5 按下（或點彩球的按下）
@@ -189,6 +193,7 @@ struct ClioVoiceLoop: Equatable {
     /// 轉寫收尾回來了：有字就送出，沒字就收麥克風
     mutating func turnDone(text: String, now: Double) -> [Action] {
         guard state == .finishing || listening else { return [] }
+        echoSuspect = false
         if text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { state = .off; return [.closeMic] }
         state = .waiting; waitAt = now
         return [.submit]
@@ -203,8 +208,8 @@ struct ClioVoiceLoop: Equatable {
         case .waiting, .speaking:
             if followUpEnabled { state = .followUp(until: now + Self.followUpWindow); heard = false; return [] }
             state = .off; return [.closeMic]
-        case .bargeCheck:   // 念完了、人還在講：這就是下一輪
-            state = .listening(.handsFree)
+        case .bargeCheck:   // 念完了、人還在講：這就是下一輪（也可能只是還沒判完的回音，收尾時再比）
+            state = .listening(.handsFree); echoSuspect = true
             return []
         default: return []
         }

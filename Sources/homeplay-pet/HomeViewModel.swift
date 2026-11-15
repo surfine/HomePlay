@@ -371,7 +371,6 @@ final class HomeViewModel {
     func anatomyAnchor(_ part: AnatomyPart, eye: SIMD3<Float> = SIMD3<Float>(0, 10, 100)) -> SIMD3<Float>? {
         anatomyPicker().anchor(part, eye: eye)
     }
-    var selftestPickTargets: Int { anatomyPicker().count }
 
     private func makeScreenBlack() {
         guard let tex = try? TextureResource.generate(from: Self.blackImage(), withName: "screen",
@@ -436,6 +435,7 @@ final class HomeViewModel {
     private(set) var wall = false
     func setWall(_ on: Bool) {
         wall = on
+        picker = nil   // 挑零件的清單建立時會濾掉停用的零件；掛牆切換後要重建，否則底座永遠點不到
         baseGroup?.isEnabled = !on
         for name in ["TlTyQAuZSZnkfBS", "UHiMdHobqyuoBpP"] { usdzRoot?.findEntity(named: name)?.isEnabled = !on }   // 铰链上下两半
         setRig(pitch: 0, yaw: 0)

@@ -211,6 +211,10 @@ final class ClioVoiceSession {
         if endAt > 0 {
             log("ClioTalk voice: turn \(Int((t - listenAt) * 1000)) ms, speech→endpoint \(onsetAt > 0 ? Int((endAt - onsetAt) * 1000) : -1) ms, finalize \(Int((t - endAt) * 1000)) ms")
         }
+        if loop.echoSuspect, ClioEcho.isEcho(heard: liveFinal + liveVolatile, spoken: spokenText()) {
+            log("ClioTalk voice: turn was my own speech, dropped")
+            liveFinal = ""; liveVolatile = ""
+        }
         perform(loop.turnDone(text: liveFinal + liveVolatile, now: t))
     }
 

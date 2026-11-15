@@ -179,7 +179,7 @@ enum MessagesScreen {
     // MARK: 對話列表
 
     private static func drawList(_ g: CGContext, _ m: MessagesListModel, _ hits: inout Hits) {
-        let pad = HPTokens.Space.margin, W: CGFloat = 1024
+        let pad = HPTokens.Space.content, W: CGFloat = 1024
         var y: CGFloat
         if let lead = m.titleLeading {
             let tl = HPComponents.titleLayout(L("msg.title", "信息"))   // 不壓 👀 膠囊
@@ -301,7 +301,7 @@ enum MessagesScreen {
 
     /// 底部：🎤 說話、⌨ 打字（膠囊）、😊 表情（圓）；回傳按鈕列的上緣
     private static func drawInputBar(_ g: CGContext, speakTitle: String, _ hits: inout Hits, speak: MessagesHit = .speak, type: MessagesHit = .type, emoji: Bool = true) -> CGFloat {
-        let pad = HPTokens.Space.margin, W: CGFloat = 1024
+        let pad = HPTokens.Space.content, W: CGFloat = 1024
         let bh: CGFloat = 108, by = 1024 - 48 - bh, gap: CGFloat = 22
         let em = CGRect(x: W - pad - bh, y: by, width: bh, height: bh)
         let right = emoji ? em.minX - gap : W - pad
@@ -329,21 +329,21 @@ enum MessagesScreen {
     // MARK: 對話頁
 
     private static func drawThread(_ g: CGContext, _ m: MessagesThreadModel, _ hits: inout Hits) {
-        let pad = HPTokens.Space.margin, W: CGFloat = 1024
+        let pad = HPTokens.Space.content, W: CGFloat = 1024
         drawHeader(g, title: m.title, inShell: m.inShell, &hits)
         let by = drawInputBar(g, speakTitle: L("msg.speak", "用说的"), &hits)
         let ink = label
 
         // 建議回覆晶片：高度 ≥ 88，排不下就換行（最多兩排）
         let cf = HPType.sf(HPType.Size.button, .semibold)   // 2.0 depth：建議回覆是按鈕，用按鈕字級（原本 32）
-        let chipH: CGFloat = 88, chipGap: CGFloat = 18
+        let chipH: CGFloat = 88, chipGap: CGFloat = 16   // 間距取 HPGrid.scale（原本 18）
         var placed: [(Int, CGRect)] = [], cx = pad, row = 0
         for (i, c) in (m.showsChips ? Array(m.chips.prefix(3)) : []).enumerated() {
             let w = max(chipH, min(W - 2 * pad, width(c, cf) + 64))
             if cx + w > W - pad + 0.5, cx > pad { row += 1; cx = pad }
             if row > 1 { break }
             placed.append((i, CGRect(x: cx, y: CGFloat(row) * (chipH + chipGap), width: w, height: chipH)))
-            cx += w + 18
+            cx += w + chipGap
         }
         let rows = placed.isEmpty ? 0 : row + 1
         let chipsH = rows == 0 ? 0 : CGFloat(rows) * chipH + CGFloat(rows - 1) * chipGap
@@ -428,7 +428,7 @@ enum MessagesScreen {
         let maxW = maxBubble - (m.isGroup && !it.fromMe ? groupIndent : 0)
         switch it.kind {
         case .separator, .unsent:
-            return Block(height: 52, main: CGSize(width: 896, height: 52), above: 0, below: 0)
+            return Block(height: 52, main: CGSize(width: HPGrid.Content.width, height: 52), above: 0, below: 0)
         case .text(let s):
             let lines = wrap(s, bubbleFont, maxW - 2 * hPad, maxLines: 8)
             let w = min(maxW, (lines.map { width($0, bubbleFont) }.max() ?? 0) + 2 * hPad)
@@ -470,7 +470,7 @@ enum MessagesScreen {
     }
 
     private static func draw(_ g: CGContext, _ it: MessagesItem, _ b: Block, top: CGFloat, _ m: MessagesThreadModel, index: Int, _ hits: inout Hits) {
-        let pad = HPTokens.Space.margin, W: CGFloat = 1024
+        let pad = HPTokens.Space.content, W: CGFloat = 1024
         let indent: CGFloat = m.isGroup && !it.fromMe ? groupIndent : 0
         let x = it.fromMe ? W - pad - b.main.width : pad + indent
         let main = CGRect(x: x, y: top + b.above, width: b.main.width, height: b.main.height)
@@ -479,7 +479,7 @@ enum MessagesScreen {
             text(g, s, HPType.sf(HPType.Size.secondary, .semibold), secondary, x: W / 2, y: top + 36, align: .center)
             return
         case .unsent(let s):
-            text(g, s, HPType.sf(HPType.Size.secondary, .regular), secondary, x: W / 2, y: top + 36, maxWidth: 896, align: .center)
+            text(g, s, HPType.sf(HPType.Size.secondary, .regular), secondary, x: W / 2, y: top + 36, maxWidth: HPGrid.Content.width, align: .center)
             return
         default: break
         }
@@ -676,7 +676,7 @@ enum MessagesScreen {
     // MARK: 新訊息
 
     private static func drawCompose(_ g: CGContext, _ m: MessagesComposeModel, _ hits: inout Hits) {
-        let pad = HPTokens.Space.margin, W: CGFloat = 1024
+        let pad = HPTokens.Space.content, W: CGFloat = 1024
         drawHeader(g, title: L("msg.new", "新信息"), inShell: true, &hits)
         // 收件人列
         let lf = HPType.sf(HPType.Size.list, .regular), sf = HPType.sf(HPType.Size.list, .semibold)
@@ -793,19 +793,6 @@ enum MessagesScreen {
     private static func pill(_ g: CGContext, _ r: CGRect, fill: NSColor) {
         g.setFillColor(fill.cgColor)
         g.addPath(CGPath(roundedRect: r, cornerWidth: r.height / 2, cornerHeight: r.height / 2, transform: nil)); g.fillPath()
-    }
-
-    /// 設計稿 24×24 的愛心
-    static func heartPath(in r: CGRect) -> CGPath {
-        func P(_ x: CGFloat, _ y: CGFloat) -> CGPoint { CGPoint(x: r.minX + x / 24 * r.width, y: r.minY + y / 24 * r.height) }
-        let p = CGMutablePath()
-        p.move(to: P(12, 21))
-        p.addCurve(to: P(4, 10), control1: P(12, 21), control2: P(4, 15.8))
-        p.addCurve(to: P(12, 7.2), control1: P(4, 6.0), control2: P(9.2, 4.2))
-        p.addCurve(to: P(20, 10), control1: P(14.8, 4.2), control2: P(20, 6.0))
-        p.addCurve(to: P(12, 21), control1: P(20, 15.8), control2: P(12, 21))
-        p.closeSubpath()
-        return p
     }
 
     enum Align { case left, center, right }

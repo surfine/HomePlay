@@ -33,7 +33,6 @@ struct ScrollArbiter {
 
     private(set) var target: GestureTarget?
     private(set) var startedAt: Double = 0
-    private(set) var sawMomentum = false
     private var lastEventAt: Double = -1
     private var travel: Double = 0
 
@@ -54,12 +53,10 @@ struct ScrollArbiter {
             target = classify()
             startedAt = now
             travel = 0
-            sawMomentum = false
         } else if momentum && (target == nil || stale) {
             // 惯性不能自己开启一个手势（手指早就离开了，起点已不可知）
             return .none
         }
-        if momentum { sawMomentum = true }
         travel += abs(dx) + abs(dy)
         let t = target ?? .none
         if momentumEnded { target = nil }
@@ -67,7 +64,7 @@ struct ScrollArbiter {
         return t
     }
 
-    mutating func reset() { target = nil; lastEventAt = -1; travel = 0; sawMomentum = false }
+    mutating func reset() { target = nil; lastEventAt = -1; travel = 0 }
 }
 
 /// 两指手势的类型：手指一碰到触控板就看两指各自往哪走，判定后锁到手指离开。

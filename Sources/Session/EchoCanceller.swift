@@ -42,6 +42,4 @@ package final class EchoCanceller {
         }
         return out
     }
-
-    package func reset() { speex_echo_state_reset(state) }
 }

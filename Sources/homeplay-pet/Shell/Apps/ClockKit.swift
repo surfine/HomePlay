@@ -59,11 +59,7 @@ extension HPTokens {
         static let bigDotsY: CGFloat = 982, bigDot: CGFloat = 12, bigDotGap: CGFloat = 14
         /// 地圖顏色（深色＝實拍；淺色是推斷：同一套明暗關係換成淺灰）
         static var ocean: NSColor { dark ? .black : srgb(0xE9E9ED) }
-        static var landDay: NSColor { dark ? srgb(0x4A4A4C) : srgb(0xFFFFFF) }
-        static var landNight: NSColor { dark ? srgb(0x1B1B1C) : srgb(0xBDBDC3) }
-        static var oceanNight: NSColor { dark ? .black : srgb(0xD3D3D9) }
         static var terminator: NSColor { dark ? NSColor(white: 0.78, alpha: 1) : NSColor(white: 0.45, alpha: 1) }
-        static var meridian: NSColor { dark ? NSColor(white: 1, alpha: 0.07) : NSColor(white: 0, alpha: 0.05) }
     }
 }
 
@@ -155,16 +151,6 @@ enum ClockKit {
         if dialCache.count > 24 { dialCache.removeAll() }
         dialCache[key] = img
         return img
-    }
-
-    /// 一個類比錶盤：secondsOfDay＝那個時區當天的秒數（含小數；減少動態效果時取整數＝一秒一跳）
-    static func analogDial(_ g: CGContext, _ face: Face, center c: CGPoint, radius R: CGFloat, secondsOfDay t0: Double, night: Bool) {
-        typealias T = HPTokens.Clock
-        let t = reduceMotion ? floor(t0) : t0
-        if let img = dialFace(face, radius: R, night: night, scale: pixelScale(g)) {
-            blit(g, img, in: CGRect(x: c.x - R, y: c.y - R, width: 2 * R, height: 2 * R))
-        }
-        drawHands(g, center: c, radius: R, secondsOfDay: t, night: night)
     }
 
     static func drawHands(_ g: CGContext, center c: CGPoint, radius R: CGFloat, secondsOfDay t: Double, night: Bool) {
@@ -317,144 +303,6 @@ enum ClockKit {
         let h = (lon - sun.lon) * r
         return asin(sin(lat * r) * sin(sun.lat * r) + cos(lat * r) * cos(sun.lat * r) * cos(h)) / r
     }
-    /// 晨昏線：每個經度上太陽高度＝0 的緯度
-    static func terminatorLat(lon: Double, sun: Sun) -> Double {
-        let r = Double.pi / 180
-        let decl = abs(sun.lat) < 0.01 ? 0.01 : sun.lat
-        return atan(-cos((lon - sun.lon) * r) / tan(decl * r)) / r
-    }
-    /// 當地當天的日出、日落（太陽中心 −0.833°）；極晝／極夜回 nil
-    static func sunTimes(lat: Double, lon: Double, day: Date, tz: TimeZone) -> (rise: Date, set: Date)? {
-        var cal = Calendar(identifier: .gregorian); cal.timeZone = tz
-        let noonLocal = cal.date(bySettingHour: 12, minute: 0, second: 0, of: day) ?? day
-        var times: [Date] = []
-        for sign in [-1.0, 1.0] {
-            // 迭代兩次：先用當地正午的太陽位置算時角，再用算出的時刻重算
-            var t = noonLocal
-            for _ in 0..<3 {
-                let sun = subsolar(t), r = Double.pi / 180
-                let cosH = (sin(-0.833 * r) - sin(lat * r) * sin(sun.lat * r)) / (cos(lat * r) * cos(sun.lat * r))
-                guard abs(cosH) <= 1 else { return nil }
-                let H = acos(cosH) / r                                       // 度
-                // 太陽過中天的時刻：直射點經度＝當地經度
-                var dl = (sun.lon - lon).truncatingRemainder(dividingBy: 360)
-                if dl > 180 { dl -= 360 }; if dl < -180 { dl += 360 }
-                let transitShift = dl / 15 * 3600                            // 直射點還要多久走到這裡（太陽往西走 15°/h）
-                let transit = t.addingTimeInterval(transitShift)
-                t = transit.addingTimeInterval(sign * H / 15 * 3600)
-            }
-            times.append(t)
-        }
-        return (times[0], times[1])
-    }
-
-    // MARK: - 世界地圖（系統時鐘 App 的陸地剪影，執行時讀；4208×1928，等距圓柱、180°W～180°E、約 84°N～80.9°S）
-
-    static let mapNorth: Double = 84, mapSouth: Double = -80.9
-    nonisolated(unsafe) private static var mapTried = false
-    nonisolated(unsafe) private static var mapImage: CGImage?
-    /// 自檢用：強制走自繪的退路（當作系統地圖讀不到）
-    nonisolated(unsafe) static var forceFallback = false
-    static var worldMap: CGImage? {
-        if forceFallback { return nil }
-        if !mapTried { mapTried = true; mapImage = loadSystemMap() }
-        return mapImage
-    }
-    /// 系統地圖有沒有讀到（報告與自檢用）
-    static var usingSystemMap: Bool { worldMap != nil }
-    /// CoreUI 的 CUICatalog 讀 Clock.app 的 Assets.car（map_mac 是 mac idiom＝7 的 PDF 向量圖，CoreUI 會轉成點陣）。
-    /// 私有類別：找不到類別或方法就回 nil（畫面照樣有晨昏線與經線，只是沒有陸地）
-    private static func loadSystemMap() -> CGImage? {
-        if ProcessInfo.processInfo.environment["HOMEPLAY_NO_SYSTEM_MAP"] == "1" { return nil }
-        let car = "/System/Applications/Clock.app/Contents/Resources/Assets.car"
-        guard FileManager.default.fileExists(atPath: car),
-              dlopen("/System/Library/PrivateFrameworks/CoreUI.framework/CoreUI", RTLD_NOW) != nil,
-              let cls = NSClassFromString("CUICatalog") as? NSObject.Type else { return nil }
-        let initSel = NSSelectorFromString("initWithURL:error:"), imgSel = NSSelectorFromString("imageWithName:scaleFactor:deviceIdiom:")
-        guard cls.instancesRespond(to: initSel), cls.instancesRespond(to: imgSel),
-              let raw = cls.perform(NSSelectorFromString("alloc"))?.takeUnretainedValue() as? NSObject else { return nil }
-        typealias InitF = @convention(c) (AnyObject, Selector, NSURL, UnsafeMutablePointer<NSError?>?) -> AnyObject?
-        guard let cat = unsafeBitCast(raw.method(for: initSel), to: InitF.self)(raw, initSel, NSURL(fileURLWithPath: car), nil) as? NSObject else { return nil }
-        typealias ImgF = @convention(c) (AnyObject, Selector, NSString, CGFloat, Int) -> AnyObject?
-        guard let named = unsafeBitCast(cat.method(for: imgSel), to: ImgF.self)(cat, imgSel, "map_mac", 2, 7) as? NSObject else { return nil }
-        let cgSel = NSSelectorFromString("image")
-        guard named.responds(to: cgSel) else { return nil }
-        typealias CGF = @convention(c) (AnyObject, Selector) -> Unmanaged<CGImage>?
-        guard let img = unsafeBitCast(named.method(for: cgSel), to: CGF.self)(named, cgSel)?.takeUnretainedValue(), img.width > 1000 else { return nil }
-        // 只要陸地的形狀（alpha）：縮成 1600 寬、取出 alpha 當灰階遮罩（白＝陸地），之後每分鐘重畫地圖才便宜
-        let w = 1600, h = Int((CGFloat(w) * CGFloat(img.height) / CGFloat(img.width)).rounded())
-        guard let ctx = CGContext(data: nil, width: w, height: h, bitsPerComponent: 8, bytesPerRow: w * 4, space: CGColorSpace(name: CGColorSpace.sRGB)!,
-                                  bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue), let data = ctx.data else { return nil }
-        ctx.interpolationQuality = .high
-        ctx.draw(img, in: CGRect(x: 0, y: 0, width: w, height: h))
-        let src = data.bindMemory(to: UInt8.self, capacity: w * h * 4)
-        var alpha = [UInt8](repeating: 0, count: w * h)
-        for i in 0..<(w * h) { alpha[i] = src[i * 4 + 3] }
-        return CGImage(width: w, height: h, bitsPerComponent: 8, bitsPerPixel: 8, bytesPerRow: w, space: CGColorSpaceCreateDeviceGray(),
-                       bitmapInfo: CGBitmapInfo(rawValue: 0), provider: CGDataProvider(data: Data(alpha) as CFData)!, decode: nil,
-                       shouldInterpolate: true, intent: .defaultIntent)
-    }
-
-    /// 畫一條世界地圖（等距圓柱）到 rect：海、陸地（白天亮、夜裡暗，晨昏線上 0.6° 的柔邊）、每 15° 一條經線、晨昏線。
-    /// north／south＝rect 上下緣的緯度
-    static func drawMap(_ g: CGContext, in r: CGRect, north: Double, south: Double, date: Date) {
-        typealias W = HPTokens.WorldClock
-        let sun = subsolar(date)
-        func xOf(_ lon: Double) -> CGFloat { r.minX + CGFloat((lon + 180) / 360) * r.width }
-        func yOf(_ lat: Double) -> CGFloat { r.minY + CGFloat((north - lat) / (north - south)) * r.height }
-        g.saveGState()
-        g.clip(to: r)
-        // 夜的遮罩：低解析的格子算太陽高度（柔邊＝民用晨昏前的 0.6°），放大時線性內插
-        let gw = 360, gh = max(2, Int(Double(gw) * (north - south) / 360))
-        var px = [UInt8](repeating: 0, count: gw * gh)
-        for j in 0..<gh {
-            let lat = north - (Double(j) + 0.5) / Double(gh) * (north - south)
-            for i in 0..<gw {
-                let lon = -180 + (Double(i) + 0.5) / Double(gw) * 360
-                let alt = altitude(lat: lat, lon: lon, sun: sun)
-                let k = max(0, min(1, (0.3 - alt) / 0.6))       // 1＝夜
-                px[j * gw + i] = UInt8(k * 255)
-            }
-        }
-        let night = CGImage(width: gw, height: gh, bitsPerComponent: 8, bitsPerPixel: 8, bytesPerRow: gw, space: CGColorSpaceCreateDeviceGray(),
-                            bitmapInfo: CGBitmapInfo(rawValue: 0), provider: CGDataProvider(data: Data(px) as CFData)!, decode: nil,
-                            shouldInterpolate: true, intent: .defaultIntent)
-        // 海
-        g.setFillColor(W.ocean.cgColor); g.fill(r)
-        if let night, W.oceanNight != W.ocean {
-            g.saveGState(); clipMask(g, night, r); g.setFillColor(W.oceanNight.cgColor); g.fill(r); g.restoreGState()
-        }
-        // 陸地：系統圖的緯度範圍換到這個 rect
-        if let land = worldMap {
-            let full = CGRect(x: r.minX, y: yOf(mapNorth), width: r.width, height: yOf(mapSouth) - yOf(mapNorth))
-            g.saveGState(); clipMask(g, land, full)
-            g.setFillColor(W.landDay.cgColor); g.fill(r)
-            if let night { clipMask(g, night, r); g.setFillColor(W.landNight.cgColor); g.fill(r) }
-            g.restoreGState()
-        }
-        // 經線（時區格）：每 15°
-        g.setFillColor(W.meridian.cgColor)
-        for k in 1..<24 { g.fill(CGRect(x: (xOf(-180 + Double(k) * 15)).rounded() - 0.75, y: r.minY, width: 1.5, height: r.height)) }
-        // 晨昏線
-        let path = CGMutablePath()
-        for i in 0...360 {
-            let lon = -180 + Double(i)
-            let p = CGPoint(x: xOf(lon), y: yOf(terminatorLat(lon: lon, sun: sun)))
-            if i == 0 { path.move(to: p) } else { path.addLine(to: p) }
-        }
-        g.addPath(path); g.setStrokeColor(W.terminator.cgColor); g.setLineWidth(2.5); g.setLineJoin(.round); g.strokePath()
-        g.restoreGState()
-    }
-    /// 畫布是翻過來的：遮罩圖的第 0 列要在 rect 的上緣
-    private static func clipMask(_ g: CGContext, _ mask: CGImage, _ r: CGRect) {
-        g.translateBy(x: 0, y: r.minY + r.maxY); g.scaleBy(x: 1, y: -1)
-        g.clip(to: r, mask: mask)
-        g.scaleBy(x: 1, y: -1); g.translateBy(x: 0, y: -(r.minY + r.maxY))
-    }
-    /// 經緯度 → 地圖上的點
-    static func mapPoint(lat: Double, lon: Double, in r: CGRect, north: Double, south: Double) -> CGPoint {
-        CGPoint(x: r.minX + CGFloat((lon + 180) / 360) * r.width, y: r.minY + CGFloat((north - lat) / (north - south)) * r.height)
-    }
 }
 
 // MARK: - 自檢
@@ -467,16 +315,6 @@ enum ClockKitSelfTest {
         let s = ClockKit.subsolar(d)
         check(abs(s.lat - 23.43) < 0.1 && abs(s.lon) < 1.5, "時鐘：夏至正午直射點在北回歸線、本初子午線附近（\(String(format: "%.2f, %.2f", s.lat, s.lon))）")
         check(ClockKit.altitude(lat: s.lat, lon: s.lon, sun: s) > 89.9, "時鐘：直射點的太陽高度 90°")
-        let tl = ClockKit.terminatorLat(lon: s.lon + 90, sun: s)
-        check(abs(ClockKit.altitude(lat: tl, lon: s.lon + 90, sun: s)) < 0.01, "時鐘：晨昏線上太陽高度 0")
-        // 台北夏至日出約 5:05、日落約 18:47
-        if let tz = TimeZone(identifier: "Asia/Taipei"), let st = ClockKit.sunTimes(lat: 25.03, lon: 121.56, day: d, tz: tz) {
-            var cal = Calendar(identifier: .gregorian); cal.timeZone = tz
-            let r = cal.dateComponents([.hour, .minute], from: st.rise), e = cal.dateComponents([.hour, .minute], from: st.set)
-            let rm = (r.hour ?? 0) * 60 + (r.minute ?? 0), em = (e.hour ?? 0) * 60 + (e.minute ?? 0)
-            check(abs(rm - (5 * 60 + 5)) <= 4 && abs(em - (18 * 60 + 47)) <= 4, "時鐘：台北夏至日出 \(r.hour ?? 0):\(r.minute ?? 0)、日落 \(e.hour ?? 0):\(e.minute ?? 0)")
-        } else { check(false, "時鐘：台北日出日落算得出來") }
-        check(ClockKit.sunTimes(lat: 80, lon: 0, day: d, tz: TimeZone(identifier: "UTC")!) == nil, "時鐘：北極圈內夏至沒有日落（極晝）")
         // 計時器暫停：停住剩下的秒數、不會到點、繼續後從剩下的接著倒數；暫停的不當 primary
         var b = TimerBook()
         let a = b.add(seconds: 60, label: "a", now: 1000), z = b.add(seconds: 120, label: "z", now: 1000)
@@ -485,19 +323,5 @@ enum ClockKitSelfTest {
         check(b.primary?.id == z && b.sorted.map(\.id) == [z, a], "計時器：暫停的不鏡射到錶面、排在在跑的後面")
         b.resume(a, now: 2000)
         check(abs((b.timer(a)?.left(2010) ?? 0) - 40) < 1e-9 && b.expire(now: 2050).map(\.id) == [z, a], "計時器：繼續後從剩下的接著倒數、到點")
-        // 系統地圖讀不到：自動退回自繪（海＋晨昏線照畫，畫面不是空的）；讀得到時陸地跟退路不一樣
-        func shot() -> [UInt8] {
-            guard let img = ClockKit.layer(size: CGSize(width: 180, height: 67), scale: 1, { c in
-                ClockKit.drawMap(c, in: CGRect(x: 0, y: 0, width: 180, height: 67), north: 78, south: -56, date: d)
-            }), let data = img.dataProvider?.data as Data? else { return [] }
-            return [UInt8](data)
-        }
-        ClockKit.forceFallback = true
-        let fb = shot()
-        ClockKit.forceFallback = false
-        check(!fb.isEmpty && Set(stride(from: 0, to: fb.count, by: 4).map { fb[$0] }).count > 1, "時鐘：強制退路時地圖照樣畫得出來（晨昏線、經線）")
-        if ClockKit.usingSystemMap {
-            check(shot() != fb, "時鐘：讀到系統地圖時畫出陸地（跟退路不同）")
-        }
     }
 }

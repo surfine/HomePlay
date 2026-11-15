@@ -25,7 +25,7 @@ enum AppUI {
     }
 
     // MARK: 尺寸
-    static let margin: CGFloat = HPTokens.Space.margin
+    static let margin: CGFloat = HPTokens.Space.content
     static let contentW: CGFloat = HPTokens.contentWidth
     /// 往下捲動時內容被蓋住的上緣（大標題那一列底下）
     static let topEdge: CGFloat = 196
@@ -63,10 +63,11 @@ enum AppUI {
     }
 
     // MARK: inset grouped 清單
-    static let groupRadius: CGFloat = HPTokens.Radius.group
+    /// 分組卡的圓角：整台同一個固定值（HPTokens.Radius.group＝39.5）
+    static func groupRadius(_ r: CGRect) -> CGFloat { HPTokens.Radius.group }
     /// 一組一張圓角卡
-    static func group(_ g: CGContext, _ r: CGRect, radius: CGFloat = groupRadius) {
-        fillRound(g, r, radius: radius, color: grouped)
+    static func group(_ g: CGContext, _ r: CGRect, radius: CGFloat? = nil) {
+        fillRound(g, r, radius: radius ?? groupRadius(r), color: grouped)
     }
     /// 列與列之間的 1 px 分隔線：從文字起點 x 畫到卡片右緣
     static func separator(_ g: CGContext, x: CGFloat, maxX: CGFloat, y: CGFloat) {
@@ -130,21 +131,22 @@ enum AppUI {
     static var personalLocked: Bool { WhoIsLooking.recognitionEnabled && !WhoIsLooking.shared.personalContentAllowed }
 
     static func drawLock(_ g: CGContext, _ face: Face, title t: String) {
-        let r = CGRect(x: 112, y: 230, width: 800, height: 460)
-        group(g, r, radius: Screen.concentric(inset: 112))
-        let c = CGRect(x: 512 - 70, y: 290, width: 140, height: 140)
+        // 2026-11-12 外殼版面規格：卡片貼內容邊線 98.5／925.5、頂 220（shell-layout.md 第 4、6 節；原本 112…912、頂 230）
+        let r = CGRect(x: HPGrid.Content.leading, y: HPTokens.contentTop, width: HPGrid.Content.width, height: 460)
+        group(g, r, radius: HPTokens.Radius.contentCard)
+        let c = CGRect(x: 512 - 70, y: r.minY + 60, width: 140, height: 140)
         g.setFillColor(grouped2.cgColor); g.fillEllipse(in: c)
         face.drawSymbol(g, "lock.fill", in: c.insetBy(dx: 38, dy: 36), color: label)
-        center(face, g, L("apps.locked.title", "需要主人"), font(52, .bold), cx: 512, y: 530, label)
-        center(face, g, L("apps.locked.body", "认出主人之后才会显示"), font(34), cx: 512, y: 590, secondary)
-        HPAX.note(g, CGRect(x: 112, y: 480, width: 800, height: 150), .text, L("apps.locked.title", "需要主人"), value: L("apps.locked.body", "认出主人之后才会显示"), shape: .rounded(24))   // 2.0 depth：VoiceOver
+        center(face, g, L("apps.locked.title", "需要主人"), font(52, .bold), cx: 512, y: r.minY + 300, label)
+        center(face, g, L("apps.locked.body", "认出主人之后才会显示"), font(34), cx: 512, y: r.minY + 360, secondary)
+        HPAX.note(g, CGRect(x: r.minX, y: r.minY + 250, width: r.width, height: 150), .text, L("apps.locked.title", "需要主人"), value: L("apps.locked.body", "认出主人之后才会显示"), shape: .rounded(24))   // 2.0 depth：VoiceOver
     }
 
     /// 沒有權限的說明卡；回傳按鈕的框（點了走既有的權限流程）
     static func drawPermission(_ g: CGContext, _ face: Face, appTitle: String, symbol: String, tint: NSColor,
                                headline: String, body: String, button b: String) -> CGRect {
-        let r = CGRect(x: 112, y: 220, width: 800, height: 600)
-        group(g, r, radius: Screen.concentric(inset: 112))
+        let r = CGRect(x: HPGrid.Content.leading, y: HPTokens.contentTop, width: HPGrid.Content.width, height: 600)   // 貼內容邊線（原本 112…912）
+        group(g, r, radius: HPTokens.Radius.contentCard)
         let c = CGRect(x: 512 - 70, y: 270, width: 140, height: 140)
         g.setFillColor(tint.withAlphaComponent(0.22).cgColor); g.fillEllipse(in: c)
         face.drawSymbol(g, symbol, in: c.insetBy(dx: 36, dy: 36), color: tint)

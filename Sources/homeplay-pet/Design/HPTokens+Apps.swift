@@ -223,7 +223,7 @@ extension HPTokens {
         static let whiteFill: CGFloat = 0.96
         static let tintFill: CGFloat = 0.88
         /// 名單：搜尋膠囊（高 88）在大標題下；列高 128、頭像 84；分區標題到卡片 64、卡片到下一個分區 40；最近通話最多 3 筆
-        static let searchRect = CGRect(x: HPTokens.Space.margin, y: 196, width: HPTokens.contentWidth, height: 88)
+        static let searchRect = CGRect(x: HPTokens.Space.content, y: 196, width: HPTokens.contentWidth, height: 88)
         static let listTop: CGFloat = 304
         static let rowHeight: CGFloat = 128
         static let avatar: CGFloat = 84
@@ -239,17 +239,18 @@ extension HPTokens {
 extension HPTokens {
     /// 尋找：大標題底下分段（成員／裝置）、地圖卡、清單
     enum FindMy {
-        static let segment = CGRect(x: Space.margin, y: 196, width: contentWidth, height: 88)
+        /// 內容頂 220（shell-layout.md 第 4 節）；分段→地圖→清單之間各 24
+        static let segment = CGRect(x: Space.content, y: HPTokens.contentTop, width: contentWidth, height: 88)
         /// 地圖卡（內容，不上玻璃）：圓角跟分組卡一樣
-        static let map = CGRect(x: Space.margin, y: 308, width: contentWidth, height: 330)
-        static let listTop: CGFloat = 662
+        static let map = CGRect(x: Space.content, y: segment.maxY + 24, width: contentWidth, height: 330)
+        static let listTop: CGFloat = map.maxY + 24
         static let rowHeight: CGFloat = 116
         static let icon: CGFloat = 76
         /// 地圖上的大頭針：白圈直徑、裡面的色圓直徑（iOS「尋找」的裝置釘）
         static let pin: CGFloat = 84
         static let pinInner: CGFloat = 68
         /// 細節頁：地圖高、兩顆膠囊鈕
-        static let detailMap = CGRect(x: Space.margin, y: 220, width: contentWidth, height: 420)
+        static let detailMap = CGRect(x: Space.content, y: 220, width: contentWidth, height: 420)
         static let detailButtonY: CGFloat = 700
         static let buttonHeight: CGFloat = 104
     }
@@ -277,13 +278,14 @@ extension HPTokens {
         /// Widget 強調＝暖金 #E6A651
         static let accent = srgb(HVTruth.alarmWidgetAccent)
     }
-    /// Safari：底部三件分開的玻璃（‹ 圓鈕、網址膠囊、› 圓鈕；iOS 27 safari-scrolled），跟左上返回鈕上下對稱
+    /// Safari：底部三件分開的玻璃（‹ 圓鈕、網址膠囊、› 圓鈕；iOS 27 safari-scrolled）。中線跟左上返回鈕上下對稱（1024 − 105）；
+    /// 2026-11-12 外殼版面規格：左右外緣貼內容邊線 98.5／925.5（shell-layout.md 第 6 節；原本圓心離邊 105）
     enum Safari {
         static let barCenterY: CGFloat = 1024 - cornerControlCenter
         static let circle: CGFloat = 96
         static let gap: CGFloat = 16
-        static var back: CGRect { CGRect(x: cornerControlCenter - circle / 2, y: barCenterY - circle / 2, width: circle, height: circle) }
-        static var forward: CGRect { CGRect(x: 1024 - cornerControlCenter - circle / 2, y: barCenterY - circle / 2, width: circle, height: circle) }
+        static var back: CGRect { CGRect(x: HPGrid.Content.leading, y: barCenterY - circle / 2, width: circle, height: circle) }
+        static var forward: CGRect { CGRect(x: HPGrid.Content.trailing - circle, y: barCenterY - circle / 2, width: circle, height: circle) }
         static var field: CGRect { CGRect(x: back.maxX + gap, y: barCenterY - circle / 2, width: forward.minX - gap - back.maxX - gap, height: circle) }
         /// AirDrop 分享鈕：浮在 › 圓鈕正上方（跟「開始烹飪」同一排）
         static var share: CGRect { CGRect(x: forward.minX, y: field.minY - gap - circle, width: circle, height: circle) }
@@ -302,11 +304,11 @@ extension HPTokens {
         static let tile: CGFloat = 164
         static let tileTop: CGFloat = 300
     }
-    /// 家庭攝影機頁：五路以上排 3×3（官方 Home Camera 錶面九路）；11-grid-apps：格線對齊 App 內容區 64…960（x=64、gap=16 → 磚 288×162）
+    /// 家庭攝影機頁：五路以上排 3×3（官方 Home Camera 錶面九路）；格線對齊內容邊線 98.5…925.5（gap 16 → 磚 265 × 149）
     enum HomeCameras {
         static let max = 9
         static let gridColumns = 3
-        static let x: CGFloat = Space.margin, gap: CGFloat = 16
+        static let x: CGFloat = Space.content, gap: CGFloat = 16
         static let labelGap: CGFloat = 64
     }
 }

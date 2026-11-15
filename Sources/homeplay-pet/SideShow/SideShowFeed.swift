@@ -20,8 +20,6 @@ final class SideShowFeed {
     private var narrow = Data("{}".utf8)     // 訪客裝置：只有公開內容
     private var timer: Timer?
 
-    var currentState: Data { lock.lock(); defer { lock.unlock() }; return narrow }
-
     func state(personal: Bool) -> Data {
         lock.lock(); defer { lock.unlock() }
         return personal ? broad : narrow

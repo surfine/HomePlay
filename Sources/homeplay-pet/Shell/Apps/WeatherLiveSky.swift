@@ -124,11 +124,12 @@ final class WeatherLiveSky {
         let env = ProcessInfo.processInfo.environment["HOMEPLAY_WEATHER_SKY"]
         if forceFallback { fallbackReason = "forced (selftest)"; useOurs(s); return }
         if env == "ours" { fallbackReason = "HOMEPLAY_WEATHER_SKY=ours"; useOurs(s); return }
-        guard let v = WeatherSkyVFX.make(side: side) else {
-            fallbackReason = "system VFX renderer unavailable (class, symbol or scene missing)"; useOurs(s); return
-        }
+        // 先看記錄再建渲染器：這個系統上健檢已經失敗過，就不必每次啟動後第一次開天氣都白載一次私有框架
         if env != "system", let r = UserDefaults.standard.string(forKey: Self.probeKey), r.hasPrefix("fail") {
             fallbackReason = "system VFX probe failed earlier on this OS (\(r))"; useOurs(s); return
+        }
+        guard let v = WeatherSkyVFX.make(side: side) else {
+            fallbackReason = "system VFX renderer unavailable (class, symbol or scene missing)"; useOurs(s); return
         }
         // 健檢：先用我們的（不讓第一次打開等 2 秒），系統那條在另一條佇列用要畫的場景試畫 3 秒
         //（180 幀、離線步進）；整片同色超過 2 張就不用，結果記下來（每個系統版本一次）

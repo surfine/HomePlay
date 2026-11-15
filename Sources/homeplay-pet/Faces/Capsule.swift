@@ -125,7 +125,6 @@ extension Face {
     /// 高光 0.55、白填 0.12、內緣暗 0.3），背景是這一刻已經畫好的錶面；位置與分鐘不變就用快取。
     /// 85eff38 曾換成系統 Regular 玻璃（較霧、厚邊框＋裡面一顆淺色內膠囊，看起來像兩層），這裡改回來；錶面數字等其他玻璃不動
     func glassPill(_ g: CGContext, _ r: CGRect) -> Bool {
-        guard let backdrop = g.makeImage() else { return false }
         let ri = r.integral, sc = renderPixelScale
         let key = "\(style.rawValue)|\(Int(ri.minX)),\(Int(ri.minY)),\(Int(ri.width)),\(Int(ri.height))|\(Int(sc * 100))|\(Int(Date().timeIntervalSince1970 / 60))"
         let path = CGPath(roundedRect: r, cornerWidth: r.height / 2, cornerHeight: r.height / 2, transform: nil)
@@ -135,6 +134,7 @@ extension Face {
         // 橫滑換頁中整頁被平移，backdrop 是整個畫布、玻璃會照沒平移的位置取樣（取到頁縫的黑）＝變暗；而且這張會被快取住、
         // 滑完到下一分鐘前都是暗的。滑動中不算新的、不寫快取：有快取用快取，沒有就讓呼叫端用輕的那版
         if faceTransition != nil, Self.pageDir != 0 { return false }
+        guard let backdrop = g.makeImage() else { return false }   // 快取沒中才拍背景：拍了再畫會整張複製一次
         var p = SystemGlassParams.portrait
         p.refractionAmount = -2.4; p.blurRadius = 9; p.highlight = 0.55; p.fill = 0.12; p.ringShadow = 0.3
         guard let out = SystemGlass.shared.render(path: path, key: "pill|\(key)", scale: sc, backdrop: backdrop, params: p) else { return false }

@@ -149,14 +149,6 @@ final class PeopleRegistry {
         return person
     }
 
-    func rename(_ id: String, to name: String) throws {
-        guard let index = people.firstIndex(where: { $0.id == id }) else { throw PeopleError.notFound }
-        guard let name = cleaned(name) else { throw PeopleError.emptyName }
-        people[index].name = name
-        try saveRoster()
-        onChange?()
-    }
-
     /// 2.0 第五輪：換頭像（來源：自動／聯絡人照片／👀 人物；👀 的樣式照樣存著，換回來不用重選）
     func setAvatar(_ id: String, style: HPAvatar.Style?, source: AvatarSource) throws {
         guard let index = people.firstIndex(where: { $0.id == id }) else { throw PeopleError.notFound }

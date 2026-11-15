@@ -61,7 +61,7 @@ enum HPComponents {
 
     // MARK: 版面
     /// 左右邊距（跟主畫面圖示欄外緣對齊）
-    static let margin: CGFloat = HPTokens.Space.margin
+    static let margin: CGFloat = HPTokens.Space.content
     /// 大標題那一列底下，內容從這裡開始（R1：y≈220）
     static let contentTop: CGFloat = HPTokens.contentTop
     static var screenRadius: CGFloat { Screen.cornerRadius }
@@ -77,13 +77,14 @@ enum HPComponents {
         HPAX.note(g, CGRect(x: t.x, y: top, width: t.lines.map { Typo.width($0, t.font) }.max() ?? 0, height: bottom - top), .heading, s)   // 2.0 P05：念整個標題
         for (line, y) in zip(t.lines, t.baselines) { face.drawLeft(g, line, font: t.font, x: t.x, y: y, color: color ?? label) }
     }
-    /// 2.0 depth：長標題（群組名稱、播客節目、清單名稱）。我們的標題住在返回鈕與 👀 膠囊之間，只有兩百多 px：
-    /// 先照比例縮到 44；還放不下就照 iOS 大標題的換行改成兩行（38，兩行一起置中在返回鈕的中線上，不碰 contentTop）。
-    /// 第一行在膠囊旁邊；第二行已經在膠囊下緣底下，可以用到右上時間前（titleMaxWidth）。
+    /// 2.0 depth：長標題（群組名稱、播客節目、清單名稱）。2026-11-12 外殼版面規格：標題粗體 56、左緣 174、基線 125，
+    /// 可用寬度到右上時間之前（titleMaxWidth）——頂端中間現在是 8 高的把手、有動態時是藥丸（藥丸槽下緣 76，
+    /// 標題大寫頂約 85），兩者都在標題那一列上面，不再限制標題寬度。
+    /// 放不下才照比例縮到 44；還放不下就照 iOS 大標題的換行改成兩行（38，兩行一起置中在返回鈕的中線上，不碰 contentTop）。
     /// 第二行還放不下就中間截斷，留住結尾（「…週末計畫」比「[Famil…」好認）；一個長詞斷不開就整串一行中間截斷。
     static func titleLines(_ s: String, maxWidth: CGFloat? = nil) -> (font: NSFont, x: CGFloat, baselines: [CGFloat], lines: [String], width: CGFloat) {
         let f0 = HPTokens.titleFont, tw = Typo.width(s, f0)
-        let w = min(maxWidth ?? titleMaxWidth, Shell.pillRect(Shell.pillT).minX - 24 - HPTokens.titleX)
+        let w = min(maxWidth ?? titleMaxWidth, titleMaxWidth)
         if tw <= w { return (f0, HPTokens.titleX, [HPTokens.titleBaseline], [s], w) }
         // 字級不是線性的（光學尺寸與 trak 字距跟著字級換），照比例算完再往下試到真的放得下
         var size = (f0.pointSize * w / max(1, tw)).rounded(.down)
@@ -117,23 +118,22 @@ enum HPComponents {
         }
         return str()
     }
-    /// 大標題放哪裡：Apple 的頂端中央是空的（鏡頭在邊框裡），我們那裡住著 👀 膠囊——
-    /// 標題照官方位置接在返回鈕旁，可用寬度到膠囊左緣前 24；放不下就照比例縮小（最小 38），不壓膠囊、不換行。
+    /// 大標題放哪裡：照官方位置接在返回鈕旁，可用寬度到右上時間之前（同 titleLines）；放不下就照比例縮小（最小 38），不換行。
     static func titleLayout(_ s: String, maxWidth: CGFloat? = nil) -> (font: NSFont, x: CGFloat, baseline: CGFloat, width: CGFloat) {
         let f0 = HPTokens.titleFont, tw = Typo.width(s, f0)
-        let w = min(maxWidth ?? titleMaxWidth, Shell.pillRect(Shell.pillT).minX - 24 - HPTokens.titleX)
+        let w = min(maxWidth ?? titleMaxWidth, titleMaxWidth)
         let f = tw > w && tw > 0 ? FaceType.sf(max(38, (f0.pointSize * w / tw).rounded(.down)), .bold, mono: false) : f0
         return (f, HPTokens.titleX, HPTokens.titleBaseline, w)
     }
 
     /// 自己畫的右上時間（照片上的頁面：外殼的時間跟著淺色會是黑字，照片上要白字）
     static func clock(_ g: CGContext, _ face: Face, color: NSColor) { topClock(g, face, size: 34, baselineDY: 12, color: color) }
-    /// 右上小字時間：右緣對齊右上角圓角圓心 +30、基線在圓心下 baselineDY（外殼 32／+11；照片上的頁面 34／+12）
+    /// 右上小字時間：右緣貼內容邊線 925.5、基線在頂列中線下 baselineDY（外殼 32／+11；照片上的頁面 34／+12）
     static func topClock(_ g: CGContext, _ face: Face, size: CGFloat = HPType.Size.clock, baselineDY: CGFloat = 11, color: NSColor) {
         let s = Face.statusClock(Face.displayDate)   // 2.0 depth：12／24 小時制照系統
         let f = FaceType.sf(size, .semibold)
-        // 2.0 align：右緣對 App 內容邊線（960）、中心 y 對返回鈕（105）
-        let cy = HPTokens.cornerControlCenter, right = HPGrid.App.trailing
+        // 右緣對內容邊線（925.5）、中心 y 對返回鈕（105）
+        let cy = HPTokens.cornerControlCenter, right = HPGrid.Content.trailing
         face.drawLeft(g, s, font: f, x: right - Typo.width(s, f), y: cy + baselineDY, color: color)
     }
     /// 外殼的左上返回圓鈕（HPTokens.backButton，90 px、圓心 (105, 105)，Regular 玻璃，可按）：符號 ✕（xmark，0.34）或 ‹（chevron.left，0.36），
@@ -338,45 +338,6 @@ enum HPComponents {
         g.restoreGState()
     }
 
-    /// 上一次 textTabs 畫出來的每個字的框（家庭 App 點分頁用）
-    nonisolated(unsafe) static var tabRects: [CGRect] = []
-
-    /// 文字分頁（R8 家庭的房間）：標題下的一排小字，選中＝label 色 semibold＋底線，其餘 secondary；回傳每個字的框
-    @discardableResult
-    static func textTabs(_ g: CGContext, _ face: Face, _ items: [String], selected: Int, x: CGFloat, baseline y: CGFloat, maxX: CGFloat,
-                         size: CGFloat = 32, key: String = "tabs") -> [CGRect] {
-        var out: [CGRect] = [], cx = x
-        let gap: CGFloat = 40
-        var widths: [CGFloat] = []
-        for (i, s) in items.enumerated() {
-            let f = sf(size, weight: i == selected ? .semibold : .medium)
-            widths.append(Typo.width(s, f))
-        }
-        // 放不下：從選中的那一個往左捲
-        var shift: CGFloat = 0
-        let selMax = x + widths.prefix(selected + 1).reduce(0, +) + gap * CGFloat(selected)
-        if selMax > maxX { shift = selMax - maxX }
-        cx -= shift
-        for (i, s) in items.enumerated() {
-            let on = i == selected
-            let f = sf(size, weight: on ? .semibold : .medium)
-            let r = CGRect(x: cx - gap / 2, y: y - f.ascender - 22, width: widths[i] + gap, height: f.ascender + 44)
-            if cx + widths[i] > x - 1, cx < maxX {
-                face.drawLeft(g, s, font: f, x: cx, y: y, color: on ? label : secondary)
-            }
-            out.append(r); cx += widths[i] + gap
-        }
-        // 底線滑過去（interactiveSpring）
-        if selected < out.count {
-            let target = out[selected]
-            let ux = Anim.track("\(key).x", to: target.minX + gap / 2, spring: AppMotion.interactive)
-            let uw = Anim.track("\(key).w", to: widths[selected], spring: AppMotion.interactive)
-            g.setFillColor(label.cgColor)
-            g.addPath(capsulePath(CGRect(x: ux, y: y + 14, width: uw, height: 5))); g.fillPath()
-        }
-        return out
-    }
-
     /// 一般的膠囊晶片：選中＝白（淺色）／白 0.34（深色），未選＝玻璃
     static func chip(_ g: CGContext, _ face: Face, _ r: CGRect, _ title: String, selected: Bool, symbol: String? = nil, symbolTint: NSColor? = nil, size: CGFloat = 32) {
         HPAX.note(g, r, .radio(selected), title)   // 2.0 P05
@@ -410,17 +371,22 @@ enum HPComponents {
     }
 
     /// inset grouped 的整組卡片
-    static func groupCard(_ g: CGContext, _ r: CGRect, radius: CGFloat = 52, color: NSColor? = nil) {
-        g.addPath(continuousRoundedRect(r, radius: radius)); g.setFillColor((color ?? grouped).cgColor); g.fillPath()
+    static func groupCard(_ g: CGContext, _ r: CGRect, radius: CGFloat? = nil, color: NSColor? = nil) {
+        g.addPath(continuousRoundedRect(r, radius: radius ?? HPTokens.Radius.group)); g.setFillColor((color ?? grouped).cgColor); g.fillPath()
+    }
+    /// 貼內容邊線（98.5）的分組卡：圓角跟螢幕同心（39.5），連續圓角。不是玻璃（玻璃只在控制層）
+    static func contentCard(_ g: CGContext, _ r: CGRect, color: NSColor? = nil) {
+        groupCard(g, r, radius: HPTokens.Radius.contentCard, color: color)
     }
     /// 列間 1 px 分隔線（縮排到文字起點）
     static func separatorLine(_ g: CGContext, x: CGFloat, maxX: CGFloat, y: CGFloat) {
         g.setFillColor(separator.cgColor); g.fill(CGRect(x: x, y: y - 1, width: maxX - x, height: 2))
     }
 
-    /// 頂端列底下的柔和淡出：bg 從 top 往下到 top + height 漸漸透明（內容捲到標題底下時看不到硬邊）
-    static func topFade(_ g: CGContext, _ bg: NSColor, solidTo: CGFloat, height: CGFloat = 70) {
-        g.setFillColor(bg.cgColor); g.fill(CGRect(x: 0, y: 0, width: 1024, height: solidTo))
+    /// 頂端列底下的柔和淡出：bg 從 top 往下到 top + height 漸漸透明（內容捲到標題底下時看不到硬邊）。
+    /// 實心那一段從 solidFrom 蓋到 solidTo；solidFrom＝solidTo 就只畫柔邊（上面還有不捲動的內容時用，例如尋找的地圖卡）
+    static func topFade(_ g: CGContext, _ bg: NSColor, solidTo: CGFloat, height: CGFloat = 70, solidFrom: CGFloat = 0) {
+        g.setFillColor(bg.cgColor); g.fill(CGRect(x: 0, y: solidFrom, width: 1024, height: max(0, solidTo - solidFrom)))
         let stops: [(CGFloat, CGFloat)] = [(0, 1), (0.35, 0.82), (0.7, 0.35), (1, 0)]
         guard let grad = CGGradient(colorsSpace: CGColorSpace(name: CGColorSpace.sRGB),
                                     colors: stops.map { bg.withAlphaComponent($0.1).cgColor } as CFArray, locations: stops.map(\.0)) else { return }
@@ -449,35 +415,6 @@ enum HPComponents {
             for l in MediaUI.wrap(body, bf, 800, maxLines: 4) { center(g, face, l, bf, y: y, bodyColor ?? secondary); y += 46 }
         }
         return y - 46
-    }
-
-    // MARK: 家庭磚（R8：3×3 正方磚、開＝不透明白、關＝灰色半透明；磚是內容層，不進玻璃）
-
-    /// 磚的形狀與底：fill 給了＝開（不透明＋卡片陰影），nil＝關（半透明灰）；按下放大 1.08 並變亮。content 畫圖示與標籤
-    static func homeTile(_ g: CGContext, _ r: CGRect, radius: CGFloat = HPTokens.Radius.tile, fill: NSColor?, content: @escaping (CGContext) -> Void) {
-        let k = Press.scale(r), rr = k == 1 ? r : scaled(r, k)
-        let path = continuousRoundedRect(rr, radius: radius * k)
-        if let fill {
-            g.saveGState()
-            HPTokens.Shadow.card.apply(g)
-            g.addPath(path); g.setFillColor(fill.cgColor); g.fillPath()
-            g.restoreGState()
-            if Press.amount(r) > 0.01 { g.addPath(path); g.setFillColor(NSColor(white: 1, alpha: 0.2 * Press.amount(r)).cgColor); g.fillPath() }
-            content(g)
-        } else {
-            // 關著：半透明灰（影片 O-61 #736A63 的霧感）；磚是內容層，不進 GlassPass（chan-notes G1）
-            g.addPath(path); g.setFillColor((HPTokens.dark ? NSColor(white: 1, alpha: 0.14) : NSColor(white: 0.32, alpha: 0.32)).cgColor); g.fillPath()
-            if Press.amount(r) > 0.01 { g.addPath(path); g.setFillColor(NSColor(white: 1, alpha: 0.18 * Press.amount(r)).cgColor); g.fillPath() }
-            content(g)
-        }
-    }
-    /// 磚底部的兩行標籤（名稱 semibold 30、狀態 regular 26，置中）
-    static func homeTileLabels(_ g: CGContext, _ face: Face, _ r: CGRect, _ name: String, _ sub: String, ink: NSColor, subInk: NSColor) {
-        HPAX.note(g, r, .button, name, value: sub, shape: .rounded(HPTokens.Radius.tile))   // 2.0 P05：磚＝按鈕，狀態是值
-        let nf = fitted(name, size: 30, weight: .semibold, maxWidth: r.width - 36)
-        center(g, face, Face.clipped(name, nf, r.width - 36), nf, cx: r.midX, y: r.maxY - 74, ink)
-        let sf = fitted(sub, size: 26, weight: .regular, maxWidth: r.width - 36)
-        center(g, face, Face.clipped(sub, sf, r.width - 36), sf, cx: r.midX, y: r.maxY - 36, subInk)
     }
 
     // MARK: 小工具框（主畫面 small 小工具：連續圓角 58、上下漸層底；內容由小工具自己畫）
@@ -516,7 +453,6 @@ enum HPComponents {
         }
     }
     static var capsuleRowHeight: CGFloat { HPTokens.Assistant.rowHeight }
-    static var capsuleRowInset: CGFloat { HPTokens.Assistant.rowInset }
     /// 2.0 P05：膠囊列要多高——預設字級照官方（113／135）；大字時照換行後的行數長高
     static func capsuleRowHeight(title: String, subtitle: String?, trailing: String?, width: CGFloat) -> CGFloat {
         let base = subtitle == nil ? HPTokens.Assistant.rowHeight : HPTokens.Assistant.rowHeight2
@@ -606,55 +542,6 @@ enum HPComponents {
             face.drawLeft(g, r.text, font: f, x: cx, y: y, color: color)
             cx += Typo.width(r.text, f)
         }
-    }
-
-    /// 助理的珠（👀 膠囊在 ClioTalk 裡變成的那顆）：黑色玻璃球——上半近黑、中間一道折射的亮帶（暖→白→冷）、下半透出底色漸亮，
-    /// 底下一圈柔影。只畫珠本身；眼睛由呼叫的人畫在上面（不改眼睛的樣子）。shape 給了就照它裁（膠囊正在變成圓）
-    static func assistantOrb(_ g: CGContext, _ r: CGRect, shape: CGPath? = nil, alpha: CGFloat = 1) {
-        guard alpha > 0.003 else { return }
-        let path = shape ?? CGPath(ellipseIn: r, transform: nil)
-        let cs = CGColorSpace(name: CGColorSpace.sRGB)
-        g.saveGState()
-        g.setAlpha(alpha)
-        g.beginTransparencyLayer(auxiliaryInfo: nil)
-        // 柔影（官方珠下緣外 10–14 px 還有一圈淡灰）。CG 的陰影位移在裝置座標（y 往上），往下要給負值
-        g.saveGState()
-        g.setShadow(offset: CGSize(width: 0, height: -r.height * 0.08), blur: r.height * 0.24, color: NSColor(white: 0, alpha: 0.2).cgColor)
-        g.addPath(path); g.setFillColor(NSColor(white: 0.08, alpha: 1).cgColor); g.fillPath()
-        g.restoreGState()
-        g.addPath(path); g.clip()
-        func lin(_ stops: [(CGFloat, UInt32, CGFloat)], _ a: CGPoint, _ b: CGPoint) {
-            let grad = CGGradient(colorsSpace: cs, colors: stops.map { srgb($0.1, $0.2).cgColor } as CFArray, locations: stops.map(\.0))!
-            g.drawLinearGradient(grad, start: a, end: b, options: [.drawsBeforeStartLocation, .drawsAfterEndLocation])
-        }
-        func at(_ fx: CGFloat, _ fy: CGFloat) -> CGPoint { CGPoint(x: r.minX + r.width * fx, y: r.minY + r.height * fy) }
-        // 1. 上半：近黑的玻璃（官方中線取樣 #1A1714 → #110F0D → #27241F）
-        lin([(0, 0x1A1714, 1), (0.16, 0x110F0D, 1), (0.34, 0x26231F, 1), (0.46, 0x4A3F34, 1)], at(0.5, 0), at(0.5, 0.5))
-        // 2. 下半：一團透出白底的「液面」——上緣是一道微微拱起的弧（官方：左低、中間偏右最高、右邊落下）
-        let liquid = CGMutablePath()
-        liquid.move(to: at(-0.05, 0.50))
-        liquid.addCurve(to: at(1.05, 0.56), control1: at(0.30, 0.40), control2: at(0.72, 0.42))
-        liquid.addLine(to: at(1.05, 1.1)); liquid.addLine(to: at(-0.05, 1.1)); liquid.closeSubpath()
-        g.saveGState(); g.addPath(liquid); g.clip()
-        lin([(0.44, 0x8F95A3, 1), (0.56, 0x7C7F87, 1), (0.72, 0x9C9DA0, 1), (0.86, 0xC8C8CA, 1), (1, 0xEFEFF1, 1)], at(0.5, 0.42), at(0.5, 1))
-        // 下半右邊亮、左下暗一點（球面）
-        lin([(0, 0x000000, 0.16), (0.55, 0x000000, 0), (1, 0xFFFFFF, 0.22)], at(0.05, 0.95), at(0.95, 0.55))
-        g.restoreGState()
-        // 3. 液面上緣的折射亮帶：暖 → 白 → 冷，柔一點
-        g.saveGState()
-        g.addPath(liquid); g.setLineWidth(r.height * 0.07); g.replacePathWithStrokedPath(); g.clip()
-        lin([(0, 0xC9925A, 0.0), (0.18, 0xD9A26A, 0.9), (0.42, 0xFFFDF6, 1), (0.66, 0xF2F6FF, 0.95), (0.84, 0x7C93C8, 0.85), (1, 0x5A6FA8, 0.0)], at(0, 0.5), at(1, 0.5))
-        g.restoreGState()
-        // 4. 邊緣：上半一圈更暗（玻璃的厚度），下半一圈細亮邊
-        let c = CGPoint(x: r.midX, y: r.midY)
-        let edge = CGGradient(colorsSpace: cs, colors: [NSColor(white: 0, alpha: 0).cgColor, NSColor(white: 0, alpha: 0.3).cgColor] as CFArray, locations: [0.7, 1])!
-        g.drawRadialGradient(edge, startCenter: c, startRadius: 0, endCenter: c, endRadius: max(r.width, r.height) / 2, options: [])
-        g.saveGState()
-        g.addPath(path); g.setLineWidth(r.height * 0.05); g.replacePathWithStrokedPath(); g.clip()
-        lin([(0.5, 0xFFFFFF, 0), (0.8, 0xFFFFFF, 0.55), (1, 0xFFFFFF, 0.8)], at(0.5, 0), at(0.5, 1))
-        g.restoreGState()
-        g.endTransparencyLayer()
-        g.restoreGState()
     }
 
     /// 動畫或按下進行中：App 的 tick 要回 true（每個 App 的 tick 開頭都問一次）

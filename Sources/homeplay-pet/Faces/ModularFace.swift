@@ -46,8 +46,6 @@ extension Face {
     /// 官方 dashboard：右中那格是照片；膠囊（👀）浮在照片上，兩者共用同一格
     private static var photoTile: CGRect { MG.tile(2, 1) }
     private static var widgetTile: CGRect { MG.tile(0, 2) }
-    /// 舊寬磚（drawModularWide 還在用；現在不畫，留著給函式編譯）
-    private static var wideTile: CGRect { MG.tile(0, 2, w: 2) }
     private static var moonTile: CGRect { MG.tile(1, 2) }
     private static var powerTile: CGRect { MG.tile(2, 2) }
 
@@ -187,18 +185,6 @@ extension Face {
         let box = CGRect(x: r.midX - h / 2, y: r.minY + Self.MG.iconCenterFromTop - h / 2, width: h, height: h)
         drawModularArt(g, w.art, in: box, pal)
         modularLabel(g, w.title, w.sub, in: r, pal)
-    }
-
-    /// 寬磚：左邊圖示（或封面），右邊兩行字，跟小磚同字級
-    private func drawModularWide(_ g: CGContext, _ w: ModularWidget, _ pal: ModularPalette) {
-        let r = Self.wideTile
-        let art = CGRect(x: r.minX + 44, y: r.midY - 80, width: 160, height: 160)
-        drawModularArt(g, w.art, in: art, pal)
-        let f = FaceType.sf(Self.labelFont + 6, .semibold, mono: false), x = art.maxX + 40, maxW = r.maxX - 40 - x
-        drawLeft(g, Self.clipped(w.title, f, maxW), font: f, x: x, y: r.midY - 6, color: pal.primary)
-        let sf = FaceType.sf(Self.labelFont, .semibold, mono: false)
-        let subC = HPAccessibility.increaseContrast && !pal.isNight ? NSColor.white.withAlphaComponent(0.85) : pal.secondary
-        drawLeft(g, Self.clipped(w.sub, sf, maxW), font: sf, x: x, y: r.midY + 46, color: subC)
     }
 
     private func drawModularArt(_ g: CGContext, _ art: ModularWidget.Art, in r: CGRect, _ pal: ModularPalette) {

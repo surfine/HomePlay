@@ -114,16 +114,16 @@ enum AppsSelfTest {
               "網格：返回鈕 (60,60,90,90)，大標題＝鈕右緣＋24、基線＝鈕中線＋20、SF 56 bold") // l10n-ignore：自檢訊息
         check(HPComponents.hitBack(CGPoint(x: 105, y: 105)) && !HPComponents.hitBack(CGPoint(x: 170, y: 105)) && !HPComponents.hitBack(CGPoint(x: 105, y: 170)),
               "網格：返回鈕命中區以 (60,60,90,90) 為準（所有 App 的 ‹ 都在同一格）") // l10n-ignore：自檢訊息
-        check(AppUI.margin == HPGrid.App.margin && AppUI.contentW == HPGrid.App.trailing - HPGrid.App.leading,
-              "網格：App 內容區 64…960（AppUI.margin 對到 HPGrid.App）") // l10n-ignore：自檢訊息
+        check(AppUI.margin == HPGrid.Content.leading && AppUI.contentW == HPGrid.Content.trailing - HPGrid.Content.leading && AppUI.margin == 98.5,
+              "網格：App 內容區 98.5…925.5（AppUI.margin 對到 HPGrid.Content）") // l10n-ignore：自檢訊息
         let titleXs = Set(AppRegistry.all.map { HPComponents.titleLayout($0.title).x })
         check(titleXs == [HPTokens.titleX], "網格：所有 App（\(AppRegistry.all.count) 個）大標題同一條左緣 \(Int(HPTokens.titleX))") // l10n-ignore：自檢訊息
-        // 家庭攝影機子頁的格線也在 64…960 系統上（2×2：磚 432、欄距 32；3×3：磚 288、欄距 16）
+        // 家庭攝影機子頁的格線也在內容邊線 98.5…925.5 上（2×2：磚 397.5、欄距 32；3×3：磚 265、欄距 16）
         let quad = HomeApp.cameraCells(4)
-        check(quad.map { $0.minX } == [64, 528, 64, 528] && quad.allSatisfy { $0.maxX == 496 || $0.maxX == 960 } && quad[0].width == 432 && quad[2].minY - quad[0].maxY == 85,
-              "網格：家庭攝影機 2×2 對齊 64…960（磚 432、欄距 32、標籤留 85）") // l10n-ignore：自檢訊息
+        check(quad[0].minX == 98.5 && quad[2].minX == 98.5 && abs(quad[1].maxX - 925.5) < 0.01 && quad[0].width == 397.5 && quad[1].minX - quad[0].maxX == 32 && quad[2].minY - quad[0].maxY == 85,
+              "網格：家庭攝影機 2×2 對齊 98.5…925.5（磚 397.5、欄距 32、標籤留 85）") // l10n-ignore：自檢訊息
         let nine = HomeApp.cameraCells(6)
-        check(nine.prefix(3).map { $0.minX } == [64, 368, 672] && nine.allSatisfy { $0.width == 288 } && nine[3].minX == 64 && nine[5].maxX == 960,
-              "網格：家庭攝影機 3×3 對齊 64…960（磚 288、欄距 16）") // l10n-ignore：自檢訊息
+        check(nine[0].minX == 98.5 && nine[3].minX == 98.5 && abs(nine[5].maxX - 925.5) < 0.01 && nine.allSatisfy { abs($0.width - 265) < 0.01 } && abs(nine[1].minX - nine[0].maxX - 16) < 0.01,
+              "網格：家庭攝影機 3×3 對齊 98.5…925.5（磚 265、欄距 16）") // l10n-ignore：自檢訊息
     }
 }

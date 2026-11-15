@@ -1,4 +1,4 @@
-// HomeView 對齊 WP3：設定 › 外觀 › 顯示（官方「Turn Off Display」與「Ambient」對應項）。
+// HomeView 對齊 WP3：設定 › 顯示器 › 熄屏與環境海報（官方「Turn Off Display」與「Ambient」對應項）、海報日期。
 // 20 秒是實測選項；「自動」＝房間暗/沒人看就睡、有人在留在海報。
 import SwiftUI
 
@@ -6,6 +6,7 @@ struct DisplaySection: View {
     @EnvironmentObject var m: SettingsModel
     @State private var sleepAfter: Double? = DisplaySettings.sleepAfter
     @State private var ambient = DisplaySettings.ambientEnabled
+    @State private var header = PosterConfiguration.current.dateFormat
 
     var body: some View {
         Section {
@@ -18,40 +19,13 @@ struct DisplaySection: View {
                 Text(L("settings.display.never", "永不")).tag(Double?.some(3600))
             } label: {
                 RowLabel(title: L("settings.display.sleep", "熄屏"),
-                         subtitle: L("settings.display.sleep.short", "回到表盘后多久调暗"), symbol: "moon.fill", tint: .indigo)
+                         subtitle: L("settings.display.sleep.short", "回到表盘后多久调暗"))
             }
-            Toggle(isOn: Binding(get: { ambient }, set: { v in
-                ambient = v; DisplaySettings.ambientEnabled = v
-            })) {
-                RowLabel(title: L("settings.display.ambient", "环境海报"), symbol: "photo.artframe", tint: .indigo)
-            }
-        } header: {
-            SectionTitle(title: L("settings.display.title", "显示"),
-                         info: L("settings.display.footer", "照 HomeView：闲置回表盘后进入环境海报，之后熄屏；有人靠近会亮回来，点一下直接回到之前画面。"))
-        }
-    }
-}
-
-// HomeView 對齊 WP2（拍板 2026-11-05 補 UI）：設定 › 外觀 › Look——官方 12 種海報主題挑選器。
-// 每顆以 Look 的四層 token 畫成迷你海報預覽（底色＋numerals 大數字＋secondary/accent 角標）。
-struct LookSection: View {
-    @EnvironmentObject var m: SettingsModel
-    @State private var look = HPLook.current.name
-    @State private var header = PosterConfiguration.current.dateFormat
-
-    private let cols = [GridItem(.adaptive(minimum: 108, maximum: 128), spacing: 10)]
-
-    var body: some View {
-        Section {
-            ScrollView(.horizontal, showsIndicators: false) {
-                LazyHGrid(rows: cols, spacing: 10) {
-                    ForEach(HVTruth.looks, id: \.name) { l in
-                        lookTile(l)
-                    }
-                }
-                .padding(.vertical, 2)
-            }
-            .frame(height: 148)
+            .settingsRow("settings.display.sleep")
+            ToggleRow(title: L("settings.display.ambient", "环境海报"), symbol: "",
+                      info: L("settings.display.footer", "照 HomeView：闲置回表盘后进入环境海报，之后熄屏；有人靠近会亮回来，点一下直接回到之前画面。"),
+                      isOn: Binding(get: { ambient }, set: { v in ambient = v; DisplaySettings.ambientEnabled = v }))
+                .settingsRow("settings.display.ambient")
             // 錶面體系：環境海報的頁首日期（官方海報配置 header.dateFormat；Shell/PosterConfiguration.swift）
             Picker(selection: Binding(get: { header.choice }, set: { v in
                 switch v {
@@ -64,26 +38,51 @@ struct LookSection: View {
             } label: {
                 RowLabel(title: L("settings.look.header", "海报日期"), subtitle: PosterConfiguration.current.headerText(Date()))
             }
+            .settingsRow("settings.look.header")
             if header.choice == .custom {
                 TextField(L("settings.look.header.format", "ICU 格式"), text: Binding(get: { header.format }, set: { v in
                     guard !v.isEmpty else { return }
                     setHeader(.init(format: v, title: PosterConfiguration.DateFormat.customTitle))
                 }), prompt: Text(verbatim: "EEEE d MMMM"))
             }
-        } header: {
-            SectionTitle(title: L("settings.look.title", "Look（表盘主题）"), info: L("settings.look.footer", "照 HomeView 的 12 种表盘主题：大数字与着色建议跟着换。"))
         }
     }
 
     private func setHeader(_ f: PosterConfiguration.DateFormat) {
         header = f; PosterConfiguration.current.dateFormat = f; m.app?.view.face.forceDirty = true
     }
+}
+
+// HomeView 對齊 WP2（拍板 2026-11-05 補 UI）：設定 › 錶面與桌布 ›「主題」——官方 12 種海報主題（Look）挑選器，一列橫捲。
+// 每顆以 Look 的四層 token 畫成迷你海報預覽（底色＋numerals 大數字＋secondary/accent 角標）。
+struct LookGridRow: View {
+    @EnvironmentObject var m: SettingsModel
+    var onPick: () -> Void = {}
+    @State private var look = HPLook.current.name
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 6) {
+                Text(L("settings.look.title", "Look（表盘主题）"))
+                InfoButton(L("settings.look.footer", "照 HomeView 的 12 种表盘主题：大数字与着色建议跟着换。"))
+            }
+            ScrollView(.horizontal, showsIndicators: false) {
+                LazyHStack(spacing: 10) {
+                    ForEach(HVTruth.looks, id: \.name) { l in
+                        lookTile(l)
+                    }
+                }
+                .padding(.vertical, 2)
+            }
+            .frame(height: 132)
+        }
+    }
 
     @ViewBuilder
     private func lookTile(_ l: HVTruth.Look) -> some View {
         let selected = look == l.name
         Button {
-            look = l.name; HPLook.select(l.name); m.app?.view.face.forceDirty = true
+            look = l.name; HPLook.select(l.name); m.app?.view.face.forceDirty = true; onPick()
         } label: {
             ZStack {
                 RoundedRectangle(cornerRadius: 14)

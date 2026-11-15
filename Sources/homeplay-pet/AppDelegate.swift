@@ -363,8 +363,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// F5 按住說話：按下＝requestSiri 按下（開始聽）、放開＝按鍵放開（結束）。
     /// 還沒直播時先進 CarPlay，連上後依當時是否還按著補送按下或按一下（接收器在 RECORD 前也會先記著）。
     func siriKey(down: Bool) {
-        // 2.0: CarPlay 沒在直播時 F5 交給 ClioTalk（直播中照舊給 iPhone 的 Siri；設定裡可關）
-        if ClioTalkController.shared.handleF5(down: down, carPlayLive: isLive && !carPlayLocked, view: view) { return }   // 訪客鎖著 CarPlay：F5 當作沒有 CarPlay
+        // 2.0: 看畫面決定。螢幕上是 CarPlay 時 F5 給 iPhone 的 Siri；退回錶面或主畫面（CarPlay 留在背景）時交給 ClioTalk（設定裡可關）。
+        // 以前只看會話是否連著，CarPlay 一連上就完全叫不出 ClioTalk（2026-11-11 拍板改成看畫面）。
+        if ClioTalkController.shared.handleF5(down: down, carPlayLive: isLive && !carPlayLocked && view.showingVideo, view: view) { return }   // 訪客鎖著 CarPlay：F5 當作沒有 CarPlay
         let now = CACurrentMediaTime()
         if down {
             if carPlayLocked { showCarPlayLock("siri key"); return }   // iPhone 的 Siri 念得出主人的訊息：跟 CarPlay 一起鎖
@@ -654,15 +655,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    var micStatusLabel: String {
-        switch AVCaptureDevice.authorizationStatus(for: .audio) {
-        case .authorized: return L("mic.status.on", "已允许")
-        case .notDetermined: return L("mic.status.ask", "首次进入 CarPlay 时询问")
-        case .denied, .restricted: return L("mic.status.off", "已关闭")
-        @unknown default: return L("mic.status.off", "已关闭")
-        }
-    }
-
     private func showMicDenied() {
         if window?.isVisible == true, !view.occluded, !view.showingVideo {
             withPermission(.microphone) { _ in }; return    // 拒绝卡：给「打开系统设置」
@@ -679,25 +671,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    func showMicrophonePermission() {
-        switch AVCaptureDevice.authorizationStatus(for: .audio) {
-        case .notDetermined:
-            requestMicrophoneIfNeeded(announce: true, reason: "menu") { [weak self] ok in
-                if !ok { self?.showMicDenied() }
-            }
-        case .denied, .restricted:
-            showMicDenied()
-        case .authorized:
-            NSApp.activate(ignoringOtherApps: true)
-            let a = NSAlert()
-            a.messageText = L("mic.allowed.title", "麦克风已允许")
-            a.informativeText = L("mic.allowed.body", "ClioTalk、CarPlay 通话和 iPhone 的 Siri 可以使用麦克风；屏幕画面与本地播放不受影响。")
-            a.addButton(withTitle: L("gaze.denied.ok", "好"))
-            a.runModal()
-        @unknown default:
-            showMicDenied()
-        }
-    }
 
     private func showGazeDenied(_ reason: String?) {
         if (reason == nil || reason == "camera permission denied"),
@@ -737,6 +710,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             self.view.setFaceStyle(st)
         }
         wirePermissionMoods()
+        // ClioTalk 的對話紀錄：啟動時就把過期的輪次從檔案裡刪掉（載入時會修剪並寫回），不必等到下次叫出 ClioTalk
+        if !SnapshotPrivacy.active { DispatchQueue.global(qos: .utility).async { _ = ClioHistoryStore(dir: ClioHistoryStore.defaultDir).load() } }
         if HomePlayState.isolated { log("rehearsal state: Application Support/\(HomePlayState.name), agent \(ReceiverAgent.label)") }
         tightenLogPermissions()
         DispatchQueue.main.asyncAfter(deadline: .now() + 3) { ActivityBridge.shared.start() }   // iPhone 即時動態：沒有 ActivityKit、沒有活動都只是空清單，不影響桌寵
@@ -808,9 +783,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if ProductShot.on { Pet.aspect = ProductShot.aspect }   // 2.0 device: 官圖畫布 2576×2061
         rememberFrame = remember
         let restored = remember ? WindowFrameStore.restore(WindowFrameStore.load(), visible: NSScreen.screens.map(\.visibleFrame)) : nil
-        // 第一次打開（沒有記住的大小）：開大一點（380 pt），設定引導的字才清楚好讀；之後照使用者調的大小
-        let firstWidth = (restored == nil && !sizeGiven) ? max(initialWidth, 380) : initialWidth
-        let size = restored?.size ?? NSSize(width: firstWidth, height: firstWidth / Pet.aspect)
+        // 第一次打開（沒有記住的大小）就是 Pet.defaultWidth（300：一般點按範圍 88 剛好 20 pt，docs/plans/shell-layout.md 第 2 節）；
+        // 2026-11-13 拿掉原本「至少 380」的下限。之後照使用者調的大小
+        let size = restored?.size ?? NSSize(width: initialWidth, height: initialWidth / Pet.aspect)
         window = PetWindow(size: size)
         view = PetView(frame: NSRect(origin: .zero, size: size), initialApart: initialApart, yaw: initialYaw, pitch: initialPitch)
         if let t = initialApartT { view.setInitialApart(t) }
@@ -1331,7 +1306,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         handoffTimeoutWork?.cancel(); handoffTimeoutWork = nil
         view.face.status = .connecting
         ReceiverLauncher.savePhone(address)
-        ReceiverAgent.syncPhone()
         CarPlayOverlayState.needsPairing = false
         CarPlayOverlayState.pairingHost = nil
         if let c = client {
@@ -1513,7 +1487,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    /// 插线换新 iPhone：USB 已结束、手机蓝牙恢复；给用户看配对卡，等 BondAssist/系统配对完成。
+    /// 插线换新 iPhone：USB 已结束、手机蓝牙恢复；给用户看配对卡，等系统配对完成。
     private func beginPairingHandoffView() {
         view.wakeFromPosterForGuide()
         beginHandoffFreeze(seconds: 200)
@@ -1929,6 +1903,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         homeLatchUntil = 0
         view.showVideo(true)
         view.face.status = .live
+        view.decoder.rebuild()   // 退到背景時 reset 清了 format；接收器只補關鍵幀不重送 config，不重建就每幀都丟
         client?.requestKeyframe()
         log("CarPlay back to the front")
         return true
@@ -2015,7 +1990,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     /// 真正結束 CarPlay：請接收器拆掉手機會話（接收器隨後退出）。現在只有隱藏桌寵、交接中退出會走這裡。
     private func endCarPlay(reason: String) {
-        userStopped = true; reconnectTimer?.invalidate()
+        userStopped = true; reconnectTimer?.invalidate(); reconnectTimer = nil   // 不清成 nil，之後 scheduleReconnect 的 guard 永遠擋住
         PhoneNowPlayingBridge.shared.clear()
         client?.requestTeardown(reason: reason)   // 讓 iPhone 端也結束 CarPlay，而不是只關畫面
         view.showVideo(false); view.face.status = .pausedResume

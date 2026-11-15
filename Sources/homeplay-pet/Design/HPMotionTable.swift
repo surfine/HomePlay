@@ -109,7 +109,6 @@ extension HPMotion {
         /// 回答逐行由模糊到清楚：每行晚 0.03 s；白幕先停（打開後 0.58 s 第一行）
         static let clioLine = HPTransition(name: "cliodrop", spring: .settling(0.12), stagger: 0.03, measured: 0.06, source: "v1 0:22.21→22.38（O-027）")
         static let clioHold = 0.58
-        static let clioCardDelay = 0.1
         static let clioButtonDelay = 0.3
         /// 在想：聆聽的大珠收成回答的小珠
         static let clioThink = HPTransition(name: "clio.think", spring: .settling(0.23), measured: 0.23, source: "v1 0:21.60（0.21–0.23）")
@@ -331,7 +330,6 @@ struct HPListMotion {
 enum HPDrip {
     /// 兩個圓角形狀之間的頸子：a 在上（膠囊）、b 在下（水滴）。gap 小於 merge 時，用兩條內凹的曲線連起來；
     /// 越遠頸子越細，超過 merge 就斷開（回 nil）。union 名字照 HPGlass 的慣例：同名的形狀融成一塊。
-    static let unionName = "clio.drip"
     static func neck(top a: CGRect, bottom b: CGRect, merge: CGFloat) -> CGPath? {
         let gap = b.minY - a.maxY
         guard merge > 0, gap < merge else { return nil }

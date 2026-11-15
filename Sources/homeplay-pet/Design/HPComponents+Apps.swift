@@ -255,7 +255,8 @@ extension HPComponents {
 extension HPComponents {
     /// 程式畫的地圖（內容層，不上玻璃）：陸地、水、公園、街道格與一條主幹道。seed 決定街區排法；
     /// 色照 Apple 地圖的標準樣式（淺：米白陸地、淡藍水、淡綠公園、白路；深：炭灰陸地、深藍水）
-    static func mapCard(_ g: CGContext, _ r: CGRect, radius: CGFloat = HPTokens.Radius.group, seed: Int = 1) {
+    static func mapCard(_ g: CGContext, _ r: CGRect, radius: CGFloat? = nil, seed: Int = 1) {
+        let radius = radius ?? HPTokens.Radius.group
         let dark = HPTokens.dark
         let land = dark ? srgb(0x2A2C30) : srgb(0xF4F1EA), water = dark ? srgb(0x1B3247) : srgb(0xAAD3F2)
         let park = dark ? srgb(0x23382B) : srgb(0xCFE7C3), road = dark ? srgb(0x44474E) : srgb(0xFFFFFF)

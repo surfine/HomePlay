@@ -136,6 +136,7 @@ HPLook.parseSnapshotArgs()   // 快照：--look Slate（官方 12 種 Look 之�
 if CommandLine.arguments.contains("--poster-list") { print(PosterLibraryStore.listText); exit(0) }   // 多臉：列出每一張（目前那張標 ←）
 if let s = arg("--poster-select"), let n = Int(s), PosterLibraryStore.all.indices.contains(n) {   // 快照：選第 n 張，不寫偏好
     PosterConfiguration.snapshotOverride = PosterLibraryStore.all[n]
+    PosterLibraryStore.selectInMemory(n)   // W1：換頁的下標也照它（--face-drag 的邊界用 library index）
 }
 if let s = arg("--poster") { PosterConfiguration.snapshotOverride = PosterConfiguration.parse(s) }   // 快照：--poster 'look=Blue-Orange,typeface=soft' 或 default-color-1…4（海報配置，不寫偏好；Shell/PosterConfiguration.swift）
 AppLaunchCounts.parseSnapshotArgs(CommandLine.arguments)   // 快照：--launch-counts timers=9,music=3（App 資料庫的排序依據，不寫偏好；Shell/SpringBoard/SBLibraryCategories.swift）
@@ -579,9 +580,12 @@ if CommandLine.arguments.contains("--selftest") {
     for f in MessagesSelftest.run() { check(false, f) }   // 2.0: 訊息資料層（Messages/MessagesSelftest.swift）
     peopleSelftest(check)   // 2.0: 谁在看（People/PeopleSelftest.swift）
     ProductShot.selftest(check); DeviceFinish.selftest(check)   // 2.0 device
+    SettingsSearch.selftest(check)   // 設定搜尋：登記的列都查得到字
     HelloSelfTest.run(check); HelloProduct.selftest(check)   // 2.0 hello（Hello/）
     ShellAccessibility.selftest(check)   // 2.0: P05 畫出來的螢幕的輔助使用（Shell/ShellAccessibility.swift）
     GridSelftest.run(check)   // 10-grid: 網格與對齊合約的版面自檢（Design/GridSelftest.swift）
+    ShellLayoutSelfTest.run(check)   // 外殼版面規格（docs/plans/shell-layout.md；Design/ShellLayoutSelfTest.swift）
+    HPFramesSelfTest.run(check)   // 閘門計帳：限速的臉照重畫頻率攤提（Design/HPFrames.swift）
     ShellIntegrationSelftest.run(check)   // 2.0: 個人內容的門、訊息確認、Live Activity 隱私（Shell/ShellIntegrationSelftest.swift）
     RemoteSelftest.run(check)   // 2.0 idle: 網頁串流的配對、加密、區網、撤銷（Remote/RemoteSelftest.swift）
     PromoSelfTest.run(check)   // 2.0 promo：Handoff、烹飪、宣傳片時間軸（Shell/Apps/PromoDemo.swift）

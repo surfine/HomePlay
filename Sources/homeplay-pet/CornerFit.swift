@@ -33,7 +33,6 @@ final class CornerFit {
 
     /// iOS 遮罩的對角內縮（佔畫面寬度）；nil＝沒啟用（關掉、或接收器沒協商）
     private(set) var maskDiag: Double?
-    private(set) var negotiated: Bool?
     private var maskTexture: MTLTexture?
     private var maskSidePx = 0          // 遮罩邊長（畫面像素）
     private var pipeline: MTLComputePipelineState?
@@ -68,7 +67,6 @@ final class CornerFit {
     func handle(_ o: [String: Any], videoWidth: Int, device: MTLDevice?) {
         guard ConcentricCorners.enabled, o["learning"] as? Bool ?? true else { reset(); return }
         let neg = o["negotiated"] as? Bool ?? false
-        negotiated = neg
         if let b64 = o["png"] as? String, let png = Data(base64Encoded: b64), let dev = device,
            let m = Self.measure(png: png, device: dev) {
             maskTexture = m.texture; maskSidePx = m.side
@@ -90,7 +88,7 @@ final class CornerFit {
         onChange?()
     }
 
-    func reset() { maskDiag = nil; negotiated = nil; maskTexture = nil; onChange?() }
+    func reset() { maskDiag = nil; maskTexture = nil; onChange?() }
 
     /// 解遮罩：8 位元灰階（亮＝保留）。照 DiPlay 的做法看四個角哪個最暗，翻成「(0,0) 是被裁掉的那個角」；
     /// 對角線上覆蓋率過半的位置就是輪廓在對角線上的內縮。

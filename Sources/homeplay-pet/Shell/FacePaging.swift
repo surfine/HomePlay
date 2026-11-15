@@ -39,22 +39,24 @@ enum FacePaging {
         var dy: CGFloat = 0
         var screenW: CGFloat = 300
         var dir = 0                    // 已經換上來的方向：+1 下一個、−1 上一個、0 還沒
-        var fromStyle: FaceStyle
+        var fromIndex: Int             // 起手那張臉（PosterLibraryStore 下標）；換頁邊界照它
+        var fromConfig: PosterConfiguration   // 起手那張的完整配置（換方向時放回「整張臉」，不只放回種類）
         var fromNav: ShellNav
         var pager = FacePager()
         var samples: [(t: Double, x: CGFloat)] = []
     }
-    /// 往 dir（+1 下一個、−1 上一個）那一頁是什麼：陣容裡的錶面、主畫面（只有尾端往前）、沒有（第一個往回＝橡皮筋）
+    /// 往 dir（+1 下一個、−1 上一個）那一頁是什麼：自己的臉（PosterLibraryStore.all）、主畫面（只有尾端往前）、
+    /// 沒有（第一個往回＝橡皮筋）。W1（2026-11-10）：順序＝臉的順序，不再是 FaceStyle.lineup 的 12 款種類。
     enum Neighbor: Equatable { case face(Int), home, none }
     static func neighbor(dir: Int, index i: Int, count: Int) -> Neighbor {
         if dir > 0 { return i >= count - 1 ? .home : .face(i + 1) }
         if dir < 0 { return i <= 0 ? .none : .face(i - 1) }
         return .none
     }
-    /// 這一下手勢的邊界照起手的錶面。預覽已經把畫面換成目標臉，不能改用那個 index：
-    /// 從第二個往前滑時畫面先變成第一個，若用第一個的 index，canPrev 變 false，放手的停點裡沒有「上一頁」，永遠彈回第二個。
-    static func gestureOrigin(_ style: FaceStyle) -> Int {
-        FaceStyle.lineup.firstIndex(of: style.inLineup) ?? 0
+    /// 這一下手勢的邊界照起手的那張臉（library 下標）。預覽已經把畫面換成目標臉，不能改用那個 index：
+    /// 從第二張往前滑時畫面先變成第一張，若用第一張的 index，canPrev 變 false，放手的停點裡沒有「上一頁」，永遠彈回第二張。
+    static func gestureOrigin(_ i: Int, count: Int) -> Int {
+        max(0, min(i, count - 1))
     }
     nonisolated(unsafe) static var drag: Drag?
     nonisolated(unsafe) static var releasedAt = -10.0
@@ -69,10 +71,11 @@ extension PetView {
             Face.pageCancel = nil; Face.pageGoal = 1; face.faceTransition = nil; c()
         }
         guard Shell.nav.screen == .face, Shell.nav.overlay == .none, !Shell.lockFace, !face.inOverview, !face.onboardingActive,
-              !showingVideo, !carVideo.active, !ClioTalkPanel.visible, FacePaging.insideScreen(uv), FaceStyle.lineup.count > 0 else { return }
+              !showingVideo, !carVideo.active, !ClioTalkPanel.visible, FacePaging.insideScreen(uv), PosterLibraryStore.all.count > 0 else { return }
         let c = screenCorners()
         let w = c.count == 4 ? hypot(c[1].x - c[0].x, c[1].y - c[0].y) : 300
-        FacePaging.drag = FacePaging.Drag(at: e.locationInWindow, uv: uv, screenW: w, fromStyle: face.style, fromNav: Shell.nav)
+        FacePaging.drag = FacePaging.Drag(at: e.locationInWindow, uv: uv, screenW: w,
+                                          fromIndex: PosterLibraryStore.index, fromConfig: PosterConfiguration.active, fromNav: Shell.nav)
     }
 
     /// 拖動：回 true＝換頁吃掉了；false＝不是換頁（呼叫端照舊）
@@ -126,8 +129,8 @@ extension PetView {
 
     private func facePageTrack(_ d: inout FacePaging.Drag, now: Double) {
         var x = FacePaging.offset(dx: d.dx, screenWidth: d.screenW)
-        // 邊界照起手的錶面。尾端往前是主畫面；第一個往回沒有下一頁（橡皮筋，不繞到主畫面）
-        let origin = FacePaging.gestureOrigin(d.fromStyle), n = FaceStyle.lineup.count
+        // 邊界照起手的那張臉。尾端往前是主畫面；第一張往回沒有上一頁（橡皮筋，不繞到主畫面）
+        let origin = FacePaging.gestureOrigin(d.fromIndex, count: PosterLibraryStore.all.count), n = PosterLibraryStore.all.count
         d.pager.canPrev = FacePaging.neighbor(dir: -1, index: origin, count: n) != .none
         d.pager.canNext = true
         d.pager.drag(x)
@@ -145,25 +148,58 @@ extension PetView {
         face.forceDirty = true
     }
 
-    /// 把那一頁換上來（過場停在 pageHold）：陣容中間換錶面；頭尾換到主畫面
+    /// 把那一頁換上來（過場停在 pageHold）：中間換「那一張臉」；尾端往前換到主畫面
     private func facePageCommit(_ dir: Int, _ d: FacePaging.Drag) {
-        let target = FacePaging.neighbor(dir: dir, index: FacePaging.gestureOrigin(d.fromStyle), count: FaceStyle.lineup.count)
-        guard target != .none else { return }   // 第一個往回：橡皮筋，不換
+        let target = FacePaging.neighbor(dir: dir, index: FacePaging.gestureOrigin(d.fromIndex, count: PosterLibraryStore.all.count), count: PosterLibraryStore.all.count)
+        guard target != .none else { return }   // 第一張往回：橡皮筋，不換
         Face.pageHold = 0; Face.pageStart = nil; Face.pageGoal = 1; Face.pageCancel = nil
         switch target {
-        case .home: shellNavigate(.page(dir))   // ShellNav：陣容尾端往前是主畫面（過場同一種分頁滑動）
+        case .home: shellNavigate(.page(dir))   // ShellNav：臉的尾端往前是主畫面（過場同一種分頁滑動）
         case .face(let j):
             Face.pagePrev = face.style.inLineup
             Face.pageDirOverride = dir
-            setFaceStyle(FaceStyle.lineup[j])
+            applyLibraryFace(j)
         case .none: break
         }
     }
-    /// 放回拖之前的那個（不另外過場）
+
+    /// W1：換到 library 第 j 張臉——select(j) → PosterConfiguration.current＝該張 → setFaceStyle(該張的 galleryFace, remember: false)。
+    /// remember 必須 false：否則換到 B 臉會把 A 的種類寫進 B（handoff 陷阱）。
+    /// 快照（--face-drag／--poster-select）只動記憶體：selectInMemory＋同步 snapshotOverride＋suppressLibraryWrite（快照不寫偏好）。
+    func applyLibraryFace(_ j: Int) {
+        guard PosterLibraryStore.all.indices.contains(j) else { return }
+        let c = PosterLibraryStore.all[j]
+        if Face.snapshotFreeze {
+            PosterLibraryStore.selectInMemory(j)
+            PosterConfiguration.snapshotOverride = c
+        } else {
+            _ = PosterLibraryStore.select(j)
+        }
+        PosterConfiguration.suppressLibraryWrite = true   // select 已落盤；current 只是對上畫面，不重複寫
+        PosterConfiguration.current = c
+        PosterConfiguration.suppressLibraryWrite = false
+        setFaceStyle(c.galleryFace, remember: false)
+        face.textLayerCache = nil; face.staticCache = nil
+        log("face page → poster \(j) (\(c.galleryFace.rawValue))")
+    }
+
+    /// 放回拖之前的那一張（不另外過場）：整張臉（index＋config＋style），不只放回種類
     private func facePageRestore(_ d: FacePaging.Drag) {
         guard d.dir != 0 else { return }
         if Shell.nav != d.fromNav { Shell.nav = d.fromNav; Shell.pillFrom = nil; Shell.appMorph = nil }
-        if face.style != d.fromStyle { setFaceStyle(d.fromStyle) }
+        if PosterLibraryStore.index != d.fromIndex || face.style != d.fromConfig.galleryFace || PosterConfiguration.current != d.fromConfig {
+            if Face.snapshotFreeze {
+                PosterLibraryStore.selectInMemory(d.fromIndex)
+                PosterConfiguration.snapshotOverride = d.fromConfig
+            } else {
+                _ = PosterLibraryStore.select(d.fromIndex)
+            }
+            PosterConfiguration.suppressLibraryWrite = true
+            PosterConfiguration.current = d.fromConfig
+            PosterConfiguration.suppressLibraryWrite = false
+            setFaceStyle(d.fromConfig.galleryFace, remember: false)
+            face.textLayerCache = nil; face.staticCache = nil
+        }
         face.faceTransition = nil
         Face.pageHold = nil; Face.pageStart = nil; Face.pageGoal = 1; Face.pageCancel = nil
         Face.pagePrev = face.style.inLineup
@@ -190,7 +226,8 @@ extension PetView {
     func facePageDemo(_ x: CGFloat) {
         guard Shell.nav.screen == .face else { return }
         _ = face.render()
-        var d = FacePaging.Drag(at: .zero, uv: CGPoint(x: 0.5, y: 0.5), axis: .horizontal, fromStyle: face.style, fromNav: Shell.nav)
+        var d = FacePaging.Drag(at: .zero, uv: CGPoint(x: 0.5, y: 0.5), axis: .horizontal,
+                                fromIndex: PosterLibraryStore.index, fromConfig: PosterConfiguration.active, fromNav: Shell.nav)
         d.dx = x * d.screenW * (1024 + Face.pageGap) / 1024
         facePageTrack(&d, now: CACurrentMediaTime())
         FacePaging.drag = d
@@ -262,8 +299,17 @@ enum FacePagingSelftest {
         let w: CGFloat = 400
         check(abs(FacePaging.offset(dx: -w * (1024 + Face.pageGap) / 1024 * 0.5, screenWidth: w) + 0.5) < 1e-9, "錶面換頁：螢幕寬的一半＝半頁（1:1）")
         // 2026-11-09 錄影：第二個錶面往前滑，預覽先換成第一個，邊界若改看第一個，canPrev 變 false，放手沒有「上一頁」停點
-        let n = FaceStyle.lineup.count
-        let fromSecond = FacePaging.gestureOrigin(.photos)
+        // W1（2026-11-10）：換頁順序＝臉（PosterLibraryStore.all），下標進 Drag.fromIndex；種類不再是頁
+        let n = 3   // 建 3 張臉測（下標 0/1/2）
+        check(FacePaging.neighbor(dir: 1, index: 1, count: n) == .face(2)
+              && FacePaging.neighbor(dir: 1, index: 2, count: n) == .home
+              && FacePaging.neighbor(dir: -1, index: 1, count: n) == .face(0)
+              && FacePaging.neighbor(dir: -1, index: 0, count: n) == .none,
+              "錶面換頁：鄰居是「下一張自己的臉」；尾端往前＝主畫面、第一張往回＝橡皮筋")   // l10n-ignore：selftest 訊息
+        check(FacePaging.gestureOrigin(1, count: n) == 1 && FacePaging.gestureOrigin(-2, count: n) == 0
+              && FacePaging.gestureOrigin(9, count: n) == 2,
+              "錶面換頁：手勢邊界吃 library 下標（夾在範圍內）")   // l10n-ignore
+        let fromSecond = FacePaging.gestureOrigin(1, count: n)
         var pager = FacePager()
         pager.canPrev = FacePaging.neighbor(dir: -1, index: fromSecond, count: n) != .none
         pager.canNext = true
@@ -273,6 +319,13 @@ enum FacePagingSelftest {
         stuck.canPrev = FacePaging.neighbor(dir: -1, index: 0, count: n) != .none
         stuck.drag(0.6)
         check(fromSecond == 1 && pager.canPrev && landed.target == 1 && stuck.release(velocity: 2).target == 0,
-              "錶面換頁：從第二個往前的邊界照起手的那張，預覽換成第一個之後仍然停得到第一個")   // l10n-ignore
+              "錶面換頁：從第二張往前的邊界照起手的那張，預覽換成第一張之後仍然停得到第一張")   // l10n-ignore
+        // 拖到一半換方向：先把原本那張放回來（index＋config＋style 整張）
+        var lib = PosterLibrary(items: [PosterConfiguration(), PosterConfiguration(), PosterConfiguration()], index: 1)
+        lib.items[2].extras.faceKind = FaceStyle.photos.rawValue
+        _ = lib.select(2)
+        _ = lib.select(1)
+        check(lib.index == 1 && lib.current == lib.items[1],
+              "錶面換頁：換方向時放回起手那張（整張臉，index 回得去）")   // l10n-ignore
     }
 }

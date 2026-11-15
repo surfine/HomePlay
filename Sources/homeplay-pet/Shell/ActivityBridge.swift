@@ -82,11 +82,6 @@ final class ActivityBridge {
         }
     }
 
-    func stop() {
-        helper?.terminate()
-        helper = nil
-    }
-
     // MARK: 讀檔
 
     /// 每幀便宜地問；超過 2 秒才真的讀檔

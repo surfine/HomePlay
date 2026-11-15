@@ -1,5 +1,6 @@
 // 2.0 開場手勢引導：在桌寵自己的螢幕上播幾頁手勢示範（設計稿：手勢引導 canvas，512 稿 ×2＝1024 畫布）。
-// 頁序：歡迎 → 從 👀 往下拉回主畫面 → 拉住停一下開切換器 → 右上角往下拉開控制中心 → 左右滑換頁與資源庫 → 桌寵本身 → 其他手勢。
+// 2026-11-12：依裝置改教（docs/plans/gestures.md 第八節）——觸控板或滑鼠教捲動下拉、右上角往下捲、重按預覽、智慧縮放；觸控教原本的下拉與長按。
+// 頁序：歡迎 → 從頂端的把手往下拉回主畫面 → 拉住停一下開切換器 → 右上角往下拉開控制中心 → 左右滑換頁與資源庫 → 桌寵本身 → 其他手勢。
 // 每頁都能略過；→／Return 下一頁、← 上一頁、Esc 略過。畫在 IntroScreen.swift。
 //
 // 出現時機（取代 1.x 的「操作提示卡」：舊卡教的四件事都收進新引導，不再另外出）：
@@ -247,9 +248,25 @@ enum IntroGuide {
     static func title(_ p: IntroPage, _ i: IntroInput) -> String {
         switch p {
         case .welcome: return L("intro.welcome.title", "嗨，我是 HomePlay")
-        case .home: return i == .touch ? L("intro.home.title.touch", "从 👀 往下拉，回主屏幕") : L("intro.home.title.drag", "从 👀 往下拖，回主屏幕")
-        case .switcher: return i == .touch ? L("intro.switcher.title.touch", "拉住停一下，开 App 切换器") : L("intro.switcher.title.drag", "拖住停一下，开 App 切换器")
-        case .control: return i == .touch ? L("intro.control.title.touch", "右上角往下拉，开控制中心") : L("intro.control.title.drag", "右上角往下拖，开控制中心")
+        // 2026-11-12：觸控板與滑鼠教捲動（游標放在命中區，不必按住）；觸控教原本的下拉
+        case .home:
+            switch i {
+            case .touch: return L("intro.home.title.touch", "从顶端的把手往下拉，回主屏幕")
+            case .trackpad: return L("intro.home.title.trackpad", "光标移到顶端中间，双指往下滑，回主屏幕")
+            case .mouse: return L("intro.home.title.mouse", "光标移到顶端中间，往下滚动，回主屏幕")
+            }
+        case .switcher:
+            switch i {
+            case .touch: return L("intro.switcher.title.touch", "拉住停一下，开 App 切换器")
+            case .trackpad: return L("intro.switcher.title.trackpad", "双指往下滑到一半停住，开 App 切换器")
+            case .mouse: return L("intro.switcher.title.mouse", "按住顶端的把手往下拖，停一下，开 App 切换器")   // 一般滾輪分不出停住和放開：滑鼠教按住拖
+            }
+        case .control:
+            switch i {
+            case .touch: return L("intro.control.title.touch", "右上角往下拉，开控制中心")
+            case .trackpad: return L("intro.control.title.trackpad", "光标移到右上角，双指往下滑，开控制中心")
+            case .mouse: return L("intro.control.title.mouse", "光标移到右上角，往下滚动，开控制中心")
+            }
         case .swipe:
             switch i {
             case .touch: return L("intro.swipe.title.touch", "左右滑换页，最后一页之后是资源库")
@@ -263,9 +280,9 @@ enum IntroGuide {
 
     static func body(_ p: IntroPage, _ i: IntroInput) -> String {
         switch p {
-        case .welcome: return L("intro.welcome.body", "顶端这颗 👀 就是我。\n几个手势，半分钟就会。")
-        case .home: return i == .mouse ? L("intro.home.body.click", "在哪里都一样，CarPlay 也是。按一下 👀 也行。")
-                                       : L("intro.home.body.tap", "在哪里都一样，CarPlay 也是。点一下 👀 也行。")
+        case .welcome: return L("intro.welcome.body", "这颗 👀 就是我。\n几个手势，半分钟就会。")
+        case .home: return i == .touch ? L("intro.home.body.tap", "把手平常藏着，照样能拉；点一下顶端就回主屏幕。CarPlay 上第一下先让把手出现。")
+                                       : L("intro.home.body.pointer", "把手平常藏着，光标靠近就出现；按住往下拖也可以。CarPlay 上也一样。")
         case .switcher:
             switch i {
             case .touch: return L("intro.switcher.body.touch", "左右滑挑一个，往上推掉就关闭。")
@@ -298,7 +315,8 @@ enum IntroGuide {
             // 2026-11-07：兩指旋轉＝原地轉身（跟拖機身同一件事，併成一列，表維持六列）
             return [(L("intro.pet.dragOrTwist", "拖机身，或双指旋转"), rotate), (L("intro.pet.doubleTap", "点两下机身"), front),
                     (L("intro.pet.pinch", "双指捏合"), size), (L("intro.pet.twoFingerSwipe", "双指左右滑"), L("intro.do.pages", "换表盘、换页")),
-                    (L("intro.pet.forceClick", "用力按屏幕（重按）"), carplay), (L("intro.pet.twoFingerClick", "双指点按"), menu)]
+                    // 2026-11-12：重按＝圖示或小工具的預覽與選單（不再進出 CarPlay；空白鍵在「其他手勢」那頁）
+                    (L("intro.pet.forceClickIcon", "用力按图标或小组件（重按）"), L("intro.do.preview", "预览与菜单")), (L("intro.pet.twoFingerClick", "双指点按"), menu)]
         case .touch:
             return [(L("intro.pet.dragBodyFinger", "单指拖机身"), rotate), (L("intro.pet.doubleTap", "点两下机身"), front),
                     (L("intro.pet.pinch", "双指捏合"), size), (L("intro.pet.dragBase", "拖底座"), move),
@@ -308,11 +326,15 @@ enum IntroGuide {
 
     /// 其他手勢
     static func moreRows(_ i: IntroInput) -> [(how: String, what: String)] {
-        [(i == .touch ? L("intro.more.holdEyes.touch", "长按 👀") : L("intro.more.holdEyes", "按住 👀"), L("intro.more.clio", "叫 ClioTalk")),
+        [(i == .touch ? L("intro.more.holdEyes.touch", "长按顶端的把手") : L("intro.more.holdEyes", "按住顶端的把手"), L("intro.more.clio", "叫 ClioTalk")),
          (i == .touch ? L("intro.more.edge.touch", "从左缘往右滑") : L("intro.more.edge.drag", "从左缘往右拖"), L("intro.more.back", "返回上一层")),
-         (L("intro.more.space", "空格键"), L("intro.more.spaceDoes", "同 👀：CarPlay ⇄ 主屏幕")),
+         (L("intro.more.space", "空格键"), L("intro.more.spaceDoes", "CarPlay ⇄ 主屏幕")),
          (L("intro.more.arrows", "CarPlay 上的方向键"), L("intro.more.knob", "像车上的旋钮")),
-         (i == .mouse ? "⌘+  ⌘−" : L("intro.pet.pinch", "双指捏合"), L("intro.more.resize", "把桌宠放大缩小"))]
+         // 觸控板的捏合已經在「桌寵本身」那頁：這裡教智慧縮放（兩指輕點兩下）
+         i == .trackpad ? (L("intro.more.smartZoom", "双指轻点两下"), L("intro.more.smartZoomDoes", "放大桌宠，再点两下回原来大小"))
+                        : (i == .mouse ? L("intro.more.zoomKeys", "⌘+ ⌘− ⌘0、菜单，或按住 ⌥ 滚动") : L("intro.pet.pinch", "双指捏合"), L("intro.more.resize", "把桌宠放大缩小"))]
+        // 2026-11-13：⌥ 加捲動保留，而且要讓人知道——觸控板版多一列，和選單、⌘＋ ⌘− ⌘0 並列（滑鼠版就是上面那一列）
+        + (i == .trackpad ? [(L("intro.more.zoomKeys", "⌘+ ⌘− ⌘0、菜单，或按住 ⌥ 滚动"), L("intro.more.resize", "把桌宠放大缩小"))] : [])
     }
 
     static func inputName(_ i: IntroInput) -> String {
@@ -348,10 +370,20 @@ enum IntroGuide {
         // 選字：手指說「拉／滑」，滑鼠說「拖」，觸控板換頁說「雙指滑」
         let saved = L10n.language
         L10n.language = .zhHans
-        let homeT = title(.home, .touch), homeM = title(.home, .mouse), swipeP = title(.swipe, .trackpad), swipeM = title(.swipe, .mouse)
+        let homeT = title(.home, .touch), homeM = title(.home, .mouse), homeP = title(.home, .trackpad), swipeP = title(.swipe, .trackpad), swipeM = title(.swipe, .mouse)
+        let ctlT = title(.control, .touch), ctlM = title(.control, .mouse), ctlP = title(.control, .trackpad), swT = title(.switcher, .touch), swP = title(.switcher, .trackpad)
+        let padRows = petRows(.trackpad).map { $0.how + $0.what }.joined(), padMore = moreRows(.trackpad).map(\.how).joined()
         L10n.language = saved
-        check(homeT.contains("拉") && homeM.contains("拖") && swipeP.contains("双指") && swipeM.contains("拖") && !swipeM.contains("双指"),   // l10n-ignore：selftest 斷言
+        check(homeT.contains("拉") && swipeP.contains("双指") && swipeM.contains("拖") && !swipeM.contains("双指"),   // l10n-ignore：selftest 斷言
               "手勢引導：依輸入方式換字（手指拉、滑鼠拖、觸控板雙指滑）")   // l10n-ignore：selftest 訊息
+        // 2026-11-12：依裝置改教——觸控板與滑鼠教捲動下拉（游標放在命中區），觸控教原本的下拉；重按教預覽、不再教進出 CarPlay
+        check(homeM.contains("滚") && homeP.contains("双指往下滑") && ctlM.contains("滚") && ctlP.contains("双指往下滑") && swP.contains("停")   // l10n-ignore：selftest 斷言
+              && homeT.contains("往下拉") && ctlT.contains("往下拉") && swT.contains("拉住"),   // l10n-ignore：selftest 斷言
+              "手勢引導：觸控板與滑鼠教捲動下拉與右上角往下捲；觸控教原本的下拉")   // l10n-ignore：selftest 訊息
+        check(padMore.contains("⌥") && moreRows(.mouse).map(\.how).joined().contains("⌥") && !moreRows(.touch).map(\.how).joined().contains("⌥"),
+              "手勢引導：觸控板與滑鼠版列出 ⌥ 加捲動（和選單、⌘＋ ⌘− ⌘0 並列）；觸控版沒有")   // l10n-ignore：selftest 訊息
+        check(padRows.contains("重按") && padRows.contains("预览") && !padRows.contains("CarPlay") && padMore.contains("轻点两下"),   // l10n-ignore：selftest 斷言
+              "手勢引導：觸控板的重按教預覽與選單（不再是進出 CarPlay），並教兩指輕點兩下縮放")   // l10n-ignore：selftest 訊息
         // 2026-11-07 手勢語法：轉身體一律說「拖機身」（不說拖螢幕）；觸控板版要教兩指旋轉
         L10n.language = .zhHans
         let rotRows = IntroInput.allCases.map { i in petRows(i).filter { $0.what == L("intro.do.rotate", "转身体") }.map(\.how).joined() }

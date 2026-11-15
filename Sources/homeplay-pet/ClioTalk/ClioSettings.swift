@@ -108,12 +108,6 @@ enum ClioSettings {
         get { d.object(forKey: "ClioTalkSpeak") as? Bool ?? true }
         set { d.set(newValue, forKey: "ClioTalkSpeak"); note() }
     }
-    /// F5：CarPlay 沒在直播時交給 ClioTalk（直播時一律給 iPhone 的 Siri）
-    static var f5OpensClioTalk: Bool {
-        get { d.object(forKey: "ClioTalkF5") as? Bool ?? true }
-        set { d.set(newValue, forKey: "ClioTalkF5"); note() }
-    }
-
     /// 用說的問完、回答也念完之後再聽 8 秒（不用再按 F5）；說話也能打斷朗讀
     static var followUpListening: Bool {
         get { d.object(forKey: "ClioTalkFollowUp") as? Bool ?? true }
@@ -136,13 +130,13 @@ enum ClioSettings {
     }
 }
 
-/// F5 的分流（純邏輯）：直播中 → iPhone Siri；沒直播且設定打開 → ClioTalk。按下時決定，放開跟著同一邊。
+/// F5 的分流（純邏輯，2026-11-12 定案：不加設定）：畫面是 CarPlay → iPhone 的 Siri；其他時候 → ClioTalk。按下時決定，放開跟著同一邊。
 struct ClioF5Router {
     private(set) var heldForClio = false
     /// 回 true＝這次按鍵歸 ClioTalk（呼叫端不要再送給 iPhone）
-    mutating func route(down: Bool, carPlayLive: Bool, clioEnabled: Bool) -> Bool {
+    mutating func route(down: Bool, carPlayLive: Bool) -> Bool {
         if down {
-            heldForClio = !carPlayLive && clioEnabled
+            heldForClio = !carPlayLive
             return heldForClio
         }
         defer { heldForClio = false }

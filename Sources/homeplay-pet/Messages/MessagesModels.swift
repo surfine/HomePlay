@@ -18,7 +18,6 @@ enum TapbackKind: Int, CaseIterable {
         default: return nil
         }
     }
-    static func isTapbackRow(_ type: Int) -> Bool { (2000...2007).contains(type) || (3000...3007).contains(type) }
 }
 
 struct MsgTapback: Equatable {
@@ -115,8 +114,6 @@ enum HandleKey {
         if digits.isEmpty { return "x:" + s.lowercased() }
         return "p:" + (digits.count > 9 ? String(digits.suffix(9)) : digits)
     }
-    /// 沒有通訊錄名字時顯示用：電話原樣、信箱原樣
-    static func display(_ raw: String) -> String { raw }
     /// 頭像／圓圈上的一個字：取名字第一個字元（中文取第一字、英文大寫）
     static func initial(of name: String) -> String {
         let t = name.trimmingCharacters(in: CharacterSet(charactersIn: "[] \n\t"))

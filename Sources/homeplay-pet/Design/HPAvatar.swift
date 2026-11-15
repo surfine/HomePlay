@@ -210,11 +210,6 @@ enum HPAvatar {
 
 // MARK: - 誰的頭像：帳號頭像、聯絡人照片、👀 人物或縮寫（第五輪：來源見 People/AvatarSources.swift）
 
-extension Person {
-    /// 這個人現在用照片（帳號頭像或聯絡人「我」）
-    var showsContactPhoto: Bool { avatarPhoto != nil }
-}
-
 extension Face {
     /// 畫一個家人的頭像（圓，r 是外框）：帳號頭像 → 聯絡人照片 → 縮寫；選了 👀 才畫 👀 人物
     func drawPersonAvatar(_ g: CGContext, _ person: Person, in r: CGRect) {

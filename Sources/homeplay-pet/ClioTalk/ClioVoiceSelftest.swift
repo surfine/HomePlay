@@ -127,6 +127,12 @@ enum ClioVoiceSelftest {
         var q = ClioVoiceLoop()
         _ = q.press(now: 0); _ = q.release(now: 1); _ = q.turnDone(text: "x", now: 1.2); q.answerSpeaking(); _ = q.onset(now: 2)
         check(q.answerDone(now: 2.5) == [] && q.state == .listening(.handsFree), "插話：念完時人還在講，就接成下一輪")
+        check(q.echoSuspect, "插話：這樣接成的一輪收尾時要再比一次是不是回音")   // l10n-ignore
+        check(q.turnDone(text: "", now: 3) == [.closeMic] && q.state == .off && !q.echoSuspect, "插話：整輪只是自己念的字（被清空）就收麥克風，不送出")   // l10n-ignore
+        var r = ClioVoiceLoop()
+        _ = r.press(now: 0); _ = r.release(now: 1); _ = r.turnDone(text: "x", now: 1.2); r.answerSpeaking(); _ = r.onset(now: 2); _ = r.answerDone(now: 2.5)
+        _ = r.endpoint(now: 3); _ = r.turnDone(text: "y", now: 3.1); r.answerSpeaking(); _ = r.answerDone(now: 4); _ = r.onset(now: 5)
+        check(!r.echoSuspect && r.state == .listening(.handsFree), "插話：下一輪正常開始時不帶著回音嫌疑")   // l10n-ignore
 
         let spoken = "这周有两个生日：周二 10月27日：朋友 A 生日"   // l10n-ignore：測試樣本
         check(ClioEcho.isEcho(heard: "这周有两个生日", spoken: spoken) && ClioEcho.isEcho(heard: "周", spoken: spoken), "回音：跟念的字一樣（或太短）當回音")   // l10n-ignore：測試樣本

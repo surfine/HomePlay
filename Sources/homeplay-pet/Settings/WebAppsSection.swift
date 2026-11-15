@@ -40,7 +40,7 @@ struct WebAppsSection: View {
                             Text(L("webapp.settings.allow", "允许")).tag("allow")
                             Text(L("webapp.settings.deny", "拒绝")).tag("deny")
                         } label: {
-                            Label(p.title, systemImage: p.symbol)
+                            Text(p.title)   // 列裡不放圖示
                         }
                     }
                     LabeledContent {

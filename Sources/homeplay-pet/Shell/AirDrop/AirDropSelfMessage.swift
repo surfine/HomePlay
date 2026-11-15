@@ -98,6 +98,7 @@ enum SelfShare {
         let dir = base.appendingPathComponent(UUID().uuidString, isDirectory: true)
         let alt = fm.temporaryDirectory.appendingPathComponent("homeplay-selfshare/\(UUID().uuidString)", isDirectory: true)
         prune(base, fm: fm)
+        prune(fm.temporaryDirectory.appendingPathComponent("homeplay-selfshare", isDirectory: true), fm: fm)   // 退到暫存資料夾的那些也要清
         for d in [dir, alt] {
             guard (try? fm.createDirectory(at: d, withIntermediateDirectories: true)) != nil else { continue }
             switch piece {

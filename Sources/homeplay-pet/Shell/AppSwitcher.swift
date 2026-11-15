@@ -201,17 +201,18 @@ extension PetView {
         let a = CommandLine.arguments, now = CACurrentMediaTime()
         if let m = CarPlayDemo.mode {
             if Shell.homeHue == nil { let shot = face.render(); Shell.homeHue = Shell.hue(fromFace: shot, face: face); Shell.captureHomeBackdrop(shot) }
-            let pill = face.capsuleCore ?? Shell.pillRect(0)
+            let pill = face.capsuleCore ?? HomeHandle.rect
             CarPlayChrome.shared.prepareForSnapshot(face: face, now: now, backdropFrom: CarPlayDemo.frame)
             AppSwitcher.shots[CarPlayApp.id] = CarPlayChrome.scaled(CarPlayChrome.shared.composite(CarPlayDemo.frame), to: 1024)
             switch m {
-            case "background":   // 會話在背景：主畫面（頂端藥丸掛 CarPlay 角標、正在播放）
+            case "background":   // 會話在背景：主畫面（頂端多一顆 CarPlay 的小藥丸）
                 face.status = .background
+                Shell.pillT = 1
                 if Shell.nav.screen == .face { Shell.nav.screen = .home }
             case "toface":   // 從 CarPlay 回錶面：膠囊從那條帶滑回錶面上的位置（HOMEPLAY_ANIM=cpglide:t）
                 face.status = .background
                 Shell.nav = ShellNav()
-                Face.capsuleGlide = (HomeIndicator.carPlayCapsule(inset: HomeIndicator.inset), now)
+                Face.capsuleGlide = (HomeHandle.rect, now)
             default:   // front／glide：CarPlay 在前面（glide＝膠囊從剛才的位置滑進帶裡，HOMEPLAY_ANIM=cpglide:t）
                 face.status = .live
                 Shell.nav = ShellNav(screen: .app(CarPlayApp.id), overlay: .none, appReturn: .home)

@@ -198,14 +198,13 @@ struct PeoplePane: View {
 
     var body: some View {
         Form {
+            PaneHeaderCard(section: .people)
             Section {
                 ToggleRow(title: L("people.pane.recognize", "认出谁在看"),
                           subtitle: !m.gazeFollow ? L("people.pane.recognize.needsFollow", "需要先在「相机」里打开「跟随我」")
                              : ownerUnset ?? L("people.pane.recognize.sub", "个人内容只给认出的主人看"),
                           symbol: "person.crop.square.fill", tint: SettingsSection.people.tint, info: recognizeInfo,
                           isOn: Binding(get: { model.recognize }, set: { WhoIsLooking.recognitionEnabled = $0; model.refresh() }))
-            } header: {
-                IllustrationHeader(scene: .people, note: L("people.pane.demoNote", "认出你，才显示你的那一份"))
             }
 
             Section {

@@ -73,15 +73,21 @@ enum CompanionLog {
         guard !arr.contains(today) else { return }
         arr.append(today)
         UserDefaults.standard.set(Array(arr.suffix(400)), forKey: key)
+        monthCache = nil
     }
     /// 这个月打开过的日子（几号）
+    /// 錶面每次重畫（含眨眼的每一幀）都會問；解析最多 400 個日期字串一次要十幾毫秒，所以按「今天」記住結果
+    nonisolated(unsafe) private static var monthCache: (day: String, days: Set<Int>)?
     static func daysThisMonth() -> Set<Int> {
         let f = fmt(), cal = Calendar.current, now = Date()
+        let today = f.string(from: now)
+        if let c = monthCache, c.day == today { return c.days }
         var out = Set<Int>()
         for s in UserDefaults.standard.stringArray(forKey: key) ?? [] {
             guard let d = f.date(from: s), cal.isDate(d, equalTo: now, toGranularity: .month) else { continue }
             out.insert(cal.component(.day, from: d))
         }
+        monthCache = (today, out)
         return out
     }
 }

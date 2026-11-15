@@ -9,10 +9,12 @@
 // - 類別之間與類別內都照啟動次數排（ATXAppDirectoryOrderingProvider），不是字母。
 // - 搜尋是另一層（SBHLibrarySearchController）：前綴命中優先，其餘 A→Z。
 //
-// HomePlay 目前做得到的：類別順序、空類別不畫、前綴優先的搜尋、iPhone App 另成一區。
-// 🟡 還做不到：啟動次數排序（沒有這本帳，先 A→Z／固定順序）、第三方 App 的 genre（只有本機 App，
-// 每個自家 App 手寫對映；Web App 一律 Other）、豆莢縮圖與點開、Suggestions／Recents 兩顆。
+// HomePlay 目前做得到的：類別順序、空類別不畫、前綴優先的搜尋、建議／最近加入兩顆、豆莢與展開頁；
+// iPhone 的 App 混進各分類、用徽章區分（2026-11-12 定案；搜尋結果裡仍標一區「iPhone」）。
+// 🟡 還做不到：第三方 App 的 genre——自家 App 手寫對映、Web App 一律 Other；iPhone 的 App 只有佔位 App 的
+// Info.plist 帶 LSApplicationCategoryType 的才分得出類別（本機實測約四分之一），其餘進 Other。
 
+import AppKit
 import Foundation
 
 /// 開啟次數（App Library 的排序依據）。系統有兩本帳：裝置上的開啟次數（`_appLaunchCounts`）與
@@ -63,24 +65,32 @@ enum AppLaunchCounts {
         return library[id] ?? 0
     }
 
-    /// 快照：`--launch-counts timers=9,music=3` 假裝有這些開啟次數（只影響這次執行，不寫偏好）。
-    /// 用來驗「類別內照次數排」而不依賴這台 Mac 的使用習慣。
-    /// 同時合成一份逐日歷史（每天一次，連續 n 天）給「建議」豆莢的評分用——不然快照永遠看不到建議。
+    /// 快照：`--launch-counts timers=9,music=3` 假裝總開啟次數（只影響這次執行，不寫偏好）。
+    /// `--library-launches id=5` 假裝從資料庫開過的次數，分類去重看的是這一本。
+    /// 總次數同時合成逐日歷史（每天一次）給「建議」豆莢——不然快照永遠看不到建議。
     static func parseSnapshotArgs(_ args: [String]) {
-        guard let i = args.firstIndex(of: "--launch-counts"), i + 1 < args.count else { return }
-        var a: [String: Int] = [:]
+        func pairs(_ flag: String) -> [String: Int] {
+            guard let i = args.firstIndex(of: flag), i + 1 < args.count else { return [:] }
+            var out: [String: Int] = [:]
+            for kv in args[i + 1].split(separator: ",") {
+                let p = kv.split(separator: "=").map(String.init)
+                guard p.count == 2, let n = Int(p[1]), n >= 0 else { continue }
+                out[p[0]] = n
+            }
+            return out
+        }
+        let a = pairs("--launch-counts")
+        let lib = pairs("--library-launches")
+        guard !a.isEmpty || !lib.isEmpty else { return }
         var hist: [String: [Int: Int]] = [:]
         let today = AppLaunchHistory.dayIndex()
-        for kv in args[i + 1].split(separator: ",") {
-            let p = kv.split(separator: "=").map(String.init)
-            guard p.count == 2, let n = Int(p[1]), n >= 0 else { continue }
-            a[p[0]] = n
+        for (id, n) in a {
             var m: [Int: Int] = [:]
-            for back in 0..<min(n, AppLaunchHistory.window) { m[today - back] = 1 }   // 一天一次
-            hist[p[0]] = m
+            for back in 0..<min(n, AppLaunchHistory.window) { m[today - back] = 1 }
+            hist[id] = m
         }
-        override = (apps: a, library: [:])
-        AppLaunchHistory.override = hist
+        override = (apps: a, library: lib)
+        if !hist.isEmpty { AppLaunchHistory.override = hist }
     }
 
     /// 類別內的順序：次數高的在前，平手照名字（系統的 _appBundleIDTotalLaunchComparator）
@@ -135,8 +145,6 @@ enum AppLaunchCounts {
 // HomePlay 的畫布是 1024（不是 1032），套用時按比例縮，或整組當成「1032 座標系」再縮。
 enum SBLPodMetrics {
     static let referenceWidth: CGFloat = 1032       // 量測時的螢幕寬
-    static let searchSize = CGSize(width: 334, height: 48)
-    static let searchCornerRadius: CGFloat = 24
     static let podSize = CGSize(width: 178.33, height: 201.5)
     static let iconSize: CGFloat = 72
     static let iconPitch: CGFloat = 80
@@ -144,7 +152,6 @@ enum SBLPodMetrics {
     static let podPadding: CGFloat = 13
     static let podLabelHeight: CGFloat = podSize.height - (podPadding + iconSize + iconGap + iconSize)   // 36.5
     static let firstPodLeft: CGFloat = 111
-    static let firstPodTop: CGFloat = 532
 
     /// 一頁幾欄。實機直向、橫向都是 4 欄（OCR 標籤中心 pitch 一致）。
     static let podColumnCount = 4
@@ -227,8 +234,7 @@ enum SBLPodZoom {
 // 豆莢是 2×2 大格；> 4 個 App 時右下那一格換成 2×2 的四顆小圖示（共 3 大 + 4 小）；
 // ≤ 4 個 App 時四顆全大、沒有小叢集。
 //
-// 這裡只算「哪一格放什麼」。豆莢的邊長、圓角、欄距還沒有固件數字，所以畫面仍用四欄清單，
-// 不憑感覺造豆莢版面。
+// 這裡只算「哪一格放什麼」。畫出來的欄寬在 SBLPodGrid。
 enum SBLCategoryPod {
     enum Slot: Equatable {
         /// 大圖示（2×2 的其中一格）
@@ -244,8 +250,8 @@ enum SBLCategoryPod {
             // 四顆（或更少）全是大圖示，沒有小叢集
             return (0..<count).map { .large($0) }
         }
-        // 3 大 + 右下角的 4 小小叢集
-        let cluster = Array(4..<min(count, 8))
+        // 3 大 + 右下 4 小，一共 7 個，從第 4 個接下去，不跳號。多出來的只在展開頁。
+        let cluster = Array(3..<min(count, 7))
         return [.large(0), .large(1), .large(2), .cluster(cluster)]
     }
 
@@ -350,6 +356,8 @@ enum AppInstallDates {
     private static func map() -> [String: Double] {
         if let o = override { return o }
         if let d = dates { return d }
+        // 跟開啟次數同一條：快照與自檢不讀這台 Mac 的帳，不然「最近添加」每次不一樣。
+        if AppLaunchCounts.frozen { return [:] }
         let stored = UserDefaults.standard.dictionary(forKey: key) as? [String: Double]
         dates = stored ?? [:]
         return dates ?? [:]
@@ -424,17 +432,45 @@ enum AppSuggestionScore {
 
 
 //
-// 只有一套格子，就是主畫面那組（98.5 起、欄距 225、圖示 152、首列頂 241、列距 240、右緣 925.5）。
-// 一顆豆莢＝主畫面相鄰的兩欄、相鄰的兩列。四顆圖示就落在那四格上，不另起欄寬、不另起列距。
-// 標籤用主畫面同一條：圖示底再 41。畫布放得下主畫面的前三列，所以一列豆莢（第 1、2 列）完整，
-// 下一列豆莢（第 3、4 列）跟主畫面的第四列一樣，在畫面下面，捲動才看到。
+// 2026-11-12 設計稿定案（取代 2026-11-11 的 3 欄／圖示 110）：
+// - 四欄，尺寸用 iPad 量到的（SBLPodMetrics，1032 寬）乘 1024/1032 換到畫布：底板 176.9 見方、大圖示 71.4、
+//   小圖示 31.8、內距 12.9、圖示縫 7.9、列距 215。分類名稱在底板下方一行（豆莢外面），置中、單行、太長就截斷。
+// - 每顆豆莢的中心對準主畫面的欄心（174.5、399.5、624.5、849.5），所以外緣是 86／938，不是 98.5／925.5。
+// - 頁首：搜尋欄佔第 1–3 欄（98.5…700.5），頭像留在和主畫面同一個位置。豆莢從 y241（主畫面第一列的頂）起，
+//   三列完整，第四列露出上半。
+// - iPhone 上的 App 混進各分類，用徽章區分（不另成一顆「iPhone」豆莢）。
+// - 四個以內全部大圖示，超過四個第四格變小圖示群；點那一格或分類名稱展開，展開頁用主畫面那種四欄圖示（152）。
 
 enum SBLPodKind: Equatable {
     case suggestions
     case recentlyAdded
     case hidden
-    case iphone
     case category(SBLibraryCategory)
+
+    /// 點標題開的那一頁。建議最多 4 顆、豆莢裡全畫得出來，沒有展開頁。
+    var page: SBLibraryPage? {
+        switch self {
+        case .suggestions: return nil
+        case .recentlyAdded: return .recentlyAdded
+        case .hidden: return .hidden
+        case .category(let c): return .category(c)
+        }
+    }
+}
+
+/// 展開頁是哪一顆豆莢。分類、最近添加、已隱藏都能開；建議不能。
+enum SBLibraryPage: Equatable {
+    case category(SBLibraryCategory)
+    case recentlyAdded
+    case hidden
+
+    var title: String {
+        switch self {
+        case .category(let c): return c.title
+        case .recentlyAdded: return L("sb.library.cat.recents", "最近添加")
+        case .hidden: return L("sb.library.cat.hidden", "已隐藏")
+        }
+    }
 }
 
 struct SBLPod: Equatable {
@@ -447,33 +483,40 @@ struct SBLPod: Equatable {
 }
 
 enum SBLPodGrid {
-    /// 一列兩顆。每顆佔主畫面的兩欄，所以欄數是主畫面的一半。
-    static let columns = 2
-    static let iconSide: CGFloat = HPTokens.Home.iconSide        // 152，跟主畫面同一顆
-    /// 標籤佔的就是主畫面一格裡圖示底下那一截（格子高 218、圖示 152）。
-    static var labelBand: CGFloat { Shell.rowH - iconSide }
-    static let margin: CGFloat = HPGrid.Home.margin
-    /// 主畫面兩顆圖示中間的縫（225 − 152）。豆莢和豆莢之間用同一條。
-    static var columnGap: CGFloat { HPTokens.Home.columnPitch - iconSide }
-    /// 左緣到右緣＝兩顆主畫面圖示＋中間那條縫。圖示貼著這條外緣，不再往內縮。
-    static var podWidth: CGFloat { iconSide * 2 + columnGap }
-    /// 底板只包住四顆圖示：上緣是第一列圖示的頂，下緣是第二列圖示的底。標籤在底板下面。
-    static var podHeight: CGFloat { HPTokens.Home.rowPitch + iconSide }
-    /// 兩欄主畫面的寬度。第二顆豆莢的左緣＝主畫面第三欄的左緣。
-    static var columnPitch: CGFloat { HPTokens.Home.columnPitch * 2 }
-    /// 下一列豆莢從再下面兩列主畫面開始。中間剩下的就是主畫面本來的列縫。
-    static var rowPitch: CGFloat { HPTokens.Home.rowPitch * 2 }
-    static var rowGap: CGFloat { rowPitch - podHeight - labelBand }
-    static let miniSide: CGFloat = 48
-    static let miniPitch: CGFloat = 64
-    static var labelHeight: CGFloat { labelBand }
-    /// 豆莢圓角。**量出來的，不是猜的**：iPad 11" 實機截圖上，把豆莢左／上緣的亞像素邊界取出來
-    /// （用「覆蓋率 0.5」反演，不是憑顏色），再對那一圈做圓擬合：
-    /// 建議豆莢 r = 25.71 pt（左上）/ 25.84 pt（右上），殘差平均 0.23 px、最大 0.64 px；
-    /// 擬合圓心推回左緣 121.1 px、上緣 731.6 px，跟直接量到的邊界一致。
-    /// 豆莢寬 159.6 pt ⇒ **r / 寬 = 0.162**。
-    /// 形狀是圓弧，不是連續圓角：同一批點用連續圓角對不上（差數 px），圓弧殘差只有 0.23 px。
-    static var cornerRadius: CGFloat { podWidth * SBLPodMetrics.podCornerRatio }
+    /// 2026-11-12 外殼版面規格（docs/plans/shell-layout.md 第 7 節）：一列三顆，左右外緣貼內容邊線 98.5／925.5。
+    /// 尺寸由三欄寬度推出，所有縫都取 HPGrid.scale：豆莢之間 16、豆莢內距 16、大圖示之間 16 ⇒ 大圖示 108.5。
+    /// iPad 量到的比例（SBLPodMetrics）留作參考，不再直接換算。
+    static let columns = 3
+    /// 豆莢之間的橫向縫
+    static let columnGap: CGFloat = 16
+    /// 底板是正方形：(827 − 2 × 16) ÷ 3 = 265
+    static var podWidth: CGFloat { (HPGrid.Content.width - CGFloat(columns - 1) * columnGap) / CGFloat(columns) }
+    static var podHeight: CGFloat { podWidth }
+    /// 圖示離底板外緣
+    static let podPadding: CGFloat = 16
+    /// 大圖示之間的縫
+    static let iconGap: CGFloat = 16
+    /// 豆莢內的大圖示：(265 − 2 × 16 − 16) ÷ 2 = 108.5（規格「約 108」，不小於 88）
+    static var iconSide: CGFloat { (podWidth - 2 * podPadding - iconGap) / 2 }
+    /// 底板下方的名稱那一行
+    static let labelBand: CGFloat = 56
+    /// 名稱底到下一列底板的縫
+    static let rowGap: CGFloat = 16
+    static let margin: CGFloat = HPGrid.Content.leading
+    /// 底板＋名稱＋縫＝337
+    static var rowPitch: CGFloat { podHeight + labelBand + rowGap }
+    /// 第四格的小圖示群：2×2，小圖示之間 8，四顆剛好填滿一格（(108.5 − 8) ÷ 2 ≈ 50.3）
+    static let miniGap: CGFloat = 8
+    static var miniSide: CGFloat { (iconSide - miniGap) / 2 }
+    static var miniPitch: CGFloat { miniSide + miniGap }
+    /// 展開頁：主畫面那種四欄圖示（152、欄距 225、列距 240）
+    static let expandedColumns = 4
+    static var expandedRowPitch: CGFloat { HPTokens.Home.rowPitch }
+    /// 圖示的圓角（連續圓角的係數，跟 Shell 畫圖示用的同一個）
+    static var iconCorner: CGFloat { iconSide * 0.2237 }
+    /// 豆莢圓角：不貼邊的容器跟裡面的東西同心＝圖示圓角＋內距（24.3 + 16 ≈ 40.3）。
+    /// 形狀是圓弧，不是連續圓角（實機圓擬合殘差 0.23 px 支持圓弧）。
+    static var cornerRadius: CGFloat { HPTokens.Radius.enclosing(content: iconCorner, padding: podPadding) }
     /// 豆莢底板的等效白幕覆蓋率。實機量到：豆莢外壁紙 121、豆莢內（無圖示處）135，
     /// `135 = 121·(1−α) + 255·α` ⇒ α = 0.104。
     /// 系統的 `podBackgroundView*.visualstyleset` 是「vibrantColorMatrix ＋白 0.7255 染色」，
@@ -481,42 +524,63 @@ enum SBLPodGrid {
     /// 與實測「豆莢內仍看得到背景色」矛盾，所以照實測的等效白幕做。
     static var veil: CGFloat { SBLPodMetrics.podVeil }
 
+    /// 第 index 顆豆莢的底板（正方形）。名稱在它下面，見 labelFrame。
     static func podFrame(_ index: Int, top: CGFloat) -> CGRect {
-        let c = index % columns, r = index / columns
-        return CGRect(x: margin + CGFloat(c) * columnPitch, y: top + CGFloat(r) * rowPitch,
+        let col = index % columns, r = index / columns
+        return CGRect(x: margin + CGFloat(col) * (podWidth + columnGap), y: top + CGFloat(r) * rowPitch,
                       width: podWidth, height: podHeight)
+    }
+    /// 底板下方的名稱那一行
+    static func labelFrame(_ pod: CGRect) -> CGRect { CGRect(x: pod.minX, y: pod.maxY, width: pod.width, height: labelBand) }
+    /// 名稱的點按範圍（點它＝展開）：往上補進底板的下內距、往下補到下一列底板之前，高 16 + 56 + 16 = 88（規格的點按底線）
+    static func labelHit(_ pod: CGRect) -> CGRect {
+        CGRect(x: pod.minX, y: pod.maxY - podPadding, width: pod.width, height: podPadding + labelBand + rowGap)
     }
 
     /// 豆莢裡大圖示的框（2×2：0 左上、1 右上、2 左下、3 右下）。
-    /// 座標就是主畫面那一格的圖示：橫向欄距 225、直向列距 240。
     static func largeFrame(_ slot: Int, in pod: CGRect) -> CGRect {
         let c = slot % 2, r = slot / 2
-        return CGRect(x: pod.minX + CGFloat(c) * HPTokens.Home.columnPitch,
-                      y: pod.minY + CGFloat(r) * HPTokens.Home.rowPitch,
+        let pitch = iconSide + iconGap
+        return CGRect(x: pod.minX + podPadding + CGFloat(c) * pitch,
+                      y: pod.minY + podPadding + CGFloat(r) * pitch,
                       width: iconSide, height: iconSide)
     }
 
-    /// 小叢集那一格（右下）裡的第 i 顆（2×2，居中）
+    /// 小圖示群那一格（右下）裡的第 i 顆（2×2，填滿那一格）
     static func miniFrame(_ i: Int, in pod: CGRect) -> CGRect {
         let cell = largeFrame(3, in: pod)
-        let span = miniSide * 2 + (miniPitch - miniSide)
-        let ox = cell.midX - span / 2, oy = cell.midY - span / 2
-        return CGRect(x: ox + CGFloat(i % 2) * miniPitch, y: oy + CGFloat(i / 2) * miniPitch,
+        return CGRect(x: cell.minX + CGFloat(i % 2) * miniPitch, y: cell.minY + CGFloat(i / 2) * miniPitch,
                       width: miniSide, height: miniSide)
     }
 
-    /// 一頁要擺的豆莢：建議、最近添加、各分類（DH 順序、空類別不畫）、iPhone、已隱藏（沒有就不畫）
+    /// 一頁要擺的豆莢（docs/plans/shell-layout.md 第 7 節）：建議、最近添加（沒有就不畫）、各分類（≥ 3 個 App）、
+    /// 已隱藏（沒有就不畫）、其他（永遠最後）。iPhone 的 App 混在分類裡。
     /// 最近添加最多留幾個。系統 `_updateRecentsForInstalledApps:` 收尾是 `w1 = #8`
-    /// （`NSMakeRange(0,8)` 的長度），豆莢本身只畫 4 格。
+    /// （`NSMakeRange(0,8)` 的長度）。1～4 顆全畫成大圖示；超過 4 顆是 3 大＋小叢集。
     static let recentsCapacity = 8
+    /// 一個分類至少要有幾個 App 才自成一顆豆莢；不到的併進「其他」
+    static let minimumCategorySize = 3
     /// 主畫面上的 App，從資料庫開啟還不到這麼多次，就從分類裡拿掉。
     /// `_reorderAndHideDupesForAppsInCategory:` 的 block（0x22e8f37a0）：在
     /// `_homescreenAppsToDedupeAgainst`（ivar +0xd0）裡，而且 `_libraryAppLaunchCounts`（ivar +0x10）
     /// 比 5 小（`fcmp d8, #5; b.pl` 跳過刪除），就從那一類移除。
     static let homeScreenDedupeLaunches = 5
+    /// 2026-11-13 使用者定案：分類包含全部 App，不管它在不在主畫面上（同 iOS 的 App 資料庫）。
+    /// 固件的那條去重在桌寵上會把分類掏空（剩下的都不到 3 個、全併進「其他」），所以不採用；門檻留著當記錄。
+    static let dedupesHomeScreenApps = false
 
+    /// iPhone 的 App 不套去重：它們原本在自己的「iPhone」豆莢裡一律列出（不管主畫面上有沒有），
+    /// 混進分類之後維持「資料庫裡一定找得到」，靠徽章區分。
     static func showsInCategory(_ id: String, homeScreenApps: Set<String>) -> Bool {
-        !(homeScreenApps.contains(id) && AppLaunchCounts.libraryCount(id) < homeScreenDedupeLaunches)
+        guard dedupesHomeScreenApps, !id.hasPrefix(PhoneCarPlayApp.idPrefix) else { return true }
+        return !(homeScreenApps.contains(id) && AppLaunchCounts.libraryCount(id) < homeScreenDedupeLaunches)
+    }
+
+    /// 分類豆莢與展開頁共用的分組：拿掉 iPhone 上跟桌寵自己的 App 同名的那一個、套主畫面去重，
+    /// 不到 3 個的分類併進「其他」，「其他」排最後。每個 App 只會出現在一類。
+    static func categoryGroups(_ apps: [PetApp], homeScreenApps: Set<String>) -> [(category: SBLibraryCategory, apps: [PetApp])] {
+        let listed = SBLibraryCategory.withoutPhoneTwins(apps).filter { showsInCategory($0.id, homeScreenApps: homeScreenApps) }
+        return SBLibraryCategory.mergedGroups(listed)
     }
 
     static func pods(_ apps: [PetApp], homeWidgetApps: Set<String> = [],
@@ -529,38 +593,38 @@ enum SBLPodGrid {
             let picked = ranked.prefix(4).compactMap { AppRegistry.app($0) }
             out.append(pod(.suggestions, L("sb.library.cat.suggestions", "建议"), picked))
         }
-        // 最近添加：安裝日期新的在前（沒有日期就退回 AppRegistry 的追加順序）
-        let visible = apps.filter { !AppRegistry.hidden.contains($0.id) }
-        let recent = visible.sorted { a, b in
-            let da = AppInstallDates.date(a.id) ?? 0, db = AppInstallDates.date(b.id) ?? 0
-            if da != db { return da > db }
-            return registryIndex(a.id) > registryIndex(b.id)
+        // 容量 8。豆莢最多畫 7 顆（3 大＋小叢集）；第 8 顆在展開頁。沒有東西就不畫。
+        let picked = recentApps(apps)
+        if !picked.isEmpty {
+            out.append(pod(.recentlyAdded, L("sb.library.cat.recents", "最近添加"), picked))
         }
-        if recent.count > 4 {
-            out.append(pod(.recentlyAdded, L("sb.library.cat.recents", "最近添加"),
-                           Array(recent.prefix(recentsCapacity).prefix(4))))
-        }
-        let own = apps.filter { !($0 is PhoneCarPlayApp) }
-        for c in SBLibraryCategory.orderedCategories(own) {
-            let group = own.filter {
-                SBLibraryCategory.category(for: $0) == c && showsInCategory($0.id, homeScreenApps: homeScreenApps)
-            }
-            guard !group.isEmpty else { continue }
-            out.append(pod(.category(c), c.title, AppLaunchCounts.order(group)))
-        }
-        let phone = apps.filter { $0 is PhoneCarPlayApp }
-        if !phone.isEmpty {
-            out.append(pod(.iphone, L("sb.library.iphone", "iPhone"), AppLaunchCounts.order(phone)))
+        let groups = categoryGroups(apps, homeScreenApps: homeScreenApps)
+        for (c, group) in groups where c != .other {
+            out.append(pod(.category(c), c.title, group))
         }
         let hidden = AppRegistry.all.filter { AppRegistry.hidden.contains($0.id) }
         if !hidden.isEmpty {
             out.append(pod(.hidden, L("sb.library.cat.hidden", "已隐藏"), hidden))
         }
+        if let other = groups.first(where: { $0.category == .other }) {
+            out.append(pod(.category(.other), other.category.title, other.apps))
+        }
         return out
     }
 
-    private static func registryIndex(_ id: String) -> Int {
-        AppRegistry.all.firstIndex { $0.id == id } ?? 0
+    /// 最近添加：只列裝好之後才加進來的（iPhone 的 App、加到主畫面的網頁），不含內建 App。
+    /// 要有加進來的日期才算（沒有日期＝這本帳開始前就在，不是「最近」；不然這顆會跟「其他」長得一樣）。
+    /// 日期新的在前、同一刻照名字，最多 8 顆。
+    static func recentApps(_ apps: [PetApp]) -> [PetApp] {
+        let added = SBLibraryCategory.withoutPhoneTwins(apps).filter {
+            !AppRegistry.hidden.contains($0.id) && SBLibraryCategory.isAddedLater($0) && (AppInstallDates.date($0.id) ?? 0) > 0
+        }
+        let recent = added.sorted { a, b in
+            let da = AppInstallDates.date(a.id) ?? 0, db = AppInstallDates.date(b.id) ?? 0
+            if da != db { return da > db }
+            return a.title.localizedStandardCompare(b.title) == .orderedAscending
+        }
+        return Array(recent.prefix(recentsCapacity))
     }
 
     private static func pod(_ kind: SBLPodKind, _ title: String, _ apps: [PetApp]) -> SBLPod {
@@ -639,9 +703,33 @@ enum SBLibraryCategory: String, CaseIterable {
         "carplay": .other,         // 手機的 App 入口，系統的 App Library 沒有這一類
     ]
 
-    /// 一個 App 落在哪一類。iPhone 的 App 不走這裡（另成一區，照 Mac 的 App 瀏覽）；
+    /// iPhone 的系統 App（佔位 App 沒帶類別）：照系統 App Library 的歸類
+    private static let phoneSystem: [String: SBLibraryCategory] = [
+        "com.apple.Maps": .travel, "com.apple.Music": .entertainment, "com.apple.podcasts": .entertainment, "com.apple.mobilephone": .social,
+    ]
+    /// LSApplicationCategoryType（public.app-category.*）對到資料庫的分類。🟡 對映是照 App Store 類別名與系統顯示名手寫的
+    static func category(genre: String?) -> SBLibraryCategory? {
+        guard let g = genre?.replacingOccurrences(of: "public.app-category.", with: "") else { return nil }
+        switch g {
+        case let x where x.hasSuffix("games"): return .games
+        case "social-networking": return .social
+        case "entertainment", "music", "video", "sports": return .entertainment
+        case "photography", "graphics-design": return .creativity
+        case "productivity", "finance", "business", "developer-tools": return .productivity
+        case "education": return .education
+        case "books", "news", "reference", "weather", "magazines-newspapers": return .reading
+        case "healthcare-fitness", "medical": return .health
+        case "utilities": return .utilities
+        case "food-drink", "shopping": return .shopping
+        case "travel", "navigation": return .travel
+        default: return nil
+        }
+    }
+
+    /// 一個 App 落在哪一類。iPhone 的 App 照佔位 App 帶的類別（LSApplicationCategoryType），沒帶的進 Other；
     /// Web App 沒有 genre，一律 Other。
     static func category(for app: PetApp) -> SBLibraryCategory {
+        if let p = app as? PhoneCarPlayApp { return phoneSystem[p.entry.bundleID] ?? category(genre: p.entry.genre) ?? .other }
         if let c = own[app.id] { return c }
         if app.id.hasPrefix(WebApp.idPrefix) { return .other }
         return .other
@@ -672,14 +760,47 @@ enum SBLibraryCategory: String, CaseIterable {
             if !phone.isEmpty { out.append((L("sb.library.iphone", "iPhone"), phone)) }
             return out
         }
-        var out: [(title: String?, apps: [PetApp])] = []
-        for c in orderedCategories(own) {
-            let group = own.filter { category(for: $0) == c }
-            guard !group.isEmpty else { continue }   // 空類別不畫
-            out.append((c.title, AppLaunchCounts.order(group)))   // 類別內：開啟次數高的在前，平手照名字
+        // iPhone 的 App 混在各分類裡；跟豆莢同一套分組（同名的 iPhone App 不重複、不到 3 個併進其他、其他最後）
+        return mergedGroups(withoutPhoneTwins(apps)).map { ($0.category.title, $0.apps) }
+    }
+
+    /// 分組：空類別不畫；不到 `SBLPodGrid.minimumCategorySize` 個 App 的類別併進「其他」；
+    /// 類別照 orderedCategories 排，「其他」永遠最後。類別內：開啟次數高的在前，平手照名字。
+    static func mergedGroups(_ apps: [PetApp]) -> [(category: SBLibraryCategory, apps: [PetApp])] {
+        var other: [PetApp] = apps.filter { category(for: $0) == .other }
+        var out: [(category: SBLibraryCategory, apps: [PetApp])] = []
+        for c in orderedCategories(apps) where c != .other {
+            let group = apps.filter { category(for: $0) == c }
+            guard !group.isEmpty else { continue }
+            if group.count < SBLPodGrid.minimumCategorySize { other += group; continue }
+            out.append((c, AppLaunchCounts.order(group)))
         }
-        if !phone.isEmpty { out.append((L("sb.library.iphone", "iPhone"), AppLaunchCounts.order(phone))) }
+        if !other.isEmpty { out.append((.other, AppLaunchCounts.order(other))) }
         return out
+    }
+
+    /// iPhone 上跟桌寵自己的 App 是同一個的（例如「訊息」）：同一個系統 App 的 bundle id，或名字一樣
+    private static let ownTwins: [String: String] = [
+        "com.apple.MobileSMS": "messages", "com.apple.facetime": "facetime", "com.apple.Music": "music",
+        "com.apple.podcasts": "podcasts", "com.apple.weather": "weather", "com.apple.mobilecal": "calendar",
+        "com.apple.reminders": "reminders", "com.apple.mobilesafari": "safari", "com.apple.MobileAddressBook": "contacts",
+        "com.apple.findmy": "findmy", "com.apple.Home": "home", "com.apple.Preferences": "settings",
+    ]
+    /// 拿掉桌寵自己有的 App 在 iPhone 上的同名那一個（桌寵的那一個留著）
+    static func withoutPhoneTwins(_ apps: [PetApp]) -> [PetApp] {
+        let own = apps.filter { !($0 is PhoneCarPlayApp) }
+        let ownIDs = Set(own.map(\.id))
+        let ownTitles = Set(own.map { $0.title.lowercased() })
+        return apps.filter { app in
+            guard let p = app as? PhoneCarPlayApp else { return true }
+            if let twin = ownTwins[p.entry.bundleID], ownIDs.contains(twin) { return false }
+            return !ownTitles.contains(p.title.lowercased())
+        }
+    }
+
+    /// 裝好之後才加進來的：iPhone 的 App、加到主畫面的網頁。內建 App 不算。
+    static func isAddedLater(_ app: PetApp) -> Bool {
+        app is PhoneCarPlayApp || app.id.hasPrefix(WebApp.idPrefix)
     }
 
     /// 搜尋結果的順序：前綴命中（標題、再逐字詞首）優先，其餘 A→Z。
@@ -742,39 +863,77 @@ enum SBLibraryCategorySelfTest {
         let none = SBLibraryCategory.hits(probe, query: "zzzz-none")
         check(none.isEmpty, "App 資料庫：搜尋沒有結果是空的")   // l10n-ignore
 
-        // 豆莢網格：圖示落在主畫面的格子上；下一列從主畫面第 3 列起（第 4 列在畫面下面）
+        // 豆莢網格（2026-11-12 外殼版面規格）：三欄、外緣貼 98.5／925.5、縫都取 scale；名稱在底板下方；兩列完整。
         let gridPods = SBLPodGrid.pods(AppRegistry.visible)
-        let f0 = SBLPodGrid.podFrame(0, top: SBUI.libraryTop)
-        let f1 = SBLPodGrid.podFrame(1, top: SBUI.libraryTop)
-        let nextRow = SBLPodGrid.podFrame(SBLPodGrid.columns, top: SBUI.libraryTop)
-        let homeIcon = { (c: Int, r: Int) in Shell.iconRect(in: Shell.cell(c, r)) }
-        check(SBLPodGrid.columns == 2
-              && SBLPodGrid.iconSide == HPTokens.Home.iconSide
-              && abs(f0.minX - HPGrid.Home.margin) < 0.01
-              && abs(f1.maxX - HPGrid.Home.trailing) < 0.01
-              && abs(f1.minX - (HPGrid.Home.margin + 2 * HPTokens.Home.columnPitch)) < 0.01
-              && abs(f0.minY - HPTokens.Home.gridTop) < 0.5
-              && abs(nextRow.minY - (HPTokens.Home.gridTop + 2 * HPTokens.Home.rowPitch)) < 0.01
-              && SBLPodGrid.largeFrame(0, in: f0) == homeIcon(0, 0)
-              && SBLPodGrid.largeFrame(1, in: f0) == homeIcon(1, 0)
-              && SBLPodGrid.largeFrame(2, in: f0) == homeIcon(0, 1)
-              && SBLPodGrid.largeFrame(3, in: f0) == homeIcon(1, 1)
-              && SBLPodGrid.largeFrame(0, in: f1) == homeIcon(2, 0)
-              && abs(SBUI.libraryPodClipBottom - (f0.maxY + SBLPodGrid.labelBand)) < 0.01
-              && SBUI.libraryPodClipBottom <= nextRow.minY,
-              "App 資料庫：豆莢的圖示就落在主畫面的格子上（兩欄兩列，第一列頂 241，下一列從第 3 列開始，裁在完整的一列）")   // l10n-ignore
+        let G = SBLPodGrid.self
+        let f0 = G.podFrame(0, top: SBUI.libraryTop)
+        let f1 = G.podFrame(1, top: SBUI.libraryTop)
+        let nextRow = G.podFrame(G.columns, top: SBUI.libraryTop)
+        let row2 = G.podFrame(G.columns, top: SBUI.libraryTop)
+        let visibleBottom = SBUI.panel.maxY
+        check(G.columns == 3
+              && HPGrid.scale.contains(f1.minX - f0.maxX) && HPGrid.scale.contains(nextRow.minY - G.labelFrame(f0).maxY)
+              && abs(f0.minY - HPTokens.Home.gridTop) < 0.01
+              && HPGrid.scale.contains(G.largeFrame(0, in: f0).minX - f0.minX)
+              && HPGrid.scale.contains(G.largeFrame(1, in: f0).minX - G.largeFrame(0, in: f0).maxX)
+              && abs(G.largeFrame(1, in: f0).maxX + G.podPadding - f0.maxX) < 0.01
+              && abs(G.miniFrame(3, in: f0).maxX - G.largeFrame(3, in: f0).maxX) < 0.01,
+              "App 資料庫：三欄豆莢、第一列頂 241，豆莢之間、內距、圖示之間的縫都取 HPGrid.scale")   // l10n-ignore
+        check(G.labelFrame(f0).minY == f0.maxY && G.labelFrame(row2).maxY <= visibleBottom,
+              "App 資料庫：分類名稱在底板下方；兩列完整在面板裡")   // l10n-ignore
+        let savedNav = Shell.nav
+        let savedQuery = SB.libraryQuery, savedSearching = SB.librarySearching, savedExpanded = SB.libraryExpanded
+        let savedScroll = SB.libraryScroll, savedDragging = SB.libraryScrollDragging
+        Shell.nav = ShellNav(); Shell.nav.screen = .library
+        SB.libraryQuery = ""; SB.librarySearching = false; SB.libraryExpanded = nil
+        SB.libraryScrollDragging = false
+        SB.libraryScroll = MotionValue("sbLibScroll", spring: SBMotion.settle, from: 0, to: 0, now: 0)
+        let libFace = Face(); libFace.frozen = true
+        let libAX = SBAX.items(face: libFace)
+        let drawn = SBUI.libraryPodIcons().map(\.rect).filter { SBUI.libraryMostlyVisible($0) }
+        let axIcons = libAX.filter { $0.id.hasPrefix("sb.lib.pod.") }
+        let listed = SB.libraryItems()
+        Shell.nav = savedNav; SB.libraryQuery = savedQuery; SB.librarySearching = savedSearching; SB.libraryExpanded = savedExpanded
+        SB.libraryScroll = savedScroll; SB.libraryScrollDragging = savedDragging
+        check(axIcons.count == drawn.count && axIcons.allSatisfy { a in drawn.contains { $0.equalTo(a.rect) } }
+              && libAX.contains { $0.id.hasPrefix("sb.lib.title.") && $0.role == .button },
+              "App 資料庫：輔助使用念的是畫面上的大圖示，露出不到一半的不念，分類名點得開")   // l10n-ignore
+        check(listed.count == drawn.count && listed.allSatisfy { item in drawn.contains { $0.equalTo(item.0) } },
+              "App 資料庫：點空白不會打到舊的四欄清單")   // l10n-ignore
+        let warm = NSColor(srgbRed: 181.0 / 255, green: 134.0 / 255, blue: 99.0 / 255, alpha: 1)
+        let night = NSColor(srgbRed: 0.08, green: 0.08, blue: 0.10, alpha: 1)
+        func channel(_ c: NSColor) -> (CGFloat, CGFloat, CGFloat) {
+            let s = c.usingColorSpace(.sRGB) ?? c
+            return (s.redComponent, s.greenComponent, s.blueComponent)
+        }
+        let onWarm = channel(SBUI.libraryLabelColor(onPlate: warm))
+        let onNight = channel(SBUI.libraryLabelColor(onPlate: night))
+        check(onWarm.0 < 0.05 && onWarm.1 < 0.05 && onWarm.2 < 0.05
+              && onNight.0 > 0.95 && onNight.1 > 0.95 && onNight.2 > 0.95,
+              "App 資料庫：豆莢標籤淺底用黑字、深底用白字")   // l10n-ignore
+        let exp = SBUI.libraryCell(0, HPTokens.Home.gridTop)
+        let expHit = SBUI.libraryExpandedHit(exp)
+        let nextExpanded = exp.maxY + (SBLPodGrid.expandedRowPitch - exp.height)
+        let search = SBUI.libraryIcon(SBUI.libraryCell(0, SBUI.libraryTop))
+        let searchHit = SBUI.librarySearchHit(search)
+        let nextSearch = search.maxY + (HPTokens.Home.rowPitch - HPTokens.Home.iconSide)
+        check(expHit.contains(CGPoint(x: exp.midX, y: exp.maxY + 30)) && expHit.maxY < nextExpanded
+              && searchHit.contains(CGPoint(x: search.midX, y: search.maxY + 30)) && searchHit.maxY < nextSearch,
+              "App 資料庫：展開頁和搜尋結果點名稱開 App，碰不到下一列")   // l10n-ignore
         check(abs(SBUI.librarySearch.minX - HPGrid.Home.margin) < 0.01
-              && abs(SBUI.librarySearch.maxX - (HPGrid.Home.margin + 3 * HPTokens.Home.columnPitch)) < 0.01
-              && abs(SBUI.librarySearch.height - 96) < 0.01
+              && abs(SBUI.librarySearch.maxX - SBUI.libraryCell(2, 0).maxX) < 0.01 && abs(SBUI.librarySearch.maxX - 700.5) < 0.01
+              && abs(SBUI.librarySearch.height - 88) < 0.01
               && SBUI.librarySearch.maxX < Shell.avatarRect.minX,
-              "App 資料庫：搜尋欄佔前三欄、高 96，第四欄留給頭像")   // l10n-ignore
+              "App 資料庫：搜尋欄佔第 1–3 欄（98.5…700.5）、高 88，第四欄留給頭像")   // l10n-ignore
         check(gridPods.allSatisfy { $0.large.count + $0.cluster.count > 0 && $0.large.count <= 4 && $0.cluster.count <= 4
                                      && !($0.large.count == 4 && !$0.cluster.isEmpty) },
               "App 資料庫：每顆豆莢都有內容（4 顆全大，或 3 大＋≤4 小叢集）")   // l10n-ignore
         let kinds = gridPods.map(\.kind)
-        check(gridPods.first.map { $0.kind == .suggestions || $0.kind == .recentlyAdded } == true
-              && !(kinds.contains(.hidden) && kinds.last != .hidden),
-              "App 資料庫：豆莢從建議／最近添加開始，已隱藏排最後")   // l10n-ignore
+        // 建議、最近添加沒有東西時不畫（快照沒有開啟紀錄與加入日期，兩顆都可能不在）；有畫就排在所有分類前面
+        let leading = kinds.prefix { $0 == .suggestions || $0 == .recentlyAdded }.count
+        check(!kinds.dropFirst(leading).contains { $0 == .suggestions || $0 == .recentlyAdded }
+              && (!kinds.contains(.category(.other)) || kinds.last == .category(.other)),
+              "App 資料庫：建議／最近添加有畫就排最前，其他排最後")   // l10n-ignore
         check(abs(SBLPodGrid.contentHeight(gridPods)
                   - (CGFloat((gridPods.count + SBLPodGrid.columns - 1) / SBLPodGrid.columns) * SBLPodGrid.rowPitch - SBLPodGrid.rowGap)) < 0.01,
               "App 資料庫：內容高度＝列數×列距−一條縫（捲動上限用它）")   // l10n-ignore
@@ -804,40 +963,60 @@ enum SBLibraryCategorySelfTest {
               "App 資料庫：28 天窗口外的開啟不算（29 天前 99 次只算 1 次）")   // l10n-ignore
         AppLaunchHistory.override = nil
         AppInstallDates.override = nil
+        check(AppRegistry.all.allSatisfy { AppInstallDates.date($0.id) == nil },
+              "App 資料庫：快照與自檢不讀這台 Mac 的安裝日期")   // l10n-ignore
 
-        // 最近添加：安裝日期新的在前、上限 8、已隱藏不出現
-        let probeIDs = ["timers", "worldclock", "alarms", "weather", "calendar", "reminders",
-                        "music", "podcasts", "sing", "recipes"]
-        AppInstallDates.override = Dictionary(uniqueKeysWithValues: probeIDs.enumerated().map {
-            ($0.element, 1_000_000 + Double($0.offset))   // 越後面越新
-        })
-        let probeApps = probeIDs.compactMap { AppRegistry.app($0) }
-        let recentPods = SBLPodGrid.pods(probeApps)
-        let recents = recentPods.first { $0.kind == .recentlyAdded }
-        check(recents?.large == ["recipes"] || recents?.large.contains("recipes") == true,
-              "App 資料庫：最近添加把最新安裝的排在前面")   // l10n-ignore
+        // 最近添加只列裝好之後才加進來的（iPhone 的 App、網頁），不含內建 App；沒有就不畫（規則本身另在 ShellLayoutSelfTest）
+        let builtIns = ["timers", "worldclock", "alarms", "weather", "calendar", "reminders"].compactMap { AppRegistry.app($0) }
+        AppInstallDates.override = Dictionary(uniqueKeysWithValues: builtIns.enumerated().map { ($0.element.id, 1_000_000 + Double($0.offset)) })
+        check(SBLPodGrid.recentApps(builtIns).isEmpty && !SBLPodGrid.pods(builtIns).contains { $0.kind == .recentlyAdded },
+              "App 資料庫：只有內建 App 時沒有最近添加豆莢")   // l10n-ignore
+        let phones = (0..<9).map { i in PhoneCarPlayApp(PhoneCarPlayEntry(bundleID: "com.example.app\(i)", name: "App \(i)", url: "x\(i):", path: "")) }
+        AppInstallDates.override = Dictionary(uniqueKeysWithValues: phones.enumerated().map { ($0.element.id, 1_000_000 + Double($0.offset)) })
+        let phoneRecents = SBLPodGrid.recentApps(builtIns + phones)
+        let phonePod = SBLPodGrid.pods(builtIns + phones, homeScreenApps: []).first { $0.kind == .recentlyAdded }
+        check(phoneRecents.map(\.id) == phones.reversed().prefix(8).map(\.id)
+              && phonePod?.large.first == phones.last?.id && phonePod?.large.count == 3 && phonePod?.cluster.count == 4,
+              "App 資料庫：最近添加新的在前、上限 8；超過 4 個是 3 大＋小叢集")   // l10n-ignore
+        // 點名稱或第四格的小圖示群開展開頁（拿畫面上第一顆有小叢集的分類豆莢）
+        if let i = SBUI.libraryPods().firstIndex(where: { $0.kind.page != nil && !$0.cluster.isEmpty }) {
+            let f = SBLPodGrid.podFrame(i, top: SBUI.libraryTop), page = SBUI.libraryPods()[i].kind.page
+            check(SBUI.libraryPodTitle(at: CGPoint(x: f.midX, y: SBLPodGrid.labelFrame(f).midY), offset: 0) == page
+                  && SBUI.libraryPodTitle(at: CGPoint(x: SBLPodGrid.largeFrame(3, in: f).midX, y: SBLPodGrid.largeFrame(3, in: f).midY), offset: 0) == page,
+                  "App 資料庫：點分類名稱或第四格的小圖示群開展開頁")   // l10n-ignore
+        }
+        let day = AppLaunchHistory.dayIndex()
+        let savedHist = AppLaunchHistory.override, savedCounts = AppLaunchCounts.override
+        AppLaunchHistory.override = ["timers": [day: 4, day - 1: 4]]
+        AppLaunchCounts.override = (apps: ["timers": 8], library: ["timers": 5])
+        let timerIcons = SBUI.libraryPodIcons().filter { $0.id == "timers" }
+        let timerPlaces = Set(timerIcons.map { "\(Int($0.rect.minX)):\(Int($0.rect.minY))" })
+        AppLaunchHistory.override = savedHist
+        AppLaunchCounts.override = savedCounts
+        check(timerIcons.count >= 2 && timerPlaces.count >= 2,
+              "App 資料庫：同一個 App 在建議和分類各有一顆，兩顆都點得到")   // l10n-ignore
         check(SBLPodGrid.recentsCapacity == 8, "App 資料庫：最近添加容量 8（固件 NSMakeRange(0,8)）")   // l10n-ignore
         AppInstallDates.override = nil
 
 
-        // 分類去重：主畫面上、從資料庫開啟不到 5 次的 App 不進分類；滿 5 次就回來。
+        // 分類包含全部 App（2026-11-13 定案）：在主畫面上、從資料庫一次都沒開過的 App 也留在分類裡。
         // 用一組指定的主畫面，不依賴這台機器實際擺了什麼。
         let home: Set<String> = ["timers", "home"]
-        AppLaunchCounts.override = (apps: [:], library: ["timers": 4])
-        let hiddenIDs = SBLPodGrid.pods(AppRegistry.visible, homeScreenApps: home)
-            .flatMap { $0.large + $0.cluster }
-        AppLaunchCounts.override = (apps: [:], library: ["timers": 5])
-        let shownIDs = SBLPodGrid.pods(AppRegistry.visible, homeScreenApps: home)
-            .flatMap { $0.large + $0.cluster }
+        AppLaunchCounts.override = (apps: [:], library: [:])
+        let categorized = SBLPodGrid.categoryGroups(AppRegistry.visible, homeScreenApps: home).flatMap { $0.apps.map(\.id) }
         AppLaunchCounts.override = nil
-        check(SBLPodGrid.homeScreenDedupeLaunches == 5
-              && !hiddenIDs.contains("timers") && !hiddenIDs.contains("home")
-              && shownIDs.contains("timers") && !shownIDs.contains("home"),
-              "App 資料庫：主畫面上的 App 要從資料庫開滿 5 次才回到分類（4 次還不回來）")   // l10n-ignore
+        check(!SBLPodGrid.dedupesHomeScreenApps && categorized.contains("timers") && categorized.contains("home")
+              && SBLPodGrid.showsInCategory("iphone:com.example", homeScreenApps: ["iphone:com.example"]),
+              "App 資料庫：分類包含全部 App，主畫面上的也在；iPhone 的 App 一律列出")   // l10n-ignore
+        // 最近添加要有加進來的日期：沒有日期的 iPhone App 不算，不然這顆會跟「其他」一模一樣
+        let undated = [PhoneCarPlayApp(PhoneCarPlayEntry(bundleID: "com.example.undated", name: "Undated", url: "u:", path: ""))]
+        AppInstallDates.override = [:]
+        check(SBLPodGrid.recentApps(undated).isEmpty, "App 資料庫：沒有加入日期的 App 不進最近添加")   // l10n-ignore
+        AppInstallDates.override = nil
 
         // 展開是 0.2 秒交叉淡化：起點在 0、1 秒內到 1；收回時展開頁留到淡出結束。
-        SB.setLibraryExpanded(.utilities, now: 5000, immediate: false)
-        check(SB.libraryExpanded == .utilities && SB.libraryReveal.value(5000) < 0.05 && !SB.libraryReveal.done(5000),
+        SB.setLibraryExpanded(.category(.utilities), now: 5000, immediate: false)
+        check(SB.libraryExpanded == .category(.utilities) && SB.libraryReveal.value(5000) < 0.05 && !SB.libraryReveal.done(5000),
               "App 資料庫：展開從 0 開始交叉淡入")   // l10n-ignore
         check(SB.libraryReveal.done(5001) && abs(SB.libraryReveal.value(5001) - 1) < 0.02,
               "App 資料庫：0.2 秒交叉淡化在 1 秒內結束")   // l10n-ignore
@@ -853,30 +1032,116 @@ enum SBLibraryCategorySelfTest {
               && !SB.libraryZoom.done(5000 + SBLPodZoom.delay * 0.5),
               "App 資料庫：展開縮放要等 0.05 秒才動")   // l10n-ignore
         SB.setLibraryExpanded(nil, now: 6000, immediate: false)
-        check(SB.libraryClosing && SB.libraryExpanded == .utilities, "App 資料庫：收回時展開頁留到淡出結束")   // l10n-ignore
+        check(SB.libraryClosing && SB.libraryExpanded == .category(.utilities), "App 資料庫：收回時展開頁留到淡出結束")   // l10n-ignore
         _ = SB.animating(6001)
         check(SB.libraryExpanded == nil && !SB.libraryClosing, "App 資料庫：淡出結束才清掉展開頁")   // l10n-ignore
 
-        let catApps = SBLibraryCategory.sections(AppRegistry.visible, searching: false)
         if let firstCat = gridPods.compactMap({ p -> SBLibraryCategory? in
             if case .category(let c) = p.kind { return c } else { return nil } }).first {
-            SB.libraryExpanded = firstCat
+            SB.libraryExpanded = .category(firstCat)
             let expanded = SBUI.libraryExpandedApps()
-            let expect = (catApps.first { $0.title == firstCat.title }?.apps ?? []).map(\.id)
-                .filter { SBLPodGrid.showsInCategory($0, homeScreenApps: SB.layout.appsOnHome) }
-            check(expanded.map(\.id) == expect && !expanded.isEmpty
-                  && SBUI.libraryExpandedCells().allSatisfy { $0.minX >= 14 && $0.maxX <= 1010 && $0.minY >= SBUI.libraryTop },
-                  "App 資料庫：展開頁列出該類全部 App，格子都在畫面裡")   // l10n-ignore
-            // 標題帶：只有分類豆莢有，點在標題帶上要回那一類
+            let expect = (gridPods.first { $0.kind == .category(firstCat) }.map { $0.large + $0.cluster } ?? [])
+            let cells = SBUI.libraryExpandedCells()
+            check(Array(expanded.map(\.id).prefix(expect.count)) == expect && !expanded.isEmpty
+                  && SBLPodGrid.expandedColumns == 4
+                  && cells.enumerated().allSatisfy { i, c in c.equalTo(SBUI.libraryCell(i % 4, SBUI.libraryTop + CGFloat(i / 4) * HPTokens.Home.rowPitch)) }
+                  && cells.allSatisfy { $0.width == HPTokens.Home.iconSide && $0.minX >= HPGrid.Home.margin - 0.01 && $0.maxX <= HPGrid.Home.trailing + 0.01 },
+                  "App 資料庫：展開頁用主畫面的四欄圖示（152），外緣對齊主畫面")   // l10n-ignore
+            // 標題帶在豆莢框底部。點標題才展開，點圖示區不展開。
             if let idx = gridPods.firstIndex(where: { if case .category(let c) = $0.kind { return c == firstCat } else { return false } }) {
                 let f = SBLPodGrid.podFrame(idx, top: SBUI.libraryTop)
-                let bandCentre = CGPoint(x: f.midX, y: f.maxY + SBLPodGrid.labelHeight / 2)
-                check(SBUI.libraryPodTitle(at: bandCentre, offset: 0) == firstCat
+                let bandCentre = CGPoint(x: f.midX, y: SBLPodGrid.labelFrame(f).midY)
+                check(SBUI.libraryPodTitle(at: bandCentre, offset: 0) == .category(firstCat)
                       && SBUI.libraryPodTitle(at: CGPoint(x: f.midX, y: f.minY + 40), offset: 0) == nil,
-                      "App 資料庫：點豆莢底下的標題才展開，點圖示區不展開")   // l10n-ignore
+                      "App 資料庫：點底板下方的名稱才展開，點圖示之間的縫不展開")   // l10n-ignore
             }
             SB.libraryExpanded = nil
         }
+
+        // 搜尋清單比豆莢高。捲下去再收起，豆莢要從頂開始，不能整頁捲出畫面。
+        let scrollQ = SB.libraryQuery, scrollS = SB.librarySearching
+        let scrollV = SB.libraryScroll, scrollD = SB.libraryScrollDragging
+        SB.libraryQuery = "a"
+        SB.librarySearching = true
+        SB.libraryScrollDragging = false
+        SB.libraryScroll = MotionValue("sbLibScroll", spring: SBMotion.settle, from: 800, to: 800, now: 0)
+        SB.dismissLibrarySearch(now: 0)
+        check(SB.libraryQuery.isEmpty && !SB.librarySearching && abs(SB.libraryScrollNow) < 0.01,
+              "App 資料庫：收起搜尋後從豆莢頂開始，不沿用搜尋的捲動")   // l10n-ignore
+        SB.libraryQuery = scrollQ
+        SB.librarySearching = scrollS
+        SB.libraryScroll = scrollV
+        SB.libraryScrollDragging = scrollD
+
+        SB.libraryQuery = ""
+        SB.librarySearching = true
+        let focusedExpanded = SB.libraryExpanded
+        SB.libraryExpanded = nil
+        SB.libraryScrollDragging = false
+        SB.libraryScroll = MotionValue("sbLibScroll", spring: SBMotion.settle, from: 0, to: 0, now: 0)
+        let focusedPods = SBUI.libraryPodIcons().map(\.rect).filter { SBUI.libraryMostlyVisible($0) }
+        let focusedItems = SB.libraryItems()
+        check(SB.libraryBrowsing && focusedItems.count == focusedPods.count
+              && focusedItems.allSatisfy { item in focusedPods.contains { $0.equalTo(item.0) } },
+              "App 資料庫：搜尋欄還沒打字時仍是豆莢，不是四欄清單")   // l10n-ignore
+        let savedMenu = SB.menu, savedSheet = SB.sheet
+        SB.menu = nil
+        SB.sheet = nil
+        check(SB.libraryAllowsPaging, "App 資料庫：搜尋欄還沒打字時橫滑仍可翻回主畫面")   // l10n-ignore
+        SB.libraryQuery = "設"   // l10n-ignore
+        check(!SB.libraryAllowsPaging, "App 資料庫：有搜尋字時橫滑不翻頁")   // l10n-ignore
+        SB.libraryQuery = ""
+        SB.setLibraryExpanded(.category(.utilities), now: 0, immediate: true)
+        check(SB.libraryBackTarget == .pods && !SB.libraryAllowsPaging,
+              "App 資料庫：展開頁開著時，返回先收回展開頁")   // l10n-ignore
+        SB.setLibraryExpanded(nil, now: 0, immediate: true)
+        SB.libraryQuery = "設"   // l10n-ignore
+        SB.menu = savedMenu
+        SB.sheet = savedSheet
+        let avatarMid = CGPoint(x: Shell.avatarRect.midX, y: Shell.avatarRect.midY)
+        let savedAvatarPage = SB.libraryExpanded
+        SB.libraryExpanded = .recentlyAdded
+        check(SBUI.libraryAvatarChrome(avatarMid)
+              && !SBUI.librarySearch.contains(avatarMid)
+              && SBUI.libraryPodIcons().allSatisfy { !$0.rect.insetBy(dx: -SBLPodGrid.iconGap / 2, dy: -SBLPodGrid.iconGap / 2).contains(avatarMid) }
+              && SBUI.libraryExpandedCells().allSatisfy { !SBUI.libraryExpandedHit($0).contains(avatarMid) },
+              "App 資料庫：點頭像是換人，不是收起搜尋或收回展開頁")   // l10n-ignore
+        SB.libraryExpanded = savedAvatarPage
+        let escMenu = SB.menu
+        SB.menu = nil
+        SB.libraryQuery = "a"
+        SB.librarySearching = true
+        SB.setLibraryExpanded(.category(.utilities), now: 0, immediate: true)
+        check(SB.dismissLibraryTop(now: 1) && SB.libraryQuery.isEmpty && !SB.librarySearching
+              && SB.libraryExpanded == .category(.utilities),
+              "App 資料庫：展開頁上的搜尋，Esc 先收搜尋")   // l10n-ignore
+        check(SB.dismissLibraryTop(now: 2) && SB.libraryClosing && SB.libraryExpanded == .category(.utilities),
+              "App 資料庫：再按 Esc 才收回展開頁，不直接離開資料庫")   // l10n-ignore
+        SB.setLibraryExpanded(nil, now: 3, immediate: true)
+        check(!SB.dismissLibraryTop(now: 4), "App 資料庫：沒有展開頁時 Esc 交給回主畫面")   // l10n-ignore
+        SB.menu = escMenu
+        SB.setLibraryExpanded(.category(.utilities), now: 5, immediate: true)
+        SB.librarySearching = false
+        SB.libraryQuery = ""
+        SB.libraryScroll = MotionValue("sbLibScroll", spring: SBMotion.settle, from: 40, to: 40, now: 5)
+        SB.focusLibrarySearch()
+        check(SB.librarySearching && SB.libraryExpanded == .category(.utilities) && abs(SB.libraryScrollNow - 40) < 0.01,
+              "App 資料庫：點搜尋欄留在展開頁，捲動不動")   // l10n-ignore
+        SB.setLibraryExpanded(nil, now: 6, immediate: true)
+        SB.librarySearching = false
+        SB.setLibraryExpanded(.category(.utilities), now: 7, immediate: true)
+        SB.librarySearching = true
+        SB.libraryQuery = ""
+        SB.closeLibraryExpanded(now: 8)
+        check(!SB.librarySearching && SB.libraryClosing && SB.libraryExpanded == .category(.utilities),
+              "App 資料庫：點空白收回展開頁時，搜尋焦點一起收")   // l10n-ignore
+        SB.setLibraryExpanded(nil, now: 9, immediate: true)
+        SB.libraryQuery = ""
+        SB.libraryExpanded = focusedExpanded
+        SB.librarySearching = scrollS
+        SB.libraryQuery = scrollQ
+        SB.libraryScroll = scrollV
+        SB.libraryScrollDragging = scrollD
 
         SB.libraryQuery = ""
         let lay = SBUI.libraryLayout()
@@ -901,14 +1166,14 @@ enum SBLibraryCategorySelfTest {
         check(SBLCategoryPod.slots(count: 0).isEmpty
               && SBLCategoryPod.slots(count: 3) == [.large(0), .large(1), .large(2)]
               && SBLCategoryPod.slots(count: 4) == [.large(0), .large(1), .large(2), .large(3)]
-              && SBLCategoryPod.slots(count: 5) == [.large(0), .large(1), .large(2), .cluster([4])]
-              && SBLCategoryPod.slots(count: 9) == [.large(0), .large(1), .large(2), .cluster([4, 5, 6, 7])],
+              && SBLCategoryPod.slots(count: 5) == [.large(0), .large(1), .large(2), .cluster([3, 4])]
+              && SBLCategoryPod.slots(count: 9) == [.large(0), .large(1), .large(2), .cluster([3, 4, 5, 6])],
               "App 資料庫：豆莢 ≤4 個全大、>4 個是 3 大＋右下 2×2 小叢集")   // l10n-ignore
         let podApps = ["timers", "settings", "home", "findmy", "intercom", "worldclock"].compactMap { AppRegistry.app($0) }
         let pod = SBLCategoryPod.layout(podApps)
-        check(pod.large.count == 3 && pod.cluster.count == 2 && pod.large.first?.id == podApps.first?.id
-              && pod.cluster.first?.id == podApps[4].id,
-              "App 資料庫：豆莢內容照順序取 3 大，其餘進小叢集")   // l10n-ignore
+        check(pod.large.count == 3 && pod.cluster.count == 3 && pod.large.first?.id == podApps.first?.id
+              && pod.cluster.first?.id == podApps[3].id && pod.cluster.last?.id == podApps[5].id,
+              "App 資料庫：豆莢內容照順序取 3 大，第 4 個起進小叢集")   // l10n-ignore
 
         // 豆莢幾何：量自 iPadOS 27 模擬器（AX frame）——寬高、圖示、pitch、padding 要自洽
         let M = SBLPodMetrics.self
@@ -921,8 +1186,8 @@ enum SBLibraryCategorySelfTest {
 
         // 豆莢圓角與底色：實機量到的比例，不是猜的
         check(abs(M.podCornerRatio - 0.162) < 0.002 && M.podCornerRadius == 26
-              && abs(SBLPodGrid.cornerRadius - SBLPodGrid.podWidth * M.podCornerRatio) < 0.01,
-              "App 資料庫：豆莢圓角＝寬的 0.162（實機 26 pt / 159.6 pt，圓擬合殘差 0.23 px）")   // l10n-ignore
+              && abs(SBLPodGrid.cornerRadius - (SBLPodGrid.iconCorner + SBLPodGrid.podPadding)) < 0.01,
+              "App 資料庫：豆莢圓角＝圖示圓角＋內距（同心）")   // l10n-ignore
         check(abs(M.podVeil - 0.104) < 0.001
               && abs(((121.0 * (1 - M.podVeil)) + 255 * M.podVeil) - 135) < 0.6,
               "App 資料庫：底板白幕 0.104（壁紙 121 → 豆莢 135）")   // l10n-ignore

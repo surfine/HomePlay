@@ -48,7 +48,9 @@ enum WeatherSkySelfTest {
         a.configure(WeatherSkyScene(kind: .rain, time: .day))
         let ia = a.renderSync(frames: 3)
         WeatherSkyVFX.simulateMissing = false
-        check(a.source == .ours && ia != nil && !WeatherLiveSky.isUniform(ia!) && a.fallbackReason.contains("unavailable"),
+        // 這台 Mac 上系統渲染器的健檢若已經記過失敗（weatherSky.systemProbe.*），choose() 會先看那筆記錄、還沒走到「不在」那一步；
+        // 兩條路都是「改用自己的天空」，自檢不該因為偏好裡有那筆記錄就失敗
+        check(a.source == .ours && ia != nil && !WeatherLiveSky.isUniform(ia!) && (a.fallbackReason.contains("unavailable") || a.fallbackReason.contains("failed earlier")),
               "天氣天空：系統渲染器不在時自動改用自己的天空（\(a.source.rawValue)）") // l10n-ignore：自檢訊息
         // 退路二：強制退路（selftest 旗標）
         let b = WeatherLiveSky(forceFallback: true)

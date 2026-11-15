@@ -109,6 +109,60 @@ struct SymbolTile: View {
     }
 }
 
+/// 头部卡（系统设置每一页最上面那一张）：彩色方块、页名、一句话。分组表单的第一组，圆角与间距交给系统。
+struct PaneHeaderCard: View {
+    let section: SettingsSection
+    var body: some View {
+        Section {
+            VStack(spacing: 6) {
+                SymbolTile(symbol: section.symbol, tint: section.tint, size: 52)
+                Text(section.title).font(.title3.weight(.bold))
+                Text(section.line)
+                    .font(.callout).foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 10)
+            .accessibilityElement(children: .combine)
+        }
+    }
+}
+
+/// 示范舞台：分组表单的第一组，内容贴满那一张卡（两边和下面的表单切齐），不加玻璃、不另画卡片
+struct StageSection<Content: View>: View {
+    @ViewBuilder var content: Content
+    var body: some View {
+        Section {
+            content
+                .frame(maxWidth: .infinity)
+                .listRowInsets(EdgeInsets())
+        }
+    }
+}
+
+/// 搜索能跳到的一行：带上 id（让 ScrollViewReader 卷过去），被跳到时整行底色闪一下
+struct SettingsRowMark: ViewModifier {
+    let key: String
+    @EnvironmentObject var m: SettingsModel
+    func body(content: Content) -> some View {
+        content
+            .id(key)
+            .background {
+                if m.flash == key {
+                    RoundedRectangle(cornerRadius: 6, style: .continuous)
+                        .fill(Color.accentColor.opacity(0.18))
+                        .padding(.horizontal, -6).padding(.vertical, -4)
+                        .transition(.opacity)
+                        .allowsHitTesting(false)
+                }
+            }
+    }
+}
+extension View {
+    func settingsRow(_ key: String) -> some View { modifier(SettingsRowMark(key: key)) }
+}
+
 /// 行尾的 ⓘ：一句话说不完的细节放进小气泡（WindowShade copy-guide 第 7 条）
 struct InfoButton: View {
     let text: String
@@ -178,15 +232,6 @@ struct RowMenu<Content: View>: View {
             .fixedSize()
             .foregroundStyle(.secondary)
             .accessibilityLabel(L("settings.rowMenu", "更多操作"))
-    }
-}
-
-/// 按下缩一点（0.94，100 ms 缓出），放开弹回
-struct PressScaleStyle: ButtonStyle {
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .scaleEffect(configuration.isPressed ? 0.94 : 1)
-            .animation(.easeOut(duration: 0.1), value: configuration.isPressed)
     }
 }
 

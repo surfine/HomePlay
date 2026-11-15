@@ -230,7 +230,7 @@ struct HomeStatusPage {
     private(set) var contentH: CGFloat = 0
     private(set) var hits: [(CGRect, Action)] = []
 
-    static let x0 = HPGrid.App.leading, x1 = HPGrid.App.trailing
+    static let x0 = HPGrid.Content.leading, x1 = HPGrid.Content.trailing
     static let row = HPTokens.Size.row
     /// 兩行的列（自動化：名稱＋條件／最近變化）用助理膠囊列的兩行高（HPTokens.Assistant.rowHeight2）
     static let row2: CGFloat = 135

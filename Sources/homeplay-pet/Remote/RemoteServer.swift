@@ -484,7 +484,6 @@ final class RemoteConn {
     /// HTTP：標頭已讀、本文還沒收齊時暫存
     private var pending: (method: String, path: String, headers: [String: String], need: Int)?
     private var didClose = false
-    var isClosed: Bool { phase == .closing || didClose }
 
     init(_ c: NWConnection, server: RemoteServer) { conn = c; self.server = server; ip = RemoteServer.ip(c.endpoint) }
 

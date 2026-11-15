@@ -217,8 +217,6 @@ package final class ScreenStream {
 /// 把屏幕流接到现有的 H264Sink：config → SPS/PPS；frame → feedAVCC，并立刻收尾这一帧。
 package final class ScreenStreamH264Adapter {
     private let sink: H264Sink
-    package private(set) var configs = 0
-    package private(set) var frames = 0
     package init(sink: H264Sink) { self.sink = sink }
 
     package func attach(to stream: ScreenStream) {
@@ -232,12 +230,10 @@ package final class ScreenStreamH264Adapter {
         if codec == .h265 { nals = ScreenStreamParser.hvcCToAVCC(record) }
         else { nals = ScreenStreamParser.avcCToNALs(record) }
         guard let nals else { return }
-        configs += 1
         sink.feedAVCC(nals)
     }
 
     package func handleFrame(_ nals: Data) {
-        frames += 1
         sink.feedAVCC(nals)
         sink.endAccessUnit()   // CarPlay 一条消息就是一个 access unit，不等下一帧才吐
     }

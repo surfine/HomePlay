@@ -70,9 +70,6 @@ enum HPLook {
         }
     }
 
-    /// 大數字色（ClockLook 用）：官方彩色數字版 Look 直接給 numerals 實測色
-    static var numeralsColor: NSColor { current.numerals_color }
-
     /// 著色外觀（HomeAppearance tinted）的建議色：Look 的 secondary（官方四層 token 中的強調層）
     static var suggestedTint: NSColor { current.secondary_color }
 

@@ -104,6 +104,7 @@ package final class CarPlaySession {
     }
 
     package func stop() {
+        stopSharedMic()
         queue.sync {
             probe?.stop(); probe = nil
             heartbeat?.cancel(); heartbeat = nil
@@ -234,6 +235,7 @@ package final class CarPlaySession {
         queue.async { [self] in
             config.phoneBluetoothAddress = address
             if let cc = live {
+                stopSharedMic()   // 和 end() 一樣：會話沒了就別讓預熱的麥克風繼續開著
                 live = nil
                 cc.close()
                 conns[ObjectIdentifier(cc)] = nil
@@ -528,7 +530,7 @@ private final class ControlConnection {
                 if let o = a.origin {
                     let latencySec = Double(a.latencyMs) / 1000
                     let elapsedSec = max(0, Double(Int64(bitPattern: nowNs &- o.atNs)) / 1e9 - latencySec)
-                    let play = o.firstSample &+ UInt32(elapsedSec * Double(a.sampleRate))
+                    let play = o.firstSample &+ UInt32(truncatingIfNeeded: Int64(elapsedSec * Double(a.sampleRate)))   // RTP 時間戳本來就繞回；直接轉 UInt32 在約 25 小時後會 trap
                     if let id = a.connectionID { s["streamConnectionID"] = id }
                     s["timestamp"] = Int64(bitPattern: timing?.syncedNTP() ?? 0)
                     s["timestampRawNs"] = Int64(bitPattern: nowNs)
@@ -655,6 +657,7 @@ private final class ControlConnection {
                             mic = m
                         }
                     }
+                    mic?.downlinkOutsideVoiceProcessing = MicUplink.playsDownlinkOutsideVoiceProcessing(audioType: sd["audioType"] as? String)
                     let a = try CarPlayAudioStream(
                         type: type, connectionID: sd["streamConnectionID"] as? NSNumber,
                         key: Data(key), codec: codec, rtpClockRate: rtpClockRate,

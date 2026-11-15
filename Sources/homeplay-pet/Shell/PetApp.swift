@@ -37,8 +37,6 @@ protocol PetApp: AnyObject {
     /// 主畫面上的名字（已本地化）
     var title: String { get }
     var icon: AppIcon { get }
-    /// 還沒做好：主畫面照樣有一格，打開是「即將推出」
-    var isPlaceholder: Bool { get }
     /// rect 永遠是整個螢幕（0,0,1024,1024，左上原點）；畫面要留出頂端藥丸（y < 130）與左上關閉鈕
     func render(into g: CGContext, face: Face, rect: CGRect, now: Double)
     /// 每幀叫；要重畫回 true
@@ -72,7 +70,6 @@ protocol PetApp: AnyObject {
 }
 
 extension PetApp {
-    var isPlaceholder: Bool { false }
     func tick(_ now: Double) -> Bool { false }
     func handleTap(_ p: CGPoint, face: Face, now: Double) -> Bool { false }
     func handleScroll(_ dy: CGFloat, now: Double) -> Bool { false }
@@ -119,24 +116,5 @@ enum AppRegistry {
     /// 主畫面、App 資料庫、編輯時能放的 App
     static var visible: [PetApp] { all.filter { !hidden.contains($0.id) } + AppProviders.apps(viewer: PersonHome.viewerID) }   // 2.0 Web App：加上這個人的（Shell/AppPlatform）
     static func app(_ id: String) -> PetApp? { all.first { $0.id == id } ?? AppProviders.app(id) }
-}
-
-/// 還沒做的 App：大圖示＋名字＋「即將推出」
-final class PlaceholderApp: PetApp {
-    let id: String
-    private let titleFn: () -> String
-    let icon: AppIcon
-    var title: String { titleFn() }
-    var isPlaceholder: Bool { true }
-    init(id: String, title: @escaping () -> String, icon: AppIcon) { self.id = id; self.titleFn = title; self.icon = icon }
-
-    func render(into g: CGContext, face: Face, rect: CGRect, now: Double) {
-        g.setFillColor(srgb(0x0b0b0e).cgColor); g.fill(rect)
-        let r = CGRect(x: 512 - 120, y: 300, width: 240, height: 240)
-        Shell.drawAppIcon(g, face: face, icon: icon, in: r)
-        face.drawCentered(g, title, font: Face.rounded(64, weight: .bold), y: 640, color: .white)
-        face.drawCentered(g, L("app.comingSoon", "即将推出"), font: Face.rounded(40, weight: .semibold), y: 712,
-                          color: NSColor.white.withAlphaComponent(0.55))
-    }
 }
 

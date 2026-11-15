@@ -66,10 +66,15 @@ HPDS 是 HomePlay 2 所有畫面共用的那一層：外殼、內建 App、ClioT
 | `l` | 32 | 段落間 |
 | `widgetPad` | 30 | 小工具內距（16 pt） |
 | `column` | 60 | 主畫面欄距（影片 v1） |
-| `margin` | 64 | App 內容左右邊距 |
-| `homeMargin` | 114 | 主畫面網格左右邊距（影片 v1） |
+| `content` | 98.5 | 內容邊線：主畫面第 1 欄圖示左緣；右邊 925.5（`HPGrid.Content`） |
 
-版面：大標題列底下內容從 `contentTop` = 220 開始，內容寬 `contentWidth` = 896。
+版面：大標題列底下內容從 `contentTop` = 220 開始，內容寬 `contentWidth` = 827（98.5…925.5）。頁首三種、垂直位置、間距、左右邊線與豁免的總規格在 `docs/plans/shell-layout.md`。
+
+### 內容邊線（2026-11-12 設計稿定案）
+
+整台只留一條左右內容邊線：98.5／925.5（主畫面第 1、4 欄圖示的外緣），`HPGrid.Content`。四欄欄心 174.5、399.5、624.5、849.5（`HPGrid.Content.columnCenter`）。垂直節奏：列 96／有副標 120、分組間距 24、區段間距 32。Liquid Glass 只在控制層（圓鈕、搜尋欄）；分組卡、豆莢底板、文字後面都不是玻璃。
+
+貼這條線的：螢幕上的設定、App 資料庫、橫幅通知、右上時間，以及清單型 App 的內容區（聯絡人、FaceTime、尋找、Safari 起始頁、訊息、行事曆、提醒事項、鬧鐘、音樂資料庫、Podcast、食譜的最近與食材、天氣的模組、遊戲、對講機、家庭狀態與攝影機子頁）。不貼這條線、各自照官方圖量測的：頂列左上圓鈕（圓心 105）、ClioTalk 的回答（字起點 91、膠囊列內縮 46）、正在播放（進度條 90…934）、食譜封面、計時器、家庭磚牆（外距 24）、世界時鐘（瑞士國鐵鐘設計稿：左右 48、鐘列頂 208、地圖卡頂 560）。豁免總表在 `docs/plans/shell-layout.md` 第 6 節。舊的 `Space.margin` 64／`HPGrid.App` 已經刪掉。
 
 ### 圓角 `HPTokens.Radius`
 
@@ -83,11 +88,13 @@ HPDS 是 HomePlay 2 所有畫面共用的那一層：外殼、內建 App、ClioT
 | `concentric(rect:)` | 138 − 離螢幕四邊最近的距離 | 貼邊容器（卡片、橫幅、sheet、面板）一律用這個，並登記在 `EdgeContainers.swift`（selftest 驗） |
 | `concentric(parent:padding:)` | 父半徑 − 內距 | 父元件不是螢幕時；父半徑用 `drawn(_:in:)`（矮卡片的連續圓角會被夾小） |
 | `capsule(r)` | 高 ÷ 2 | 按鈕、膠囊列、分段 |
-| `group` | 52 | inset grouped 卡片 |
+| `group` | 39.5 | inset grouped 卡片：整台同一個固定值（＝`contentCard`；清單中段的卡片不逐張算同心）；原本 52 |
+| `contentCard` | 39.5 | 貼內容邊線 98.5 的分組卡（138 − 98.5）；往內每層再減內距：選取底 8 → 31.5、圖示方塊 24 → 15.5，最小 12（`HPComponents.contentCard`） |
+| `enclosing(content:padding:)` | 內容圓角＋內距 | 不貼邊的容器跟裡面的東西同心：App 資料庫的豆莢＝圖示圓角＋豆莢內距 |
 | `tile` | 50 | 家庭磚（影片 49–50） |
 | `widget` | 56 | 主畫面 small 小工具（`HPTokens.Radius.widget` 一直是 56；舊版這張表誤寫 50） |
 
-形狀一律用 `continuousRoundedRect`（iOS 的連續曲率係數），膠囊用半圓。角落的控制（返回鈕、右上時間）讓圓心落在螢幕圓角的圓心上（`Screen.cornerCapsuleCenter`）。
+形狀一律用 `continuousRoundedRect`（iOS 的連續曲率係數），膠囊用半圓。頂列的控制：返回鈕圓心 (105, 105)（官方 recipe-overview 量測，`HPTokens.cornerControlCenter`），右上時間中線 y105、右緣貼內容邊線 925.5。
 
 ### 陰影 `HPTokens.Shadow`
 
@@ -107,7 +114,8 @@ HPDS 是 HomePlay 2 所有畫面共用的那一層：外殼、內建 App、ClioT
 | --- | --- | --- |
 | `tap` | 88 | 最小點按範圍（44 pt）。視覺可以比它小，命中不行 |
 | `topBar` | 90 | 頂欄圓鈕：返回、關閉、‹/✕、編輯欄兩顆膠囊 |
-| `row` | 88 | 列表行：控制中心展開、Sheet 清單、資料夾 |
+| `row` | 96 | 列表行（2026-11-12 定案整台 96，原本 88）：控制中心展開、Sheet 清單、長按選單、家庭狀態、設定 |
+| `listRow`、`listRowSub` | 96、120 | `listRow` 就是 `row`；有副標的列 120 |
 | `rowCompact` | 72 | 選項行：兩張設定卡共用（命中補到 88） |
 | `cta` | 96 | 卡片底部主按鈕、彈窗按鈕、控制中心底欄 |
 | `pill` | 104 | 玻璃膠囊鈕；`pairedButton` 440×104 同高 |
@@ -120,9 +128,9 @@ HPDS 是 HomePlay 2 所有畫面共用的那一層：外殼、內建 App、ClioT
 | `liveActivity` | 62 | 系統 Live Activity，不進階梯 |
 | `sourceBadge` | 24 | 藥丸右下的 CarPlay 角標（會話活著但在背景；≈ 12.7 pt） |
 
-內縮與節奏（`HPGrid.Inset` / `HPGrid.Rhythm`）：一個容器**只有一條左緣、一條右緣**——`card` 40（標題、清單、預覽、主按鈕都對它）、`nested` 24（卡片內行的內距）、`menu` 12（長按選單唯一的邊線）、`app` 64（沿用）。卡片內部只用 `rowGap` 8、`groupGap` 24、`sectionGap` 32。
+內縮與節奏（`HPGrid.Inset` / `HPGrid.Rhythm`）：一個容器**只有一條左緣、一條右緣**——浮層（控制中心、Sheet、長按選單、橫幅通知）的卡片一律 `card` 40（標題、清單、預覽、主按鈕都對它；`docs/plans/shell-layout.md` 第 3 節）、`nested` 24（卡片內行的內距）。卡片內部只用 `rowGap` 8、`groupGap` 24、`sectionGap` 32。
 
-**豁免**（量測值或幾何約束，刻意不進階梯）：主畫面整組（官方幀逐項量）、Live Activity 62、控制中心頁點命中 60×26。（以前的「右上時鐘右緣 931」「音樂來源膠囊中心 138.44」已在 `98d9a16` 取消：頂列一條線，時鐘右緣 960、來源膠囊中心 105。）
+**豁免**（量測值或幾何約束，刻意不進階梯）：主畫面整組（官方幀逐項量）、Live Activity 62。點按範圍一律不小於 88（`docs/plans/shell-layout.md` 第 2 節；控制中心頁點原本 60×26 的豁免已取消）。（以前的「右上時鐘右緣 931」「音樂來源膠囊中心 138.44」已在 `98d9a16` 取消：頂列一條線，時鐘右緣 960、來源膠囊中心 105。）
 
 ### 助理回答 `HPTokens.Assistant`（第三輪量自官方 siri-calendar／siri-cyanotype）
 
@@ -142,7 +150,7 @@ HPDS 是 HomePlay 2 所有畫面共用的那一層：外殼、內建 App、ClioT
 
 ### 家庭模組錶面 `HPTokens.HomeModular`
 
-第四輪：背景是程式生成的硬邊幾何桌布（`HomeModularWallpaper`：左下放射的扇形色塊＋沿長邊折成亮暗兩面的稜柱帶＋大三角；綠、紫、藍、琥珀，`homeModular.color`／`--homemod-color`），磚的斜邊把直線折彎，玻璃看得出來。3×3 玻璃磚：外距 24、間距 20、每格 312、圓角＝`Radius.tile` 50（官方的磚不跟螢幕同心）；溫控 2×2，大數字 262／wght 500、基線離磚頂 375；左右箭頭中心離磚頂 556、離左右緣 92；標籤兩行同字級 semibold 31（狀態白 60%），基線＝磚底 − 98／− 59；小磚符號中心離磚頂 103；玻璃鐘 12 根一樣長的刻度（0.71–0.935 R）。玻璃是控制式折射：只有邊緣 24 px 斜面在彎，磚裡的圖樣清楚。
+第四輪：背景是程式生成的硬邊幾何桌布（`HomeModularWallpaper`：左下放射的扇形色塊＋沿長邊折成亮暗兩面的稜柱帶＋大三角；綠、紫、藍、琥珀，`homeModular.color`／`--homemod-color`），磚的斜邊把直線折彎，玻璃看得出來。3×3 玻璃磚：外距 24、間距 20、每格 312、圓角＝`Radius.tile` 50（官方圖量到固定約 50；整面網格不逐顆跟螢幕同心）；溫控 2×2，大數字 262／wght 500、基線離磚頂 375；左右箭頭中心離磚頂 556、離左右緣 92；標籤兩行同字級 semibold 31（狀態白 60%），基線＝磚底 − 98／− 59；小磚符號中心離磚頂 103；玻璃鐘 12 根一樣長的刻度（0.71–0.935 R）。玻璃是控制式折射：只有邊緣 24 px 斜面在彎，磚裡的圖樣清楚。
 
 ### 圖示 `HPIcons`
 
@@ -310,10 +318,10 @@ HPDS 是 HomePlay 2 所有畫面共用的那一層：外殼、內建 App、ClioT
 | 元件 | API | 數字 |
 | --- | --- | --- |
 | 頂列：返回圓鈕 | `shellBackButton(face, symbol:)`；照片上的頁面 `backButton(g, face, symbol:)` | 90，圓心 (105, 105)（`HPTokens.cornerControlCenter`，第三輪量自官方 recipe-overview）；✕ 0.34、‹ 0.36；Regular（照片上 Clear） |
-| 頂列：藥丸＝Home 鍵（2.0 align C） | `ShellInput.shellHomeKey`、`LiveActivityStack.pillHit` | 點＝分派一次 `.back`，前面先走 Esc 那串（選單 → sheet → 資料夾 → 編輯模式；資料庫：選單 → 搜尋 → 疊層 → 畫面）：App → 資料庫／主畫面 → 錶面；開關 App 的過場中也能按。長按＝展開第一個活動；分體小藥丸點＝開它自己的活動。不做雙擊（單擊會被拖慢 250–300 ms）。命中整顆、上下補到 `Size.tap` 88。AX 一條按鈕，標籤跟層級（返回上一層／回到主畫面／回到錶面），有活動時活動是值 |
+| 頂列：把手＝Home 鍵（2.0 align C；2026-11-12 起待機是預設隱藏的把手 `HomeHandle`，點一下＝Home 鍵，只有 CarPlay 上隱藏時第一下只現身） | `ShellInput.shellHomeKey`、`LiveActivityStack.pillHit` | 點＝分派一次 `.back`，前面先走 Esc 那串（選單 → sheet → 資料夾 → 編輯模式；資料庫：選單 → 搜尋 → 疊層 → 畫面）：App → 資料庫／主畫面 → 錶面；開關 App 的過場中也能按。長按＝展開第一個活動；分體小藥丸點＝開它自己的活動。不做雙擊（單擊會被拖慢 250–300 ms）。命中整顆、上下補到 `Size.tap` 88。AX 一條按鈕，標籤跟層級（返回上一層／回到主畫面／回到錶面），有活動時活動是值 |
 | 顯示源切換（2.0 align D） | `SourceSwitcher`、`Face.drawSourceBadge／drawSourceSwitcher` | CarPlay 會話在背景時：藥丸右下角標（綠底白 `car.fill`）；長按藥丸＝兩顆，拖到哪顆放手切到哪（另一顆 55%），只換顯示源（`switchSource`，不拆會話）。沒有會話時長按照舊展開活動。手動切到 HomeView 後 60 s 內重連的第一幀不自動拉回 CarPlay（`homeLatchUntil`）。快照 `--source home|carplay`、`HOMEPLAY_ANIM=source.split:t`；腳本 `hold:x,y,du,dv` |
-| 頂列：大標題 | `bigTitle(g, face, s)` | SF Pro bold 56，x = 返回鈕右緣 + 24，基線 = 圓心 + 20；放不下縮到 40 |
-| 頂列：右上時間 | `topClock(g, face, size:, baselineDY:, color:)` | semibold 32（照片上 34），中線 y 105、右緣 960（`HPGrid.App.trailing`，`98d9a16` 起與內容邊線同列）；媒體全螢幕不畫 |
+| 頂列：大標題 | `bigTitle(g, face, s)` | SF Pro bold 56，x = 返回鈕右緣 + 24（174），基線 = 圓心 + 20（125）；可用寬度到右上時間之前，放不下才縮（`docs/plans/shell-layout.md` 第 3 節） |
+| 頂列：右上時間 | `topClock(g, face, size:, baselineDY:, color:)` | semibold 32（照片上 34），中線 y 105、右緣 925.5（`HPGrid.Content.trailing`；官方量到 931）；媒體全螢幕不畫 |
 | 主要動作圓鈕 | `actionButton(g, face, r, symbol:, role:, label:)`、`actionRect(cx:cy:)` | 150；`.stop` 紅、`.mic` 黃（黑符號）、`.start` 綠、`.glass` 無色；符號 0.36；下方說明 28 |
 | 玻璃圓鈕 | `glassCircle(g, face, r, symbol:, tint:)` | 符號 0.38 |
 | 膠囊鈕 | `glassButton(…)`（無色）、`filledButton(…, tint:)`（染色主要動作） | 高 ≥ 88、字 regular 36（官方食譜圖的膠囊是 Regular）、符號同字重 1.1 倍字級＋間距 16。並排成一組的鈕共用 `HPTokens.Size.pairedButton`（440 × 104），只靠樣式分主次。`busy: true`＝符號換轉圈（`HPComponents.spinner`，0.9 s 一圈）、標籤換 `busyTitle`（進行式，如「打開中…」；nil＝標籤不變）；用在 Music 打開音樂、ClioTalk 想的時候的「停止」鈕，FaceTime 呼叫中是結束鈕外圈轉圈。快照 `HOMEPLAY_ANIM=busy:t` 凍結 |
@@ -322,7 +330,7 @@ HPDS 是 HomePlay 2 所有畫面共用的那一層：外殼、內建 App、ClioT
 | 文字分頁 | `textTabs(…)` | 32，選中 semibold＋5 px 底線、間距 40 |
 | 晶片 | `chip(g, face, r, title, selected:)` | 玻璃膠囊；選中＝白（深色白 34%）；字 semibold 32 |
 | 分區標題 | `sectionHeader(g, face, s, x:, baseline:, chevron:)` | bold 38，可加 chevron |
-| 分組卡 | `groupCard(g, r)`、`separatorLine(…)` | 圓角 52、`card` 色；分隔線 2 px 縮排到文字起點 |
+| 分組卡 | `groupCard(g, r)`、`separatorLine(…)` | 圓角 39.5（`Radius.group`＝`contentCard`，整台同一個固定值；原本 52）、`card` 色；分隔線 2 px 縮排到文字起點 |
 | 膠囊列 | `capsuleRow(g, face, r, title:, subtitle:, trailing:, style:)` | 單行高 113、兩行 135、左右內縮 46、半徑 = 高/2；標題 semibold 33.8、右邊 regular 29.5、時間 regular 31；`.allDay` 淡橘 #FFF0DB＋橘圓 #FF9500（d＝0.46 高）＋棕字 #845008；`.timed` 淡藍 #DAEDFE＋14 px 藍豎條 #0088FE＋深藍標題 #0A4378、時間 #1A5FA0；`.plain` 灰底 |
 | 來源晶片 | `sourceChip(g, face, x:, y:, title)` | 高 40、字 regular 21 #6E6E73、底 #F5F5F5、左右各 13；「+3」是正圓 |
 | 重點詞內文 | `HPType.richWrap(…)`＋`drawRich(…)` | `**粗體**` 標記；英文詞不拆、漢字逐字排 |

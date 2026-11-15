@@ -41,7 +41,6 @@ final class NowPlayingPage {
     private var accent = srgb(0x3a3a44)
     private var tone = (top: srgb(0x3a4a56), bottom: srgb(0x1c2329))
     private var revision = 0                   // 畫面底下的東西換了（曲目、封面到了）就加一：玻璃按鈕要重算
-    private var phoneSerial = -1
     private var macArt: [String: CGImage] = [:]
     private var macArtOrder: [String] = []
     private var requested = Set<String>()
@@ -161,9 +160,9 @@ final class NowPlayingPage {
     }
     /// 左上：App 的玻璃圓鈕（同外殼返回鈕的位置）
     static var appButton: CGRect { HPTokens.backButton }
-    /// 右上：來源膠囊（186×88）。2.0 align：中心 y 對返回鈕（105）、右緣對內容邊線（960）
+    /// 右上：來源膠囊（186×88）：中心 y 對返回鈕（105）、右緣對內容邊線（925.5）
     static let sourceBadge: CGRect = {
-        CGRect(x: HPGrid.App.trailing - 186, y: HPTokens.cornerControlCenter - 44, width: 186, height: 88)
+        CGRect(x: HPGrid.Content.trailing - 186, y: HPTokens.cornerControlCenter - 44, width: 186, height: 88)
     }()
     static let open = CGRect(x: 512 - HPTokens.Size.pairedButton.width / 2, y: 640, width: HPTokens.Size.pairedButton.width, height: HPTokens.Size.pairedButton.height)
     /// 資料庫頁底下的迷你播放器要的：目前這首的封面（還沒同步過就是 nil）
@@ -564,15 +563,6 @@ final class NowPlayingPage {
             face.drawLeft(g, Face.clipped(i.artist, af, maxW), font: af, x: Self.textX, y: N.ambientArtistBaseline, color: NSColor.white.withAlphaComponent(N.ambientArtistAlpha))
         }
         g.restoreGState()
-    }
-
-    /// 玻璃膠囊裡「符號＋字」置中
-    static func capsuleLabel(_ g: CGContext, face: Face, _ r: CGRect, symbol: String, _ text: String, ink: NSColor = .white) {
-        let f = HPComponents.sf(30, weight: .semibold)
-        let t = Face.clipped(text, f, r.width - 90)
-        let w = 32 + 12 + Typo.width(t, f), x = r.midX - w / 2
-        face.drawSymbol(g, symbol, in: CGRect(x: x, y: r.midY - 16, width: 32, height: 32), color: ink, weight: .semibold)
-        face.drawLeft(g, t, font: f, x: x + 44, y: r.midY + f.capHeight / 2, color: ink)
     }
 
     /// 沒在播放時底下的「資料庫」入口（玻璃膠囊）

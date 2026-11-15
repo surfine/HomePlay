@@ -597,6 +597,7 @@ package final class OpusJitterBuffer {
             if Int32(bitPattern: sample &- next) < 0 { nextSample = sample }
         } else {
             nextSample = sample
+            latestSample = sample   // 從第一包起算：RTP 起點隨機，落在高半區時和 0 比永遠是「更舊」，緩衝就等於沒開
         }
         if Int32(bitPattern: sample &- latestSample) > 0 { latestSample = sample }
         packets[sample] = payload
@@ -689,6 +690,7 @@ final class CarPlayAudioStream {
     private let control: UDPSocket
     private var packets = 0, decrypted = 0, rejected = 0
     private var dumped = 0
+    private static let dumpEnabled = ProcessInfo.processInfo.environment["HOMEPLAY_AUDIO_DUMP"] != nil   // 每包查一次環境表太貴
     /// 第一個下行包從哪個位址來：用來判斷手機的音訊走 IPv4 還是 IPv6，
     /// 麥克風上行要跟著走同一個位址族。
     private var loggedSource = false
@@ -767,7 +769,7 @@ final class CarPlayAudioStream {
                 else { onLog?("音频开始（type \(type)，此格式暂不出声）") }
             }
         }
-        if ProcessInfo.processInfo.environment["HOMEPLAY_AUDIO_DUMP"] != nil, dumped < 50 {
+        if Self.dumpEnabled, dumped < 50 {
             dumped += 1
             if dumped == 1 { FileManager.default.createFile(atPath: "/tmp/phone_au.bin", contents: nil) }
             var hdr = UInt32(payload.count).littleEndian

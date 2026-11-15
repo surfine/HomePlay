@@ -20,13 +20,42 @@ enum LiveActivitySelftest {
         let old = S.visible([act(.timer, "timers"), act(.music, "music")], wall: S.maxAge + 1, seen: &aged, enabled: { _ in true })
         check(old.map(\.appID) == ["music"], "Live Activity：超過 8 小時就結束")
 
-        // compact：眼睛在正中、左右同寬緊貼、跟島一樣高、碰不到問候語
-        let eh: CGFloat = 60
-        let c = S.layout(eyesHalf: eh, top: 46, single: (40, 76), minimal: [])
+        // compact（2026-11-13）：藥丸貼合內容——圖示緊接文字、中間沒有原本眼睛的空位，整顆置中、54 高、碰不到問候語
+        let c = S.layout(top: 46, single: (40, 76), minimal: [])
         let greetingTop = HPTokens.Home.greetingBaseline - HPTokens.Home.greetingSize * 0.75
-        check(abs(c.pill.midX - 512) < 0.01 && c.pill.height == S.height && c.leading.map { $0.width == c.trailing.width && $0.maxX <= 512 - eh } == true
-              && c.trailing.minX >= 512 + eh && c.pill.maxY < greetingTop && c.pill.width < 440,
-              "Live Activity compact：👀 正中、左右同寬緊貼眼睛、54 高、比舊的 440 窄、不壓問候語（\(c.pill)）")   // l10n-ignore：selftest 訊息
+        check(abs(c.pill.midX - 512) < 0.01 && c.pill.height == S.height && c.pill.minY == 46 && c.pill.maxY < greetingTop
+              && c.pill.width == 40 + S.innerGap + 76 + 2 * S.endPad
+              && c.leading.map { $0.minX == c.pill.minX + S.endPad && $0.width == 40 && c.trailing.minX - $0.maxX == S.innerGap } == true
+              && c.trailing.width == 76 && c.trailing.maxX == c.pill.maxX - S.endPad,
+              "Live Activity compact：寬度剛好包住內容（圖示＋12＋文字＋兩端各 18），圖示和文字靠在一起，置中、54 高、不壓問候語（\(c.pill)）")   // l10n-ignore：selftest 訊息
+        let iconOnly = S.layout(top: 46, single: (40, 0), minimal: [])
+        check(iconOnly.pill.width == 40 + 2 * S.endPad && iconOnly.trailing.width == 0 && iconOnly.leading?.midX == 512 && iconOnly.pill.minY == 46,
+              "Live Activity compact：只有圖示的（CarPlay）是一顆 76 寬的小藥丸，圖示在正中")   // l10n-ignore：selftest 訊息
+        // 實際的 CarPlay 那則標題是空字串：量出來要是 0，不然整顆會變寬、圖示偏左（2026-11-13 修）
+        let cpTrail = S.textWidth(S.carPlayActivity().title, Face.rounded(28, weight: .semibold), cap: 150)
+        check(cpTrail == 0 && S.textWidth("Mom", Face.rounded(28, weight: .semibold), cap: 150) > 0,
+              "Live Activity compact：空字串的寬度是 0（CarPlay 那顆只有圖示）")   // l10n-ignore：selftest 訊息
+        // CarPlay 在背景＝一則即時動態（取代綠色角標）：有會話在背景才出現、排最後、滿了擠掉第三個；點它回 CarPlay、不展開
+        let cp = S.carPlayActivity()
+        let three = [act(.timer, "timers"), act(.music, "music"), act(.call, "facetime")]
+        check(S.isCarPlay(cp) && cp.title.isEmpty && cp.detail.isEmpty && cp.symbol == "car.fill" && !S.isCarPlay(three[0])
+              && S.pillActivities([], carPlayBehind: false).isEmpty && S.pillActivities([], carPlayBehind: true).map(\.appID) == [CarPlayApp.id]
+              && S.pillActivities(three, carPlayBehind: false).count == 3
+              && S.pillActivities(three, carPlayBehind: true).map(\.appID) == ["timers", "music", CarPlayApp.id]
+              && S.pillActivities([three[0]], carPlayBehind: true).map(\.appID) == ["timers", CarPlayApp.id],
+              "Live Activity：CarPlay 在背景是一顆車子圖示的藥丸，有會話在背景才出現；滿三個時也一定留著")   // l10n-ignore：selftest 訊息
+        let savedShown = S.shown, savedHits = S.hits, savedExpanded = S.expandedApp
+        var opened: [String] = [], homes = 0
+        S.expandedApp = nil
+        S.shown = [cp]; S.hits = [(.pill, CGRect(x: 474, y: 46, width: 76, height: 54))]
+        let tapCP = S.tap(CGPoint(x: 512, y: 70), long: false, now: 0, face: Face(), open: { opened.append($0.appID) }, home: { homes += 1 })
+        let holdCP = S.tap(CGPoint(x: 512, y: 70), long: true, now: 0, face: Face(), open: { opened.append($0.appID) }, home: { homes += 1 })
+        S.shown = [three[0], cp]; S.hits = [(.pill, CGRect(x: 474, y: 46, width: 76, height: 54)), (.minimal(1), CGRect(x: 562, y: 46, width: 62, height: 54))]
+        let tapTimer = S.tap(CGPoint(x: 512, y: 70), long: false, now: 0, face: Face(), open: { opened.append($0.appID) }, home: { homes += 1 })
+        let tapMini = S.tap(CGPoint(x: 590, y: 70), long: true, now: 0, face: Face(), open: { opened.append($0.appID) }, home: { homes += 1 })
+        check(tapCP && holdCP && tapTimer && tapMini && opened == [CarPlayApp.id, CarPlayApp.id, CarPlayApp.id] && homes == 1 && S.expandedApp == nil,
+              "Live Activity：點 CarPlay 那顆＝回 CarPlay（按住也是，沒有大卡）；其他藥丸照舊是 Home 鍵")   // l10n-ignore：selftest 訊息
+        S.shown = savedShown; S.hits = savedHits; S.expandedApp = savedExpanded
         // 回歸 #15：換頁只從「乾淨」的上一幀取舊畫面
         check(Face.transitionSource(dim: 0, pageDir: 0, status: .notConnected, hasLast: true, hasSettled: false) == .last
               && Face.transitionSource(dim: 0.4, pageDir: 0, status: .notConnected, hasLast: true, hasSettled: true) == .settled
@@ -47,19 +76,20 @@ enum LiveActivitySelftest {
               && Face.growsCapsule([phone, call], musicActive: false),
               "Live Activity：空內容與 iPhone 鏡像不長大；通話／有字的活動才長（回歸 #17b）")   // l10n-ignore：selftest 訊息
         // 回歸 #18：再長的內容也不能把膠囊撐成巨物；槽與膠囊同一個上限
-        let huge = S.layout(eyesHalf: eh, top: 46, single: (40, 380), minimal: [])
-        check(huge.pill.width <= S.maxWidth + 0.01 && huge.trailing.width <= (S.maxWidth - 2 * (eh + S.gap + S.endPad)) / 2 + 0.01
-              && huge.trailing.width < 380,
+        let huge = S.layout(top: 46, single: (40, 2000), minimal: [])
+        check(huge.pill.width <= S.maxWidth + 0.01 && huge.trailing.width <= S.maxWidth - 2 * S.endPad - 40 - S.innerGap + 0.01
+              && huge.trailing.width < 2000 && huge.trailing.maxX <= huge.pill.maxX - S.endPad + 0.01,
               "Live Activity compact：內容槽受上限約束（膠囊 ≤ \(S.maxWidth)、槽 ≤ \(huge.trailing.width)）")   // l10n-ignore：selftest 訊息
-        // minimal：一個接在膠囊、兩個分離（右、左），寬內容是橢圓
-        let m = S.layout(eyesHalf: eh, top: 46, single: nil, minimal: [38, 26, 80])
+        // minimal：中間一顆、兩個分離（右、左）；每顆都貼合內容——圓形，寬內容是橢圓；中間那顆也沒有空位
+        let m = S.layout(top: 46, single: nil, minimal: [38, 26, 80])
         check(m.detached.count == 2 && m.detached[0].minX > m.pill.maxX && m.detached[1].maxX < m.pill.minX
               && m.detached[0].width == m.detached[0].height && m.detached[1].width > m.detached[1].height
-              && m.trailing.minX >= 512 + eh && m.pill.maxY < greetingTop,
-              "Live Activity minimal：一個接在膠囊、其餘分離在兩側；圓形或橢圓")   // l10n-ignore：selftest 訊息
-        // expanded：上緣＝膠囊上緣（沒有額頭）、跟螢幕同心、高度照內容
+              && m.pill.width == max(S.height, 38 + 2 * S.minimalPad) && abs(m.pill.midX - 512) < 0.01 && abs(m.trailing.midX - 512) < 0.01
+              && m.trailing.width == 38 && m.pill.maxY < greetingTop && m.pill.minY == 46,
+              "Live Activity minimal：中間一顆、其餘分離在兩側；每顆寬度跟著內容（圓形或橢圓），沒有留空")   // l10n-ignore：selftest 訊息
+        // expanded：上緣＝膠囊上緣（沒有額頭）、左右貼內容邊線（shell-layout.md 第 6 節）、跟螢幕同心、高度照內容
         let big = S.expandedRect(height: S.expandedHeight(.timer), top: 46)
-        check(big.minY == 46 && big.minX == S.expandedInset && S.expandedRadius(big) <= Screen.concentric(inset: S.expandedInset)
+        check(big.minY == 46 && big.minX == HPGrid.Content.leading && big.maxX == HPGrid.Content.trailing && S.expandedRadius(big) <= Screen.concentric(inset: S.expandedInset)
               && S.expandedHeight(.assistant) < S.expandedHeight(.timer) && S.expandedHeight(.music) > S.expandedHeight(.timer),
               "Live Activity expanded：上緣貼著膠囊、同心圓角、高度隨內容")   // l10n-ignore：selftest 訊息
 

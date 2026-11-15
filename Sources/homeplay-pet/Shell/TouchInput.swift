@@ -913,8 +913,9 @@ extension Face {
 
     /// 小卡：貼在 👀 膠囊旁邊，一個小箭頭指著它（沒有膠囊時置中、不畫箭頭）
     private func drawTouchTip(_ g: CGContext, _ now: Double) {
-        let cap = capsuleCore
-        let title = L("touch.tip.title", "从 👀 往下拉，回到主屏幕")
+        // 錶面上指著 👀 膠囊；外殼畫面上那裡是把手（Shell/HomeHandle.swift）
+        let cap = capsuleCore ?? (shellCoversFace ? HomeHandle.rect : nil)
+        let title = shellCoversFace ? L("touch.tip.title.handle", "从顶端的把手往下拉，回到主屏幕") : L("touch.tip.title", "从 👀 往下拉，回到主屏幕")
         let body = L("touch.tip.body", "按住看更多选项，两指捏合调整大小")
         let w: CGFloat = 840, h: CGFloat = 330, x = (1024 - w) / 2
         let tf = Self.fitted(title, size: 54, weight: .bold, maxWidth: w - 96)

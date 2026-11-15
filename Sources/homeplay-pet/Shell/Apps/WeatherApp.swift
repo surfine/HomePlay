@@ -260,6 +260,7 @@ final class WeatherApp: PetApp {
         g.saveGState()
         g.setShadow(offset: CGSize(width: 0, height: -2), blur: 14, color: NSColor(srgbRed: 0.1, green: 0.2, blue: 0.35, alpha: 0.32).cgColor)
         HPComponents.clock(g, face, color: .white)
+        HPComponents.bigTitle(g, face, title, color: .white)   // 下一層頁首的標題（shell-layout.md 第 3 節）
         g.restoreGState()
         HPComponents.backButton(g, face, symbol: backSymbol)
     }
@@ -280,7 +281,7 @@ final class WeatherApp: PetApp {
         func note(_ r: CGRect, _ label: String, _ role: HPAXNote.Role = .text) {
             let vis = r.intersection(CGRect(x: 0, y: AppUI.topEdge, width: 1024, height: 1024 - AppUI.topEdge))
             guard !vis.isNull, vis.height >= r.height * 0.5 else { return }
-            notes.append(HPAXNote(role: role, label: label, rect: r, shape: .rounded(AppUI.groupRadius)))
+            notes.append(HPAXNote(role: role, label: label, rect: r, shape: .rounded(AppUI.groupRadius(r))))
         }
         func shadowed(_ draw: () -> Void) {
             g.saveGState()
@@ -328,11 +329,11 @@ final class WeatherApp: PetApp {
         var colliders: [CGRect] = []
         func module(_ r: CGRect, symbol: String?, _ head: String) {
             if r.minY > clipTop, r.minY < 1024 { colliders.append(r) }
-            let path = continuousRoundedRect(r, radius: AppUI.groupRadius)
+            let path = continuousRoundedRect(r, radius: AppUI.groupRadius(r))
             g.setFillColor(fill.cgColor); g.addPath(path); g.fillPath()
             if !rt {
                 g.setStrokeColor(NSColor.white.withAlphaComponent(0.10).cgColor); g.setLineWidth(2)
-                g.addPath(continuousRoundedRect(r.insetBy(dx: 1, dy: 1), radius: AppUI.groupRadius - 1)); g.strokePath()
+                g.addPath(continuousRoundedRect(r.insetBy(dx: 1, dy: 1), radius: AppUI.groupRadius(r) - 1)); g.strokePath()
             }
             var x = r.minX + 36
             if let symbol {

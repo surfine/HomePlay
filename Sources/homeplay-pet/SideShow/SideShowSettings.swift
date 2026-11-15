@@ -45,7 +45,7 @@ enum SideShowSettings {
     /// QR 碼要放的網址（快照用假網址，不讀這台 Mac 的名字與位址）。這一頁配的是副屏。
     static func pairURL(code: String) -> String? {
         let base = SnapshotPrivacy.active || demoOn ? "http://homeplay.local:\(RemoteStore.defaultPort)/" : RemoteServer.urls().first
-        return base.map { $0 + "#pair=" + code + "&mode=side" }
+        return base.map { $0 + "side/#pair=" + code + "&mode=side" }   // 只有 /side/ 那一頁讀 #pair=；根頁（鏡像）讀的是 #p=，會把這段丟掉
     }
 
     /// Core Image 的 QR 碼，放大成 px 見方、不內插（每個模組邊界清楚）
@@ -67,51 +67,32 @@ enum SideShowSettings {
 }
 
 extension SettingsApp {
-    private var x0: CGFloat { Self.x0 }
     private var width: CGFloat { Self.x1 - Self.x0 }
-
-    /// 一列：左邊名稱、右邊開關（點整列切換）
-    private func toggleRow(_ g: CGContext, _ face: Face, _ r: CGRect, _ title: String, on: Bool, key: String, action: @escaping () -> Void) {
-        let sw = CGRect(x: r.maxX - Self.inset - 106, y: r.midY - 31, width: 106, height: 62)
-        face.drawLeft(g, Face.clipped(title, lf, sw.minX - r.minX - Self.inset - 24), font: lf, x: r.minX + Self.inset, y: r.midY + 15, color: HPComponents.label)
-        HPComponents.toggle(g, sw, on: on, key: key, label: title)
-        hits.append((r, action))
-    }
 
     func drawSideShow(_ g: CGContext, _ face: Face) {
         var y = HPTokens.contentTop
         let srv = RemoteServer.shared, on = SideShowSettings.on
-        let owner = PersonalGate.allowed
-        HPComponents.groupCard(g, CGRect(x: x0, y: y, width: width, height: Self.row))
-        toggleRow(g, face, CGRect(x: x0, y: y, width: width, height: Self.row), L("settings.sideshow", "iPhone 与 iPad"), on: on, key: "sideshow.enabled") {
-            guard owner, !SideShowSettings.demoOn else { return }
-            RemoteStore.enabled = !on
-            if RemoteStore.enabled { srv.startFromLaunch() } else { srv.stop() }
-            NotificationCenter.default.post(name: RemoteServer.changed, object: nil)
-        }
-        y += Self.row + HPGrid.Rhythm.rowGap
+        // 沒認出主人：只顯示要主人在場的說明（示範名冊照常畫）
+        guard PersonalGate.allowed || SideShowSettings.demoOn else { needOwner(g, face, y: &y); return }
+        group(g, face, [
+            Row(title: L("settings.sideshow", "iPhone 与 iPad"), control: .toggle(on, key: "sideshow.enabled")) {
+                guard !SideShowSettings.demoOn else { return }
+                RemoteStore.enabled = !on
+                if RemoteStore.enabled { srv.startFromLaunch() } else { srv.stop() }
+                NotificationCenter.default.post(name: RemoteServer.changed, object: nil)
+            },
+        ], y: &y)
         footnote(g, face, L("sideshow.note", "把旧 iPhone 或 iPad 变成第二块屏幕：可以镜像整个画面，也可以只当副屏——时钟、天气、正在播放、计时器和家庭警报。Mac 睡着时，副屏照样显示最后的内容。"), y: &y)
         if srv.listenFailed && !SideShowSettings.demoOn {
             footnote(g, face, L("sideshow.listenFailed", "无法开始监听：端口被占用，或没有本地网络权限。"), y: &y)
         }
         guard on else { return }
-        y += HPGrid.Rhythm.sectionGap
+        y += HPGrid.Rhythm.sectionGap - HPGrid.Rhythm.groupGap
 
-        HPComponents.groupCard(g, CGRect(x: x0, y: y, width: width, height: Self.row))
-        row(g, face, CGRect(x: x0, y: y, width: width, height: Self.row), L("sideshow.add", "添加设备"),
-            value: owner ? nil : L("sideshow.needOwner", "需要主人"), chevron: owner, dim: !owner,
-            action: owner ? { [weak self] in _ = srv.store.newPairing(); self?.picking = .sideshowPair } : nil)
-        y += Self.row + HPGrid.Rhythm.rowGap
+        group(g, face, [
+            Row(title: L("sideshow.add", "添加设备"), control: .nav(nil)) { [weak self] in _ = srv.store.newPairing(); self?.picking = .sideshowPair },
+        ], y: &y)
         footnote(g, face, L("sideshow.manage", "已配对的设备、镜像／副屏、个人内容，都在 Mac 的「设置 › iPhone 与 iPad」里管理。"), y: &y)
-    }
-
-    /// 「剛剛」「14:05」「11/5」
-    static func seenText(_ t: Double) -> String {
-        let now = Date().timeIntervalSince1970
-        if now - t < 90 { return L("sideshow.justNow", "刚刚") }
-        let d = Date(timeIntervalSince1970: t), f = DateFormatter()
-        Face.setTimeFormat(f, datePrefix: Calendar.current.isDateInToday(d) ? "" : "Md")
-        return f.string(from: d)
     }
 
     func drawSideShowPair(_ g: CGContext, _ face: Face, now: Double) {
@@ -131,14 +112,14 @@ extension SettingsApp {
         }
         HPAX.note(g, card, .text, L("sideshow.qr.a11y", "配对二维码"), shape: .rounded(48))
         var y = card.maxY + HPGrid.Rhythm.groupGap
-        let bf = HPType.sf(42, .semibold)
+        let bf = HPType.sf(34, .semibold)
         face.drawCentered(g, L("sideshow.scan", "用 iPad 或手机的相机扫描"), font: bf, y: y + 40, color: HPComponents.label)
         y += 64
         let left = max(0, Int(((store.pairingExpires ?? 0) - Date().timeIntervalSince1970) / 60 + 0.99))
-        face.drawCentered(g, String(format: L("sideshow.code", "配对码 %@ · %d 分钟内有效"), code, left), font: sf, y: y + 38, color: HPComponents.secondary)
-        y += 56
+        face.drawCentered(g, String(format: L("sideshow.code", "配对码 %@ · %d 分钟内有效"), code, left), font: vf, y: y + 38, color: HPComponents.secondary)
+        y += 56 + HPGrid.Rhythm.groupGap - HPGrid.Rhythm.rowGap
         footnote(g, face, L("sideshow.pairHint", "扫码后先把网页添加到主屏幕，再从主屏幕打开，Mac 睡着时也能显示最后的内容。也可以在 Safari 打开下面的网址，再输入配对码。"), y: &y)
         let base = url.components(separatedBy: "#").first ?? url
-        face.drawCentered(g, Face.clipped(base, sf, width - 2 * Self.inset), font: sf, y: y + 38, color: HPComponents.blue)
+        face.drawCentered(g, Face.clipped(base, sf, width - 2 * Self.inset), font: sf, y: y + 30 - HPGrid.Rhythm.groupGap + HPGrid.Rhythm.rowGap, color: HPComponents.blue)
     }
 }

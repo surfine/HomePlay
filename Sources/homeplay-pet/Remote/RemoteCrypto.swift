@@ -63,10 +63,6 @@ enum RemoteCrypto {
         return stride(from: 0, to: s.count, by: 4).map { String(s[$0..<min(s.count, $0 + 4)]) }.joined(separator: "-")
     }
 
-    static func pairingKey(_ secret: [UInt8]) -> SymmetricKey {
-        SymmetricKey(data: Data(secret + [UInt8](repeating: 0, count: max(0, 32 - secret.count))))
-    }
-
     static func sessionKey(_ key: SymmetricKey, nonceC: [UInt8], nonceS: [UInt8]) -> SymmetricKey? {
         guard nonceC.count == 6, nonceS.count == 6, let n = try? ChaChaPoly.Nonce(data: Data(nonceC + nonceS)),
               let box = try? ChaChaPoly.seal(Data(count: 32), using: key, nonce: n) else { return nil }

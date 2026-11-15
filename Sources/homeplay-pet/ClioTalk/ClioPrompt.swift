@@ -72,12 +72,21 @@ struct ClioContext: Equatable {
         return c
     }
 
-    /// 只給名，不給姓（「Aaron Lau」→「Aaron」；中文名照原樣，太長就截前兩個字）
+    /// 只給名，不給姓（「Aaron Lau」→「Aaron」）。中文名沒有空格：兩到四個字的純漢字名去掉開頭的姓
+    ///（常見複姓去兩個字，其餘去一個字）；分不出來的照原樣。
     static func firstName(_ n: String) -> String {
         let t = n.trimmingCharacters(in: .whitespacesAndNewlines)
         if let sp = t.firstIndex(of: " ") { return String(t[..<sp]) }
-        return t
+        let chars = Array(t)
+        let han = chars.allSatisfy { $0.unicodeScalars.allSatisfy { (0x4E00...0x9FFF).contains($0.value) || (0x3400...0x4DBF).contains($0.value) } }
+        guard han, (2...4).contains(chars.count) else { return t }
+        if chars.count >= 3, compoundSurnames.contains(String(chars[0...1])) { return String(chars[2...]) }
+        return String(chars[1...])
     }
+    private static let compoundSurnames: Set<String> = [
+        "歐陽", "欧阳", "司馬", "司马", "上官", "諸葛", "诸葛", "東方", "东方", "皇甫", "尉遲", "尉迟", "公孫", "公孙",   // l10n-ignore：姓氏表，不是介面文字
+        "慕容", "令狐", "長孫", "长孙", "宇文", "軒轅", "轩辕", "夏侯", "司徒", "端木", "獨孤", "独孤", "南宮", "南宫", "西門", "西门", "澹臺", "澹台",   // l10n-ignore：姓氏表，不是介面文字
+    ]
 
     /// 正式用的：在主執行緒拍一張（引擎在背景，這裡同步取）
     nonisolated(unsafe) static var live: (_ now: Date, _ mode: ClioResponseMode) -> ClioContext = { now, mode in
@@ -275,6 +284,10 @@ struct ClioReply: Equatable {
 
 extension ClioContext {
     static func selftest(_ check: (Bool, String) -> Void) {
+        // 只給名不給姓：英文取空格前；中文去掉姓（複姓去兩個字）；分不出來的照原樣
+        check(firstName("Aaron Lau") == "Aaron" && firstName("劉亞倫") == "亞倫" && firstName("王明") == "明", "ClioTalk 名字：英文取名、中文去掉姓")   // l10n-ignore：selftest
+        check(firstName("歐陽小明") == "小明" && firstName("司马光") == "光", "ClioTalk 名字：複姓去兩個字")   // l10n-ignore：selftest
+        check(firstName("Aaron") == "Aaron" && firstName("明") == "明" && firstName("阿明Lau") == "阿明Lau", "ClioTalk 名字：分不出姓名的照原樣")   // l10n-ignore：selftest
         let tz = TimeZone(identifier: "Asia/Taipei")!
         var c = ClioContext(now: Date(timeIntervalSince1970: 1_793_000_000), timeZone: tz, mode: .voice, language: "zh-Hant")
         c.city = "Taipei"; c.person = .owner("Aaron Lau"); c.app = "Recipes"; c.appDetail = "step 3 of 7"

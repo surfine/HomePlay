@@ -237,7 +237,7 @@ final class ClioTalkController: NSObject, NSPopoverDelegate {
     /// 按住＝按著說（放開送出）；點一下＝免按住（停頓 0.7 秒送出）；念回答時按＝立刻停
     func handleF5(down: Bool, carPlayLive: Bool, view v: PetView?) -> Bool {
         if carPlayLive { voice.cancel() }   // CarPlay 的 Siri 要用麥克風：先放掉
-        let mine = f5.route(down: down, carPlayLive: carPlayLive, clioEnabled: ClioSettings.f5OpensClioTalk)
+        let mine = f5.route(down: down, carPlayLive: carPlayLive)
         guard mine else { return false }
         if down {
             openForVoice(v)
@@ -315,7 +315,7 @@ final class ClioTalkController: NSObject, NSPopoverDelegate {
         guard answerSeen, st == .waiting || st == .speaking || st == .bargeCheck else { return }
         let p = snapshot.phase
         guard p == .idle || p == .confirm || p == .error, speaker.pending == 0 else { return }
-        voice.answerDone(followUp: ClioSettings.followUpListening)
+        voice.answerDone(followUp: ClioSettings.followUpListening && isOpen)   // 卡片已被收起：答完就關麥克風，不在看不到的時候繼續聽
     }
 
     /// 2.0 P10（HV-SPECS-65）：從螢幕頂端往下滑＝立刻開始聽（免按住、停頓就送出），不出文字框；
@@ -614,9 +614,15 @@ extension Face {
         let na = ClioTalkPanel.nextAlpha(a, target: target, dt: dt)
         if na != a { ClioTalkPanel.entering = na > a }
         ClioTalkPanel.alpha = na
-        if na == 0 { if a != 0 { ClioTalkPanel.buttons = [] }; return a != 0 }
+        // 卡片收起來之後語音狀態機照樣要走：不然回答中途被收掉時，「回答完再聽一會兒」和等模型的逾時永遠不到期，麥克風一直開著
+        let voice = ClioTalkController.shared.voice
+        if na == 0 {
+            if voice.loop.state != .off { voice.tick() }
+            if a != 0 { ClioTalkPanel.buttons = [] }
+            return a != 0
+        }
         let p = ClioTalkPanel.snapshot.phase
-        ClioTalkController.shared.voice.tick()   // 2.0 語音：跟進倒數、沒開口逾時
+        voice.tick()   // 2.0 語音：跟進倒數、沒開口逾時
         let moving = p == .thinking || p == .streaming || now - ClioTalkPanel.pressAt < 0.3 || ClioTalkPanel.voiceAnimating
             || now - ClioTalkPanel.openedAt < 0.8 || now - ClioTalkPanel.revealAt < 0.8   // 2.0 R9：滴下來、逐行浮現
             || ClioTalkPanel.orbSettling   // 水滴的狀態過場還沒走完（空閒且到位就不逐幀）

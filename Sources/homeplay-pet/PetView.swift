@@ -257,7 +257,6 @@ final class PetView: NSView {
 
     private weak var liveTimerItem: NSMenuItem?   // 打开的菜单里的「计时器」父项
     private var menuTicker: Timer?                // 菜单打开期间逐秒刷新倒计时
-    private var gazePitchValueLabel: NSTextField? // 俯仰角度弹窗里的数值
     private enum Drag { case none, rotate, resize, touch, move }
     private var drag: Drag = .none
     private var threeFinger: [CGPoint]?   // 三指拖移的上一帧归一化位置
@@ -276,7 +275,7 @@ final class PetView: NSView {
         setAccessibilityElement(true)
         setAccessibilityRole(.button)
         setAccessibilityLabel(L("a11y.pet", "HomePlay 桌宠"))
-        setAccessibilityHelp(L("a11y.help", "重按屏幕进出 CarPlay，右键打开菜单"))
+        setAccessibilityHelp(L("a11y.help", "按空格键进出 CarPlay，右键打开菜单"))
 
         render.frame = bounds
         render.autoresizingMask = [.width, .height]
@@ -318,7 +317,8 @@ final class PetView: NSView {
         setFinish(Finish(rawValue: UserDefaults.standard.string(forKey: Finish.defaultsKey) ?? "") ?? .starlight)
         if model.finish == .g4 { face.beginHello(CACurrentMediaTime()) }   // G4 白：开机先写一个 hello（2.0：Hello/HelloScene.swift）
         let savedStyle = FaceStyle(rawValue: UserDefaults.standard.string(forKey: FaceStyle.defaultsKey) ?? "") ?? .island
-        face.style = savedStyle.inLineup
+        // W1（2026-11-10）：啟動套 library 目前那張臉（index → kind＋config）；舊鍵 HomePlayFaceStyle 只當遷移依據與退版鏡射
+        face.style = PosterLibraryStore.current.galleryFace
         face.restoreFaceOptions(migrating: savedStyle)   // Typograph 材質／System 6 版式（舊的浮雕、Alarm Clock、About 在這裡搬進來）
         face.restoreIslandOptions()   // 島錶面：时钟样式 / 背景 / 年代
         CompanionLog.markToday()   // 陪伴的痕跡：今天打开过
@@ -1069,7 +1069,6 @@ final class PetView: NSView {
     /// 拖它就搬窗口的部位：底座那一截（螢幕、鉸鏈仍是轉身體）
     private static let standAnatomy: Set<AnatomyPart> = [.radiators, .baseModule, .power, .climate, .woofer, .foot]
     static var standAnatomyForTest: Set<AnatomyPart> { standAnatomy }
-    private static let standParts: Set<String> = ["hinge", "dome", "grille", "driver", "foot"]
 
     /// 换外观：模型换材质；G4 白的屏幕走 Aqua，转头幅度也大一点（向日葵）
     func setFinish(_ f: Finish) { model.apply(finish: f); face.aqua = f == .g4 }
@@ -1204,10 +1203,9 @@ final class PetView: NSView {
     // 追人（摄像头）：人脸框 → 转头/歪头；没人时做待机扫视。
     var gazeEnabled = false
     var gazePresent = false
-    var gazeX: CGFloat = 0, gazeY: CGFloat = 0, gazeRoll: CGFloat = 0, gazeSize: CGFloat = 0
+    var gazeX: CGFloat = 0, gazeY: CGFloat = 0
     private var gazeLastSeen: Double = 0
     private var gazeWasPresent = false
-    private var gazeHeadOn = false    // 头部 yaw 的迟滞：小侧移只动眼睛，明显侧移才转头
     static let gazePitchKey = "HomePlayGazePitch"
     private(set) var gazePitchDegrees: CGFloat = {
         let v = (UserDefaults.standard.object(forKey: "HomePlayGazePitch") as? Double) ?? 2.5
@@ -1230,10 +1228,7 @@ final class PetView: NSView {
             // 非 G4 最多约 2°，G4 最多约 3.7°——Mac 是效率工具，桌宠只做轻微回应。
             // 头部有 0.08–0.14 的迟滞：小幅侧移只动眼睛，明显侧移才转头，避免一直微调。
             let g4 = model.finish == .g4
-            let ax = abs(gazeX)
-            if ax > 0.14 { gazeHeadOn = true } else if ax < 0.08 { gazeHeadOn = false }
             // 左右转交给整机（aim，±25° DockKit 式）；铰链只留俯仰
-            _ = ax
             gx = 0
             // 俯仰上限由菜单里的「跟随我俯仰角度」控制（0–8°，默认 2.5°，G4 略大）。
             let maxPitch = gazePitchDegrees * (g4 ? 1.25 : 1.0) * .pi / 180
@@ -1292,11 +1287,10 @@ final class PetView: NSView {
     func setGazeEnabled(_ on: Bool) {
         gazeEnabled = on
         WhoIsLooking.shared.setFollowActive(on)   // 2.0: 「跟随我」开着才认人
-        gazeHeadOn = false
         if !on {
             gazePresent = false
             gazeWasPresent = false
-            gazeX = 0; gazeY = 0; gazeRoll = 0; gazeSize = 0
+            gazeX = 0; gazeY = 0
         }
         log("gaze follow \(on ? "on" : "off")")
     }
@@ -1310,11 +1304,10 @@ final class PetView: NSView {
     func applyGaze(_ s: GazeTracker.Sample) {
         if s.present {
             gazePresent = true
-            gazeX = s.x; gazeY = s.y; gazeRoll = s.roll; gazeSize = s.size
+            gazeX = s.x; gazeY = s.y
             gazeLastSeen = CACurrentMediaTime()
             if !gazeWasPresent {
                 gazeWasPresent = true
-                gazeHeadOn = false
                 // 错峰：眼睛先到（Face.pointer 每帧更新、14/s 追过去），
                 // 头随后（0.6 s 弹簧），落定前再点一下头、补一个眨眼。
                 mood.show(.surprised, for: 0.3, now: CACurrentMediaTime())
@@ -1331,7 +1324,6 @@ final class PetView: NSView {
         } else if gazeWasPresent {
             gazeWasPresent = false
             gazePresent = false
-            gazeHeadOn = false
             face.blinkSoon(after: 0.12)
             log("gaze lost")
         }
@@ -1379,6 +1371,13 @@ final class PetView: NSView {
         } else {
             face.pointer = CGPoint(x: (m.x - f.midX) / (f.width * 0.6), y: -(m.y - f.midY) / (f.height * 0.6))
         }
+        // 找游標（Shell/PointerInput.swift）：快速搖晃游標時眼睛朝游標看一下——跟隨我、AirPlay 影片佔著眼神時也看過去；只動眼神
+        if !Face.snapshotFreeze {
+            pointerShake(screenX: m.x, now: now)
+            if now < PointerInput.lookAtCursorUntil {
+                face.pointer = CGPoint(x: max(-1, min(1, (m.x - f.midX) / (f.width * 0.6))), y: max(-1, min(1, -(m.y - f.midY) / (f.height * 0.6))))
+            }
+        }
         if let tp = touchGazePointer(now) { face.pointer = tp }   // 拍板 2：手指按著看手指，放開 1 秒後回到上面的平常
         var onStand = false
         if f.contains(m), drag == .none {
@@ -1416,14 +1415,14 @@ final class PetView: NSView {
         guard on != showingVideo else { return }
         let now = CACurrentMediaTime()
         if on {   // 共享元素：膠囊從剛才主畫面／錶面上的位置滑進 CarPlay 頂端那條帶
-            CarPlayChrome.shared.glide = (face.capsuleCore ?? Shell.pillRect(Shell.pillT), now)
+            CarPlayChrome.shared.glide = (face.capsuleCore ?? HomeHandle.rect, now)
         } else {
             if let shot = CarPlayChrome.shared.snapshot() { AppSwitcher.shots[CarPlayApp.id] = shot }   // 切換器卡片、下次打開的過場
             CarPlayChrome.shared.reset()
             // 不是 carPlayToHome 收的（到點、斷線、要在錶面上看結果的動作）：回錶面，膠囊從 CarPlay 那條帶滑回錶面上的位置
             if !Shell.carPlayPeek, case .app(CarPlayApp.id) = Shell.nav.screen {
                 Shell.nav = ShellNav()
-                Face.capsuleGlide = (HomeIndicator.carPlayCapsule(inset: HomeIndicator.inset), now)
+                Face.capsuleGlide = (HomeHandle.rect, now)
             }
         }
         showingVideo = on
@@ -1735,7 +1734,7 @@ final class PetView: NSView {
             face.forceDirty = true
             return
         }
-        if overviewMouseUp(event, uv: screenUV(local(event))) { drag = .none; pressTarget = 1; system6Pending = false; return }
+        if overviewMouseUp(event, uv: ShellInput.uvOverride ?? screenUV(local(event))) { drag = .none; pressTarget = 1; system6Pending = false; return }   // uvOverride＝自檢腳本指定放手點
         if drag == .rotate, touchScreenReleased(event) { drag = .none; pressTarget = 1; system6Pending = false; return }   // 螢幕上捲過了（沒捲＝點按，照下面）
         let p = local(event)
         switch drag {
@@ -1817,7 +1816,7 @@ final class PetView: NSView {
         // 捏合到最小/最大时给一次对齐反馈（只在刚碰界那一下，不连发）
         let limit: CGFloat? = w == Pet.minWidth ? Pet.minWidth : (w == Pet.maxWidth ? Pet.maxWidth : nil)
         if limit != nil, limit != limitHaptic {
-            NSHapticFeedbackManager.defaultPerformer.perform(.alignment, performanceTime: .now)
+            PointerHaptics.perform(.pinchLimit)   // 震動三處之一（Shell/PointerInput.swift；設定 › 輔助使用「觸覺回饋」可關）
         }
         limitHaptic = limit
     }
@@ -1854,10 +1853,7 @@ final class PetView: NSView {
     func zoom(by factor: CGFloat) { resizeWindowAnimated(toWidth: bounds.width * factor) }
     func setZoom(width: CGFloat) { resizeWindowAnimated(toWidth: width) }
     /// 一键最大：屏高的 85%（锁比例），不超过上限
-    func zoomMax() {
-        let vh = (NSScreen.main ?? NSScreen.screens.first)?.visibleFrame.height ?? 900
-        setZoom(width: min(Pet.maxWidth, vh * 0.85 * Pet.aspect))
-    }
+    func zoomMax() { setZoom(width: zoomMaxWidth) }
 
     /// 双击：转正回主视角（走最短路径的弹簧动画），拆开状态先组回来
     func resetOrientation() {
@@ -1901,11 +1897,17 @@ final class PetView: NSView {
         addTrackingArea(a); hoverArea = a
     }
     override func mouseMoved(with event: NSEvent) {
+        let hoverUV = screenUV(local(event))
+        shellHandleHover(hoverUV)   // 游標進入頂端中間的命中區：把手現身（Shell/HomeHandle.swift）
+        pointerHover(hoverUV)       // 游標回饋：圖示放大、按鈕與清單列出現底色（Shell/PointerInput.swift）
+        pointerPat(at: local(event), now: CACurrentMediaTime())   // 摸頭：游標在頭頂來回
         guard anatomyActive, drag == .none else { return }
         let hit = pickAnatomy(local(event))?.0
         if hit != hoverPart { hoverPart = hit; updateAnatomyCallout(CACurrentMediaTime()) }
     }
     override func mouseExited(with event: NSEvent) {
+        shellHandleHover(nil)
+        pointerHover(nil)
         if hoverPart != nil { hoverPart = nil; updateAnatomyCallout(CACurrentMediaTime()) }
     }
 
@@ -1982,10 +1984,6 @@ final class PetView: NSView {
     }
 
     @objc func menuViewFront() { setView(yaw: 0, pitch: 0.12, label: "front") }
-    @objc func menuViewMode(_ sender: NSMenuItem) {
-        guard let raw = sender.representedObject as? String, let mode = ViewMode(rawValue: raw) else { return }
-        setViewMode(mode)
-    }
     func setViewMode(_ mode: ViewMode) {
         let wasWall = viewMode == .wall
         viewMode = mode
@@ -2085,15 +2083,28 @@ final class PetView: NSView {
         dragVel = 0
         mood.show(.happy, for: 1.2, now: CACurrentMediaTime())
     }
-    /// 智慧缩放（触控板两指轻点两下）＝拆开／组回；Magic Mouse 的「单指轻点两下」也会送这个事件、很容易误触——
-    /// 拿得到接触帧时只认触控板上正好两指（2026-11-06 使用者：鼠标也别误触）
+    /// 智慧縮放（觸控板兩指輕點兩下、Magic Mouse 單指輕點兩下）＝桌寵在目前大小與放大之間切換（2026-11-12 定案；
+    /// HIG Pointing devices：smart zoom 用來放大或縮小內容）。拆開／組回只留在選單
     override func smartMagnify(with e: NSEvent) {
         if TouchInput.dropsSystemEvent() { return }
-        if TrackpadPinch.shared.available, !TrackpadPinch.shared.recentTwoFingers { return }
-        setApart(!isApart)
+        endPoster()
+        pointerSmartZoom()
+    }
+    /// 「放到最大」的寬度：螢幕高的 85%（鎖比例），不超過上限
+    var zoomMaxWidth: CGFloat {
+        let vh = (NSScreen.main ?? NSScreen.screens.first)?.visibleFrame.height ?? 900
+        return min(Pet.maxWidth, vh * 0.85 * Pet.aspect)
+    }
+    /// 游標在不在桌寵頭頂：機身上、螢幕上緣那條線的外側（摸頭用）。用螢幕四角在視圖裡的位置判斷，機身轉了也跟著
+    func pointerOnHead(_ p: NSPoint) -> Bool {
+        guard screenFacingCamera(), screenUV(p) == nil, hitsModel(p) else { return false }
+        let c = screenCorners()   // 左上、右上、右下、左下
+        guard c.count == 4 else { return false }
+        func side(_ q: CGPoint) -> CGFloat { (c[1].x - c[0].x) * (q.y - c[0].y) - (c[1].y - c[0].y) * (q.x - c[0].x) }
+        return side(p) * side(c[3]) < 0   // 跟螢幕下緣不同側＝在上緣以上
     }
     // 三指手势统一给「拖移窗口」（见 touchesBegan/Moved）。轻扫不再占用三指：
-    // 转一圈用菜单「外观 › 自动环绕」，回正双击，拆开双指轻点两下。
+    // 转一圈用菜单「外观 › 自动环绕」，回正双击，拆开在菜单。
 
     // MARK: 三指拖移窗口
     // 触控板只给归一化坐标（0..1，铺满整块触控板），按屏宽比例换算成点：
@@ -2140,6 +2151,7 @@ final class PetView: NSView {
             }
             if !e.momentumPhase.isEmpty, scrollWasPinch { return }
         }
+        if pointerScroll(e, uv: ShellInput.uvOverride ?? screenUV(local(e))) { return }   // 游標在頂端把手／右上角起手往下捲＝下拉把手／控制中心（Shell/PointerInput.swift）
         if overviewScroll(e) { return }   // 总览里滚轮／触控板挑錶面，不转身体
         if shellScroll(e, uv: screenUV(local(e))) { return }   // 2.0: 錶面頭尾滾到主畫面、App 裡捲動
         // 「正在播放」胶囊上滚＝上一首／下一首；只在胶囊活跃时占用这条带，其余照旧（转身体／换錶面）
@@ -2271,12 +2283,13 @@ final class PetView: NSView {
         }
     }
 
-    // 右键菜单：三组结构——状态动作｜宠物本身（表盘·计时器·拆装·外观）｜收尾（偏好·关于·结束）。
-    // 长得快的放外面，难得碰的收子菜单；标题动态反映当前状态；菜单每次打开都重建。
+    // 次要按鈕（右鍵、兩指點）一律只打開情境選單（2026-11-12 定案；HIG Pointing devices、Context menus）：
+    // 圖示、小工具上＝長按那一份（畫在螢幕上，馬上出現）；錶面、主畫面空白處、返回鈕＝桌寵選單前面多一段相關項目；其他地方＝桌寵選單。
+    // 桌寵選單三组结构——状态动作｜宠物本身（表盘·计时器·拆装·外观）｜收尾（偏好·结束）；菜单每次打开都重建。
     override func rightMouseDown(with event: NSEvent) {
         if TouchInput.dropsSystemEvent() { return }   // 觸控的按住在機身上由 TouchInput 叫出同一份選單
         endPoster()
-        let menu = buildContextMenu()
+        guard let menu = pointerSecondaryMenu(ShellInput.uvOverride ?? screenUV(local(event))) else { return }   // nil＝選單畫在螢幕上，已經打開
         var at = convert(event.locationInWindow, from: nil)
         // 菜单只在当前屏幕内展开：贴着屏幕底边时 macOS 会把后面几项折叠起来。
         // 下方放不下、上方放得下就向上展开（Mac 菜单的通常行为）。
@@ -2323,138 +2336,176 @@ final class PetView: NSView {
     /// CarPlay 那一項：按真實狀態給動詞（直播中＝退出；已暫停＝繼續；重連中＝重新連接；連線中＝取消）。
     /// 右鍵選單與選單列共用這一份，兩處永遠一致
     var carPlayAction: (title: String, action: Selector, hint: String?, symbol: String) {
-        if showingVideo { return (L("menu.exitCarPlay", "退出 CarPlay"), #selector(menuToggleLive), L("menu.hint.liveToggle", "重按或空格"), "car.fill") }   // 三個都落在主畫面（carPlayToHome）
+        if showingVideo { return (L("menu.exitCarPlay", "退出 CarPlay"), #selector(menuToggleLive), L("menu.hint.space", "空格"), "car.fill") }   // 空白鍵、把手、選單都落在主畫面（carPlayToHome）
         switch face.status {
         case .connecting: return (L("menu.cancelConnect", "取消连接"), #selector(menuCancelConnect), nil, "xmark.circle")
         case .pausedResume, .paused: return (L("menu.resumeCarPlay", "继续 CarPlay"), #selector(menuToggleLive), L("menu.hint.space", "空格"), "play.fill")
         case .reconnecting: return (L("menu.reconnectCarPlay", "重新连接 CarPlay"), #selector(menuEnterCarPlay), nil, "arrow.clockwise")
-        default: return (L("menu.enterCarPlay", "进入 CarPlay"), #selector(menuEnterCarPlay), L("menu.hint.forceClick", "重按"), "car")
+        default: return (L("menu.enterCarPlay", "进入 CarPlay"), #selector(menuEnterCarPlay), L("menu.hint.space", "空格"), "car")
         }
     }
 
     /// 右键菜单（状态栏图标的菜单也復用它，兩处永远一致）
     /// 2.0 P06：三组——画面（CarPlay·表盘·主屏幕·控制中心）｜机身（计时器·拆装·跟随·外观）｜收尾（ClioTalk·设置·关于·结束）。
     /// 图标只给主要动作和标准项（HIG Menus）；视角、大小、岛表盘选项都搬去设置，菜单里不再列。
-    func buildContextMenu() -> NSMenu {
+    /// context＝次要按鈕叫出來的情境選單（HIG Context menus：不顯示快速鍵、不可用的項目隱藏不變灰）；狀態列那一份照舊帶提示。
+    /// lead＝游標底下那個東西的項目，放最前面（Shell/PointerInput.swift）
+    func buildContextMenu(context: Bool = false, lead: [SecondaryClick.Lead] = []) -> NSMenu {
         CalendarSource.shared.refresh()   // 授权状态可能在系统设置里改过
         let menu = NSMenu()
+        menuForContext = context
+        defer { menuForContext = false }
+        // 情境選單只留和游標底下的東西直接相關的項目（HIG Context menus：aim for a small number、prioritize relevancy）：
+        // full＝狀態列那一份（全部）；body＝機身上的情境選單（桌寵這個物件本身的事：CarPlay、iPhone、拆開、大小、外觀、跟隨我）；
+        // 螢幕上的（錶面、主畫面空白處、返回鈕）只有 lead＋CarPlay＋設定。拿掉的每一項都還在狀態列選單、選單列、鍵盤或畫面上
+        let full = !context, body = !context || lead.isEmpty
+        let leadItems = pointerLeadItems(lead)
+        if !leadItems.isEmpty {
+            for item in leadItems { menu.addItem(item) }
+            menu.addItem(.separator())
+        }
         // 状态项：按真实状态给动词，而不是一个含糊的「暂停」。
         // 直播中＝退出（同一手势可再进）；已暂停＝继续；重连中＝重新连接；连线中＝取消。
         let cp = carPlayAction
         menu.addItem(menuItem(cp.title, cp.action, hint: cp.hint, symbol: cp.symbol))
-        // 配对过两台以上：手机收进一个子菜单，打勾的是现在这台，点一下就换（不用进偏好设定）
-        let phones = CarPlayPhoneBook.menuEntries()
-        if phones.count > 1 {
-            let sub = NSMenu()
-            for entry in phones {
-                let item = menuItem(entry.title, #selector(menuUsePhone(_:)))
-                item.representedObject = entry.address
-                item.state = entry.current ? .on : .off
-                sub.addItem(item)
+        if body {
+            // 配对过两台以上：手机收进一个子菜单，打勾的是现在这台，点一下就换（不用进偏好设定）
+            let phones = CarPlayPhoneBook.menuEntries()
+            if phones.count > 1 {
+                let sub = NSMenu()
+                for entry in phones {
+                    let item = menuItem(entry.title, #selector(menuUsePhone(_:)))
+                    item.representedObject = entry.address
+                    item.state = entry.current ? .on : .off
+                    sub.addItem(item)
+                }
+                menu.addItem(submenuItem(L("menu.iphone", "iPhone"), sub))
             }
-            menu.addItem(submenuItem(L("menu.iphone", "iPhone"), sub))
+            // iPhone：連接步驟、Wi-Fi 設定、配對新的、拷貝診斷報告（連線卡上的「右鍵 → iPhone → …」都指這裡）
+            let iphone = NSMenu()
+            iphone.addItem(menuItem(L("menu.connectSteps", "连接步骤…"), #selector(menuConnectSteps), symbol: "list.number"))
+            iphone.addItem(menuItem(L("menu.wifiPassword", "Wi-Fi 设置…"), #selector(menuWiFiPassword), symbol: "wifi"))
+            iphone.addItem(menuItem(L("menu.pairNewPhone", "配对新 iPhone…"), #selector(menuPairNewPhone), symbol: "plus.circle"))
+            iphone.addItem(.separator())
+            iphone.addItem(menuItem(L("menu.copyDiagnostics", "拷贝诊断报告"), #selector(menuCopyDiagnostics), symbol: "doc.on.clipboard"))
+            menu.addItem(submenuItem(L("menu.iphone", "iPhone"), iphone, symbol: "iphone"))
         }
-        // iPhone：連接步驟、Wi-Fi 設定、配對新的、拷貝診斷報告（連線卡上的「右鍵 → iPhone → …」都指這裡）
-        let iphone = NSMenu()
-        iphone.addItem(menuItem(L("menu.connectSteps", "连接步骤…"), #selector(menuConnectSteps), symbol: "list.number"))
-        iphone.addItem(menuItem(L("menu.wifiPassword", "Wi-Fi 设置…"), #selector(menuWiFiPassword), symbol: "wifi"))
-        iphone.addItem(menuItem(L("menu.pairNewPhone", "配对新 iPhone…"), #selector(menuPairNewPhone), symbol: "plus.circle"))
-        iphone.addItem(.separator())
-        iphone.addItem(menuItem(L("menu.copyDiagnostics", "拷贝诊断报告"), #selector(menuCopyDiagnostics), symbol: "doc.on.clipboard"))
-        menu.addItem(submenuItem(L("menu.iphone", "iPhone"), iphone, symbol: "iphone"))
         menu.addItem(.separator())
 
-        // 表盘：全部表盘（打勾）＋总览；样式选项（岛、Typograph、System 6、字体与颜色、照片文件夹）在设置的「外观」
-        let styles = NSMenu()
-        for st in FaceStyle.lineup {
-            let item = menuItem(st.title, #selector(menuStyle(_:)), hint: face.style == st ? L("menu.hint.scrollArrows", "滚轮 / ← →") : nil)
-            item.representedObject = st.rawValue; item.state = face.style == st ? .on : .off
-            styles.addItem(item)
+        if full {
+            // 表盘：全部表盘（打勾）＋总览；样式选项（岛、Typograph、System 6、字体与颜色、照片文件夹）在设置的「外观」
+            let styles = NSMenu()
+            for st in FaceStyle.lineup {
+                let item = menuItem(st.title, #selector(menuStyle(_:)), hint: face.style == st ? L("menu.hint.scrollArrows", "滚轮 / ← →") : nil)
+                item.representedObject = st.rawValue; item.state = face.style == st ? .on : .off
+                styles.addItem(item)
+            }
+            styles.addItem(.separator())
+            styles.addItem(menuItem(L("menu.faceOverview", "显示表盘总览"), #selector(menuFaceOverview), hint: L("menu.hint.longPress", "长按屏幕")))
+            styles.addItem(menuItem(L("menu.sayHello", "打个招呼"), #selector(menuSayHello)))   // 2.0 hello：再写一次开机的 hello
+            menu.addItem(submenuItem(L("menu.faces", "表盘"), styles))
+            // 2.0: 主畫面與控制中心（滑鼠沒有滑動手勢，這兩項加上鍵盤 ↑、C）
+            let home = menuItem(L("shell.menu.home", "显示主屏幕"), #selector(menuShellHome), hint: "↑", symbol: "square.grid.3x3.fill")
+            home.state = Shell.nav.screen.coversFace ? .on : .off
+            menu.addItem(home)
+            menu.addItem(menuItem(L("shell.menu.controlCenter", "显示控制中心"), #selector(menuShellControlCenter), hint: "C", symbol: "switch.2"))
+            menu.addItem(menuItem(L("recipe.menu.clipboard", "在 Safari 中打开食谱"), #selector(menuRecipeFromClipboard)))   // 2.0: 食譜
         }
-        styles.addItem(.separator())
-        styles.addItem(menuItem(L("menu.faceOverview", "显示表盘总览"), #selector(menuFaceOverview), hint: L("menu.hint.longPress", "长按屏幕")))
-        styles.addItem(menuItem(L("menu.sayHello", "打个招呼"), #selector(menuSayHello)))   // 2.0 hello：再写一次开机的 hello
-        menu.addItem(submenuItem(L("menu.faces", "表盘"), styles))
-        // 2.0: 主畫面與控制中心（滑鼠沒有滑動手勢，這兩項加上鍵盤 ↑、C）
-        let home = menuItem(L("shell.menu.home", "显示主屏幕"), #selector(menuShellHome), hint: "↑", symbol: "square.grid.3x3.fill")
-        home.state = Shell.nav.screen.coversFace ? .on : .off
-        menu.addItem(home)
-        menu.addItem(menuItem(L("shell.menu.controlCenter", "显示控制中心"), #selector(menuShellControlCenter), hint: "C", symbol: "switch.2"))
-        menu.addItem(menuItem(L("recipe.menu.clipboard", "在 Safari 中打开食谱"), #selector(menuRecipeFromClipboard)))   // 2.0: 食譜
         menu.addItem(.separator())
 
-        // 计时器：跑的时候标题显示剩余时间，多一项取消
-        let timers = NSMenu()
-        if face.pomodoro.active {
-            timers.addItem(menuItem(L("pomodoro.stop", "停止番茄钟"), #selector(menuPomodoroStop)))
-        } else {
-            timers.addItem(menuItem(L("pomodoro.start", "开始番茄钟"), #selector(menuPomodoroStart)))
-        }
-        let today = Pomodoro.todayCount
-        if today > 0 {
-            let done = NSMenuItem(title: String(format: L("pomodoro.today", "今天完成 %d 个"), today), action: nil, keyEquivalent: "")
-            done.isEnabled = false; timers.addItem(done)
-        }
-        timers.addItem(.separator())
-        for m in [1.0, 3, 5, 10, 25] {
-            let item = menuItem(String(format: L("timer.minutes", "%d 分钟"), Int(m)), #selector(menuTimer(_:)))   // 分钟清单不带图标
-            item.representedObject = m
-            if face.timerEnd != nil, !face.pomodoro.active, abs(face.timerTotal - m * 60) < 0.5 { item.state = .on }
-            timers.addItem(item)
-        }
-        if face.timerEnd != nil {
+        if full {
+            // 计时器：跑的时候标题显示剩余时间，多一项取消
+            let timers = NSMenu()
+            if face.pomodoro.active {
+                timers.addItem(menuItem(L("pomodoro.stop", "停止番茄钟"), #selector(menuPomodoroStop)))
+            } else {
+                timers.addItem(menuItem(L("pomodoro.start", "开始番茄钟"), #selector(menuPomodoroStart)))
+            }
+            let today = Pomodoro.todayCount
+            if today > 0 {
+                let done = NSMenuItem(title: String(format: L("pomodoro.today", "今天完成 %d 个"), today), action: nil, keyEquivalent: "")
+                done.isEnabled = false; timers.addItem(done)
+            }
             timers.addItem(.separator())
-            timers.addItem(menuItem(L("timer.cancel", "取消计时器"), #selector(menuTimerCancel)))
+            for m in [1.0, 3, 5, 10, 25] {
+                let item = menuItem(String(format: L("timer.minutes", "%d 分钟"), Int(m)), #selector(menuTimer(_:)))   // 分钟清单不带图标
+                item.representedObject = m
+                if face.timerEnd != nil, !face.pomodoro.active, abs(face.timerTotal - m * 60) < 0.5 { item.state = .on }
+                timers.addItem(item)
+            }
+            if face.timerEnd != nil {
+                timers.addItem(.separator())
+                timers.addItem(menuItem(L("timer.cancel", "取消计时器"), #selector(menuTimerCancel)))
+            }
+            let timerItem = submenuItem(timerMenuTitle(CACurrentMediaTime()), timers)
+            liveTimerItem = timerItem
+            menu.addItem(timerItem)
+
         }
-        let timerItem = submenuItem(timerMenuTitle(CACurrentMediaTime()), timers)
-        liveTimerItem = timerItem
-        menu.addItem(timerItem)
+        if body {
+            // 拆開／組回：智慧縮放改成縮放桌寵之後只在這裡（2026-11-12）。掛牆沒有底座可拆：情境選單裡隱藏，狀態列那一份灰掉
+            if !(context && viewMode == .wall) {
+                menu.addItem(menuItem(isApart ? L("menu.apart.putBack", "组回来") : L("menu.apart.takeApart", "拆开看看"),
+                                      viewMode == .wall ? nil : #selector(menuApart)))
+            }
+            // 放大、縮小、實際大小（選單列也有，快速鍵 ⌘＋、⌘−、⌘0；任何滑鼠都能用）
+            let sizes = NSMenu()
+            sizes.addItem(menuItem(L("menu.zoomIn", "放大"), #selector(menuZoomIn), key: "+", mods: .command))
+            sizes.addItem(menuItem(L("menu.zoomOut", "缩小"), #selector(menuZoomOut), key: "-", mods: .command))
+            sizes.addItem(menuItem(L("menu.zoomDefault", "实际大小"), #selector(menuZoomDefault), key: "0", mods: .command))
+            menu.addItem(submenuItem(L("menu.size", "大小"), sizes))
+            // 跟随我：最常开关的一项放在第一层（设置里有完整说明）
+            let follow = menuItem(L("prefs.gaze", "跟随我"), #selector(menuGazeToggle))
+            follow.state = gazeEnabled ? .on : .off
+            menu.addItem(follow)
 
-        menu.addItem(menuItem(isApart ? L("menu.apart.putBack", "组回来") : L("menu.apart.takeApart", "拆开看看"),
-                              viewMode == .wall ? nil : #selector(menuApart),   // 挂墙没有底座可拆：灰掉
-                              hint: L("menu.hint.twoFingerTap", "两指轻点两下")))
-        // 跟随我：最常开关的一项放在第一层（设置里有完整说明）
-        let follow = menuItem(L("prefs.gaze", "跟随我"), #selector(menuGazeToggle))
-        follow.state = gazeEnabled ? .on : .off
-        menu.addItem(follow)
+            // 外观：机身配色（朝向、视角、大小在设置的「外观」，快捷键 1–4、⌘+ ⌘− ⌘0 照旧）
+            let looks = NSMenu()
+            for f in Finish.allCases {
+                let item = menuItem(f.title, #selector(menuFinish(_:)))
+                item.image = finishSwatch(f)
+                item.representedObject = f.rawValue
+                item.state = model.finish == f ? .on : .off
+                looks.addItem(item)
+            }
+            looks.addItem(.separator())
+            looks.addItem(menuItem(L("menu.appearanceSettings", "外观设置…"), #selector(menuAppearanceSettings)))
+            menu.addItem(submenuItem(L("menu.finish", "外观"), looks))
 
-        // 外观：机身配色（朝向、视角、大小在设置的「外观」，快捷键 1–4、⌘+ ⌘− ⌘0 照旧）
-        let looks = NSMenu()
-        for f in Finish.allCases {
-            let item = menuItem(f.title, #selector(menuFinish(_:)))
-            item.image = finishSwatch(f)
-            item.representedObject = f.rawValue
-            item.state = model.finish == f ? .on : .off
-            looks.addItem(item)
         }
-        looks.addItem(.separator())
-        looks.addItem(menuItem(L("menu.appearanceSettings", "外观设置…"), #selector(menuAppearanceSettings)))
-        menu.addItem(submenuItem(L("menu.finish", "外观"), looks))
-
         menu.addItem(.separator())
 
-        if face.style == .photos, !AirDropShare.items(photoFile: face.photos.currentFile).isEmpty || !SharedAlbums.selected.isEmpty {
+        if full || lead.first == .faceOverview, face.style == .photos, !AirDropShare.items(photoFile: face.photos.currentFile).isEmpty || !SharedAlbums.selected.isEmpty {
             let item = menuItem(SelfShare.photoMenuTitle, #selector(menuPhotoAirDrop), symbol: SelfShare.symbol)
             if SelfShare.useMessages, #available(macOS 14.4, *) { item.subtitle = SelfShare.note }   // CarPlay 連著時改走訊息傳給自己，選單項下一行說明
             menu.addItem(item)
         }
-        menu.addItem(menuItem(L("menu.clioTalk", "问 ClioTalk"), #selector(menuClioTalk), hint: L("menu.hint.f5", "F5"), symbol: "bubble.left.and.text.bubble.right"))   // 2.0
+        if full { menu.addItem(menuItem(L("menu.clioTalk", "问 ClioTalk"), #selector(menuClioTalk), hint: L("menu.hint.f5", "F5"), symbol: "bubble.left.and.text.bubble.right")) }   // 2.0
         menu.addItem(menuItem(L("menu.settings", "设置…"), #selector(menuSettings), key: ",", mods: .command, symbol: "gearshape"))
         // 2.0: 「关于 HomePlay」搬到菜单栏的 App 菜单第一项（installMainMenu），右键菜单不再放
-        menu.addItem(.separator())
-        menu.addItem(menuItem(L("menu.quit", "退出 HomePlay"), #selector(menuQuit), key: "q", mods: .command, symbol: "power"))
+        if body {
+            menu.addItem(.separator())
+            menu.addItem(menuItem(L("menu.quit", "退出 HomePlay"), #selector(menuQuit), key: "q", mods: .command, symbol: "power"))
+        }
+        // 拿掉幾段之後可能留下連著的分隔線
+        for i in menu.items.indices.reversed() where menu.items[i].isSeparatorItem {
+            if i == 0 || i == menu.items.count - 1 || menu.items[i - 1].isSeparatorItem { menu.removeItem(at: i) }
+        }
         return menu
     }
 
+    /// 正在建的是情境選單（buildContextMenu(context:)）
+    private var menuForContext = false
     /// 菜单项：key＝真快捷键（系统画在右边）；hint＝没有快捷键的手势提示，灰字靠右；
     /// symbol＝左边的 SF Symbol（2.0 P06：只给主要动作和标准项——CarPlay、主屏幕、控制中心、ClioTalk、设置、结束）
     private func menuItem(_ title: String, _ sel: Selector?, key: String = "", mods: NSEvent.ModifierFlags = [], hint: String? = nil,
                           symbol: String? = nil) -> NSMenuItem {
-        let item = NSMenuItem(title: title, action: sel, keyEquivalent: key)
+        // 情境選單不顯示快速鍵，也不帶手勢提示（HIG Context menus）
+        let item = NSMenuItem(title: title, action: sel, keyEquivalent: menuForContext ? "" : key)
         if let symbol { item.image = NSImage(systemSymbolName: symbol, accessibilityDescription: title) }
-        item.keyEquivalentModifierMask = mods
+        item.keyEquivalentModifierMask = menuForContext ? [] : mods
         item.target = self
-        if let hint {
+        if let hint, !menuForContext {
             let ps = NSMutableParagraphStyle()
             ps.tabStops = [NSTextTab(textAlignment: .right, location: 250)]
             let font = NSFont.menuFont(ofSize: 0)
@@ -2528,15 +2579,7 @@ final class PetView: NSView {
         face.photos = PhotoShelf(folder: url); face.forceDirty = true
         log("photo folder \(url.path)")
     }
-    @objc private func menuCalendarAllow() {
-        (NSApp.delegate as? AppDelegate)?.withPermission(.calendar) { ok in
-            if ok { CalendarSource.shared.requestAccess() }   // 已授权：只是同步状态、开始读
-        }
-    }
     @objc private func menuCalendarToggle() { CalendarSource.enabled.toggle(); CalendarSource.shared.refresh() }
-    @objc private func menuCalendarSettings() {
-        if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Calendars") { NSWorkspace.shared.open(url) }
-    }
     @objc private func menuNowPlaying() {
         if NowPlayingPoller.enabled {
             NowPlayingPoller.enabled = false; NowPlayingPoller.shared.stop(); return
@@ -2550,44 +2593,10 @@ final class PetView: NSView {
     @objc private func menuGazeToggle() {
         (NSApp.delegate as? AppDelegate)?.toggleGazeFollow()
     }
-    @objc private func menuMicPermission() {
-        (NSApp.delegate as? AppDelegate)?.showMicrophonePermission()
-    }
-    @objc private func menuGazePitch() {
-        NSApp.activate(ignoringOtherApps: true)
-        let alert = NSAlert()
-        alert.messageText = L("gaze.pitch.title", "跟随我：俯仰角度")
-        alert.informativeText = L("gaze.pitch.body", "拖动滑块调整抬头/低头的最大角度；0° 只转头不点头。设置会记住。")
-        let box = NSView(frame: NSRect(x: 0, y: 0, width: 360, height: 48))
-        let slider = NSSlider(value: Double(gazePitchDegrees), minValue: 0, maxValue: 8,
-                              target: self, action: #selector(gazePitchSliderChanged(_:)))
-        slider.frame = NSRect(x: 0, y: 8, width: 300, height: 26)
-        slider.numberOfTickMarks = 5
-        slider.allowsTickMarkValuesOnly = false
-        let value = NSTextField(labelWithString: String(format: "%.1f°", Double(gazePitchDegrees)))
-        value.frame = NSRect(x: 308, y: 11, width: 52, height: 20)
-        value.alignment = .right
-        gazePitchValueLabel = value
-        box.addSubview(slider); box.addSubview(value)
-        alert.accessoryView = box
-        alert.addButton(withTitle: L("wifi.save", "保存"))
-        alert.addButton(withTitle: L("wifi.cancel", "取消"))
-        let response = alert.runModal()
-        gazePitchValueLabel = nil
-        if response == .alertFirstButtonReturn {
-            setGazePitch(CGFloat(slider.doubleValue))
-        }
-    }
-    @objc private func gazePitchSliderChanged(_ sender: NSSlider) {
-        gazePitchValueLabel?.stringValue = String(format: "%.1f°", sender.doubleValue)
-    }
     func setGazePitch(_ degrees: CGFloat) {
         gazePitchDegrees = min(8, max(0, degrees))
         UserDefaults.standard.set(Double(gazePitchDegrees), forKey: Self.gazePitchKey)
         log(String(format: "gaze pitch %.1f°", Double(gazePitchDegrees)))
-    }
-    @objc private func menuRoomLightToggle() {
-        (NSApp.delegate as? AppDelegate)?.toggleRoomLight()
     }
     /// 選單列「手勢引導」、設定「重看…」：從第一頁重播（升級提示卡一起收掉）
     @objc func menuShowHints() {
@@ -2610,32 +2619,23 @@ final class PetView: NSView {
     }
     @objc private func menuCancelConnect() { onCancelConnect?() }
 
-    // 重按（Force Touch，stage 2）＝进入 CarPlay。直播时按在屏幕上不抢：那一按本来就是 CarPlay 长按。
+    // 重按（Force Touch，stage 2）＝預覽（2026-11-12 定案；HIG Pointing devices：重按用來顯示 Quick Look 或查詢視窗）：
+    // 在圖示或小工具上顯示它的預覽與選單，其他地方不做事。不再進出 CarPlay（空白鍵、把手、選單照舊）。
     override func pressureChange(with event: NSEvent) {
-        endPoster()
         defer { forceStage = event.stage }
-        // 直播時點在屏幕上會是 .touch；這正是要退出的時候，不能把重按擋掉。
-        // 同一個手勢進出：沒畫面就進 CarPlay，有畫面就退出到主畫面（同空白鍵、👀）。
         guard event.stage == 2, forceStage < 2, !face.inOverview, !FaceOverview.swallowUp else { return }
-        // 外殼的手勢拖到一半（膠囊下拉、換頁、控制中心、拖圖示）不進出 CarPlay；按著還沒動＝先把這一下安靜收掉（放手不再當點按）
+        endPoster()
+        let uv = ShellInput.down?.uv ?? SBInputState.press.map { CGPoint(x: $0.p.x / 1024, y: $0.p.y / 1024) } ?? screenUV(local(event))
+        // 外殼的手勢拖到一半（把手下拉、換頁、控制中心、拖圖示）不理；按著還沒動＝先把這一下安靜收掉（放手不再當點按、長按不再排）
         switch ShellInput.forcePress(dragging: shellGestureDragging, pressing: ShellInput.down != nil || SBInputState.press != nil) {
         case .ignore: log("force press ignored: shell gesture in progress"); return
         case .cancelPressThenEnter: shellCancelGesture()
         case .enter: break
         }
-        onForceEnter?()
+        pointerForceClick(uv)
     }
 
     @objc func menuEnterCarPlay() { onForceEnter?() }
-    @objc func menuPairPhone() {
-        guard !showingVideo else { return }
-        CarPlayOverlayState.needsPairing = true      // 立即显示配对卡片
-        CarPlayOverlayState.needsTrust = false       // 同一时间只亮一张引导卡
-        CarPlayOverlayState.needsCable = false
-        CarPlayOverlayState.bluetoothPairing = false
-        CarPlayOverlayState.bluetoothPairFailed = false
-        onForceEnter?()                              // 拉起 receiver，等 USB
-    }
     @objc private func menuUsePhone(_ sender: NSMenuItem) {
         guard let address = sender.representedObject as? String, !address.isEmpty else { return }
         onSelectPhone?(address)
@@ -2750,17 +2750,6 @@ final class PetView: NSView {
     }
 
     @objc private func menuToggleLive() { onToggleLive?() }
-    /// 转一圈：目标偏航加一整圈，弹簧缓动转完正好回原朝向。direction = 1 往左、-1 往右（跟拖拽方向一致）。
-    private func spinBody(direction: Int) {
-        touring = false
-        atHome = false
-        ty += CGFloat(direction) * 2 * .pi
-        mood.show(.surprised, for: 0.4, now: CACurrentMediaTime())
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.7) { [weak self] in
-            self?.mood.show(.happy, for: 1.2, now: CACurrentMediaTime())
-        }
-        log("gesture spin \(direction > 0 ? "left" : "right")")
-    }
     @objc private func menuApart() { setApart(!isApart) }
     /// 选「跟随系统」清掉偏好；选某种语言就记住它。右键菜单每次打开都重建，所以只需重画表盘。
     @objc private func menuLanguage(_ sender: NSMenuItem) {

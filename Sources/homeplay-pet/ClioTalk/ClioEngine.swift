@@ -43,7 +43,7 @@ struct ClioSnapshot: Equatable {
 
 // MARK: - 本機紀錄
 
-/// ~/Library/Application Support/HomePlay/ClioTalk/：history.json（對話，超過 24 小時的舊輪次載入時丟掉）、kept.json（按「留下」的回答）
+/// ~/Library/Application Support/HomePlay/ClioTalk/：history.json（對話：只存問的與答的，超過 24 小時的舊輪次載入時從檔案裡刪掉）、kept.json（按「留下」的回答）
 struct ClioHistoryStore {
     var dir: URL
     static var defaultDir: URL {
@@ -64,13 +64,34 @@ struct ClioHistoryStore {
     func load(now: Date = Date()) -> [ClioMessage] {
         guard let d = try? Data(contentsOf: historyURL), let m = try? Self.decoder.decode([ClioMessage].self, from: d) else { return [] }
         // 回答是暫時的：太舊的輪次不再帶進對話（要留的請按「留下」）
-        let fresh = m.drop { now.timeIntervalSince($0.at) > Self.maxAge }
-        return ClioTrim.trim(Array(fresh), budget: .max)
+        let fresh = Self.forDisk(Array(m.drop { now.timeIntervalSince($0.at) > Self.maxAge }))
+        // 檔案本身也跟著修剪：過期的刪掉，舊版存進去的工具結果與 [Context] 一併洗掉（全空就刪檔）
+        if fresh != m { if fresh.isEmpty { try? FileManager.default.removeItem(at: historyURL) } else { save(fresh) } }
+        return ClioTrim.trim(fresh, budget: .max)
     }
     func save(_ m: [ClioMessage]) {
         ensureDir()
-        guard let d = try? Self.encoder.encode(m) else { return }
+        guard let d = try? Self.encoder.encode(Self.forDisk(m)) else { return }
         try? d.write(to: historyURL, options: [.atomic])
+    }
+    static let notKept = "[not kept]"
+    /// 寫進磁碟的版本：只留問的與答的。工具結果（讀到的訊息內文、行事曆、聯絡人、位置…）換成佔位字，
+    /// 工具呼叫與結果的配對留著（模型的對話格式需要）；每句話前面的 [Context]（時間、名字、城市）也拿掉。
+    /// 這一段對話還開著時記憶體裡是完整的；重開之後要用到舊的工具結果，模型得重新查一次。
+    static func forDisk(_ m: [ClioMessage]) -> [ClioMessage] {
+        m.map { msg in
+            var out = msg
+            out.blocks = msg.blocks.map { b in
+                switch b {
+                case let .toolResult(id, _, isError): return .toolResult(id: id, content: notKept, isError: isError)
+                case .text(let t) where msg.role == .user && t.hasPrefix("[Context]"):
+                    guard let end = t.range(of: "[/Context]\n") ?? t.range(of: "[/Context]") else { return b }
+                    return .text(String(t[end.upperBound...]))
+                default: return b
+                }
+            }
+            return out
+        }
     }
 
     struct Kept: Codable, Equatable { var at: Date; var question: String; var answer: String }

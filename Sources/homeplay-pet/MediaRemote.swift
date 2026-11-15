@@ -180,7 +180,8 @@ final class MediaRemoteReader {
     """#
 
     func start() {
-        guard !running, FileManager.default.isExecutableFile(atPath: "/usr/bin/perl") else { wanted = true; return }
+        wanted = true   // 正常啟動也要記：否則第一次被遮住 pause() 之後 resume() 永遠不把 perl 叫回來，正在播放停在舊曲目
+        guard !running, FileManager.default.isExecutableFile(atPath: "/usr/bin/perl") else { return }
         let p = Process()
         p.executableURL = URL(fileURLWithPath: "/usr/bin/perl")
         p.arguments = ["-e", Self.script]

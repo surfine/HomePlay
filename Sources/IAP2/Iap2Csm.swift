@@ -375,6 +375,44 @@ package enum Iap2Csm {
         ])
     }
 
+    /// 實驗（2026-11-13，iPhone 在家斷網調查的路線 B）：`HOMEPLAY_WIFI_HANDOFF` 決定交給 iPhone 的 Wi-Fi 資訊。
+    /// 根因是家用 Wi-Fi 的名稱與密碼被當成「車機的網路」交給 iPhone，iPhone 因此不再用它上網。
+    /// 實驗要回答：iPhone 沒收到名稱與密碼時，無線 CarPlay 還連得上嗎、那個網路還會被標記嗎。
+    /// - normal（不設）：現狀
+    /// - blank：0x5703 與 0x4301 無線組的名稱、密碼送空字串；識別資訊的無線元件名稱改成固定的 HomePlay
+    /// - omit：不送 0x5703；0x4301 無線組只留 IP 位址；識別資訊同 blank
+    /// 只在送出前過濾一次（Iap2AccessoryCore 的三個出口），組訊息的地方一律不動。
+    package enum WiFiHandoff: String, Sendable {
+        case normal, blank, omit
+        package static func parse(_ value: String?) -> WiFiHandoff { value.flatMap(WiFiHandoff.init(rawValue:)) ?? .normal }
+    }
+    nonisolated(unsafe) package static var wifiHandoff: WiFiHandoff = .normal
+
+    /// 照 `mode` 處理一個要送出去的訊息；nil＝不送
+    package static func handoffFiltered(_ f: Frame, _ mode: WiFiHandoff) -> Frame? {
+        guard mode != .normal else { return f }
+        func blanked(_ ps: [Parameter], ids: Set<UInt16>) -> [Parameter] {
+            ps.map { ids.contains($0.id) ? Parameter(id: $0.id, payload: nul("")) : $0 }
+        }
+        switch f.messageId {
+        case CarPlay.wifiConfig:
+            return mode == .omit ? nil : Frame(messageId: f.messageId, parameters: blanked(f.parameters, ids: [1, 2]))
+        case CarPlay.startSession:
+            return Frame(messageId: f.messageId, parameters: f.parameters.map { p in
+                guard p.id == 1, let group = parseParameters(p.payload) else { return p }   // 無線組（有線版沒有參數 1）
+                let g = mode == .omit ? group.filter { $0.id == 3 } : blanked(group, ids: [0, 1])
+                return Parameter(id: 1, payload: encodeParameters(g))
+            })
+        case Identify.information:
+            return Frame(messageId: f.messageId, parameters: f.parameters.map { p in
+                guard p.id == 24, let comp = parseParameters(p.payload) else { return p }   // 無線 CarPlay 傳輸元件：子參數 1 是名稱
+                return Parameter(id: 24, payload: encodeParameters(comp.map { $0.id == 1 ? Parameter(id: 1, payload: nul("HomePlay")) : $0 }))
+            })
+        default:
+            return f
+        }
+    }
+
     /// 0x4301 CarPlayStartSession（无线）：1 = 无线组{0 ssid、1 passphrase、2 channel、3 ip 列表、4 security}，
     /// 2 port（u32）、3 deviceIdentifier（AirPlay 设备身份，须与 TXT deviceid 一致）、
     /// 4 配对标识 pi（字段名叫 public_key，但 iOS 按「配对标识」解析并要求与 TXT pi 一致；不是 Ed25519 公钥）、

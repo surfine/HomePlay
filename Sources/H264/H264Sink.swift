@@ -97,7 +97,6 @@ package final class H264Sink {
 
     private func hevcNal(_ n: [UInt8], type: Int) {
         let vcl = type <= 31
-        if vcl && auHasVCL { /* 同一個 AU：CarPlay 一條訊息一個 AU，靠 endAccessUnit 收尾 */ }
         switch type {
         case 32: if vps != n { vps = n; hevcSPS = nil; hevcPPS = nil }
         case 33: if hevcSPS != n { hevcSPS = n; hevcPPS = nil }

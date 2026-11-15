@@ -249,7 +249,9 @@ extension Face {
         }
     }
 
-    /// 有人靠近時色團在漂（10fps）；沒人時停住，只在換分鐘時重畫
+    /// 有人靠近時色團在漂（10fps）；沒人時停住，只在換分鐘時重畫。
+    /// 這個常數也是閘門的攤提依據（HPFrames.FrameBudget）：verify.sh 的 flow 預算照它把單幀成本攤成 60Hz 每幀平均。
+    static let flowRedrawsPerSecond = 10.0
     func tickFlowFace(_ now: Double) -> Bool {
         let active = (flowActive || reveal > 0.05) && !Face.ambientPaused   // 2.0 depth：減少動態效果（與過熱、低電量）時色團不漂
         if flowAnimLast >= 0, active { flowAnimT += min(0.25, now - flowAnimLast) }
@@ -257,7 +259,7 @@ extension Face {
         let minute = Int(Self.displayDate.timeIntervalSince1970 / 60)
         if minute != flowLastMinute { flowLastMinute = minute; return true }
         guard active else { return false }
-        let t = floor(now * 10)
+        let t = floor(now * Self.flowRedrawsPerSecond)
         if t == flowFaceLastTick { return false }
         flowFaceLastTick = t
         return true

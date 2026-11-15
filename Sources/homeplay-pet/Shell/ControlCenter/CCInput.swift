@@ -285,7 +285,7 @@ extension PetView {
         case .brightness, .volume: C.expand(t, now: now)
         case .darkMode:
             CCSystem.darkAppearance.toggle()
-            HPTokens.dark = Shell.appearanceForced ? !HPTokens.dark : (Shell.lowLight(face) || CCSystem.darkAppearance)
+            HPTokens.dark = Shell.appearanceForced ? !HPTokens.dark : Shell.appsDark(face)
             Shell.homeLayer = nil
         case .focus: if face.pomodoro.active { stopPomodoro() } else { startPomodoro() }
         case .guest:

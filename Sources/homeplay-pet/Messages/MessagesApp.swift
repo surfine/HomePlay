@@ -213,6 +213,13 @@ final class MessagesApp: PetApp {
     /// 2.0 r2：對話頁是子頁（返回鈕由訊息畫面自己畫成 ‹）
     var backSymbol: String { page == .list ? "xmark" : "chevron.left" }
 
+    /// 離開 App：正在聽的、播到一半的語音、打字框、還沒按的確認卡都收掉（和主人走開時同一套；tick 只在 App 在前面時跑）
+    func didClose() {
+        dictation.cancel(); demoDictation = nil; popover?.performClose(nil); speaker.stop(); MessagesMedia.shared.stop()
+        emojiOpen = false; viewer = nil
+        if case .confirming = flow.state { flow.dismiss() }
+    }
+
     func tick(_ now: Double) -> Bool {
         var d = dirty; dirty = false
         // 主人走開了（或換成訪客、遠端訪客）：正在聽的、正在打的、還沒按的確認卡、看著的照片都收掉，朗讀停下；送出中的照樣跑完
@@ -461,6 +468,7 @@ final class MessagesApp: PetApp {
     }
 
     private func openThread(_ guid: String) {
+        if case .confirming = flow.state { flow.dismiss() }   // 確認卡是替上一串對話問的：換對話就作廢，不然按「傳送」會送給這一串
         page = .thread(guid); threadSkip = 0
         chips = ClioReplySuggest.fixed
         revealed = []
@@ -633,7 +641,7 @@ final class MessagesApp: PetApp {
     // MARK: 浮層：確認卡、聽寫、表情、看照片、小提示
 
     private func cardFrame(lines n: Int, buttons: Bool, extra: CGFloat = 0) -> CGRect {
-        let inset: CGFloat = 64, pad: CGFloat = 48, lineH: CGFloat = 62
+        let inset: CGFloat = HPGrid.Content.leading, pad: CGFloat = 48, lineH: CGFloat = 62
         let h = pad + CGFloat(n) * lineH + extra + (buttons ? 40 + 100 + pad : pad)
         return CGRect(x: inset, y: max(150, 512 - h / 2), width: 1024 - 2 * inset, height: h)
     }
@@ -689,7 +697,7 @@ final class MessagesApp: PetApp {
         }
         let pad: CGFloat = 48
         let tf = FaceType.sf(46, .semibold, mono: false)
-        let lines = MessagesScreen.wrap(message, tf, 1024 - 2 * 64 - 2 * pad, maxLines: 6)
+        let lines = MessagesScreen.wrap(message, tf, HPGrid.Content.width - 2 * pad, maxLines: 6)
         let card = cardFrame(lines: lines.count, buttons: !buttons.isEmpty)
         drawCardBase(g, card)
         var y = card.minY + pad
@@ -720,7 +728,7 @@ final class MessagesApp: PetApp {
         case .finishing: head = L("msg.dictation.finishing", "好了，正在整理…")
         default: head = listenFor == .name ? L("msg.dictation.name", "说出名字") : String(format: L("msg.dictation.to", "正在听：回复 %@"), targetName)
         }
-        let body = heard.isEmpty ? [L("msg.dictation.hint", "说完会自动停")] : MessagesScreen.wrap(heard, tf, 1024 - 2 * 64 - 2 * pad, maxLines: 4)
+        let body = heard.isEmpty ? [L("msg.dictation.hint", "说完会自动停")] : MessagesScreen.wrap(heard, tf, HPGrid.Content.width - 2 * pad, maxLines: 4)
         let card = cardFrame(lines: body.count, buttons: true, extra: 70)
         drawCardBase(g, card)
         // 頂端：紅色麥克風點（跟系統的錄音指示一樣）＋說明
@@ -744,7 +752,7 @@ final class MessagesApp: PetApp {
         let pad: CGFloat = 40, cell: CGFloat = 150, cols = 4
         let rows = (Self.emojis.count + cols - 1) / cols
         let h = pad + 70 + CGFloat(rows) * cell + 40 + 100 + pad
-        let card = CGRect(x: 64, y: min(max(150, 512 - h / 2), 1024 - 48 - h), width: 1024 - 128, height: h)
+        let card = CGRect(x: HPGrid.Content.leading, y: min(max(150, 512 - h / 2), 1024 - 48 - h), width: HPGrid.Content.width, height: h)
         drawCardBase(g, card)
         let hf = FaceType.sf(38, .bold, mono: false)
         face.drawLeft(g, L("msg.emoji", "表情"), font: hf, x: card.minX + 56, y: card.minY + pad + 44, color: HPComponents.label)

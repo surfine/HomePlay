@@ -9,6 +9,10 @@ func runPhoneSuites() {
         expect(MicUplink.wantsVoiceProcessing(audioType: "speechRecognition", environment: [:]), "100/speechRecognition → voice processing")
         expect(!MicUplink.wantsVoiceProcessing(audioType: "default", environment: [:]), "100/default → raw mic")
         expect(!MicUplink.wantsVoiceProcessing(audioType: nil, environment: [:]), "no audioType → raw mic")
+        // Siri 的下行不交給語音處理引擎播（那條路會把提示音播壞）；電話維持原樣；=0 可退回舊行為
+        expect(MicUplink.playsDownlinkOutsideVoiceProcessing(audioType: "speechRecognition", environment: [:]), "Siri downlink plays outside the voice-processing engine")
+        expect(!MicUplink.playsDownlinkOutsideVoiceProcessing(audioType: "telephony", environment: [:]), "telephony downlink stays inside the voice-processing engine")
+        expect(!MicUplink.playsDownlinkOutsideVoiceProcessing(audioType: "speechRecognition", environment: ["HOMEPLAY_SIRI_SW_AEC": "0"]), "HOMEPLAY_SIRI_SW_AEC=0 restores the old Siri path")
         expect(!MicUplink.wantsVoiceProcessing(audioType: "telephony", environment: ["HOMEPLAY_NO_AEC": "1"]),
                "HOMEPLAY_NO_AEC=1 turns it off")
         // 引擎沒起之前：下行不接手，播放器照舊自己放

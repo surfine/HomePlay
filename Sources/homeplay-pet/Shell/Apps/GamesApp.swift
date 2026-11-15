@@ -68,8 +68,14 @@ final class GamesApp: PetApp {
     private var hits: [(CGRect, MacGame)] = []
     private var opened: (name: String, at: Double)?
 
-    private static let top = HPTokens.contentTop, cols = 4
-    private static let cellW = AppUI.contentW / CGFloat(cols), icon: CGFloat = 160, rowH: CGFloat = 256
+    /// 圖示格用主畫面那一組（shell-layout.md 第 4、6 節）：頂 241、圖示 152、欄距 225，第 1／4 欄圖示外緣貼 98.5／925.5。
+    /// 列距 256：遊戲名稱最多兩行，比主畫面的 240 多留一行
+    private static let top = HPTokens.Home.gridTop, cols = 4
+    private static let cellW = HPTokens.Home.columnPitch, icon: CGFloat = HPTokens.Home.iconSide, rowH: CGFloat = 256
+    /// 第 col 欄、第 row 列的圖示框（捲動 offset 已扣掉）；名稱與點按範圍以它為中心
+    static func iconRect(col: Int, row: Int, offset: CGFloat = 0) -> CGRect {
+        CGRect(x: HPGrid.Content.leading + CGFloat(col) * cellW, y: top + CGFloat(row) * rowH - offset, width: icon, height: icon)
+    }
 
     private init() {
         if let i = CommandLine.arguments.firstIndex(of: "--demo-games") {
@@ -129,13 +135,13 @@ final class GamesApp: PetApp {
     }
 
     private func drawGrid(_ g: CGContext, _ face: Face) {
-        let x0 = AppUI.margin, nf = AppUI.font(28, .medium)
+        let nf = AppUI.font(28, .medium)
         let px = Int((Self.icon * face.renderPixelScale).rounded())
         for (i, game) in games.enumerated() {
             let col = i % Self.cols, row = i / Self.cols
-            let cell = CGRect(x: x0 + CGFloat(col) * Self.cellW, y: Self.top + CGFloat(row) * Self.rowH - scroll.offset, width: Self.cellW, height: Self.rowH)
+            let ir = Self.iconRect(col: col, row: row, offset: scroll.offset)
+            let cell = CGRect(x: ir.midX - Self.cellW / 2, y: ir.minY, width: Self.cellW, height: Self.rowH)
             guard cell.maxY > AppUI.topEdge - 60, cell.minY < 1024 else { continue }
-            let ir = CGRect(x: cell.midX - Self.icon / 2, y: cell.minY + 8, width: Self.icon, height: Self.icon)
             let k = 1 - 0.06 * Press.amount(ir)
             let r = HPComponents.scaled(ir, k)
             if !game.path.isEmpty, let img = AppIconArt.systemIcon(game.path, px: max(64, px)) {

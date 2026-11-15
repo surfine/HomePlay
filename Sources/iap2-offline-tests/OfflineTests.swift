@@ -23,6 +23,12 @@ func hexBytes(_ s: String) -> [UInt8] {
     }
 
     static func main() {
+        runAll()   // 裡面的 guard…return 只離開 runAll，失敗數照樣在這裡結算
+        if failures > 0 { print("\(failures) FAILED"); exit(1) }
+        print("PASS iap2 offline")
+    }
+
+    static func runAll() {
         // Wi-Fi 資訊分享：0x5700 沒有參數；0x5701 回狀態＋名稱＋密碼（字串可能帶 NUL）
         do {
             expect(Iap2Csm.requestWiFiInformationFrame().messageId == 0x5700, "wifi info request is 0x5700")
@@ -115,6 +121,45 @@ func hexBytes(_ s: String) -> [UInt8] {
             expect(np?.title == "Next" && np?.artist == nil, "track change clears stale metadata")
             expect(Iap2Csm.setNowPlayingInformation(elapsedMs: 42000).encoded.map { String(format: "%02x", $0) }.joined() ==
                    "4040000e5003000800000000a410", "0x5003 seek encodes absolute milliseconds (MacPlay fixture)")
+        }
+
+        // 斷網實驗（HOMEPLAY_WIFI_HANDOFF）：送出前把家用 Wi-Fi 的名稱與密碼拿掉，其他欄位不動
+        do {
+            let wifi = Iap2Csm.accessoryWiFiConfiguration(ssid: "AB", passphrase: "pw", security: .wpaWpa2, channel: 36)
+            let start = Iap2Csm.carPlayStartSessionWireless(
+                ssid: "AB", passphrase: "pw", channel: 149, ipAddresses: ["10.0.0.2"], security: .wpaWpa2,
+                port: 7000, deviceIdentifier: "AA:BB:CC:DD:EE:FF", publicKey: "pk", sourceVersion: "950.7.1")
+            let ident = Iap2Csm.identificationInformation(
+                name: "Probe", model: "WS2", manufacturer: "WindowShade", serialNumber: "S1", firmwareVersion: "0.1", hardwareVersion: "0.1",
+                externalAccessoryProtocol: "me.test", bluetoothMac: "AA:BB:CC:DD:EE:FF", ssid: "AB")
+            func group(_ f: Iap2Csm.Frame?) -> [Iap2Csm.Parameter] { f?.parameters.first { $0.id == 1 }.flatMap { Iap2Csm.parseParameters($0.payload) } ?? [] }
+            func component(_ f: Iap2Csm.Frame?) -> [Iap2Csm.Parameter] { f?.parameters.first { $0.id == 24 }.flatMap { Iap2Csm.parseParameters($0.payload) } ?? [] }
+
+            expect(Iap2Csm.WiFiHandoff.parse(nil) == .normal && Iap2Csm.WiFiHandoff.parse("x") == .normal
+                   && Iap2Csm.WiFiHandoff.parse("blank") == .blank && Iap2Csm.WiFiHandoff.parse("omit") == .omit, "handoff env parses, unknown = normal")
+            expect(Iap2Csm.handoffFiltered(wifi, .normal) == wifi && Iap2Csm.handoffFiltered(start, .normal) == start
+                   && Iap2Csm.handoffFiltered(ident, .normal) == ident, "handoff normal leaves every frame unchanged")
+
+            let bw = Iap2Csm.handoffFiltered(wifi, .blank)
+            expect(bw?.parameters.map(\.id) == [1, 2, 3, 4] && bw?.parameters[0].payload == [0] && bw?.parameters[1].payload == [0]
+                   && bw?.parameters[2].payload == [2] && bw?.parameters[3].payload == [36], "handoff blank: 0x5703 ssid and passphrase empty, security and channel kept")
+            let bg = group(Iap2Csm.handoffFiltered(start, .blank))
+            expect(bg.map(\.id) == [0, 1, 2, 3, 4] && bg[0].payload == [0] && bg[1].payload == [0]
+                   && bg[3].payload == Array("10.0.0.2".utf8) + [0], "handoff blank: 0x4301 wireless group keeps ids, ssid/passphrase empty, IP kept")
+            let bs = Iap2Csm.handoffFiltered(start, .blank)
+            expect(bs?.parameters.map(\.id) == start.parameters.map(\.id) && bs?.parameters[1] == start.parameters[1], "handoff blank: 0x4301 port and identity untouched")
+
+            expect(Iap2Csm.handoffFiltered(wifi, .omit) == nil, "handoff omit: 0x5703 is not sent")
+            let og = group(Iap2Csm.handoffFiltered(start, .omit))
+            expect(og.map(\.id) == [3] && og[0].payload == Array("10.0.0.2".utf8) + [0], "handoff omit: 0x4301 wireless group carries only the IP list")
+
+            let original = component(ident), blank = component(Iap2Csm.handoffFiltered(ident, .blank))
+            expect(original.first { $0.id == 1 }?.payload == Array("AB".utf8) + [0], "identification component 24 carries the ssid today")
+            expect(blank.first { $0.id == 1 }?.payload == Array("HomePlay".utf8) + [0] && blank.map(\.id) == original.map(\.id),
+                   "handoff blank: identification component name is HomePlay, other sub-parameters kept")
+            expect(component(Iap2Csm.handoffFiltered(ident, .omit)) == blank, "handoff omit: identification same as blank")
+            let other = Iap2Csm.Frame(messageId: 0x4E0E, parameters: [Iap2Csm.Parameter(id: 0, payload: [1])])
+            expect(Iap2Csm.handoffFiltered(other, .omit) == other, "handoff leaves unrelated messages alone")
         }
 
         // CSM：帧编码与解析往返
@@ -289,7 +334,8 @@ func hexBytes(_ s: String) -> [UInt8] {
                    "file transfer LAST_DATA reassembles")
             let c = FileTransferReceiver()
             _ = c.feed([9, 0x80, 1])
-            expect(c.feed([9, 0x02]).isEmpty && c.feed([9, 0x40, 2]).last != nil, "file transfer CANCEL drops the buffer")
+            expect(c.feed([9, 0x02]).isEmpty && c.feed([9, 0x40, 2]) == [.reply([9, 0x05]), .complete(id: 9, data: Data([2]))],
+                   "file transfer CANCEL drops the buffer")
         }
 
         // MFi：现场生成身份 → pk8/证书文件 → 加载自检 → 签名/验签往返
@@ -668,9 +714,6 @@ func hexBytes(_ s: String) -> [UInt8] {
         ConnectionMachineTests.run(expect)
         // 首次配对连不上：失败树与诊断报告
         ConnectDiagnosticsTests.run(expect)
-
-        if failures > 0 { print("\(failures) FAILED"); exit(1) }
-        print("PASS iap2 offline")
     }
 
     /// 生成一份测试身份：PKCS#8 EC P-256 私钥 + 自签证书（DER）。

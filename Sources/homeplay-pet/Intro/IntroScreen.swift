@@ -138,10 +138,11 @@ extension Face {
         } else if page != .welcome && page != .more {
             scene(t / page.loop)
         }
-        // 👀 膠囊（1024 座標；回主畫面那頁會被往下拉一點）
+        // 歡迎頁是 👀 膠囊（產品的臉）；其他頁是頂端的把手（1024 座標；回主畫面那頁會被往下拉一點）
         var capDY: CGFloat = 0
         if page == .home, !rm { capDY = 2 * CGFloat(IntroEase.move.key(t / page.loop, [(0.12, 0), (0.46, 16), (0.60, 0)])) }
-        if page != .pet && page != .control { introCapsule(g, now, pal, dy: capDY, welcomePhase: page == .welcome && !rm ? t / page.loop : nil) }
+        if page == .welcome { introCapsule(g, now, pal, dy: 0, welcomePhase: rm ? nil : t / page.loop) }
+        else if page != .pet && page != .control { introHandle(g, pal, dy: capDY) }
         // 手指／游標在最上面（膠囊之後；桌寵本身那頁在機身之後畫）
         if page.stills != nil, page != .pet {
             g.saveGState(); g.scaleBy(x: Self.introK, y: Self.introK)
@@ -236,7 +237,17 @@ extension Face {
         introHit(.skip, sr, s)
     }
 
-    // MARK: 👀 膠囊（1024）
+    // MARK: 頂端把手與 👀 膠囊（1024）
+
+    /// 把手（示範用 2 倍大，跟這份稿的其他元件同一個比例；顏色跟底色）
+    private func introHandle(_ g: CGContext, _ pal: IntroPalette, dy: CGFloat) {
+        let r = CGRect(x: 512 - HomeHandle.width, y: 2 * HomeHandle.top + dy, width: 2 * HomeHandle.width, height: 2 * HomeHandle.height)
+        HomeHandle.fill(g, r, dark: pal.dark, alpha: 1)
+        if pal.ic {
+            g.saveGState(); g.addPath(CGPath(roundedRect: r, cornerWidth: r.height / 2, cornerHeight: r.height / 2, transform: nil))
+            g.setStrokeColor(pal.ink.cgColor); g.setLineWidth(2); g.strokePath(); g.restoreGState()
+        }
+    }
 
     private func introCapsule(_ g: CGContext, _ now: Double, _ pal: IntroPalette, dy: CGFloat, welcomePhase: Double?) {
         let r = CGRect(x: 512 - 208, y: 48 + dy, width: 416, height: 124)
@@ -268,7 +279,7 @@ extension Face {
     // MARK: 手指／游標（512）
 
     /// 手指：半透明白圓點（滑鼠換成箭頭游標；觸控板換頁時是兩點）
-    private func introFinger(_ g: CGContext, _ c: CGPoint, opacity: Double, scale: Double, _ input: IntroInput, _ pal: IntroPalette, two: Bool = false, size: CGFloat = 44) {
+    private func introFinger(_ g: CGContext, _ c: CGPoint, opacity: Double, scale: Double, _ input: IntroInput, _ pal: IntroPalette, two: Bool = false, size: CGFloat = 44, side: Bool = false) {
         guard opacity > 0.01 else { return }
         g.saveGState()
         g.setAlpha(CGFloat(opacity))
@@ -285,7 +296,8 @@ extension Face {
             g.addLines(between: pts); g.closePath(); g.setStrokeColor(NSColor.black.cgColor); g.setLineWidth(1.3); g.setLineJoin(.round); g.strokePath()
         } else {
             let d = size * CGFloat(scale)
-            let centers = two ? [CGPoint(x: c.x, y: c.y - 26), CGPoint(x: c.x, y: c.y + 26)] : [c]
+            let centers = two ? (side ? [CGPoint(x: c.x - size * 0.6, y: c.y), CGPoint(x: c.x + size * 0.6, y: c.y)]
+                                      : [CGPoint(x: c.x, y: c.y - 26), CGPoint(x: c.x, y: c.y + 26)]) : [c]
             for p in centers {
                 let r = CGRect(x: p.x - d / 2, y: p.y - d / 2, width: d, height: d)
                 g.saveGState()
@@ -301,12 +313,22 @@ extension Face {
         g.restoreGState()
     }
 
+    /// 捲動下拉的示範（觸控板、滑鼠；2026-11-12）：箭頭游標停在命中區不動、不按下；觸控板旁邊多兩個並排的手指點跟著往下滑
+    private func introScrollFingers(_ at: CGPoint, travel: Double, dx: CGFloat = 78) -> CGPoint { CGPoint(x: at.x + dx, y: at.y + 34 + CGFloat(travel) * 0.6) }
+    private func introScrollPointer(_ g: CGContext, _ at: CGPoint, travel: Double, opacity: Double, _ input: IntroInput, _ pal: IntroPalette, fingersDX: CGFloat = 78) {
+        if input == .trackpad {
+            introFinger(g, introScrollFingers(at, travel: travel, dx: fingersDX), opacity: opacity, scale: 1, .trackpad, pal, two: true, size: 26, side: true)
+        }
+        introFinger(g, at, opacity: opacity, scale: 1, .mouse, pal)
+    }
+
     private func introPointer(_ g: CGContext, _ page: IntroPage, _ p: Double, _ input: IntroInput, _ pal: IntroPalette) {
         let E = IntroEase.move
         switch page {
         case .home:
             let op = E.key(p, [(0.06, 0), (0.12, 1), (0.46, 1), (0.54, 0)])
             let ty = E.key(p, [(0.12, 0), (0.46, 120), (0.54, 128)]), s = E.key(p, [(0.06, 1.15), (0.12, 0.92), (0.46, 0.92), (0.54, 1)])
+            if input != .touch { introScrollPointer(g, CGPoint(x: 256, y: 30), travel: ty, opacity: op, input, pal); break }   // 游標停在把手上，用捲動下拉
             introFinger(g, CGPoint(x: 256, y: 55 + ty), opacity: op, scale: s, input, pal)
         case .switcher:
             let op = E.key(p, [(0.06, 0), (0.12, 1), (0.68, 1), (0.76, 0)])
@@ -314,16 +336,20 @@ extension Face {
             let s = E.key(p, [(0.06, 1.15), (0.12, 0.92), (0.40, 0.92), (0.48, 0.86), (0.54, 0.92), (0.68, 0.92), (0.76, 1)])
             // 停住的提示：手指周圍擴散一圈
             let rop = IntroEase.enter.key(p, [(0.44, 0), (0.50, 0.9), (0.70, 0)]), rs = IntroEase.enter.key(p, [(0.44, 0.6), (0.50, 1), (0.70, 1.6)])
+            let pad = input == .trackpad   // 觸控板：兩指往下滑到一半停住；滑鼠教按住拖（一般滾輪分不出停住）
+            let stop = pad ? introScrollFingers(CGPoint(x: 256, y: 30), travel: 96) : CGPoint(x: 256, y: 151)
             if rop > 0.01 {
-                let rr = 32 * CGFloat(rs)
+                let rr = (pad ? 44 : 32) * CGFloat(rs)
                 g.saveGState(); g.setAlpha(CGFloat(rop)); g.setStrokeColor(NSColor(white: 1, alpha: 0.8).cgColor); g.setLineWidth(2)
-                g.strokeEllipse(in: CGRect(x: 256 - rr, y: 151 - rr, width: rr * 2, height: rr * 2)); g.restoreGState()
+                g.strokeEllipse(in: CGRect(x: stop.x - rr, y: stop.y - rr, width: rr * 2, height: rr * 2)); g.restoreGState()
             }
+            if pad { introScrollPointer(g, CGPoint(x: 256, y: 30), travel: ty, opacity: op, input, pal); break }
             introFinger(g, CGPoint(x: 256, y: 55 + ty), opacity: op, scale: s, input, pal)
         case .control:
             let op = E.key(p, [(0.06, 0), (0.12, 1), (0.48, 1), (0.56, 0)])
             let tx = E.key(p, [(0.12, 0), (0.48, -16), (0.56, -16)]), ty = E.key(p, [(0.12, 0), (0.48, 190), (0.56, 198)])
             let s = E.key(p, [(0.06, 1.15), (0.12, 0.92), (0.48, 0.92), (0.56, 1)])
+            if input != .touch { introScrollPointer(g, CGPoint(x: 452, y: 36), travel: ty * 0.6, opacity: op, input, pal, fingersDX: -86); break }   // 游標停在右上角，用捲動拉開
             introFinger(g, CGPoint(x: 452 + tx, y: 44 + ty), opacity: op, scale: s, input, pal)
         case .swipe:
             let op = E.key(p, [(0.04, 0), (0.08, 1), (0.20, 1), (0.26, 0), (0.40, 0), (0.44, 1), (0.56, 1), (0.62, 0)])

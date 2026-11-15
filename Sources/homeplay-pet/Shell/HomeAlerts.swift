@@ -107,7 +107,7 @@ extension HomeAlerts {
                 let was = old?.accessories.first { $0.id == acc.id }?
                     .characteristics.first { $0.id == ch.id }?.value?.bool ?? false
                 guard !was else { continue }
-                let room = acc.room ?? acc.name
+                let room = new.rooms.first { $0.id == acc.room }?.name ?? acc.name   // acc.room 是房間 id（UUID），不是名字
                 let detail: String?
                 switch ch.type {
                 case "contact", "doorState":   // 官方安防文案：「%@ opened at 時間」
@@ -167,7 +167,7 @@ enum HomeAlertsSelfTest {
 
         // 真實事件：快照轉移偵測（HomeLink 特徵碼；smoke/co/leak 等幫手加上後自動生效）
         let mk: (String, String, String?, Bool) -> HomeSnapshot = { accID, code, room, on in
-            HomeSnapshot(ready: true, homes: [], rooms: [], accessories: [
+            HomeSnapshot(ready: true, homes: [], rooms: room.map { [HomeRoom(id: $0, name: $0, home: nil)] } ?? [], accessories: [   // 房間以 id 對名字（實機的 acc.room 是 UUID）
                 HomeAccessory(id: accID, name: accID == "door" ? "Front Door" : accID, home: nil, room: room,
                               category: "sensor", categoryName: "Sensor", reachable: true,
                               characteristics: [HomeCharacteristic(id: "c1", type: code, value: HomeValue(bool: on), writable: false, units: nil, min: nil, max: nil, step: nil)])

@@ -6,6 +6,17 @@
 
 import AppKit
 
+/// 閘門計帳（回歸 #14 結案、handoff 2026-11-10 W0）：限速的臉不能拿「沒套限速的單幀成本」直接比預算——
+/// 照它自己的重畫頻率攤成 60Hz 下的每幀平均：該重畫的幀算成本、被跳過的算 0。
+/// flow 有人靠近時 10fps（Face.flowRedrawsPerSecond＝tickFlowFace 的節流）：一秒 60 幀裡 10 幀重畫，每幀平均＝單幀 × 10/60。
+/// 沒有限速的臉每幀都重畫，數字不變。verify.sh 的 flow 預算只讀這個攤提後的數字，預算同樣 20ms（不是放寬）。
+enum FrameBudget {
+    static let displayHz = 60.0
+    static func amortizedMS(_ singleFrameMS: Double, redrawsPerSecond: Double) -> Double {
+        singleFrameMS * min(displayHz, max(0, redrawsPerSecond)) / displayHz   // 重畫頻率高於顯示頻率＝每幀都畫，不放大
+    }
+}
+
 enum HPFrames {
     static func run(_ face: Face, out: String, count: Int, fps: Double = 30) {
         let base = out.hasSuffix(".png") ? String(out.dropLast(4)) : out
@@ -64,8 +75,29 @@ enum HPFrames {
         }
         if timeOnly, ms.count > 2 {
             let warm = ms.dropFirst(2).sorted()
-            log(String(format: "frames render ms: first %.1f, median %.1f, p90 %.1f, mean %.1f (n=%d)", ms[0], warm[warm.count / 2], warm[min(warm.count - 1, warm.count * 9 / 10)], warm.reduce(0, +) / Double(warm.count), warm.count))
+            let med = warm[warm.count / 2]
+            log(String(format: "frames render ms: first %.1f, median %.1f, p90 %.1f, mean %.1f (n=%d)", ms[0], med, warm[min(warm.count - 1, warm.count * 9 / 10)], warm.reduce(0, +) / Double(warm.count), warm.count))
+            if face.style == .flow {   // 這裡量的是沒套限速的單幀成本；閘門照 tickFlowFace 的 10fps 攤提（verify.sh 的 flow 預算讀這行）
+                log(String(format: "frames render ms: flow amortized %.1f (single median %.1f × %.0f/%.0f)",
+                           FrameBudget.amortizedMS(med, redrawsPerSecond: Face.flowRedrawsPerSecond), med,
+                           Face.flowRedrawsPerSecond, FrameBudget.displayHz))
+            }
         }
         log("frames \(count) @\(Int(fps)) fps -> \(base)-NNN.png")
+    }
+}
+
+// MARK: - selftest
+
+enum HPFramesSelfTest {
+    static func run(_ check: (Bool, String) -> Void) {
+        // handoff 2026-11-10 W0 的驗收數字：單幀 50ms、10fps 節流 → 8.3ms；16.3ms → 2.7ms
+        check(String(format: "%.1f", FrameBudget.amortizedMS(50, redrawsPerSecond: 10)) == "8.3"
+              && String(format: "%.1f", FrameBudget.amortizedMS(16.3, redrawsPerSecond: 10)) == "2.7",
+              "閘門計帳：限速的臉把單幀成本攤成 60Hz 每幀平均（50ms×10fps→8.3ms；16.3ms→2.7ms）")   // l10n-ignore：selftest 訊息
+        check(abs(FrameBudget.amortizedMS(27.4, redrawsPerSecond: FrameBudget.displayHz) - 27.4) < 1e-9
+              && abs(FrameBudget.amortizedMS(27.4, redrawsPerSecond: 999) - 27.4) < 1e-9,
+              "閘門計帳：沒有限速的臉數字不變（每幀都重畫＝單幀成本，不因頻率高而放大）")   // l10n-ignore
+        check(Face.flowRedrawsPerSecond == 10, "閘門計帳：攤提用 tickFlowFace 同一個節流常數（10fps，改節流就跟著改）")   // l10n-ignore
     }
 }

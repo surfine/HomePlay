@@ -1,16 +1,19 @@
-// 2.0 P03：頂端 👀 膠囊＝我們的 Dynamic Island（HIG Live Activities；Chan「Design dynamic Live Activities」WWDC23 7:40 起）。
+// 2.0 P03：頂端的即時動態藥丸＝我們的 Dynamic Island（HIG Live Activities；Chan「Design dynamic Live Activities」WWDC23 7:40 起）。
+// 2026-11-12：外殼畫面待機時頂端只有把手（Shell/HomeHandle.swift）；有活動時藥丸才出現，而且不帶眼睛（docs/plans/capsule.md）。
+// 2026-11-13：藥丸貼合內容——寬度跟著內容走，圖示和文字靠在一起，中間不再留原本眼睛的位置；兩個以上的動態也一樣。
+// 位置（上緣 Shell.pillTop）與高度不變。CarPlay 會話在背景時也是一則動態（一顆車子圖示的小藥丸，點它回 CarPlay），不再掛綠色角標。
 //
 // 三種呈現：
-//   compact：只有一個活動。👀 當成鏡頭留在正中，左邊 leading、右邊 trailing 緊貼眼睛兩側，左右同寬（取較大的、各自置中），
-//            高度跟沒有活動時的膠囊一樣（62），越窄越好；也因此不會壓到主畫面左上的問候語。
-//   minimal：兩到三個活動。第一個接在膠囊右側，其餘分離成圓形（內容寬就變橢圓）的小藥丸，右一個、左一個；
+//   compact：只有一個活動。leading（圖示）緊接 trailing（要看的那個值），整顆置中，高 54，寬度剛好包住內容；
+//            只有圖示的（CarPlay）就是一顆圓。也因此不會壓到主畫面左上的問候語。
+//   minimal：兩到三個活動。第一個在中間，其餘是分離的小藥丸，右一個、左一個；每顆都是圓形（內容寬就變橢圓）；
 //            每一個仍然顯示資訊（計時器的環、音樂的音量條、通話的秒數），不退回只有 logo。
-//   expanded：按住膠囊（或小藥丸）展開成大卡：眼睛留在頂端正中，leading／trailing 留在原本的左右兩側（相對位置不變），
+//   expanded：按住藥丸（或小藥丸）展開成大卡：leading／trailing 留在原本的左右兩側（相對位置不變），
 //            下面放標題與動作（計時器 +1 分鐘／停止、音樂上一首／播放／下一首、通話掛斷、訊息回覆）；
-//            高度照內容（沒有動作的 ClioTalk 比較矮），上緣就是膠囊上緣、眼睛兩側緊貼，不留「額頭」。
-// 膠囊材質跟著年代（我們刻意保留的例外，HIG 的島是不透明黑）：純黑年代是黑，玻璃／黑透年代是深色玻璃；
+//            高度照內容（沒有動作的 ClioTalk 比較矮），上緣就是藥丸上緣，不留「額頭」。
+// 藥丸材質跟著年代（我們刻意保留的例外，HIG 的島是不透明黑）：純黑年代是黑，玻璃／黑透年代是深色玻璃；
 // 外圈一道跟活動主色一致的 key line。大卡裡的按鈕用填色，不再上一層玻璃。
-// 夜間（spec4 #3）：整面轉紅時只把眼睛那一段貼回原樣（主畫面 Shell.nightKeep、錶面 LiveActivityStack.faceKeep）。
+// 夜間（spec4 #3）：主畫面上整顆藥丸跟著轉紅；錶面的大膠囊只把眼睛那一段貼回原樣（LiveActivityStack.faceKeep）。
 // 點：compact／minimal／大卡空白處＝打開 App 到那件事（訊息到那串對話、計時器到那一組）；按住＝展開；點大卡外面或 Esc＝收回。
 // 活動超過 8 小時就不再顯示；設定 › 通用 › 即時動態 可以每個 App 關掉，訊息另有「顯示預覽」。
 // 快照：--live-activity timer,music,call,message,cliotalk（逗號分隔，可多個）；--live-activity-expanded <同上其一>。
@@ -26,12 +29,11 @@ enum LiveActivityStack {
     /// HIG：Live Activity 追蹤 8 小時內的事
     static let maxAge: Double = 8 * 3600
     /// compact／minimal 的高（HIG：compact、minimal 同高）
-    /// 待機膠囊（拍板 2026-11-08：全系統一致；2026-11-09：再收小一點，仍留在 CarPlay 安全帶裡）
-    /// 眼睛膠囊（idle）與 compact 分開：idle 48，長出活動時才回到 54 的 compact 高度。
     static let height: CGFloat = 54
-    static let idleHeight: CGFloat = 48
-    static let idleWidth: CGFloat = 166
-    static let gap: CGFloat = 14             // 眼睛 ↔ 內容（緊貼，不另外加 padding）
+    /// 藥丸最窄這麼寬（＝把手的寬；外殼畫面待機時不畫藥丸，2026-11-12）
+    static let idleWidth: CGFloat = HomeHandle.width
+    static let gap: CGFloat = 14             // 大卡頂列：左右兩半各自離中線
+    static let innerGap: CGFloat = 12        // compact：圖示 ↔ 文字
     static let endPad: CGFloat = 18          // 內容 ↔ 膠囊兩端（落在半圓裡）
     static let detachGap: CGFloat = 12
     static let minimalPad: CGFloat = 14      // 分離小藥丸：內容 ↔ 邊
@@ -72,39 +74,55 @@ enum LiveActivityStack {
     // MARK: 版面（純函數）
 
     struct Layout: Equatable {
-        var pill: CGRect          // 接著眼睛的那顆
+        var pill: CGRect          // 中間那顆
         var leading: CGRect?      // compact 才有
-        var trailing: CGRect      // compact：右邊；minimal：接在膠囊上的那一格
+        var trailing: CGRect      // compact：圖示右邊的值；minimal：中間那顆的內容
         var detached: [CGRect]    // 分離的 minimal（右、左）
     }
 
-    /// eh：眼睛的半寬（中心到外緣）；single：只有一個活動時 leading／trailing 內容寬；minimal：多個活動時各自的內容寬
-    static func layout(eyesHalf eh: CGFloat, top: CGFloat, centerX cx: CGFloat = 512,
-                       single: (lead: CGFloat, trail: CGFloat)?, minimal: [CGFloat]) -> Layout {
+    /// 一段字在藥丸裡佔多寬：空字串是 0（不是字型量出來的那一點寬——不然只有圖示的 CarPlay 那顆會變寬、圖示偏左）
+    static func textWidth(_ s: String, _ font: NSFont, cap: CGFloat) -> CGFloat { s.isEmpty ? 0 : min(cap, Typo.width(s, font)) }
+
+    /// 藥丸貼合內容（2026-11-13）。single：只有一個活動時 leading／trailing 的內容寬（trail 0＝只有圖示）；minimal：多個活動時各自的內容寬
+    static func layout(top: CGFloat, centerX cx: CGFloat = 512, single: (lead: CGFloat, trail: CGFloat)?, minimal: [CGFloat]) -> Layout {
         if let s = single {
             // 回歸 #18：內容槽必須跟膠囊同一個上限。槽比膠囊大就會出現「本體巨大、內容小小」的巨膠囊。
-            let maxSide = max(0, (maxWidth - 2 * (eh + gap + endPad)) / 2)
-            let side = min(max(s.lead, s.trail), maxSide)
-            let w = min(maxWidth, max(idleWidth, 2 * (eh + gap + side + endPad)))
+            let trail = min(s.trail, max(0, maxWidth - 2 * endPad - s.lead - innerGap))
+            let inner = s.lead + (trail > 0 ? innerGap + trail : 0)
+            let w = max(height, inner + 2 * endPad)
+            let x0 = cx - inner / 2
             return Layout(pill: CGRect(x: cx - w / 2, y: top, width: w, height: height),
-                          leading: CGRect(x: cx - eh - gap - side, y: top, width: side, height: height),
-                          trailing: CGRect(x: cx + eh + gap, y: top, width: side, height: height), detached: [])
+                          leading: CGRect(x: x0, y: top, width: s.lead, height: height),
+                          trailing: CGRect(x: x0 + s.lead + (trail > 0 ? innerGap : 0), y: top, width: trail, height: height), detached: [])
         }
         let m0 = minimal.first ?? 0
-        let minX = cx - idleWidth / 2, maxX = max(cx + idleWidth / 2, cx + eh + gap + m0 + endPad)
-        let pill = CGRect(x: minX, y: top, width: maxX - minX, height: height)
+        let w = max(height, m0 + 2 * minimalPad)   // 圓形；內容寬就變橢圓
+        let pill = CGRect(x: cx - w / 2, y: top, width: w, height: height)
         var det: [CGRect] = []
-        for (i, w) in minimal.dropFirst().enumerated() {
-            let dw = max(height, w + 2 * minimalPad)   // 圓形；內容寬就變橢圓
+        for (i, mw) in minimal.dropFirst().enumerated() {
+            let dw = max(height, mw + 2 * minimalPad)
             det.append(i == 0 ? CGRect(x: pill.maxX + detachGap, y: top, width: dw, height: height)
                               : CGRect(x: pill.minX - detachGap - dw, y: top, width: dw, height: height))
         }
-        return Layout(pill: pill, leading: nil, trailing: CGRect(x: cx + eh + gap, y: top, width: m0, height: height), detached: det)
+        return Layout(pill: pill, leading: nil, trailing: CGRect(x: cx - m0 / 2, y: top, width: m0, height: height), detached: det)
     }
 
-    /// 大卡：上緣＝膠囊上緣，左右離螢幕邊 46；高度照內容
+    /// CarPlay 會話在背景（HomeView 在前面）的那一則：一顆車子圖示，沒有字；點它回 CarPlay，按住不展開。
+    /// 用 .message 的呈現（leading 是符號、標題是空的＝沒有 trailing）
+    static func carPlayActivity() -> LiveActivity {
+        LiveActivity(kind: .message, title: "", detail: "", accent: HPComponents.green, progress: nil, appID: CarPlayApp.id, symbol: "car.fill")
+    }
+    static func isCarPlay(_ a: LiveActivity) -> Bool { a.appID == CarPlayApp.id }
+    /// 藥丸上要顯示的：App 的活動，加上 CarPlay 在背景的那一則（排最後；滿了就擠掉第三個，回 CarPlay 的入口一定在）
+    static func pillActivities(_ acts: [LiveActivity], carPlayBehind: Bool) -> [LiveActivity] {
+        guard carPlayBehind else { return acts }
+        return Array(acts.prefix(maxShown - 1)) + [carPlayActivity()]
+    }
+
+    /// 大卡：上緣＝膠囊上緣，左右貼內容邊線 98.5／925.5（shell-layout.md 第 6 節；原本離邊 46）；高度照內容。
+    /// 圓角仍照 expandedInset 算（同心的那個 46），外觀不變
     static func expandedRect(height h: CGFloat, top: CGFloat) -> CGRect {
-        CGRect(x: expandedInset, y: top, width: 1024 - 2 * expandedInset, height: h)
+        CGRect(x: HPGrid.Content.leading, y: top, width: HPGrid.Content.width, height: h)
     }
     static func expandedRadius(_ r: CGRect) -> CGFloat { min(r.height / 2, Screen.concentric(inset: expandedInset)) }
     /// 有動作列的 200；音樂多一條進度 236；沒有動作的（ClioTalk）矮成膠囊型 150
@@ -130,8 +148,8 @@ enum LiveActivityStack {
     static func greetingAlpha(_ now: Double) -> CGFloat { 1 - max(0, min(1, expandT(now) * 1.6)) }
 
     /// 這一幀 compact／minimal 的版面（Shell.pillRect 照它長大）
-    nonisolated(unsafe) static var compactPill = CGRect(x: 512 - idleWidth / 2, y: 46, width: idleWidth, height: height)
-    /// 夜間：只貼回兩隻眼睛（nil＝照原本的作法）；錶面的大膠囊、主畫面的膠囊各一份
+    nonisolated(unsafe) static var compactPill = Shell.pillSlot
+    /// 夜間：只貼回兩隻眼睛（nil＝照原本的作法）；錶面的大膠囊用 faceKeep，主畫面的藥丸沒有眼睛（homeKeep 一直是 nil）
     nonisolated(unsafe) static var faceKeep: CGPath?
     nonisolated(unsafe) static var homeKeep: CGPath?
     /// 兩隻眼睛的外形（略放大一圈蓋住反鋸齒的邊）
@@ -180,24 +198,30 @@ enum LiveActivityStack {
         }
         switch hit {
         case .pill?:
+            if let a = shown.first, isCarPlay(a) { open(a); return true }   // CarPlay 那一顆：點＝回 CarPlay（按住也一樣，沒有大卡）
             if long { if let a = shown.first { expand(a.uid, now: now) }; return true }
             if let home { home(); return true }
             if let a = shown.first { open(a) }
             return true
         case .minimal(let i)?:
             guard i < shown.count else { return true }
-            if long { expand(shown[i].uid, now: now) } else { open(shown[i]) }
+            if long, !isCarPlay(shown[i]) { expand(shown[i].uid, now: now) } else { open(shown[i]) }
             return true
         default:
-            // 沒有活動時膠囊照舊吃掉點按（不穿到底下的圖示）；外殼上它就是 Home 鍵。命中：整顆，上下補到 88
+            // 沒有活動時那裡是把手：點按範圍（HomeHandle.tapZone）照舊吃掉點按；外殼上它就是 Home 鍵。
+            // 把手隱藏時的那一下在 ShellInput 就擋掉了（只現身），走到這裡的都是看得見的把手、或輔助使用的按下
             guard pillHit.contains(p) else { return false }
             if !long { home?() }
             return true
         }
     }
 
-    /// 藥丸的命中區：整顆膠囊，上下補到 HPTokens.Size.tap（88）
-    static var pillHit: CGRect { Shell.pillRect(Shell.pillT).insetBy(dx: -10, dy: min(0, (height - HPTokens.Size.tap) / 2)) }
+    /// 點按的命中區：有活動時是整顆藥丸（上下補到 HPTokens.Size.tap 88）；沒有活動時是把手的點按範圍
+    static var pillHit: CGRect {
+        guard Shell.pillT > 0.02 else { return HomeHandle.tapZone }
+        let r = Shell.pillRect(Shell.pillT)
+        return r.insetBy(dx: -10, dy: min(0, (r.height - HPTokens.Size.tap) / 2))
+    }
 
     /// 打開 App 之後再帶到那件事（深連結）
     static func follow(_ a: LiveActivity) {
@@ -240,7 +264,6 @@ enum LiveActivityStack {
 
     // MARK: 快照
 
-    static let demoKinds = ["timer", "music", "call", "message", "cliotalk", "iphone", "alarm", "weather"]
     static func appID(forDemo k: String) -> String? {
         ["timer": "timers", "alarm": "alarms", "weather": "weather", "music": "music", "call": "facetime", "message": "messages", "cliotalk": "cliotalk",
          "iphone": ActivityBridge.mirroringAppID][k]   // 截圖：--iphone-activity 也餵一則假活動
@@ -274,8 +297,10 @@ extension Face {
                                          enabled: LiveActivityStack.enabled)
     }
 
-    /// 眼睛的半寬（膠囊上的眼睛 k＝0.5）
-    var laEyesHalf: CGFloat { (cur.sep + cur.rx) * 0.5 }
+    /// 頂端藥丸上的全部（App 的活動＋CarPlay 在背景的那一則）；錶面的大膠囊、海報、VoiceOver 的說明仍用 shellActivities
+    func pillActivities(_ now: Double) -> [LiveActivity] {
+        LiveActivityStack.pillActivities(shellActivities(now), carPlayBehind: !HeroPull.on && SourceSwitcher.carPlayBehind(self))   // 片頭不跟這台 Mac 有沒有接上手機
+    }
 
     private static let laValueFont = Face.rounded(32, weight: .bold)
     private static let laNameFont = Face.rounded(28, weight: .semibold)
@@ -283,29 +308,29 @@ extension Face {
 
     /// compact 的內容寬
     private func laWidths(_ a: LiveActivity) -> (lead: CGFloat, trail: CGFloat, mini: CGFloat) {
+        typealias S = LiveActivityStack
         switch a.kind {
         case .timer, .alarm, .weather:
             // 與 laTrailing 的 Face.clipped(..., 140) 對齊：量測用同一段被截斷的字，否則槽會比內容寬出好幾倍
             let s = Face.clipped(a.detail, Self.laValueFont, LiveActivityStack.maxContentWidth)
             return (40, min(LiveActivityStack.maxContentWidth, Typo.width(s, Self.laValueFont)), 38)
         case .music, .assistant: return (40, 40, 34)
-        case .call: return (40, min(140, Typo.width(a.detail, Self.laValueFont)), min(110, Typo.width(a.detail, Self.laMiniFont)))
-        case .message: return (40, min(150, Typo.width(a.title, Self.laNameFont)), 34)
-        case .iphone: return (40, min(150, Typo.width(a.detail, Self.laValueFont)), 34)
+        case .call: return (40, S.textWidth(a.detail, Self.laValueFont, cap: 140), S.textWidth(a.detail, Self.laMiniFont, cap: 110))
+        case .message: return (40, S.textWidth(a.title, Self.laNameFont, cap: 150), 34)   // CarPlay 在背景那一則沒有字：0，整顆是一顆圓
+        case .iphone: return (40, S.textWidth(a.detail, Self.laValueFont, cap: 150), 34)
         }
     }
 
     /// 算好這一幀的 compact／minimal 版面（Shell.pillRect 照它長大）
     func laLayout(_ acts: [LiveActivity]) -> LiveActivityStack.Layout {
-        let eh = laEyesHalf
         if acts.count == 1 {
             let w = laWidths(acts[0])
-            return LiveActivityStack.layout(eyesHalf: eh, top: Shell.pillTop, single: (w.lead, w.trail), minimal: [])
+            return LiveActivityStack.layout(top: Shell.pillTop, single: (w.lead, w.trail), minimal: [])
         }
-        return LiveActivityStack.layout(eyesHalf: eh, top: Shell.pillTop, single: nil, minimal: acts.map { laWidths($0).mini })
+        return LiveActivityStack.layout(top: Shell.pillTop, single: nil, minimal: acts.map { laWidths($0).mini })
     }
 
-    /// 頂端膠囊的活動層：r＝這一幀膠囊（idle → compact 的插值），t＝長大進度。畫完本體與內容，眼睛由呼叫端畫在上面
+    /// 頂端藥丸的活動層：r＝這一幀的藥丸（把手 → compact 的插值），t＝長大進度。畫本體與內容（沒有眼睛）
     func drawActivityStack(_ g: CGContext, _ r: CGRect, t: CGFloat, acts: [LiveActivity], now: Double) {
         typealias S = LiveActivityStack
         S.hits = []; S.shown = acts
@@ -500,8 +525,8 @@ extension Face {
     private func laExpanded(_ g: CGContext, _ a: LiveActivity, in R: CGRect, now: Double) {
         typealias S = LiveActivityStack
         let cy = R.minY + S.height / 2, side: CGFloat = 36
-        let eyesL = 512 - laEyesHalf - S.gap
-        // 左上：leading＋App 名（跟眼睛之間留 gap）
+        let eyesL = 512 - S.gap
+        // 左上：leading＋App 名（到中線前留 gap）
         let lead = CGPoint(x: R.minX + side + 26, y: cy)
         laLeading(g, a, center: lead, size: 52, now: now)
         let small = Face.rounded(28, weight: .semibold)
@@ -517,7 +542,7 @@ extension Face {
             let s = Face.clipped(a.detail, f, 300), w = Typo.width(s, f)
             HPNumeric.draw(g, self, key: "la.big.\(a.uid)", s, font: f, x: right - w, y: cy + (a.kind == .call ? 16 : 19), color: a.accent, now: now)   // 動效包
         case .message:
-            let f = Face.rounded(30, weight: .semibold), s = Face.clipped(a.title, f, right - 512 - laEyesHalf - S.gap), w = Typo.width(s, f)
+            let f = Face.rounded(30, weight: .semibold), s = Face.clipped(a.title, f, right - 512 - S.gap), w = Typo.width(s, f)
             drawLeft(g, s, font: f, x: right - w, y: cy + 11, color: .white)
         case .iphone:
             let f = Face.rounded(44, weight: .bold)
@@ -711,7 +736,7 @@ struct LiveActivitySettingsSection: View {
             }
         } header: {
             SectionTitle(title: L("la.settings.header", "实时活动"),
-                         info: L("la.settings.footer", "正在进行的事会显示在顶端的 👀 胶囊里；按住胶囊可以展开。超过 8 小时会自动结束。"))
+                         info: L("la.settings.footer", "正在进行的事会显示在顶端的胶囊里；按住胶囊可以展开。超过 8 小时会自动结束。"))
         }
     }
 

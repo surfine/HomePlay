@@ -29,11 +29,20 @@ final class MessagesMedia: @unchecked Sendable {
         return std.hasPrefix(root) && !std.contains("/../")
     }
 
+    /// 讀不到的附件（iCloud 還沒下載、解不開）30 秒內不重試：對話每幀重畫時不會每幀都重排縮圖或在主執行緒重開檔
+    private var failedAt: [Int64: Double] = [:]   // 由 lock 保護
+    private func recentlyFailed(_ id: Int64) -> Bool {
+        lock.lock(); defer { lock.unlock() }
+        guard let t = failedAt[id] else { return false }
+        if Date().timeIntervalSinceReferenceDate - t < 30 { return true }
+        failedAt[id] = nil; return false
+    }
+
     func image(_ ref: MessagesMediaRef, video: Bool = false) -> CGImage? {
         if let d = Self.demoImages[ref.id] { return d }
         lock.lock(); let hit = cache[ref.id]; let busy = pending.contains(ref.id); lock.unlock()
         if let hit { return hit }
-        guard !busy, Self.allowed(ref.path) else { return nil }
+        guard !busy, !recentlyFailed(ref.id), Self.allowed(ref.path) else { return nil }
         lock.lock(); pending.insert(ref.id); lock.unlock()
         let path = ref.path, id = ref.id
         queue.async { [weak self] in
@@ -44,6 +53,8 @@ final class MessagesMedia: @unchecked Sendable {
             if let img {
                 self.cache[id] = img; self.order.append(id)
                 if self.order.count > 60 { self.cache[self.order.removeFirst()] = nil }
+            } else {
+                self.failedAt[id] = Date().timeIntervalSinceReferenceDate
             }
             self.lock.unlock()
             if img != nil { DispatchQueue.main.async { self.onReady?() } }
@@ -90,7 +101,11 @@ final class MessagesMedia: @unchecked Sendable {
         if Self.demoImages[ref.id] != nil || ref.id < 0 { return 7 }
         lock.lock(); let d = durations[ref.id]; lock.unlock()
         if let d { return d }
-        guard Self.allowed(ref.path), let p = try? AVAudioPlayer(contentsOf: URL(fileURLWithPath: ref.path)) else { return nil }
+        guard !recentlyFailed(ref.id), Self.allowed(ref.path) else { return nil }
+        guard let p = try? AVAudioPlayer(contentsOf: URL(fileURLWithPath: ref.path)) else {
+            lock.lock(); failedAt[ref.id] = Date().timeIntervalSinceReferenceDate; lock.unlock()
+            return nil
+        }
         lock.lock(); durations[ref.id] = p.duration; lock.unlock()
         return p.duration
     }

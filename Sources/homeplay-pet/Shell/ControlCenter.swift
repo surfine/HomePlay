@@ -48,12 +48,15 @@ enum ControlCenter {
         var isToggle: Bool { ![.nowPlaying, .volume, .brightness, .timer, .alarm, .cameras, .screenMirroring, .home, .profile].contains(self) }
     }
 
-    // MARK: 版面（1024 畫布）：一格 128、格距 24（macOS 27 截圖量到的 128／24，換到我們的畫布不縮放）
+    // MARK: 版面（1024 畫布）
+    // 2026-11-12 外殼版面規格（shell-layout.md 第 3、6 節）：控制中心算浮層，模組格左右貼內容邊線 98.5／925.5，格距取 HPGrid.scale 的 16
+    // ⇒ 一格 (827 − 5 × 16) ÷ 6 = 124.5。原本照 macOS 27 截圖的 128／24（gridX 68）。
 
-    static let cell: CGFloat = 128, gap: CGFloat = 24
-    static let gridX: CGFloat = (1024 - 6 * 128 - 5 * 24) / 2   // 68
+    static let gap: CGFloat = 16
+    static let cell: CGFloat = (HPGrid.Content.width - 5 * gap) / 6   // 124.5
+    static let gridX: CGFloat = HPGrid.Content.leading                // 98.5
     static let gridY: CGFloat = 100
-    static let gridH: CGFloat = 5 * 128 + 4 * 24               // 736
+    static let gridH: CGFloat = 5 * cell + 4 * gap                    // 686.5
     /// 寬滑桿的圓角（截圖擬合成圓弧 ≈ 47）；2×2、4×2 ≈ 64（＝半格，跟膠囊同心）。我們用連續曲率的圓角，
     /// 2×2 的參數要小一點（refcompare 擬合：60 → 64）；寬滑桿只有 128 高，連續圓角最多 42，所以照截圖用一般圓弧 47
     static let wideRadius: CGFloat = 47, squareRadius: CGFloat = 60
@@ -61,8 +64,8 @@ enum ControlCenter {
     static let editCapsuleY: CGFloat = gridY + gridH + 32
     static let capsuleH: CGFloat = HPTokens.Size.cta
     /// 長按展開的大卡（整個格子區）
-    static let expandedRect = CGRect(x: gridX, y: gridY, width: 6 * 128 + 5 * 24, height: gridH)
-    /// 展開的大卡貼著螢幕（左右離 68）：圓角跟螢幕同心，不沿用格子的 60
+    static let expandedRect = CGRect(x: gridX, y: gridY, width: 6 * cell + 5 * gap, height: gridH)
+    /// 展開的大卡（左右貼內容邊線）：圓角跟螢幕同心，不沿用格子的 60
     static var expandedRadius: CGFloat { HPTokens.Radius.concentric(rect: expandedRect) }
     /// 舊名（P04 自檢、ShellAccessibility 用）
     static var radius: CGFloat { squareRadius }

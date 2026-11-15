@@ -68,8 +68,6 @@ ${EXTRA_PLIST}
   <key>CFBundleIconName</key><string>AppIcon</string>
   <key>CFBundleShortVersionString</key><string>2.0</string>
   <key>CFBundleVersion</key><string>${BUILD}</string>
-  <key>CFBundleDevelopmentRegion</key><string>en</string>
-  <key>CFBundleLocalizations</key><array><string>en</string><string>zh-Hans</string><string>zh-Hant</string></array>
   <key>LSMinimumSystemVersion</key><string>14.0</string>
   <key>LSUIElement</key><true/>
   <key>LSMultipleInstancesProhibited</key><true/>

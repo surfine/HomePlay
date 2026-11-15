@@ -9,7 +9,7 @@ import AppKit
 
 struct SBPress {
     enum Hit: Equatable { case item(String), empty, folderApp(String), libraryApp(String), libraryEmpty,
-                          libraryExpand(SBLibraryCategory), libraryBackToPods }
+                          libraryExpand(SBLibraryPage), libraryBackToPods }
     enum Mode { case pending, drag, page, stack, swallow, libraryScroll, folderDrag, folderPage }
     var p: CGPoint
     var at: NSPoint
@@ -125,7 +125,10 @@ extension SB {
         let tl = CGPoint(x: d.point.x - d.grab.x, y: d.point.y - d.grab.y)
         let cell = SB.cell(forTopLeft: tl, span: d.item.span, current: d.pendingTarget ?? d.target)
         if d.pendingTarget.map({ $0 != cell }) ?? true { d.pendingTarget = cell; d.pendingSince = now }
-        else if d.target.map({ $0 != cell }) ?? true, now - d.pendingSince > SBMotion.reorderDwell { d.target = cell }
+        else if d.target.map({ $0 != cell }) ?? true, now - d.pendingSince > SBMotion.reorderDwell {
+            d.target = cell
+            PointerHaptics.perform(.iconIntoSlot)   // 震動三處之一：編輯模式把圖示拖進格子（畫面上是鄰居讓位）
+        }
     }
 
     /// 放手：照預覽的那個結果放（看到的就是放下去的）；疊在圖示上＝資料夾
@@ -281,29 +284,28 @@ extension PetView {
     private func sbHit(_ p: CGPoint) -> SBPress.Hit {
         if Shell.nav.screen == .library {
             let off = SB.libraryScrollNow   // 2.0 depth：捲動後的格子跟著位移；被裁掉一半以上的不算
-            if SB.libraryQuery.isEmpty && !SB.librarySearching {
+            if SB.libraryBrowsing {
                 if SB.libraryShowingExpanded {   // 展開的類別頁：點圖示開 App，點空白回總覽
                     for (app, cell) in zip(SBUI.libraryExpandedApps(), SBUI.libraryExpandedCells()) {
                         let ir = cell.offsetBy(dx: 0, dy: -off)
-                        let vis = ir.intersection(CGRect(x: -1e9, y: SBUI.libraryTop - 32, width: 2e9, height: 1024))
-                        if vis.height >= ir.height * 0.5, ir.insetBy(dx: -12, dy: -12).contains(p) { return .libraryApp(app.id) }
+                        if SBUI.libraryMostlyVisible(ir), SBUI.libraryExpandedHit(ir).contains(p) { return .libraryApp(app.id) }
                     }
                     return .libraryBackToPods
                 }
                 // 豆莢總覽
-                if let cat = SBUI.libraryPodTitle(at: p, offset: off) { return .libraryExpand(cat) }
+                if let page = SBUI.libraryPodTitle(at: p, offset: off) { return .libraryExpand(page) }
                 // 瀏覽：豆莢網格，每一顆圖示各自是一個目標
-                for (id, icon) in SBUI.libraryPodIcons() {
-                    let ir = icon.offsetBy(dx: 0, dy: -off)
-                    let vis = ir.intersection(CGRect(x: -1e9, y: SBUI.libraryTop - 32, width: 2e9, height: 1024))
-                    if vis.height >= ir.height * 0.5, ir.insetBy(dx: -12, dy: -12).contains(p) { return .libraryApp(id) }
+                for icon in SBUI.libraryPodIcons() {
+                    let ir = icon.rect.offsetBy(dx: 0, dy: -off)
+                    // 大圖示往縫的一半擴（第四格的小圖示群在上面 libraryPodTitle 已經當成展開）
+                    let pad = SBLPodGrid.iconGap / 2
+                    if SBUI.libraryMostlyVisible(ir), ir.insetBy(dx: -pad, dy: -pad).contains(p) { return .libraryApp(icon.id) }
                 }
                 return .libraryEmpty
             }
             for (app, cell) in zip(SBUI.libraryApps(), SBUI.libraryLayout().cells) {
                 let ir = SBUI.libraryIcon(cell).offsetBy(dx: 0, dy: -off)
-                let vis = ir.intersection(CGRect(x: -1e9, y: SBUI.libraryTop - 32, width: 2e9, height: 1024))
-                if vis.height >= ir.height * 0.5, ir.insetBy(dx: -12, dy: -12).contains(p) { return .libraryApp(app.id) }
+                if SBUI.libraryMostlyVisible(ir), SBUI.librarySearchHit(ir).contains(p) { return .libraryApp(app.id) }
             }
             return .libraryEmpty
         }
@@ -363,7 +365,7 @@ extension PetView {
             if SB.folder != nil { SB.enterEdit(now: now) } else if Shell.nav.screen == .home { SB.enterEdit(now: now) }
         case .folderApp: SB.enterEdit(now: now)
         case .libraryApp(let id):
-            if let cell = zip(SBUI.libraryApps(), SBUI.libraryLayout().cells).first(where: { $0.0.id == id })?.1 { SB.openLibraryMenu(app: id, cell: cell.offsetBy(dx: 0, dy: -SB.libraryScrollNow), now: now) }   // 2.0 depth：捲動後錨在畫面上的位置
+            if let cell = SBUI.libraryIconAnchor(id: id, at: pr.p, offset: SB.libraryScrollNow) { SB.openLibraryMenu(app: id, cell: cell, now: now) }
         case .libraryEmpty, .libraryExpand, .libraryBackToPods: break
         }
         SBInputState.press = pr
@@ -438,8 +440,11 @@ extension PetView {
             pr.mode = .page; SB.pageDragging = true; SB.pageDragValue = pr.startPage; SB.pageSamples = []; SBInputState.pageRawSamples = []
             sbPageTrack(p, pr: pr, now: now); return true
         }
-        // App 資源庫：橫拖＝跟最後一頁之間翻（同一套跟手、橡皮筋、投射）
-        if horizontal, Shell.nav.screen == .library, SB.libraryReachable, SB.menu == nil, SB.sheet == nil, !SB.librarySearching {
+        // App 資源庫：展開頁開著時，橫拖先收回這一頁。否則跟最後一頁之間翻。
+        if horizontal, Shell.nav.screen == .library, SB.libraryReachable, SB.libraryBackTarget == .pods {
+            SB.closeLibraryExpanded(now: now); pr.mode = .swallow; return true
+        }
+        if horizontal, Shell.nav.screen == .library, SB.libraryReachable, SB.libraryAllowsPaging {
             SB.armLibraryPaging(now: now); pr.startPage = CGFloat(SB.librarySlot)
             pr.mode = .page; SB.pageDragging = true; SB.pageDragValue = pr.startPage; SB.pageSamples = []; SBInputState.pageRawSamples = []
             sbPageTrack(p, pr: pr, now: now); return true
@@ -743,25 +748,32 @@ extension PetView {
 
     private func sbLibraryTap(_ p: CGPoint, now: Double) -> Bool {
         if let m = SB.menu { sbMenuTap(m, p, now: now); return true }
-        if SBUI.librarySearch.contains(p) { SB.librarySearching = true; SB.setLibraryExpanded(nil, now: now, immediate: true); return true }
+        if SBUI.libraryExpandedHeader {   // 展開頁是下一層：左上返回鈕收回展開頁；沒有搜尋欄、沒有頭像
+            if HPComponents.hitBack(p) {
+                SB.closeLibraryExpanded(now: now)
+                log("sb library back")
+                return true
+            }
+        } else if SBUI.libraryAvatarChrome(p) {
+            return false
+        } else if SBUI.librarySearch.contains(p) {
+            SB.focusLibrarySearch()
+            return true
+        }
         switch sbHit(p) {
         case .libraryApp(let id):
             // 豆莢總覽：錨在豆莢裡那一顆；展開頁：錨在那一格；搜尋：錨在清單那一格
-            let anchor = SBUI.libraryPodIcons()[id]
-                ?? zip(SBUI.libraryExpandedApps(), SBUI.libraryExpandedCells()).first { $0.0.id == id }?.1
-                ?? zip(SBUI.libraryApps(), SBUI.libraryLayout().cells).first { $0.0.id == id }?.1
-            guard let cell = anchor else { return false }
+            guard let cell = SBUI.libraryIconAnchor(id: id, at: p, offset: SB.libraryScrollNow) else { return false }
             SB.librarySearching = false
-            shellOpenApp(id, from: cell.offsetBy(dx: 0, dy: -SB.libraryScrollNow))   // 2.0 depth：從捲動後的位置長出來
+            shellOpenApp(id, from: cell)   // 起點已含捲動，從手指底下那一顆長出來
             return true
-        case .libraryExpand(let cat):
-            SB.setLibraryExpanded(cat, now: now)
-            SB.libraryScroll = MotionValue("sbLibScroll", spring: SBMotion.settle, from: 0, to: 0, now: now)
-            SB.libraryScrollDragging = false
-            log("sb library expand \(cat.rawValue)")
+        case .libraryExpand(let page):
+            SB.setLibraryExpanded(page, now: now)
+            SB.resetLibraryScroll(now: now)
+            log("sb library expand \(page.title)")
             return true
         case .libraryBackToPods:
-            SB.setLibraryExpanded(nil, now: now)
+            SB.closeLibraryExpanded(now: now)
             log("sb library pods")
             return true
         default:
@@ -776,8 +788,13 @@ extension PetView {
     func sbScroll(_ e: NSEvent, uv: CGPoint?) -> Bool {
         let now = CACurrentMediaTime()
         let precise = e.hasPreciseScrollingDeltas
-        // App 資源庫：觸控板兩指橫滑＝翻回最後一頁（直滑照舊捲清單）
-        if Shell.nav.screen == .library, precise, SB.libraryReachable, SB.menu == nil, SB.sheet == nil, !SB.librarySearching,
+        // App 資源庫：展開頁開著時，兩指橫滑先收回這一頁。否則翻回最後一頁（直滑照舊捲清單）
+        if Shell.nav.screen == .library, precise, SB.libraryReachable, SB.libraryBackTarget == .pods,
+           abs(e.scrollingDeltaX) > abs(e.scrollingDeltaY) * 1.2, e.phase == .began || e.phase == .changed {
+            if !SB.libraryClosing { SB.closeLibraryExpanded(now: now) }
+            return true
+        }
+        if Shell.nav.screen == .library, precise, SB.libraryReachable, SB.libraryAllowsPaging,
            let r = sbTrackpadPage(e, now: now, fromLibrary: true) { return r }
         // 2.0 depth：App 資料庫捲動（內容放不下時；跟 App 清單同一套方向語意：deltaY 正＝內容往上）
         if Shell.nav.screen == .library {
@@ -804,7 +821,7 @@ extension PetView {
             if e.scrollingDeltaY != 0, now - Shell.lastPageAt > 0.2 {   // 滑鼠滾輪：一格一列
                 Shell.lastPageAt = now
                 let from = SBInputState.libWheel ?? SB.libraryScrollNow
-                let to = max(0, min(SB.libraryMaxScroll, from + (e.scrollingDeltaY > 0 ? 1 : -1) * SBUI.libraryRowPitch))
+                let to = max(0, min(SB.libraryMaxScroll, from + (e.scrollingDeltaY > 0 ? 1 : -1) * SBUI.libraryScrollStride))
                 SBInputState.libWheel = to
                 SB.libraryScrollDragging = false
                 SB.libraryScroll.retarget(to, now: now)
@@ -898,13 +915,11 @@ extension PetView {
     // MARK: 鍵盤（ShellInput.shellKeyDown 在焦點處理之前先問）
 
     /// 主畫面／App 資料庫上「回上一層」的前置順序（Esc 與頂端藥丸＝Home 鍵共用）：選單 → sheet → 資料夾 → 編輯模式；
-    /// App 資料庫：選單 → 搜尋。收掉了一層回 true，都沒有回 false（交給 ShellNav 的 .back）
+    /// App 資料庫：選單 → 搜尋 → 展開頁。收掉了一層回 true，都沒有回 false（交給 ShellNav 的 .back）
     func sbDismissTop(now: Double) -> Bool {
         guard Shell.nav.overlay == .none else { return false }
         if Shell.nav.screen == .library {
-            if SB.menu != nil { SB.menu = nil; return true }
-            if SB.librarySearching || !SB.libraryQuery.isEmpty { SB.libraryQuery = ""; SB.librarySearching = false; return true }
-            return false
+            return SB.dismissLibraryTop(now: now)
         }
         guard Shell.nav.screen == .home else { return false }
         if SB.menu != nil { SB.menu = nil; return true }
@@ -924,16 +939,24 @@ extension PetView {
         let printable = !chars.isEmpty && chars.unicodeScalars.allSatisfy { !CharacterSet.controlCharacters.contains($0) && $0.value < 0xF700 }
         if Shell.nav.screen == .library, Shell.nav.overlay == .none {
             if e.keyCode == 53, sbDismissTop(now: now) { return true }
-            if e.keyCode == 51 { if !SB.libraryQuery.isEmpty { SB.libraryQuery.removeLast() }; SB.librarySearching = true; return true }
-            if e.keyCode == 36 || e.keyCode == 76, SB.librarySearching, let first = SBUI.libraryApps().first {
-                SB.librarySearching = false; shellOpenApp(first.id, from: SBUI.libraryCells(1)[0].offsetBy(dx: 0, dy: -SB.libraryScrollNow)); return true
+            if e.keyCode == 51 {
+                if !SB.libraryQuery.isEmpty { SB.libraryQuery.removeLast(); SB.resetLibraryScroll(now: now) }
+                SB.librarySearching = true
+                return true
             }
-            // ←：翻回最後一頁（照主畫面換頁）
-            if e.keyCode == 123, !SB.librarySearching, SB.menu == nil, SB.libraryReachable, !HPAccessibilitySettings.keyboardNavigation {
-                SB.armLibraryPaging(now: now); SB.goToPage(SB.librarySlot - 1, now: now); return true
+            if e.keyCode == 36 || e.keyCode == 76, !SB.libraryBrowsing, let first = SBUI.libraryApps().first {
+                let from = (SBUI.libraryLayout().cells.first ?? SBUI.libraryCells(1)[0]).offsetBy(dx: 0, dy: -SB.libraryScrollNow)
+                SB.librarySearching = false
+                shellOpenApp(first.id, from: from); return true
+            }
+            // ←：展開頁先收回；豆莢上才翻回最後一頁
+            if e.keyCode == 123, SB.libraryReachable, !HPAccessibilitySettings.keyboardNavigation, let back = SB.libraryBackTarget {
+                if back == .pods { SB.closeLibraryExpanded(now: now) }
+                else { SB.armLibraryPaging(now: now); SB.goToPage(SB.librarySlot - 1, now: now) }
+                return true
             }
             if printable, !(e.keyCode == 49 && !SB.librarySearching) {   // 直接打字就開始搜尋（實體鍵盤）
-                SB.librarySearching = true; SB.libraryQuery += chars; return true
+                SB.librarySearching = true; SB.libraryQuery += chars; SB.resetLibraryScroll(now: now); return true
             }
             return false
         }
@@ -1033,11 +1056,14 @@ extension PetView {
         if args.contains("--home-edit-pages") { SB.sheet = .editPages }
         if let k = arg("--home-remove") { SB.sheet = .removeConfirm(k) }
         if let q = arg("--library-search") { SB.libraryQuery = q; SB.librarySearching = true }
-        // 快照：直接停在某個分類的展開頁（rawValue 例如 DH1011）。要拍縮放的半途用 HOMEPLAY_ANIM=sbLibZoom:t。
+        // 快照：直接停在展開頁（分類 rawValue 例如 DH1011，或 recents／hidden／iphone）。要拍縮放的半途用 HOMEPLAY_ANIM=sbLibZoom:t。
         if let c = arg("--library-expand") {
-            for cat in SBLibraryCategory.allCases where cat.rawValue.caseInsensitiveCompare(c) == .orderedSame {
-                SB.setLibraryExpanded(cat, now: now - 1, immediate: false)
-            }
+            let page: SBLibraryPage? = {
+                if c.caseInsensitiveCompare("recents") == .orderedSame { return .recentlyAdded }
+                if c.caseInsensitiveCompare("hidden") == .orderedSame { return .hidden }
+                return SBLibraryCategory.allCases.first { $0.rawValue.caseInsensitiveCompare(c) == .orderedSame }.map { .category($0) }
+            }()
+            if let page { SB.setLibraryExpanded(page, now: now - 1, immediate: false) }
         }
         if let spec = arg("--home-drag")?.split(separator: "@"), spec.count >= 2 {
             let key = String(spec[0]), cr = spec[1].split(separator: ",").compactMap { Int($0) }
@@ -1080,24 +1106,97 @@ enum SBAX {
                 : [L("sb.menu.editHome", "编辑主屏幕")]
     }
 
+    /// 資料庫這一頁念出來的東西：總覽是豆莢裡的圖示和分類名，展開頁是那一類，搜尋才是清單。
+    /// 露出不到一半的不列（跟點按同一條裁切）。
+    private static func libraryItems() -> [ShellAXItem] {
+        let off = SB.libraryScrollNow
+        if SB.libraryBrowsing {
+            return SB.libraryShowingExpanded ? libraryExpandedItems(off) : libraryPodItems(off)
+        }
+        return librarySearchItems(off)
+    }
+
+    private static func libraryPodItems(_ off: CGFloat) -> [ShellAXItem] {
+        var out: [ShellAXItem] = []
+        for (i, pod) in SBUI.libraryPods().enumerated() {
+            let f = SBLPodGrid.podFrame(i, top: SBUI.libraryTop).offsetBy(dx: 0, dy: -off)
+            let band = SBLPodGrid.labelFrame(f)
+            if SBUI.libraryMostlyVisible(band) {
+                if pod.kind.page != nil {
+                    out.append(ShellAXItem(id: "sb.lib.title.\(i)", kind: .chrome, role: .button, label: pod.title,
+                                           rect: band, shape: .rounded(12), press: .tap(center(band))))
+                } else {
+                    out.append(ShellAXItem(id: "sb.lib.title.\(i)", kind: .text, role: .heading, label: pod.title, rect: band))
+                }
+            }
+            var n = 0
+            func add(_ id: String, _ ir: CGRect) {
+                guard let app = AppRegistry.app(id), SBUI.libraryMostlyVisible(ir) else { return }
+                out.append(ShellAXItem(id: "sb.lib.pod.\(i).\(n).\(id)", kind: .homeItem, role: .button,
+                                       label: appLabel(app), rect: ir, shape: .rounded(ir.width * 0.2237), press: .tap(center(ir))))
+                n += 1
+            }
+            for (slot, id) in pod.large.enumerated() { add(id, SBLPodGrid.largeFrame(slot, in: f)) }
+            // 第四格的小圖示群：整格一顆按鈕，點了展開這一類（小圖示單顆點不準）
+            let more = SBLPodGrid.largeFrame(3, in: f)
+            if !pod.cluster.isEmpty, pod.kind.page != nil, SBUI.libraryMostlyVisible(more) {
+                out.append(ShellAXItem(id: "sb.lib.more.\(i)", kind: .chrome, role: .button,
+                                       label: String(format: L("sb.library.showAll", "显示“%@”的全部 App"), pod.title),
+                                       rect: more, shape: .rounded(SBLPodGrid.iconCorner), press: .tap(center(more))))
+            }
+        }
+        return out
+    }
+
+    private static func libraryExpandedItems(_ off: CGFloat) -> [ShellAXItem] {
+        var out: [ShellAXItem] = []
+        if let page = SB.libraryExpanded {
+            let title = SBUI.libraryExpandedTitle()   // 頁首，不跟內容捲
+            let em = title.font.ascender - title.font.descender
+            let r = CGRect(x: HPTokens.titleX, y: title.baseline - title.font.ascender,
+                           width: max(1, Typo.width(page.title, title.font)), height: max(em, 1))
+            out.append(ShellAXItem(id: "sb.lib.expanded", kind: .text, role: .heading, label: page.title, rect: r))
+        }
+        for (i, pair) in zip(SBUI.libraryExpandedApps(), SBUI.libraryExpandedCells()).enumerated() {
+            let ir = pair.1.offsetBy(dx: 0, dy: -off)
+            guard SBUI.libraryMostlyVisible(ir) else { continue }
+            let hit = SBUI.libraryExpandedHit(ir)
+            out.append(ShellAXItem(id: "sb.lib.exp.\(i).\(pair.0.id)", kind: .homeItem, role: .button,
+                                   label: appLabel(pair.0), rect: hit, shape: .rounded(ir.width * 0.2237), press: .tap(center(ir))))
+        }
+        return out
+    }
+
+    private static func librarySearchItems(_ off: CGFloat) -> [ShellAXItem] {
+        var out: [ShellAXItem] = []
+        for (i, h) in SBUI.libraryLayout().headers.enumerated() {
+            let hr = CGRect(x: HPTokens.Home.gridMargin, y: h.y - off, width: 600, height: SBUI.libraryRowPitch)
+            guard SBUI.libraryMostlyVisible(hr) else { continue }
+            out.append(ShellAXItem(id: "sb.library.section.\(i)", kind: .text, role: .heading, label: h.title, rect: hr))
+        }
+        for (app, cell) in zip(SBUI.libraryApps(), SBUI.libraryLayout().cells) {
+            let ir = SBUI.libraryIcon(cell).offsetBy(dx: 0, dy: -off)
+            guard SBUI.libraryMostlyVisible(ir) else { continue }
+            let hit = SBUI.librarySearchHit(ir)
+            out.append(ShellAXItem(id: "home.app.\(app.id)", kind: .homeItem, role: .button, label: appLabel(app),
+                                   rect: hit, shape: .rounded(ir.width * 0.2237), press: .tap(center(ir))))
+        }
+        return out
+    }
+
     static func items(face: Face) -> [ShellAXItem] {
         var out: [ShellAXItem] = []
         let now = CACurrentMediaTime()
         if Shell.nav.screen == .library {
-            out.append(ShellAXItem(id: "sb.search", kind: .chrome, role: .button, label: L("sb.library.search", "搜索 App 资源库"), value: SB.libraryQuery.isEmpty ? nil : SB.libraryQuery,
-                                   rect: SBUI.librarySearch, shape: .capsule, press: .tap(center(SBUI.librarySearch))))
-            out.append(ShellAXItem(id: "avatar", kind: .chrome, role: .button, label: L("people.switch.title", "换人"), rect: Shell.avatarRect, shape: .circle, press: .tap(center(Shell.avatarRect))))
-            let off = SB.libraryScrollNow   // 2.0 depth：捲動後的框跟著位移；被裁掉一半以上的不列
-            for (i, h) in SBUI.libraryLayout().headers.enumerated() where h.y - off >= SBUI.libraryTop - 32 && h.y - off < 1000 {   // 分區標題（iPhone）
-                out.append(ShellAXItem(id: "sb.library.section.\(i)", kind: .text, role: .heading, label: h.title,
-                                       rect: CGRect(x: HPTokens.Home.gridMargin, y: h.y - off, width: 600, height: SBUI.libraryRowPitch)))
+            if SBUI.libraryExpandedHeader {   // 下一層頁首：返回鈕（標題在 libraryExpandedItems）
+                out.append(ShellAXItem(id: "sb.lib.back", kind: .chrome, role: .button, label: L("msg.ax.back", "返回"),
+                                       rect: HPTokens.backButton, shape: .circle, press: .tap(center(HPTokens.backButton))))
+            } else {
+                out.append(ShellAXItem(id: "sb.search", kind: .chrome, role: .button, label: L("sb.library.search", "搜索 App 资源库"), value: SB.libraryQuery.isEmpty ? nil : SB.libraryQuery,
+                                       rect: SBUI.librarySearch, shape: .capsule, press: .tap(center(SBUI.librarySearch))))
+                out.append(ShellAXItem(id: "avatar", kind: .chrome, role: .button, label: L("people.switch.title", "换人"), rect: Shell.avatarRect, shape: .circle, press: .tap(center(Shell.avatarRect))))
             }
-            for (app, cell) in zip(SBUI.libraryApps(), SBUI.libraryLayout().cells) {
-                let ir = SBUI.libraryIcon(cell).offsetBy(dx: 0, dy: -off)
-                let vis = ir.intersection(CGRect(x: -1e9, y: SBUI.libraryTop - 32, width: 2e9, height: 1024))
-                guard vis.height >= ir.height * 0.5 else { continue }
-                out.append(ShellAXItem(id: "home.app.\(app.id)", kind: .homeItem, role: .button, label: SBAX.appLabel(app), rect: ir, shape: .rounded(ir.width * 0.2237), press: .tap(center(ir))))
-            }
+            out.append(contentsOf: libraryItems())
             return menuItems() ?? out
         }
         if let m = menuItems() { return m }

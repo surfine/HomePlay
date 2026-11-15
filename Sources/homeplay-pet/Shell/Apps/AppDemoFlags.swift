@@ -26,7 +26,7 @@ extension Shell {
         if let v = value("--demo-music") {
             if !args.contains("--app") { open("music") }
             if let m = AppRegistry.app("music") as? MusicApp { m.applyDemo(page: v, face: face) }
-            pillT = face.shellActivity(CACurrentMediaTime()) == nil ? 0 : 1
+            pillT = face.pillActivities(CACurrentMediaTime()).isEmpty ? 0 : 1
         }
         // v2-music：--demo-podcasts [show|intro]：播客資料庫的示範資料（不讀真的「播客」資料庫）
         if let v = value("--demo-podcasts") {

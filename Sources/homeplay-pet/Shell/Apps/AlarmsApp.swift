@@ -264,11 +264,12 @@ final class AlarmsApp: PetApp {
 
     // MARK: 版面
     // 左上是返回膠囊、右上是時間：大標題不畫（膠囊寫了「闹钟」），「＋」放在下一次響鈴那一行的右邊
-    private static let listTop: CGFloat = 330
-    /// P12：頂端柔邊（scroll edge effect）：實心蓋到 280（下一次響鈴那行底下）、柔邊接到第一列（listTop）
-    private static let fadeSolid: CGFloat = 280
+    /// 2026-11-12 外殼版面規格（shell-layout.md 第 4、5 節）：第一行內容（下一次響鈴＋「＋」）的頂是 220，清單接在它下面 16
+    private static let addButton = CGRect(x: AppUI.margin + AppUI.contentW - 96, y: HPTokens.contentTop, width: 96, height: 96)
+    private static let listTop: CGFloat = addButton.maxY + 16
+    /// P12：頂端柔邊（scroll edge effect）：實心蓋到清單頂上方 50、柔邊接到第一列（listTop）
+    private static let fadeSolid: CGFloat = listTop - 50
     private static let rowH: CGFloat = 164
-    private static let addButton = CGRect(x: AppUI.margin + AppUI.contentW - 96, y: 206, width: 96, height: 96)
     private func rowRect(_ i: Int) -> CGRect {
         CGRect(x: AppUI.margin, y: Self.listTop + CGFloat(i) * Self.rowH - scroll.offset, width: AppUI.contentW, height: Self.rowH)
     }
@@ -281,10 +282,18 @@ final class AlarmsApp: PetApp {
     private static func plus(_ cx: CGFloat) -> CGRect { CGRect(x: cx - 48, y: 236, width: 96, height: 96) }
     private static func minus(_ cx: CGFloat) -> CGRect { CGRect(x: cx - 48, y: 516, width: 96, height: 96) }
     private static let chipRect = CGRect(x: 512 - 260, y: 632, width: 520, height: 96)
-    private static func dayRect(_ i: Int) -> CGRect { CGRect(x: 64 + CGFloat(i) * (104 + 28), y: 748, width: 104, height: 104) }
-    private static let deleteRect = CGRect(x: 112, y: 876, width: 250, height: 96)
-    private static let cancelRect = CGRect(x: 387, y: 876, width: 250, height: 96)
-    private static let saveRect = CGRect(x: 662, y: 876, width: 250, height: 96)
+    /// 七顆磚排在內容邊線之間（98.5…925.5）、縫 16（HPGrid.scale）：磚＝(827 − 6 × 16) ÷ 7 ≈ 104.4
+    private static let dayGap: CGFloat = 16
+    private static var daySide: CGFloat { (HPGrid.Content.width - 6 * dayGap) / 7 }
+    private static func dayRect(_ i: Int) -> CGRect { CGRect(x: HPGrid.Content.leading + CGFloat(i) * (daySide + dayGap), y: 748, width: daySide, height: daySide) }
+    /// 刪除／取消／儲存：三顆排滿內容邊線之間、縫 16
+    private static func bottomButton(_ i: Int) -> CGRect {
+        let w = (HPGrid.Content.width - 2 * 16) / 3
+        return CGRect(x: HPGrid.Content.leading + CGFloat(i) * (w + 16), y: 876, width: w, height: 96)
+    }
+    private static let deleteRect = bottomButton(0)
+    private static let cancelRect = bottomButton(1)
+    private static let saveRect = bottomButton(2)
     // R6：響鈴時兩顆 150 px 圓鈕：稍後（玻璃）、停止（紅）
     private static let stopRect = HPComponents.actionRect(cx: 512 + 140, cy: 812)
     private static let snoozeRect = HPComponents.actionRect(cx: 512 - 140, cy: 812)
@@ -348,7 +357,7 @@ final class AlarmsApp: PetApp {
             let top = min(tops.min() ?? .infinity, removed.map { $0.y - scroll.offset }.min() ?? .infinity)
             let cr = CGRect(x: AppUI.margin, y: top, width: AppUI.contentW, height: max(0, bottom - top))
             AppUI.group(g, cr)
-            card = continuousRoundedRect(cr, radius: AppUI.groupRadius)
+            card = continuousRoundedRect(cr, radius: AppUI.groupRadius(cr))
         }
         if let card { g.addPath(card); g.clip() }   // 列自己的底（跟卡同色）只在卡裡：換位置時滑動的列蓋住別的列，靜止時看不出來
         // 刪掉的列：原地收起（高度與字一起淡掉），底下的列往上補

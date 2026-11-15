@@ -365,7 +365,6 @@ enum AppMotion {
     static func critical(settle: Double) -> Spring { Spring.settling(CGFloat(settle)) }
     /// Apple 的預設（MacOSX27.0.sdk SwiftUICore.swiftinterface）：.smooth＝(1.0, 0.5)、.snappy＝(0.85, 0.5)、interactiveSpring＝(0.86, 0.15)
     static let appleSmooth = Spring.smooth
-    static let appleSnappy = Spring.snappy
     static let interactive = Spring.interactive
     /// 放手：有動量（> 約 300 px/s）時才允許過衝（damping 0.8，Designing Fluid Interfaces 的建議），否則臨界阻尼
     static func release(velocity pxPerSec: CGFloat) -> Spring { HPMotion.release(velocity: pxPerSec) }

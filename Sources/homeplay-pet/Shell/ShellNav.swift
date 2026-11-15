@@ -209,7 +209,7 @@ enum ShellSelfTest {
         typealias S = ShellInput
         // 膠囊上斜拖交回轉身體之後，下一下（控制中心、CarPlay）不能繼承那次的換頁
         let saved = (FacePaging.drag, S.replayed, S.claimed)
-        FacePaging.drag = FacePaging.Drag(at: .zero, uv: CGPoint(x: 0.5, y: 0.05), fromStyle: FaceStyle.lineup.first ?? .island, fromNav: ShellNav())
+        FacePaging.drag = FacePaging.Drag(at: .zero, uv: CGPoint(x: 0.5, y: 0.05), fromIndex: 0, fromConfig: PosterConfiguration(), fromNav: ShellNav())
         S.replayed = true; S.claimed = true
         check(S.beginPress() && !S.replayed && !S.claimed && S.down == nil,
               "外殼：新的一下開始時清掉上一下的重播與接住，還掛著的換頁要先收（控制中心橫拖不換錶面、CarPlay 放手送得到）")   // l10n-ignore
@@ -400,6 +400,7 @@ enum ShellSelfTest {
         HVTruthSelfTest.run(check)   // HomeView 對齊：Look 與狀態色實測值（Design/HVTruth.swift）
         HPIconPressSelfTest.run(check); SBLayoutSelftest.run(check)   // 圖示按壓動效、無 Dock 的主畫面版面（Design/HPIconPress.swift、Shell/SpringBoard/SBSelftest.swift）
         SBLibraryPageSelftest.run(check)   // App 資源庫＝最後一頁再往後一格（Shell/SpringBoard/SBSelftest.swift）
+        SettingsScreenSelfTest.run(check)   // 螢幕上的設定：七項兩組、推入／返回、通話音量（Shell/Apps/SettingsScreen.swift）
         SBLibraryCategorySelfTest.run(check)   // App 資料庫的分類、空類別、搜尋順序（Shell/SpringBoard/SBLibraryCategories.swift）
         SBOwnerSelftest.run(check)   // 主畫面排列存到排列的主人名下，途中換人不蓋掉別人的（Shell/SpringBoard/SBSelftest.swift）
         SBFloatySelftest.run(check)   // 浮動資料夾：分頁、拖放目標、翻頁帶（Shell/SpringBoard/SBFloatyFolder.swift）
@@ -423,6 +424,8 @@ enum ShellSelfTest {
         ReceiverRecoverySelfTest.run(check)   // 接收端連不上時只強制重啟 launchd 作業、一分鐘一次（ReceiverAgent.swift）
         AirDropCarPlaySelftest.run(check)   // CarPlay 連著時的 AirDrop 對策：傳給自己（Shell/AirDrop/AirDropSelfMessage.swift）
         HomeIndicatorSelfTest.run(check)   // 👀 膠囊兼任 Home Indicator：距離／速度／停頓判定、CarPlay 上的位置與手勢歸屬（Shell/HomeIndicator.swift）
+        PointerInputSelfTest.run(check)   // 觸控板與滑鼠：捲動下拉、次要按鈕、重按、智慧縮放、摸頭、找游標、游標回饋、震動（Shell/PointerInput.swift）
+        HomeHandleSelfTest.run(check)   // 頂端把手：外形與位置、顯示規則、隱藏時點一下只現身、隱藏時下拉仍成立（Shell/HomeHandle.swift）
         AppSwitcherSelfTest.run(check)   // App 切換器與 CarPlay App：卡片、背景中的 CarPlay、導覽（Shell/AppSwitcher.swift）
         HomeAlertsSelfTest.run(check)   // HomeView 對齊 WP5／#3：家庭警報觸發、去重、快照轉移（Shell/HomeAlerts.swift；之前漏掛）
         let near = [CGRect(x: 0, y: 0, width: 88, height: 88), CGRect(x: 100, y: 0, width: 88, height: 88)], far = [near[0], CGRect(x: 120, y: 0, width: 88, height: 88)]

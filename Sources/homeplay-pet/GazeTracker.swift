@@ -230,6 +230,7 @@ final class GazeTracker: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate 
     }
 
     func stop() {
+        restartWork?.cancel(); restartWork = nil   // 排好的重試不取消，使用者關掉「跟隨我」後相機會自己又開起來
         bumpGeneration()
         setPausedFlag(false)
         teardown(notify: true)

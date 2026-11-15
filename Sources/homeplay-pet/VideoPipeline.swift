@@ -467,12 +467,6 @@ final class ReceiverClient: NSObject, URLSessionWebSocketDelegate {
     func sendPairNewPhone() {
         send(#"{"type":"pairNewPhone"}"#)
     }
-    func sendPassphrase(_ value: String) {
-        let d: [String: Any] = ["type": "setPassphrase", "value": value]
-        if let data = try? JSONSerialization.data(withJSONObject: d), let text = String(data: data, encoding: .utf8) {
-            send(text)
-        }
-    }
     func sendWiFi(ssid: String, passphrase: String) {
         let d: [String: Any] = ["type": "setWiFi", "ssid": ssid, "passphrase": passphrase]
         if let data = try? JSONSerialization.data(withJSONObject: d), let text = String(data: data, encoding: .utf8) {

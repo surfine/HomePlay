@@ -5,8 +5,8 @@
 import AppKit
 
 enum HomeAlertCard {
-    /// 同家庭 App 橫幅的 896×152：圓角同心、離左右緣 64（EdgeContainers 驗過）；放頂端（藥丸底下滑出）
-    static let rect = CGRect(x: 64, y: 136, width: 896, height: 152)
+    /// 左右貼內容邊線 98.5／925.5（shell-layout.md 第 6 節；原本 64…960）、高 152：圓角同心（EdgeContainers 驗過）；放頂端（藥丸底下滑出）
+    static let rect = CGRect(x: HPGrid.Content.leading, y: 136, width: HPGrid.Content.width, height: 152)
     /// 點按 vs 拖動的分界（視窗點）：5 太敏感，手一抖就取消點按；10 跟系統的點擊容差接近
     static let tapSlop: CGFloat = 10
     static var radius: CGFloat { HPTokens.Radius.concentric(rect: rect) }

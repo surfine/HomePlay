@@ -137,6 +137,10 @@ extension ControlCenter {
         hits += moduleHits(t, r, s, face: face, now: now, editing: editK > 0.5)
     }
 
+    /// 編輯模式左上「−」與右下改大小把手的點按範圍：以徽標為中心 88 × 88（原本 64、72；shell-layout.md 第 2 節）
+    static func removeHit(_ r: CGRect) -> CGRect { HPGrid.hitRect(CGRect(x: r.minX - 16, y: r.minY - 16, width: 64, height: 64)) }
+    static func resizeHit(_ r: CGRect) -> CGRect { HPGrid.hitRect(CGRect(x: r.maxX - 56, y: r.maxY - 56, width: 72, height: 72)) }
+
     /// 一個模組的可點區域（畫的時候記；輔助使用在還沒畫過時也用它算）
     static func moduleHits(_ t: Tile, _ r: CGRect, _ s: CCSize, face: Face, now: Double, editing: Bool) -> [CCHit] {
         var hits: [CCHit] = []
@@ -144,10 +148,10 @@ extension ControlCenter {
         let label = title(t)
         if editing {
             hits.append(CCHit(rect: r, action: .module(t), label: label))
-            hits.append(CCHit(rect: CGRect(x: r.minX - 16, y: r.minY - 16, width: 64, height: 64), action: .remove(t),
+            hits.append(CCHit(rect: removeHit(r), action: .remove(t),
                               label: String(format: L("cc.a11y.remove", "移除“%@”"), label)))
             if t.sizes.count > 1 {
-                hits.append(CCHit(rect: CGRect(x: r.maxX - 56, y: r.maxY - 56, width: 72, height: 72), action: .resize(t),
+                hits.append(CCHit(rect: resizeHit(r), action: .resize(t),
                                   label: String(format: L("cc.a11y.resize", "更改“%@”的大小"), label)))
             }
             return hits
@@ -434,7 +438,7 @@ extension ControlCenter {
     private static func drawPageDots(_ g: CGContext, pagePos: CGFloat, alpha: CGFloat) {
         let n = layout.pages.count + (editing ? 1 : 0)
         guard n > 1, alpha > 0.01 else { return }
-        // 頁點放在格子右邊的留白正中（格子右緣 956 到畫布右緣之間），直徑與其它頁點一致（14）；
+        // 頁點放在格子右邊的留白正中（格子右緣 925.5 到畫布右緣之間），直徑與其它頁點一致（14）；
         // 原本貼著格子右緣，會壓在最右欄模組的邊上只露半個，看不出還有下一頁（2026-11-06 使用者截圖）
         let right = gridX + 6 * cell + 5 * gap
         let gapY: CGFloat = 26, x: CGFloat = right + (1024 - right) / 2
@@ -445,8 +449,18 @@ extension ControlCenter {
             let col = (HPTokens.dark ? NSColor.white : NSColor.black).withAlphaComponent((0.3 + 0.6 * cur) * alpha)
             g.setFillColor(col.cgColor)
             g.fillEllipse(in: CGRect(x: x - d / 2, y: y0 + CGFloat(i) * gapY - d / 2, width: d, height: d))
-            hits.append(CCHit(rect: CGRect(x: x - 30, y: y0 + CGFloat(i) * gapY - 13, width: 60, height: 26), action: .page(i),
-                              label: String(format: L("cc.a11y.page", "第 %d 页"), i + 1), value: i == page ? L("cc.a11y.current", "当前") : nil))
         }
+        hits.append(contentsOf: pageDotHits(n: n, x: x, y0: y0, gapY: gapY))
+    }
+
+    /// 頁點是一個控制（iOS 的 UIPageControl）：點目前那一顆的上面＝上一頁、下面＝下一頁，兩塊各 88 × 88
+    /// （shell-layout.md 第 2 節；原本每顆各自 60 × 26）
+    static func pageDotHits(n: Int, x: CGFloat, y0: CGFloat, gapY: CGFloat) -> [CCHit] {
+        let tap = HPGrid.tap, cur = y0 + CGFloat(min(max(0, page), n - 1)) * gapY
+        let prev = max(0, page - 1), next = min(n - 1, page + 1)
+        return [CCHit(rect: CGRect(x: x - tap / 2, y: cur - tap, width: tap, height: tap), action: .page(prev),
+                      label: String(format: L("cc.a11y.page", "第 %d 页"), prev + 1), value: prev == page ? L("cc.a11y.current", "当前") : nil),
+                CCHit(rect: CGRect(x: x - tap / 2, y: cur, width: tap, height: tap), action: .page(next),
+                      label: String(format: L("cc.a11y.page", "第 %d 页"), next + 1), value: next == page ? L("cc.a11y.current", "当前") : nil)]
     }
 }

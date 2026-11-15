@@ -24,9 +24,6 @@ enum HPTokens {
     static var tertiary: NSColor { dark ? NSColor(srgbRed: 0.922, green: 0.922, blue: 0.961, alpha: 0.3) : NSColor(srgbRed: 0.235, green: 0.235, blue: 0.263, alpha: 0.3) }
     static var separator: NSColor { dark ? NSColor(srgbRed: 0.329, green: 0.329, blue: 0.345, alpha: 0.6) : NSColor(srgbRed: 0.235, green: 0.235, blue: 0.263, alpha: 0.29) }
     static var fill: NSColor { dark ? NSColor(srgbRed: 0.471, green: 0.471, blue: 0.502, alpha: 0.36) : NSColor(srgbRed: 0.471, green: 0.471, blue: 0.502, alpha: 0.2) }
-    /// 再淡兩階的填色（iOS secondarySystemFill／tertiarySystemFill 的值；P07 HIG-MAT-53 補齊層級）
-    static var fillSecondary: NSColor { dark ? NSColor(srgbRed: 0.471, green: 0.471, blue: 0.502, alpha: 0.32) : NSColor(srgbRed: 0.471, green: 0.471, blue: 0.502, alpha: 0.16) }
-    static var fillTertiary: NSColor { dark ? NSColor(srgbRed: 0.471, green: 0.471, blue: 0.502, alpha: 0.24) : NSColor(srgbRed: 0.471, green: 0.471, blue: 0.502, alpha: 0.12) }
     /// 照片／深色媒體上的字（不跟淺深走）
     static let onMedia = NSColor.white
 
@@ -40,18 +37,6 @@ enum HPTokens {
         static let secondary = x(0xD6483E)
         /// 夜間控制底（播放膠囊、minimal 活動的底）：半透明紅，不是內容
         static let fill = primary.withAlphaComponent(0.16)
-    }
-
-    // MARK: 模組錶面（Modular）的色票（P07 HIG-WID-171：官方 tile_modular.png 量的灰藍底與字色收進 token，不再寫在 Face 裡）
-    enum Modular {
-        /// 平的灰藍底
-        static let bg = x(0x93abb1)
-        /// 主要字（日、時鐘、歌名）
-        static let ink = x(0x0a0b0c)
-        /// 次要字（月、演唱者、狀態）
-        static let soft = x(0x3e4a4e)
-        /// 行事曆小卡的紅（「下一個行程」、低電量）
-        static let alert = x(0xc6281f)
     }
 
     // MARK: 系統色（淺／深兩版）：macOS 27 實測（NSColor.system* 轉 sRGB，chan-notes §3.4）；增加對比時換 HIG 表上的高對比版
@@ -78,30 +63,15 @@ enum HPTokens {
 
     // MARK: 間距（1024 畫布單位；8 的倍數＋影片量到的 14、20、60、114）
     enum Space {
-        static let xxs: CGFloat = 8
-        /// 玻璃面板離螢幕邊（主畫面玻璃面板內縮、家庭磚間距）
-        static let panelInset: CGFloat = 14
-        /// 面板裡壓暗（系統 Clear 提亮 ×1.25 → 官方 ×1.07）
-        static let panelShade: CGFloat = 0.15
         static let s: CGFloat = 16
-        /// 錶面頁縫、家庭磚間距（影片 v2）
-        static let gap: CGFloat = 20
         static let m: CGFloat = 24
         static let l: CGFloat = 32
-        /// 小工具標準內距 16 pt（H-Wid）
-        static let widgetPad: CGFloat = 30
-        /// 主畫面欄距（影片 v1）
-        static let column: CGFloat = 60
-        /// App 內容左右邊距（跟主畫面圖示欄外緣對齊）
-        static let margin: CGFloat = 64
-        /// 主畫面網格左右邊距（影片 v1）
-        static let homeMargin: CGFloat = 114
+        /// 內容邊線：主畫面第 1 欄圖示的左緣（右邊是 1024 − 98.5 = 925.5，第 4 欄圖示的右緣）
+        static var content: CGFloat { Home.gridMargin }
     }
 
     // MARK: 圓角：固定、膠囊、同心三種（chan-notes S1）
     enum Radius {
-        /// 機身螢幕的連續圓角（≈ 138）；所有同心圓角的根
-        static var screen: CGFloat { Screen.cornerRadius }
         /// 螢幕圓角在 45° 方向的單軸內縮（≈ 40.8，官方圖量到約 40）；遮罩、官方圖對照用
         static var screenDiagonalInset: CGFloat { CGFloat(CornerFit.bodyDiag) * Screen.side }
         /// 同心：離螢幕邊 inset 的元件，半徑＝螢幕半徑 − inset（不小於 minimum）
@@ -116,8 +86,13 @@ enum HPTokens {
         static func drawn(_ radius: CGFloat, in r: CGRect) -> CGFloat { max(0, min(radius, min(r.width, r.height) / 2 / 1.52866483)) }
         /// 膠囊：半徑＝高 ÷ 2
         static func capsule(_ r: CGRect) -> CGFloat { min(r.width, r.height) / 2 }
-        /// inset grouped 卡片
-        static let group: CGFloat = 52
+        /// inset grouped 卡片：整台同一個固定值，就是 contentCard（39.5）。清單中段的卡片用固定圓角（iOS 的 inset grouped 也是），
+        /// 不逐張照位置算同心；原本是 52
+        static var group: CGFloat { contentCard }
+        /// 貼內容邊線（98.5）的分組卡：跟螢幕同心＝138 − 98.5 = 39.5。往內每一層再減內距（選取底 8 → 31.5、圖示方塊 24 → 15.5），用 `concentric(parent:padding:)`
+        static var contentCard: CGFloat { concentric(inset: Space.content) }
+        /// 不貼邊的容器跟裡面的東西同心：圓角＝內容圓角＋內距（App 資料庫的豆莢＝圖示圓角＋豆莢內距）
+        static func enclosing(content: CGFloat, padding: CGFloat) -> CGFloat { content + padding }
         /// 家庭磚（影片 49–50）
         static let tile: CGFloat = 50
         /// 主畫面 small 小工具：第五輪照官方主畫面 Photos 小工具（391² 正方形）的角量到約 56
@@ -139,9 +114,6 @@ enum HPTokens {
         static let knob = Shadow(offset: CGSize(width: 0, height: -2), blur: 6, alpha: 0.25)
         /// 分段控制選中的膠囊（淺色）
         static let segment = Shadow(offset: CGSize(width: 0, height: 2), blur: 8, alpha: 0.12)
-        /// 玻璃外陰影（HPGlass.flush 依底下內容調濃淡 0.10–0.30）：小控制與面板
-        static let glassSmall = Shadow(offset: CGSize(width: 0, height: -5), blur: 22, alpha: 0.10)
-        static let glassLarge = Shadow(offset: CGSize(width: 0, height: -10), blur: 40, alpha: 0.10)
     }
 
     // MARK: 尺寸
@@ -155,8 +127,11 @@ enum HPTokens {
         static let topBar: CGFloat = 90
         /// 左上返回圓鈕（官方 recipe-overview 量到 90）：就是 topBar，保留舊名給還沒遷的呼叫端
         static let backButton: CGFloat = 90
-        /// 列表行：控制中心展開、Sheet 清單、資料夾格
-        static let row: CGFloat = 88
+        /// 列表行（2026-11-12 定案：整台 96，原本 88）：控制中心展開、Sheet 清單、長按選單、家庭狀態、世界時鐘浮層、設定
+        static let row: CGFloat = 96
+        /// 內容清單的列：就是 row；有副標 120
+        static let listRow: CGFloat = row
+        static let listRowSub: CGFloat = 120
         /// 選項行：兩張設定卡共用（視覺 72，命中補到 tap 88）
         static let rowCompact: CGFloat = 72
         /// 卡片底部的主要按鈕：Sheet 的「完成」「加入小工具」、彈窗按鈕、控制中心底欄
@@ -177,16 +152,10 @@ enum HPTokens {
         static let sourceBadge: CGFloat = 24
         /// 頁點直徑（原本 12/14/18 並存）
         static let dot: CGFloat = 14
-        /// Live Activity 緊湊藥丸：系統尺寸，不進階梯
-        static let liveActivity: CGFloat = 62
         /// 主要動作圓鈕（影片 150–162）= round，保留舊名
         static let action: CGFloat = 150
         /// 並排成一組的膠囊鈕共用這一個尺寸，只靠樣式（染色／玻璃）分主次（HIG Buttons：同尺寸＝對等選項）。Music 的「打開音樂」＋「資料庫」
         static let pairedButton = CGSize(width: 440, height: pill)
-        /// 主畫面圖示
-        static let icon: CGFloat = 150
-        /// 家庭磚（影片 304–315）
-        static let tile: CGFloat = 300
     }
 
     // MARK: 主畫面（第三輪：官方主畫面左上——問候語兩行全大寫 SF Pro Regular 約 34、字距略寬、白 85%；右上頭像直徑約 100）
@@ -204,7 +173,7 @@ enum HPTokens {
         static let greetingBaseline: CGFloat = 139
         static let greetingLeading: CGFloat = 43
         static let greetingInset: CGFloat = 9
-        /// 頭像直徑（中心不動）；官方沒有描邊
+        /// 頭像直徑（中心不動）；官方沒有描邊。照官方主畫面量的 100（2026-11-12 曾照樣稿改 96，同日退回）
         static let avatar: CGFloat = 100
         /// 圖示標籤：SF Pro regular 30、白、沒有投影（官方直筆畫 2 px；semibold＋投影是 Android 啟動器的味道）
         static let iconLabelWeight: NSFont.Weight = .regular
@@ -224,18 +193,17 @@ enum HPTokens {
         static let panelInset: CGFloat = 14
         /// 面板裡壓暗（系統 Clear 提亮 ×1.25 → 官方 ×1.07）
         static let panelShade: CGFloat = 0.15
-        static let panelRimLine: CGFloat = 2
         /// 2.0 glass：官方主畫面亮邊／內光的實測（home-screen-erica：亮邊峰值 ÷ 面板外亮度 = 1.27–1.44，
         /// 絕對峰值 0.55–0.63）。原本 0.50／0.30 做出 1.48–1.69（過亮）；只留系統 @2 亮邊是 1.11–1.17（過暗）。
         /// 掃值結果 0.20／0.12 → 1.27–1.39、峰值 0.58–0.64，落在官方區間。可用 HOMEPLAY_PANEL_RIM／
         /// HOMEPLAY_PANEL_GLOW 覆寫（校準掃值用，產品照預設跑）。
         static let panelRimAlpha: CGFloat = CGFloat(Double(ProcessInfo.processInfo.environment["HOMEPLAY_PANEL_RIM"] ?? "") ?? 0.20)
-        static let panelGlowBlur: CGFloat = 24
         static let panelGlowAlpha: CGFloat = CGFloat(Double(ProcessInfo.processInfo.environment["HOMEPLAY_PANEL_GLOW"] ?? "") ?? 0.12)
     }
 
     // MARK: 家庭模組錶面（第三輪：量自官方 face-home-modular-purple／-blue、home-modular-teal-angled）
-    /// 3×3 的玻璃磚：外距 24、間距 20、每格 312；左上大溫控佔 2×2；磚圓角＝家庭磚 50（官方的磚不跟螢幕同心）
+    /// 3×3 的玻璃磚：外距 24、間距 20、每格 312；左上大溫控佔 2×2；磚圓角＝家庭磚 50（官方圖量到固定約 50；整面網格不逐顆跟螢幕同心——
+    /// 同心只用在貼著螢幕角的單一容器。2026-11-12 曾改同心，同日退回）
     enum HomeModular {
         static let margin: CGFloat = 24
         static let gap: CGFloat = 20
@@ -295,23 +263,21 @@ enum HPTokens {
         static let cardRadius: CGFloat = 48
         /// 跟進的玻璃膠囊（確認／取消、再試一次）浮在最底：離底 40
         static let actionsBottom: CGFloat = 40
-        /// 有回答時的「想深一點」「留下」：88 px 玻璃圓鈕，跟珠同一條水平線、分在兩側（官方頂端這一條除了珠是空的；
-        /// x 跟主畫面頭像的中心 874 對稱）
-        static let topActionY: CGFloat = 72.5
-        static let topActionLeadingX: CGFloat = 150
-        static let topActionTrailingX: CGFloat = 874
     }
 
     // MARK: 版面
     /// 大標題那一列底下，內容從這裡開始（R1：y≈220）
     static let contentTop: CGFloat = 220
-    static let contentWidth: CGFloat = 896
+    /// 內容寬＝925.5 − 98.5（2026-11-12：清單型 App 的內容區貼內容邊線；原本 64…960 的 896）
+    static var contentWidth: CGFloat { HPGrid.Content.width }
 
-    /// 橫幅通知：左緣 64／右緣 960（HPGrid.App 同一條線）、離頂 56（同心圓角照上緣 inset；10-grid）
-    static let bannerCard = CGRect(x: HPGrid.App.leading, y: 56, width: HPGrid.App.trailing - HPGrid.App.leading, height: 230)
+    /// 橫幅通知：左右貼內容邊線 98.5／925.5（2026-11-12 定案；原本 64／960）、離頂 56（同心圓角照上緣 inset；10-grid）
+    static let bannerCard = CGRect(x: HPGrid.Content.leading, y: 56, width: HPGrid.Content.width, height: 230)
 
     /// 第三輪：頂列角落控制的中心離螢幕左（右）緣與上緣 105——官方正面圖 recipe-overview 的 ✕ 量到圓心 (105, 105)、直徑 90、
-    /// 右上「10:09」的中線也在 y 105、右緣 960（98d9a16 起對內容邊線；官方 recipe-overview 量到 931）；影片 v1 O-038（斜拍）量到 ≈ 0.09 W ≈ 92。不再放在螢幕圓角的圓心 (138, 138)
+    /// 右上「10:09」的中線也在 y 105；影片 v1 O-038（斜拍）量到 ≈ 0.09 W ≈ 92。
+    /// 2026-11-12 曾照樣稿改成左緣 98.5、中線 y148、標題 46，同日退回：那是樣稿畫的位置，不是量測值，而且讓頂列變成膠囊底下的第二排。
+    /// 右上時間的右緣貼內容邊線 925.5（官方量到 931；原本 960）。
     static let cornerControlCenter: CGFloat = 105
     /// App 頂列：左上返回圓鈕（90 px，圓心 (105, 105)）、大標題的起點
     static let backButton: CGRect = {

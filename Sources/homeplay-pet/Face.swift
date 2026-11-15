@@ -570,6 +570,7 @@ final class Face {
             }
             if let tr { endFaceTransitionFrame(g, tr) }   // 舊錶面像起霧的玻璃一樣化開
             drawShellOverlays(g, now)    // 2.0: 控制中心、ClioTalk、亮度
+            drawPointerHover(g, now)     // 游標回饋：按鈕、清單列、控制中心的磚出現底色，資料庫圖示放大（Shell/PointerInput.swift）
             MessagesDemo.draw(g)   // 2.0: --messages-demo 快照：示範資料的訊息畫面蓋在錶面上（Messages/MessagesDemo.swift）
             drawCarPlayOverlay(g, now)   // 连线中过场（CarPlayOverlay.swift）
             if FaceOverview.active { drawOverview(g, now) }   // 长按换錶面总览盖在最上面
@@ -752,7 +753,7 @@ final class Face {
 
     /// 计时器到点的横幅：顶上一块液态玻璃（夜灯时是暗红），点一下屏幕收起，12 秒后自己收
     private func drawBanner(_ g: CGContext, red: Bool) {
-        // 10-grid：左緣 64／右緣 960（HPTokens.bannerCard），同心圓角跟著上緣 inset；內距只用 8 的倍數
+        // 左緣 98.5／右緣 925.5（HPTokens.bannerCard，內容邊線），同心圓角跟著上緣 inset；內距只用 8 的倍數
         let r = HPTokens.bannerCard, rad = Face.bannerRadius   // 跟螢幕圓角同心
         if red {
             g.setFillColor(srgb(0x1a0504).cgColor)
@@ -761,7 +762,7 @@ final class Face {
             glass(g, r, radius: rad, tint: NSColor(white: 1, alpha: 0.18), band: 14)
         }
         let accent = red ? srgb(0xb3261e) : srgb(0xff9f0a)
-        let icon = CGRect(x: r.minX + 48, y: r.midY - 60, width: 120, height: 120)
+        let icon = CGRect(x: r.minX + HPGrid.Inset.card, y: r.midY - 60, width: 120, height: 120)   // 浮層：內容邊線離卡片 40（shell-layout.md 第 3 節）
         g.setFillColor(accent.cgColor)
         g.addPath(continuousRoundedRect(icon, radius: icon.width * 0.2237)); g.fillPath()   // App 圖示的連續圓角比例
         g.setStrokeColor((red ? NSColor.black : NSColor.white).cgColor); g.setLineWidth(9); g.setLineCap(.round)
@@ -771,7 +772,7 @@ final class Face {
         drawLeft(g, bannerTexts?.title ?? L("timer.banner.title", "计时器 · 现在"), font: Self.rounded(32, weight: .bold), x: icon.maxX + 32, y: r.minY + 92, color: fg.withAlphaComponent(0.7))
         drawLeft(g, bannerTexts?.big ?? L("timer.banner.done", "时间到了"), font: Self.rounded(64, weight: .bold), x: icon.maxX + 32, y: r.minY + 168, color: fg)
         let df = Self.rounded(30, weight: .semibold), dismiss = L("timer.banner.dismiss", "点一下收起")
-        drawLeft(g, dismiss, font: df, x: r.maxX - 48 - Typo.width(dismiss, df), y: r.minY + 168, color: fg.withAlphaComponent(0.6))
+        drawLeft(g, dismiss, font: df, x: r.maxX - HPGrid.Inset.card - Typo.width(dismiss, df), y: r.minY + 168, color: fg.withAlphaComponent(0.6))
     }
 
 

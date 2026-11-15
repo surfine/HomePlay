@@ -1,10 +1,12 @@
-// CarPlay 畫面上的 👀 膠囊（拍板 2026-11-06：膠囊一直留在頂端那條邊）。
+// CarPlay 畫面上的頂端把手（拍板 2026-11-06：Home Indicator 留在頂端那條邊；2026-11-12：👀 膠囊換成預設隱藏的把手）。
 //
 // 接收端對 iPhone 宣告的安全區是 (80,80 928x928)（viewArea 1088²）：CarPlay 內容只畫在中間，外圈 80 px 只有底色。
-// 膠囊（跟主畫面頂端藥丸同一顆，只是縮小；材質照錶面年代，眼睛就是 👀）收在這條帶內，不蓋任何 CarPlay 內容。
-// 做法：膠囊畫成一小張圖（只在眨眼、表情、位置變了才重畫），每幀用一個小 GPU pass 疊進直播畫面（零拷貝路的 MTLTexture）；
-// 慢路（CGImage）在 CPU 上疊。玻璃材質要的背景＝直播畫面頂端那條帶（每兩秒從畫面讀一次，只讀那一條）。
-// 共享元素：CarPlay 叫到前面時，膠囊從剛才主畫面／錶面上的位置滑進這條帶（減少動態效果：淡入）；回主畫面時藥丸從這裡滑回去。
+// 把手（跟主畫面、App 同一條、同一個位置，Shell/HomeHandle.swift）收在這條帶內，不蓋任何 CarPlay 內容；
+// 隱藏時什麼都不疊，直播畫面是乾淨的。
+// 做法：把手畫成一小張圖（只在不透明度、底色變了才重畫），每幀用一個小 GPU pass 疊進直播畫面（零拷貝路的 MTLTexture）；
+// 慢路（CGImage）在 CPU 上疊。把手的顏色看直播畫面頂端那條帶的亮度（把手看得見時每兩秒從畫面讀一次，只讀那一條）。
+// 共享元素：從錶面叫 CarPlay 到前面時，錶面上的眼睛膠囊滑進這條帶、縮成把手並淡出（減少動態效果：不滑）；
+// 從主畫面／App 來的本來就是把手，不滑。回錶面時錶面的膠囊從把手的位置長回去（Face.capsuleGlide）。
 
 import AppKit
 import Metal
@@ -89,34 +91,45 @@ final class CarPlayChrome {
         lastSource = nil; outputs = []
     }
 
-    /// PetView 每幀（直播中）：照這一刻的膠囊需要重畫才重畫（眨眼、表情、滑進來的位置）；回 true＝膠囊換了
+    /// PetView 每幀（直播中）：把手的不透明度、底色變了才重畫（從錶面滑進來的那一段每幀）；回 true＝疊的東西換了
     @discardableResult
     func update(face: Face, now: Double, device: MTLDevice?) -> Bool {
         let dt = eyesTick > 0 ? min(0.1, now - eyesTick) : 0; eyesTick = now
-        face.tickEyes(now, dt)   // 直播時 face.tick 停著：眼睛的眨、瞄、表情還是要走
-        let inset = HomeIndicator.inset
-        let target = HomeIndicator.carPlayCapsule(inset: inset)
-        var cap = target, alpha: CGFloat = 1
+        face.tickEyes(now, dt)   // 直播時 face.tick 停著：滑進來的膠囊上眼睛的眨、瞄、表情還是要走
+        let target = HomeHandle.rect
+        // 從錶面滑進來的眼睛膠囊：e＝0 在錶面上的位置 … 1 縮成把手（同時淡出，把手淡入）
+        var cap: (rect: CGRect, alpha: CGFloat)?
+        var landed: CGFloat = 1
         if let gl = glide {
-            let t = CGFloat(HPMotion.frozen("cpglide") ?? (now - gl.start))
-            if HPMotion.reduceMotion { alpha = min(1, t / 0.2); if t >= 0.2 { glide = nil } }
+            if HPMotion.reduceMotion || gl.from.height < 20 { glide = nil }   // 減少動態效果、或本來就是把手（從主畫面／App 來）：不滑
             else {
-                let e = Self.glideSpring.value(from: 0, to: 1, velocity: 0, t: t).x
-                cap = Shell.lerp(gl.from, target, max(0, min(1, e)))
-                if HPMotion.frozen("cpglide") == nil, Self.glideSpring.settled(from: 0, to: 1, velocity: 0, t: t) { glide = nil; cap = target }
+                let t = CGFloat(HPMotion.frozen("cpglide") ?? (now - gl.start))
+                let e = max(0, min(1, Self.glideSpring.value(from: 0, to: 1, velocity: 0, t: t).x))
+                if HPMotion.frozen("cpglide") == nil, Self.glideSpring.settled(from: 0, to: 1, velocity: 0, t: t) { glide = nil }
+                else { cap = (Shell.lerp(gl.from, target, e), 1 - e); landed = e }
             }
         }
-        if face.capsuleLook() == .glass || face.capsuleLook() == .smoke, now - backdropAt > 2 { refreshBackdrop(now) }
-        let key = face.carPlayCapsuleKey(cap, alpha: alpha, now: now) + "|\(backdropAt)"
+        let ha = HomeHandle.alpha(now: now) * landed
+        guard ha > 0.003 || cap != nil else {   // 把手隱藏：什麼都不疊
+            guard overlayRect != nil else { return false }
+            overlayRect = nil; overlayImage = nil; overlayTex = nil; overlayKey = ""
+            return true
+        }
+        if now - backdropAt > 2 { refreshBackdrop(now) }
+        let dark = HomeHandle.resolveDark(backdrop: backdrop)
+        let capKey = cap.map { face.carPlayCapsuleKey($0.rect, alpha: $0.alpha, now: now) } ?? "-"
+        let key = "\(Int((ha * 50).rounded()))|\(dark)|\(capKey)|\(cap == nil ? 0 : backdropAt)"
         guard key != overlayKey else { return false }
         overlayKey = key
-        let rect = cap.insetBy(dx: -cap.height * 0.5, dy: -cap.height * 0.4).intersection(CGRect(x: 0, y: 0, width: 1024, height: 1024)).integral
-        let img = face.renderCarPlayCapsule(cap, frame: rect, alpha: alpha, backdrop: backdrop, now: now)
+        var rect = target.insetBy(dx: -4, dy: -4)
+        if let cap { rect = rect.union(cap.rect.insetBy(dx: -cap.rect.height * 0.5, dy: -cap.rect.height * 0.4)) }
+        rect = rect.intersection(CGRect(x: 0, y: 0, width: 1024, height: 1024)).integral
+        let img = face.renderCarPlayHandle(frame: rect, alpha: ha, dark: dark, capsule: cap, backdrop: backdrop, now: now)
         overlayRect = rect; overlayImage = img
         if let device { overlayTex = Self.texture(img, device: device, reuse: overlayTex) }
         return true
     }
-    /// 膠囊換了但畫面靜止（沒有新的一格進來）：拿最後一格重疊一次（解碼器留著那一格的緩衝到下一格來）
+    /// 把手換了但畫面靜止（沒有新的一格進來）：拿最後一格重疊一次（解碼器留著那一格的緩衝到下一格來）
     func reapply() -> MTLTexture? { lastSource.map { apply($0) } }
     /// 只給 HOMEPLAY_FAKE_LIVE_TEX：把假畫面傳上 GPU，走跟真的直播一樣的紋理路
     static func uploadForTest(_ img: CGImage) -> MTLTexture? {
@@ -225,9 +238,21 @@ final class CarPlayChrome {
     """
 }
 
-// MARK: - 膠囊的圖
+// MARK: - 把手（與滑進來的膠囊）的圖
 
 extension Face {
+    /// 疊在 CarPlay 畫面上的那一小張圖：把手（alpha＝這一刻的不透明度），以及從錶面滑進來、正在縮成把手的眼睛膠囊（有的話）
+    func renderCarPlayHandle(frame: CGRect, alpha: CGFloat, dark: Bool, capsule: (rect: CGRect, alpha: CGFloat)?, backdrop: CGImage?, now: Double) -> CGImage {
+        let sc = HomeIndicator.videoSide / 1024
+        let w = max(1, Int((frame.width * sc).rounded())), h = max(1, Int((frame.height * sc).rounded()))
+        let flying = capsule.map { renderCarPlayCapsule($0.rect, frame: frame, alpha: $0.alpha, backdrop: backdrop, now: now) }
+        return makeImage(w, h) { g in
+            g.scaleBy(x: sc, y: sc); g.translateBy(x: -frame.minX, y: -frame.minY)
+            if let flying { drawUpright(g, flying, in: frame) }
+            HomeHandle.fill(g, HomeHandle.rect, dark: dark, alpha: alpha)
+        }
+    }
+
     /// 這一刻的膠囊長怎樣（眨眼、表情、眼珠、位置、材質）：一樣就不重畫
     func carPlayCapsuleKey(_ cap: CGRect, alpha: CGFloat, now: Double) -> String {
         let p = cur, bf = blinkFactor(now)
@@ -236,14 +261,14 @@ extension Face {
             + "\(q(p.pdx)),\(q(p.pdy)),\(q(p.ps * 10)),\(q(p.top * 20)),\(q(p.smile * 20)),\(q(p.rx)),\(q(p.ry)),\(q(p.sep))"
     }
 
-    /// 畫出 CarPlay 畫面上的膠囊（frame：這張圖在畫布上的範圍；背景透明，只有膠囊與它的影子）。
+    /// 畫出從錶面滑進 CarPlay 畫面的眼睛膠囊（frame：這張圖在畫布上的範圍；背景透明，只有膠囊與它的影子）。
     /// 材質照 capsuleLook()（.system 的年代在藥丸上也是黑，同 drawShellPill）；眼睛大小跟藥丸同比例
     func renderCarPlayCapsule(_ cap: CGRect, frame: CGRect, alpha: CGFloat, backdrop: CGImage?, now: Double) -> CGImage {
         let sc = HomeIndicator.videoSide / 1024
         let w = max(1, Int((frame.width * sc).rounded())), h = max(1, Int((frame.height * sc).rounded()))
         let look = capsuleLook() == .system ? .black : capsuleLook()
         let path = CGPath(roundedRect: cap, cornerWidth: cap.height / 2, cornerHeight: cap.height / 2, transform: nil)
-        let k = 0.5 * cap.height / LiveActivityStack.height
+        let k = cap.height / 156   // 眼睛跟著膠囊一起縮（錶面上的膠囊是高 ÷ 156）
         func eyes(_ g: CGContext) {
             let bf = blinkFactor(now)
             for s: CGFloat in [-1, 1] { drawEye(g, cx: cap.midX + s * cur.sep * k, cy: cap.midY, side: s, blinkF: bf, k: k) }

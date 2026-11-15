@@ -18,8 +18,6 @@ enum Typo {
     nonisolated(unsafe) static var pointsPerUnit: CGFloat = 220 * 0.72 / 1024 {
         didSet { if abs(pointsPerUnit - oldValue) > 0.0005 { FaceType.flush() } }
     }
-    /// 畫布字級 → 螢幕上的實際字級（pt）
-    static func apparent(_ size: CGFloat) -> CGFloat { size * pointsPerUnit }
     /// 第三輪：光學尺寸與 trak 字距改照「HomeView 本機上的字級」選，不照桌面上這個視窗的大小——一比一對官方圖時，
     /// 同一個畫布字級要拿到跟 Apple 一樣的字形：官方 siri-calendar 的 34 單位列標題寬度合 Display（7.17 em），
     /// 21 單位的「Wikipedia」晶片寬度合 Text；兩者之間的分界（SF 在 20 pt 換 Display）落在 1 單位 ≈ 0.62 pt。

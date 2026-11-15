@@ -146,8 +146,9 @@ final class FindMyApp: PetApp {
             buttons.append((r, { FindMyModel.openFindMy() }))
         }
         g.restoreGState()
-        // P12：頂端柔邊（scroll edge effect）：實心貼齊地圖卡底、柔邊接到第一列（listTop）——靜止時看不到，捲動時列從地圖底下淡出
-        HPComponents.topFade(g, AppUI.bg, solidTo: T.map.maxY, height: T.listTop - T.map.maxY)
+        // P12：頂端柔邊（scroll edge effect）：柔邊從地圖卡底接到第一列（listTop）——靜止時看不到，捲動時列從地圖底下淡出。
+        // 只畫柔邊、不畫實心：清單本來就裁在地圖卡底以下；實心從 0 蓋到地圖卡底會把標題與地圖卡一起塗掉（2026-11-12 稽核 3-2）
+        HPComponents.topFade(g, AppUI.bg, solidTo: T.map.maxY, height: T.listTop - T.map.maxY, solidFrom: T.map.maxY)
     }
 
     private func row(_ g: CGContext, _ face: Face, _ r: CGRect, _ it: FindMyItem, last: Bool) {

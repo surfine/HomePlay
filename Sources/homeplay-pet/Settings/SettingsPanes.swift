@@ -1,28 +1,10 @@
 import AppKit
 import SwiftUI
 
-// 设置的分页：系统的分组表单（Form + .grouped）当骨架，写法学 WindowShade——
-// 页首一段会动的两格插画＋一行字；每一行＝SF Symbol＋名字＋最多一行副标题＋控件；说不完的进行尾 ⓘ 小气泡，不堆说明段落。
-
-/// 页首：两格插画＋一行说明（可带 ⓘ），放在第一组设置的 header 里（没有卡片底）
-struct IllustrationHeader: View {
-    let scene: IllusScene
-    let note: String
-    var info: String? = nil
-    var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            ZStack { IllustrationStage(scene: scene).id(scene).transition(.blurFade) }
-                .animation(.easeOut(duration: 0.2), value: scene)
-                .padding(.horizontal, -10)   // header 本身内缩 10 pt：插画两边要和下面的卡片切齐
-            HStack(spacing: 6) {
-                Text(note).font(.callout).foregroundStyle(.secondary)
-                if let info { InfoButton(info) }
-            }
-        }
-        .textCase(nil)
-        .padding(.bottom, 8)
-    }
-}
+// 设置的分页：系统的分组表单（Form + .grouped）当骨架，圆角与间距交给系统。
+// 页首：机身、表盘与墙纸、手势、相机四页是示范舞台，其余是头部卡（PaneHeaderCard）；
+// 每一行＝名字＋最多一行副标题＋控件，行里不放图示（彩色方块只在侧栏）；说不完的进行尾 ⓘ 小气泡。
+// 有右箭头的行推进下一层（SettingsSub）；搜索能跳到的行用 .settingsRow(键) 标出来（SettingsSearch.swift）。
 
 /// 页尾：右对齐的按钮
 struct FooterButtons<Content: View>: View {
@@ -34,7 +16,7 @@ struct FooterButtons<Content: View>: View {
     }
 }
 
-/// 只有文字、没有控件的一行（包进 LabeledContent，第二行才会排成副标题）；可带符号与 ⓘ
+/// 只有文字、没有控件的一行（包进 LabeledContent，第二行才会排成副标题）；可带 ⓘ
 struct InfoRow: View {
     let title: String
     var subtitle: String? = nil
@@ -44,44 +26,44 @@ struct InfoRow: View {
     var body: some View {
         LabeledContent {
             if let info { InfoButton(info) }
-        } label: { RowLabel(title: title, subtitle: subtitle, symbol: symbol, tint: tint) }
+        } label: { RowLabel(title: title, subtitle: subtitle) }
     }
 }
 
-/// 标题＋灰色副标题（放在 Toggle／Picker／LabeledContent 的 label 里）；给了 symbol 就在前面放一个彩色圆角方块
+/// 标题＋灰色副标题（放在 Toggle／Picker／LabeledContent 的 label 里）。
+/// 定案「列里不放图示」：symbol／tint 只为旧的呼叫端保留，不再画出来（彩色方块只在侧栏与头部卡）。
 struct RowLabel: View {
     let title: String
     var subtitle: String? = nil
     var symbol: String? = nil
     var tint: Color = .gray
     var body: some View {
-        if let symbol {
-            Label {
-                Text(title)
-                if let subtitle { Text(subtitle) }
-            } icon: {
-                SymbolTile(symbol: symbol, tint: tint)
-            }
-        } else {
-            Text(title)
-            if let subtitle { Text(subtitle) }
-        }
+        Text(title)
+        if let subtitle { Text(subtitle) }
     }
+}
+
+/// 机身「大小」对应到舞台上的远近：最小 0.85 倍、最大 1.2 倍
+private func stageZoom(_ width: Double) -> Float {
+    let t = (width - Double(Pet.minWidth)) / max(1, Double(Pet.maxWidth - Pet.minWidth))
+    return Float(0.85 + 0.35 * max(0, min(1, t)))
 }
 
 struct GeneralPane: View {
     @EnvironmentObject var m: SettingsModel
-    private let tint = SettingsSection.general.tint
     var body: some View {
         Form {
+            PaneHeaderCard(section: .general)
             Section {
                 Toggle(isOn: Binding(get: { m.loginItem }, set: { _ in m.perform("menuLoginItem") })) {
                     RowLabel(title: L("settings.loginItem", "登录时打开 HomePlay"),
-                             subtitle: m.loginAvailable ? nil : L("settings.loginItem.needsApp", "打包成 App 后可用"), symbol: "power", tint: tint)
+                             subtitle: m.loginAvailable ? nil : L("settings.loginItem.needsApp", "打包成 App 后可用"))
                 }.disabled(!m.loginAvailable)
+                .settingsRow("settings.loginItem")
                 Toggle(isOn: Binding(get: { m.alwaysOnTop }, set: { m.app?.setAlwaysOnTop($0); m.refresh() })) {
-                    RowLabel(title: L("settings.alwaysOnTop", "窗口置顶"), subtitle: L("settings.alwaysOnTop.sub", "全屏 App 在前面时自动让开"), symbol: "pin.fill", tint: tint)
+                    RowLabel(title: L("settings.alwaysOnTop", "窗口置顶"), subtitle: L("settings.alwaysOnTop.sub", "全屏 App 在前面时自动让开"))
                 }
+                .settingsRow("settings.alwaysOnTop")
                 Picker(selection: Binding(get: { m.language }, set: { m.perform("menuLanguage:", $0 == "system" ? nil : $0) })) {
                     Text(L("settings.language.system", "跟随系统")).tag("system")
                     Divider()
@@ -89,32 +71,34 @@ struct GeneralPane: View {
                     Text("简体中文").tag(PetLanguage.zhHans.rawValue)
                     Text("繁體中文").tag(PetLanguage.zhHant.rawValue)
                 } label: {
-                    RowLabel(title: L("settings.language", "语言"), symbol: "globe", tint: tint)
+                    RowLabel(title: L("settings.language", "语言"))
                 }
-                // 连续的值用滑杆：滑块旁边显示现在的大小（占默认大小的百分比）；两端标「小／大」
-                ValueSlider(title: L("settings.size", "大小"), subtitle: L("settings.size.sub", "也可以双指张合，或 ⌘+ ⌘−"), symbol: "arrow.up.left.and.arrow.down.right", tint: tint,
-                            value: Binding(get: { m.petWidth }, set: { m.app?.setPetWidth($0); m.petWidth = $0 }),
-                            range: Double(Pet.minWidth)...Double(Pet.maxWidth),
-                            minLabel: L("settings.size.small", "小"), maxLabel: L("settings.size.large", "大")) {
-                    "\(Int(($0 / Double(Pet.defaultWidth) * 100).rounded()))%"
-                }
-            } header: {
-                IllustrationHeader(scene: .onTop, note: L("settings.general.heroBody", "陪你待在桌面上"))
+                .settingsRow("settings.language")
             }
             Section {
                 Toggle(isOn: Binding(get: { m.nowPlayingOn }, set: { _ in m.perform("menuNowPlaying") })) {
-                    RowLabel(title: L("prefs.nowPlaying", "Mac 正在播放"), subtitle: L("settings.nowPlaying.sub", "CarPlay 播放时优先显示 iPhone"), symbol: "music.note", tint: .pink)
+                    RowLabel(title: L("prefs.nowPlaying", "Mac 正在播放"), subtitle: L("settings.nowPlaying.sub", "CarPlay 播放时优先显示 iPhone"))
                 }
-                // 2.0 #8：歌词（LRCLIB）；默认开
-                ToggleRow(title: L("settings.lyrics", "歌词"), subtitle: L("settings.lyrics.short", "跟着歌显示同步歌词"), symbol: "quote.bubble.fill", tint: .pink,
-                          info: L("settings.lyrics.sub", "依序向 LRCLIB、酷狗、QQ 音乐查同步歌词：只送歌名、歌手和长度，存在这台 Mac 上"),
-                          isOn: Binding(get: { LyricsStore.enabled }, set: { LyricsStore.enabled = $0; m.refresh() }))
-                Toggle(isOn: Binding(get: { m.calendarOn && m.permissions[.calendar] == .granted }, set: { _ in m.perform("menuCalendarToggle") })) {
-                    RowLabel(title: L("prefs.calendar.on", "读取日历"),
-                             subtitle: m.permissions[.calendar] == .granted ? L("settings.calendar.sub", "显示下一个行程")
-                                                                            : L("settings.calendar.needsPerm", "先在「权限」里允许"),
-                             symbol: "calendar", tint: .red)
-                }.disabled(m.permissions[.calendar] != .granted)
+                .settingsRow("prefs.nowPlaying")
+                // 2.0 #8：歌词（LRCLIB）；默认开。资料去向写在「隐私与安全性」
+                Toggle(isOn: Binding(get: { LyricsStore.enabled }, set: { LyricsStore.enabled = $0; m.refresh() })) {
+                    RowLabel(title: L("settings.lyrics", "歌词"), subtitle: L("settings.lyrics.short", "跟着歌显示同步歌词"))
+                }
+                .settingsRow("settings.lyrics")
+                // 要先允许才能用：那一行直接放按钮带过去（不是只写「先去哪里」）
+                if m.permissions[.calendar] == .granted {
+                    Toggle(isOn: Binding(get: { m.calendarOn }, set: { _ in m.perform("menuCalendarToggle") })) {
+                        RowLabel(title: L("prefs.calendar.on", "读取日历"), subtitle: L("settings.calendar.sub", "显示下一个行程"))
+                    }
+                    .settingsRow("prefs.calendar.on")
+                } else {
+                    LabeledContent {
+                        Button(L("settings.privacy.open", "隐私与安全性…")) { m.go(.permissions) }
+                    } label: {
+                        RowLabel(title: L("prefs.calendar.on", "读取日历"), subtitle: L("settings.calendar.needsPrivacy", "先允许 HomePlay 读取日历"))
+                    }
+                    .settingsRow("prefs.calendar.on")
+                }
             } header: {
                 Text(L("settings.sources", "表盘上的数据"))
             } footer: {
@@ -125,137 +109,288 @@ struct GeneralPane: View {
                     }
                 }
             }
-            LiveActivitySettingsSection()   // 2.0 P03：每個 App 的 Live Activity 開關、訊息「顯示預覽」（Shell/LiveActivityStack.swift）
+            IntroGuideSection()   // 開場手勢引導：重看、依照的輸入方式、新手勢提示（設計稿：手勢說明「可從一般重看」）
         }
         .formStyle(.grouped)
     }
 }
 
-struct AppearancePane: View {
+/// 机身：配色、大小、摆放（位置、朝向、视角、环绕）。舞台是缩小的即时 3D 机身，改一个值它示范一次。
+struct BodyPane: View {
     @EnvironmentObject var m: SettingsModel
-    private let tint = SettingsSection.appearance.tint
-    private var facingNote: String {
-        m.viewMode == .auto ? L("settings.facing.note", "自动朝向屏幕中央")
-            : m.viewMode == .wall ? L("settings.facing.wallNote", "只有屏幕，贴墙正对前方")
-            : L("settings.facing.frontNote", "始终正对前方")
+    enum Angle { case front, side, back, top }
+    /// 舞台的视角：按了哪一个预设就转到那里；没按过跟朝向走
+    @State private var angle: Angle?
+
+    private var pose: BodyStagePose {
+        var p: BodyStagePose
+        switch angle {
+        case .front?: p = BodyStagePose(yaw: 0, pitch: 0.12)
+        case .side?: p = BodyStagePose(yaw: .pi / 2, pitch: 0.18)
+        case .back?: p = BodyStagePose(yaw: .pi, pitch: 0.15)
+        case .top?: p = BodyStagePose(yaw: 0.52, pitch: 1.3)
+        case nil: p = m.viewMode == .front ? .front : BodyStagePose()
+        }
+        p.wall = m.viewMode == .wall
+        p.finish = m.finish
+        p.zoom = stageZoom(m.petWidth)
+        return p
     }
+    private var facingNote: String {
+        m.viewMode == .auto ? L("settings.facing.note", "自动朝向屏幕中央") : L("settings.facing.frontNote", "始终正对前方")
+    }
+
     var body: some View {
         Form {
-            Section {
-                Picker(selection: Binding(get: { m.viewMode }, set: { m.app?.view.setViewMode($0); m.refresh() })) {
-                    Text(L("settings.facing.auto", "自动")).tag(ViewMode.auto)
-                    Text(L("settings.facing.front", "正面固定")).tag(ViewMode.front)
-                    Text(L("settings.facing.wall", "挂墙")).tag(ViewMode.wall)
-                } label: {
-                    RowLabel(title: L("settings.facing", "朝向"), symbol: "scope", tint: .blue)
-                }.pickerStyle(.segmented).fixedSize()
-                LabeledContent {
-                    ControlGroup {
-                        Button(L("menu.view.front", "正面")) { m.perform("menuViewFront") }
-                        Button(L("menu.view.side", "侧面")) { m.perform("menuViewSide") }
-                        Button(L("menu.view.back", "背面")) { m.perform("menuViewBack") }
-                        Button(L("menu.view.top", "俯视")) { m.perform("menuViewAbove") }
-                    }.fixedSize()
-                } label: {
-                    RowLabel(title: L("settings.angle", "视角"), symbol: "cube.fill", tint: .blue)
-                }.disabled(m.viewMode == .wall)   // 挂墙贴在墙上，不换视角
-                // 2.0 P06：從右鍵選單搬來的視角控制
-                Toggle(isOn: Binding(get: { m.touring }, set: { _ in m.perform("menuTour") })) {
-                    RowLabel(title: L("settings.orbit", "自动环绕"), symbol: "rotate.3d", tint: .blue)
-                }.disabled(m.viewMode == .wall)
-            } header: {
-                IllustrationHeader(scene: m.viewMode == .auto ? .facing : .facingFront, note: facingNote)
-            } footer: {
-                FooterButtons { Button(L("menu.resetAngle", "回正")) { m.perform("menuResetOrientation") }.disabled(m.viewMode == .wall) }
-            }
+            StageSection { BodyStage(pose: pose) }
             Section {
                 Picker(selection: Binding(get: { m.finish }, set: { m.perform("menuFinish:", $0.rawValue) })) {
                     ForEach(Finish.allCases, id: \.self) { Text($0.title).tag($0) }
                 } label: {
-                    RowLabel(title: L("settings.finish", "配色"), symbol: "paintpalette.fill", tint: .orange)
+                    RowLabel(title: L("settings.finish", "配色"))
+                }
+                .settingsRow("settings.finish")
+                // 连续的值用滑杆：滑块旁边显示现在的大小（占默认大小的百分比）；两端标「小／大」
+                ValueSlider(title: L("settings.size", "大小"), subtitle: L("settings.size.sub", "也可以双指张合，或 ⌘+ ⌘−"),
+                            value: Binding(get: { m.petWidth }, set: { m.app?.setPetWidth($0); m.petWidth = $0 }),
+                            range: Double(Pet.minWidth)...Double(Pet.maxWidth),
+                            minLabel: L("settings.size.small", "小"), maxLabel: L("settings.size.large", "大")) {
+                    "\(Int(($0 / Double(Pet.defaultWidth) * 100).rounded()))%"
+                }
+                .settingsRow("settings.size")
+            }
+            Section {
+                // 位置＋朝向是同一个设置（ViewMode：自动／正面固定／挂墙）拆成两行：桌上才有朝向
+                Picker(selection: Binding(get: { m.viewMode == .wall }, set: { wall in
+                    angle = nil
+                    m.app?.view.setViewMode(wall ? .wall : .auto); m.refresh()
+                })) {
+                    Text(L("settings.placement.desk", "桌上")).tag(false)
+                    Text(L("settings.facing.wall", "挂墙")).tag(true)
+                } label: {
+                    RowLabel(title: L("settings.placement", "位置"))
+                }
+                .pickerStyle(.segmented).fixedSize()
+                .settingsRow("settings.placement")
+                if m.viewMode != .wall {
+                    Picker(selection: Binding(get: { m.viewMode }, set: { angle = nil; m.app?.view.setViewMode($0); m.refresh() })) {
+                        Text(L("settings.facing.auto", "自动")).tag(ViewMode.auto)
+                        Text(L("settings.facing.front", "正面固定")).tag(ViewMode.front)
+                    } label: {
+                        RowLabel(title: L("settings.facing", "朝向"), subtitle: facingNote)
+                    }
+                    .settingsRow("settings.facing")
+                    LabeledContent {
+                        ControlGroup {
+                            Button(L("menu.view.front", "正面")) { angle = .front; m.perform("menuViewFront") }
+                            Button(L("menu.view.side", "侧面")) { angle = .side; m.perform("menuViewSide") }
+                            Button(L("menu.view.back", "背面")) { angle = .back; m.perform("menuViewBack") }
+                            Button(L("menu.view.top", "俯视")) { angle = .top; m.perform("menuViewAbove") }
+                        }.fixedSize()
+                    } label: {
+                        RowLabel(title: L("settings.angle", "视角"))
+                    }
+                    .settingsRow("settings.angle")
+                    // 2.0 P06：從右鍵選單搬來的視角控制
+                    Toggle(isOn: Binding(get: { m.touring }, set: { _ in m.perform("menuTour") })) {
+                        RowLabel(title: L("settings.orbit", "自动环绕"))
+                    }
+                    .settingsRow("settings.orbit")
+                }
+            } header: {
+                Text(L("settings.placement.header", "摆放"))
+            } footer: {
+                FooterButtons {
+                    Button(L("menu.resetAngle", "回正")) { angle = nil; m.perform("menuResetOrientation") }.disabled(m.viewMode == .wall)
                 }
             }
-            faceSection
-            PosterLibrarySection()    // 多臉：多張海報外觀（Settings/PosterLibrarySection.swift）
+        }
+        .formStyle(.grouped)
+    }
+}
+
+/// 显示器：亮度、熄屏与环境海报（Settings/DisplaySection.swift）
+struct DisplayPane: View {
+    @EnvironmentObject var m: SettingsModel
+    @State private var brightness = Double(Shell.brightness)
+    var body: some View {
+        Form {
+            PaneHeaderCard(section: .display)
             Section {
-                Picker(selection: Binding(get: { m.capsule }, set: { v in
-                    capsuleMaterialSetting = v; UserDefaults.standard.set(v.rawValue, forKey: CapsuleMaterial.defaultsKey)
-                    m.app?.view.face.forceDirty = true; m.refresh()
-                })) {
-                    ForEach(CapsuleMaterial.allCases, id: \.self) { Text($0.title).tag($0) }
+                // 跟控制中心、屏幕上的设置同一个值（Shell.brightness）
+                ValueSlider(title: L("settings.brightness", "亮度"),
+                            value: Binding(get: { brightness }, set: { brightness = $0; Shell.brightness = CGFloat($0); m.app?.view.face.forceDirty = true }),
+                            range: 0.15...1, minLabel: "", maxLabel: "") { "\(Int(($0 * 100).rounded()))%" }
+                    .settingsRow("settings.brightness")
+            }
+            DisplaySection()
+        }
+        .formStyle(.grouped)
+        .onAppear { brightness = Double(Shell.brightness) }
+    }
+}
+
+/// 辅助功能：屏幕文字大小、键盘导航（Settings/ScreenAccessibilitySection.swift）
+struct AccessibilityPane: View {
+    var body: some View {
+        Form {
+            PaneHeaderCard(section: .accessibility)
+            ScreenAccessibilitySection()
+        }
+        .formStyle(.grouped)
+    }
+}
+
+/// 表盘与墙纸：这张表盘（表盘、主题、字体与颜色、胶囊、这张表盘的选项）、主屏幕墙纸、海报、共享相簿。
+/// 舞台是正面的即时机身，屏幕贴的是桌宠现在那张表盘；换了表盘就重贴一次。
+struct FacesPane: View {
+    @EnvironmentObject var m: SettingsModel
+    @State private var screenToken = 0
+    private var pose: BodyStagePose {
+        var p = BodyStagePose(yaw: 0, pitch: 0.1, zoom: 1.05)
+        p.wall = m.viewMode == .wall
+        p.finish = m.finish
+        return p
+    }
+    /// 桌宠重画表盘要一两拍：晚一点再去拿
+    private func faceChanged() {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { screenToken += 1 }
+    }
+    private var optionsSummary: String? {
+        switch m.faceStyle {
+        case .island: return m.era.title + " · " + m.clockStyle.title
+        case .analog: return m.typographMaterial.title
+        case .system6: return m.system6Layout.title
+        case .cluster: return m.clusterLayout.title
+        default: return nil
+        }
+    }
+
+    var body: some View {
+        Form {
+            StageSection { BodyStage(pose: pose, screenToken: screenToken) }
+            Section {
+                Picker(selection: Binding(get: { m.faceStyle }, set: { m.perform("menuStyle:", $0.rawValue) })) {
+                    ForEach(FaceStyle.lineup, id: \.self) { Text($0.title).tag($0) }
                 } label: {
-                    RowLabel(title: L("settings.capsule", "胶囊"),
-                             subtitle: m.capsuleLocked ? L("settings.capsule.locked", "这个表盘用它那个年代的样子")
-                                                       : L("settings.capsule.short", "装着 👀 的那颗；自动＝跟着年代"),
-                             symbol: "capsule.fill", tint: tint)
+                    RowLabel(title: L("settings.face", "表盘"))
                 }
-                .disabled(m.capsuleLocked)
+                .settingsRow("settings.face")
+                LookGridRow(onPick: faceChanged)   // 主题（HomeView 的 12 种 Look）
+                    .settingsRow("settings.look.title")
                 LabeledContent {
                     Button(L("clockLook.edit", "编辑…")) { m.perform("menuClockLook:") }.disabled(!m.clockLookApplies)
                 } label: {
                     RowLabel(title: L("settings.clockLook", "字体与颜色"),
                              subtitle: m.clockLookApplies ? L("clockLook.subtitle", "岛表盘和照片表盘的大时间")
-                                                          : L("clockLook.unavailable", "只用于岛（2026）和照片表盘"),
-                             symbol: "paintbrush.pointed.fill", tint: tint)
+                                                          : L("clockLook.unavailable", "只用于岛（2026）和照片表盘"))
                 }
+                .settingsRow("settings.clockLook")
+                Picker(selection: Binding(get: { m.capsule }, set: { v in
+                    capsuleMaterialSetting = v; UserDefaults.standard.set(v.rawValue, forKey: CapsuleMaterial.defaultsKey)
+                    m.app?.view.face.forceDirty = true; m.refresh(); faceChanged()
+                })) {
+                    ForEach(CapsuleMaterial.allCases, id: \.self) { Text($0.title).tag($0) }
+                } label: {
+                    RowLabel(title: L("settings.capsule", "胶囊"),
+                             subtitle: m.capsuleLocked ? L("settings.capsule.locked", "这个表盘用它那个年代的样子")
+                                                       : L("settings.capsule.short", "装着 👀 的那颗；自动＝跟着年代"))
+                }
+                .disabled(m.capsuleLocked)
+                .settingsRow("settings.capsule")
+                if m.faceHasOptions {
+                    NavigationLink(value: SettingsSub.faceOptions) {
+                        LabeledContent {
+                            if let s = optionsSummary { Text(s) }
+                        } label: { RowLabel(title: SettingsSub.faceOptions.title) }
+                    }
+                    .settingsRow("settings.faceOptions")
+                }
+            } header: {
+                Text(L("settings.thisFace", "这张表盘"))
             }
-            HomeAppearanceSection()   // 2.0 P02：主畫面外觀（Settings/HomeAppearanceSection.swift）
-            LookSection()             // HomeView 對齊 WP2：12 種 Look 挑選器（Settings/DisplaySection.swift）
-            DisplaySection()          // HomeView 對齊 WP3：熄屏與環境海報（Settings/DisplaySection.swift）
+            HomeWallpaperSection()    // 主屏幕墙纸（Settings/HomeAppearanceSection.swift）
+            PosterLibrarySection()    // 多臉：多張海報外觀（Settings/PosterLibrarySection.swift）
             SharedAlbumsSection()     // 2.0 P10：共享相簿當照片來源（Settings/SharedAlbumsSection.swift）
-            ScreenAccessibilitySection()   // 2.0 P05：畫面文字大小、用鍵盤操作畫面
         }
         .formStyle(.grouped)
-    }
-
-    /// 表盘与它自己的选项（和右键选单同一份动作）
-    @ViewBuilder private var faceSection: some View {
-        Section {
-            Picker(selection: Binding(get: { m.faceStyle }, set: { m.perform("menuStyle:", $0.rawValue) })) {
-                ForEach(FaceStyle.lineup, id: \.self) { Text($0.title).tag($0) }
-            } label: {
-                RowLabel(title: L("settings.face", "表盘"), symbol: "clock.fill", tint: tint)
-            }
-            if m.faceStyle == .island {   // 島錶面自己的三個選項（和右鍵選單「島錶面」同一份動作）
-                Picker(selection: Binding(get: { m.clockStyle }, set: { m.perform("menuIslandClock:", $0.rawValue) })) {
-                    ForEach(ClockStyle.allCases.filter { $0 != .thin }, id: \.self) { Text($0.title).tag($0) }
-                } label: { RowLabel(title: L("island.clock", "时钟样式"), symbol: "clock.badge.fill", tint: tint) }
-                Picker(selection: Binding(get: { m.islandBackground }, set: { m.perform("menuIslandBackground:", $0.rawValue) })) {
-                    ForEach(IslandBackground.choices(for: m.era), id: \.self) { Text($0.title).tag($0) }
-                } label: { RowLabel(title: L("island.bg", "背景"), symbol: "photo.fill", tint: tint) }
-                Picker(selection: Binding(get: { m.era }, set: { m.perform("menuIslandEra:", $0.rawValue) })) {
-                    ForEach(Era.allCases, id: \.self) { Text($0.title).tag($0) }
-                } label: { RowLabel(title: L("island.era", "年代"), symbol: "clock.arrow.circlepath", tint: tint) }
-            }
-            if m.faceStyle == .analog {   // Typograph 的材質
-                Picker(selection: Binding(get: { m.typographMaterial }, set: { m.perform("menuTypographMaterial:", $0.rawValue) })) {
-                    ForEach(TypographMaterial.allCases, id: \.self) { Text($0.title).tag($0) }
-                } label: { RowLabel(title: L("typograph.material", "Typograph 材质"), symbol: "square.stack.3d.up.fill", tint: tint) }
-            }
-            if m.faceStyle == .system6 {   // System 6 的版式
-                Picker(selection: Binding(get: { m.system6Layout }, set: { m.perform("menuSystem6Layout:", $0.rawValue) })) {
-                    ForEach(System6Layout.allCases, id: \.self) { Text($0.title).tag($0) }
-                } label: { RowLabel(title: L("system6.layout", "System 6 版式"), symbol: "macwindow", tint: tint) }
-            }
-            if m.faceStyle == .cluster {   // 儀表的版式
-                Picker(selection: Binding(get: { m.clusterLayout }, set: { m.perform("menuClusterLayout:", $0.rawValue) })) {
-                    ForEach(ClusterLayout.allCases, id: \.self) { Text($0.title).tag($0) }
-                } label: { RowLabel(title: L("cluster.layout", "仪表版式"), symbol: "gauge.with.dots.needle.67percent", tint: tint) }
-            }
-            if m.faceStyle == .photos || (m.faceStyle == .island && m.islandBackground == .photo) {
-                LabeledContent {
-                    Button(L("prefs.photoFolder", "照片文件夹…")) { m.perform("menuPhotoFolder") }
-                } label: { RowLabel(title: L("settings.photos", "照片"), symbol: "photo.on.rectangle", tint: tint) }
-            }
-        } header: {
-            Text(L("settings.face", "表盘"))
-        }
+        .onChange(of: m.faceStyle) { _, _ in faceChanged() }
+        .onChange(of: m.era) { _, _ in faceChanged() }
+        .onChange(of: m.clockStyle) { _, _ in faceChanged() }
+        .onChange(of: m.islandBackground) { _, _ in faceChanged() }
     }
 }
 
-/// 手势：依输入方式分段（鼠标／触控板／触控），每种手势一行「符号＋名字＋一行说明」；
-/// 指标停在哪一行（或点哪一行），页首就播那一个手势。语法照 docs/plans/gestures.md 二：
-/// 屏幕上的拖动只归画面，转身体只拖机身；回主屏幕以「👀 往下拉」为主。
+/// 表盘与墙纸 › 这张表盘的选项（只有这张表盘有的；和右键选单同一份动作）
+struct FaceOptionsPane: View {
+    @EnvironmentObject var m: SettingsModel
+    var body: some View {
+        Form {
+            Section {
+                if m.faceStyle == .island {   // 島錶面自己的三個選項
+                    Picker(selection: Binding(get: { m.clockStyle }, set: { m.perform("menuIslandClock:", $0.rawValue) })) {
+                        ForEach(ClockStyle.allCases.filter { $0 != .thin }, id: \.self) { Text($0.title).tag($0) }
+                    } label: { RowLabel(title: L("island.clock", "时钟样式")) }
+                    .settingsRow("island.clock")
+                    Picker(selection: Binding(get: { m.islandBackground }, set: { m.perform("menuIslandBackground:", $0.rawValue) })) {
+                        ForEach(IslandBackground.choices(for: m.era), id: \.self) { Text($0.title).tag($0) }
+                    } label: { RowLabel(title: L("island.bg", "背景")) }
+                    .settingsRow("island.bg")
+                    Picker(selection: Binding(get: { m.era }, set: { m.perform("menuIslandEra:", $0.rawValue) })) {
+                        ForEach(Era.allCases, id: \.self) { Text($0.title).tag($0) }
+                    } label: { RowLabel(title: L("island.era", "年代")) }
+                    .settingsRow("island.era")
+                }
+                if m.faceStyle == .analog {   // Typograph 的材質
+                    Picker(selection: Binding(get: { m.typographMaterial }, set: { m.perform("menuTypographMaterial:", $0.rawValue) })) {
+                        ForEach(TypographMaterial.allCases, id: \.self) { Text($0.title).tag($0) }
+                    } label: { RowLabel(title: L("typograph.material", "Typograph 材质")) }
+                    .settingsRow("typograph.material")
+                }
+                if m.faceStyle == .system6 {   // System 6 的版式
+                    Picker(selection: Binding(get: { m.system6Layout }, set: { m.perform("menuSystem6Layout:", $0.rawValue) })) {
+                        ForEach(System6Layout.allCases, id: \.self) { Text($0.title).tag($0) }
+                    } label: { RowLabel(title: L("system6.layout", "System 6 版式")) }
+                    .settingsRow("system6.layout")
+                }
+                if m.faceStyle == .cluster {   // 儀表的版式
+                    Picker(selection: Binding(get: { m.clusterLayout }, set: { m.perform("menuClusterLayout:", $0.rawValue) })) {
+                        ForEach(ClusterLayout.allCases, id: \.self) { Text($0.title).tag($0) }
+                    } label: { RowLabel(title: L("cluster.layout", "仪表版式")) }
+                    .settingsRow("cluster.layout")
+                }
+                if m.faceStyle == .photos || (m.faceStyle == .island && m.islandBackground == .photo) {
+                    LabeledContent {
+                        Button(L("prefs.photoFolder", "照片文件夹…")) { m.perform("menuPhotoFolder") }
+                    } label: { RowLabel(title: L("settings.photos", "照片")) }
+                    .settingsRow("settings.photos")
+                }
+            } header: {
+                Text(m.faceStyle.title)
+            } footer: {
+                Text(L("settings.faceOptions.footer", "只有这张表盘有这些选项。")).foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
+        .formStyle(.grouped)
+    }
+}
+
+/// 主屏幕：图标外观、内容（iPhone App、实时活动、Web App）、排列（Settings/HomeAppearanceSection.swift）
+struct HomeScreenPane: View {
+    var body: some View {
+        Form {
+            PaneHeaderCard(section: .homeScreen)
+            HomeIconSection()
+            HomeContentSection()
+            HomeLayoutSection()
+        }
+        .formStyle(.grouped)
+    }
+}
+
+/// 手势：每种手势一行「名字＋一行说明」；指标停在哪一行（或点哪一行），舞台就播那一个手势。
+/// 舞台仍是两格插画（GestureDemo）：手势的结果画在屏幕上，即时机身还演不出来。语法照 docs/plans/gestures.md 二。
 struct GesturesPane: View {
     @EnvironmentObject var m: SettingsModel
     @State private var input = ProcessInfo.processInfo.environment["HOMEPLAY_SETTINGS_GESTURE"]
@@ -264,11 +399,30 @@ struct GesturesPane: View {
     @State private var selected: GestureKind = ProcessInfo.processInfo.environment["HOMEPLAY_SETTINGS_GESTURE"]
         .flatMap { GestureKind(rawValue: String($0.split(separator: ":")[0])) } ?? .home
     @State private var hoverIntent: Task<Void, Never>?
-    private let tint = SettingsSection.gestures.tint
 
     struct Gesture: Identifiable {
         let kind: GestureKind, symbol: String, title: String, how: String
         var id: String { kind.rawValue }
+    }
+
+    /// 搜索用：每种手势那一行的标题键
+    static func titleKey(_ k: GestureKind) -> String {
+        switch k {
+        case .home: return "settings.gesture.home"
+        case .switcher: return "settings.gesture.switcher"
+        case .control: return "settings.gesture.control"
+        case .page: return "settings.gesture.page"
+        case .carDrag: return "settings.gesture.carDrag"
+        case .back: return "settings.gesture.back"
+        case .hold: return "settings.gesture.hold"
+        case .turn, .rotate: return "settings.gesture.turn"
+        case .front: return "settings.gesture.front"
+        case .resize: return "settings.gesture.resize"
+        case .move: return "settings.gesture.moveWindow"
+        case .carplay: return "settings.gesture.carplay"
+        case .menu: return "settings.gesture.menu"
+        case .apart: return "settings.gesture.apart.title"
+        }
     }
 
     /// 这种输入方式的每一行（名字＝结果，副标题＝手怎么动）
@@ -276,11 +430,17 @@ struct GesturesPane: View {
         let drag = i == .touch
         var rows: [Gesture] = [
             Gesture(kind: .home, symbol: "house.fill", title: L("settings.gesture.home", "回主屏幕"),
-                    how: drag ? L("settings.gesture.home.touch", "从 👀 往下拉；点一下 👀 也行") : L("settings.gesture.home.drag", "从 👀 往下拖；按一下 👀 也行")),
+                    how: drag ? L("settings.gesture.home.touch", "从顶端的把手往下拉；把手看得见时点一下也行")
+                        : (i == .trackpad ? L("settings.gesture.home.trackpad", "光标移到顶端中间，双指往下滑；也可以按住把手往下拖")
+                                          : L("settings.gesture.home.mouse", "光标移到顶端中间往下滚动；也可以按住把手往下拖"))),
             Gesture(kind: .switcher, symbol: "square.stack.fill", title: L("settings.gesture.switcher", "App 切换器"),
-                    how: drag ? L("settings.gesture.switcher.touch", "从 👀 往下拉，停一下") : L("settings.gesture.switcher.drag", "从 👀 往下拖，停一下")),
+                    how: drag ? L("settings.gesture.switcher.touch", "从顶端的把手往下拉，停一下")
+                        : (i == .trackpad ? L("settings.gesture.switcher.trackpad", "光标在顶端中间，双指往下滑到一半停住")
+                                          : L("settings.gesture.switcher.drag", "从顶端的把手往下拖，停一下"))),
             Gesture(kind: .control, symbol: "switch.2", title: L("settings.gesture.control", "控制中心"),
-                    how: drag ? L("settings.gesture.control.touch", "从右上角往下拉") : L("settings.gesture.control.drag", "从右上角往下拖")),
+                    how: drag ? L("settings.gesture.control.touch", "从右上角往下拉")
+                        : (i == .trackpad ? L("settings.gesture.control.trackpad", "光标移到右上角，双指往下滑；也可以往下拖")
+                                          : L("settings.gesture.control.mouse", "光标移到右上角往下滚动；也可以往下拖"))),
         ]
         switch i {
         case .mouse: rows.append(Gesture(kind: .page, symbol: "arrow.left.and.right", title: L("settings.gesture.page", "换页、换表盘"), how: L("settings.gesture.page.mouse", "在屏幕上左右拖，或滚动滚轮")))
@@ -295,23 +455,25 @@ struct GesturesPane: View {
         rows.append(Gesture(kind: .back, symbol: "chevron.backward", title: L("settings.gesture.back", "返回"),
                             how: drag ? L("settings.gesture.back.touch", "从左缘往右滑") : L("settings.gesture.back.drag", "从左缘往右拖")))
         rows.append(Gesture(kind: .hold, symbol: "square.grid.2x2.fill", title: L("settings.gesture.hold", "表盘总览、图标选单"),
-                            how: i == .touch ? L("settings.gesture.hold.touch", "在屏幕上长按") : L("settings.gesture.hold.mouse", "在屏幕上按住")))
+                            how: i == .touch ? L("settings.gesture.hold.touch", "在屏幕上长按")
+                                : (i == .trackpad ? L("settings.gesture.hold.trackpad", "双指点按；图标和小组件上也可以重按，或按住")
+                                                  : L("settings.gesture.hold.rightClick", "按右键，或在屏幕上按住"))))
         switch i {
         case .mouse:
             rows += [Gesture(kind: .turn, symbol: "arrow.trianglehead.2.counterclockwise.rotate.90", title: L("settings.gesture.turn", "转身体"), how: L("settings.gesture.turn.drag", "拖机身，不是拖屏幕")),
                      Gesture(kind: .front, symbol: "arrow.uturn.backward", title: L("settings.gesture.front", "转回正面"), how: L("settings.gesture.front.mouse", "按两下机身")),
-                     Gesture(kind: .resize, symbol: "plus.magnifyingglass", title: L("settings.gesture.resize", "放大缩小"), how: L("settings.gesture.resize.mouse", "⌘+ ⌘−，或按住 ⌥ 滚动")),
+                     Gesture(kind: .resize, symbol: "plus.magnifyingglass", title: L("settings.gesture.resize", "放大缩小"), how: L("settings.gesture.resize.keys", "⌘+ ⌘− ⌘0、菜单，或按住 ⌥ 滚动")),
                      Gesture(kind: .move, symbol: "macwindow.on.rectangle", title: L("settings.gesture.moveWindow", "搬窗口"), how: L("settings.gesture.move.mouse", "按住 ⌘ 拖")),
                      Gesture(kind: .carplay, symbol: "car.fill", title: L("settings.gesture.carplay", "进出 CarPlay"), how: L("settings.gesture.carplay.space", "按空格键")),
                      Gesture(kind: .menu, symbol: "list.bullet", title: L("settings.gesture.menu", "选单"), how: L("settings.gesture.menu.mouse", "在机身上按右键"))]
         case .trackpad:
             rows += [Gesture(kind: .rotate, symbol: "arrow.trianglehead.2.counterclockwise.rotate.90", title: L("settings.gesture.turn", "转身体"), how: L("settings.gesture.turn.rotate", "双指旋转，或拖机身")),
                      Gesture(kind: .front, symbol: "arrow.uturn.backward", title: L("settings.gesture.front", "转回正面"), how: L("settings.gesture.front.touch", "点两下机身")),
-                     Gesture(kind: .resize, symbol: "plus.magnifyingglass", title: L("settings.gesture.resize", "放大缩小"), how: L("settings.gesture.resize.pinch", "双指张合")),
+                     Gesture(kind: .resize, symbol: "plus.magnifyingglass", title: L("settings.gesture.resize", "放大缩小"), how: L("settings.gesture.resize.trackpad", "双指张合，或双指轻点两下；也可以 ⌘+ ⌘− ⌘0、菜单，或按住 ⌥ 滚动")),
                      Gesture(kind: .move, symbol: "macwindow.on.rectangle", title: L("settings.gesture.moveWindow", "搬窗口"), how: L("settings.gesture.move.three", "三指拖移，CarPlay 显示时也行")),
-                     Gesture(kind: .carplay, symbol: "car.fill", title: L("settings.gesture.carplay", "进出 CarPlay"), how: L("settings.gesture.carplay.force", "用力按屏幕（重按）")),
+                     Gesture(kind: .carplay, symbol: "car.fill", title: L("settings.gesture.carplay", "进出 CarPlay"), how: L("settings.gesture.carplay.space", "按空格键")),
                      Gesture(kind: .menu, symbol: "list.bullet", title: L("settings.gesture.menu", "选单"), how: L("settings.gesture.menu.trackpad", "双指点按机身")),
-                     Gesture(kind: .apart, symbol: "square.3.layers.3d.down.right", title: L("settings.gesture.apart.title", "拆开看看"), how: L("settings.gesture.apart.how", "双指轻点两下；再点两下组回来"))]
+                     Gesture(kind: .apart, symbol: "square.3.layers.3d.down.right", title: L("settings.gesture.apart.title", "拆开看看"), how: L("settings.gesture.apart.menu", "在菜单里选「拆开看看」"))]
         case .touch:
             rows += [Gesture(kind: .turn, symbol: "arrow.trianglehead.2.counterclockwise.rotate.90", title: L("settings.gesture.turn", "转身体"), how: L("settings.gesture.turn.touch", "单指拖机身，不是拖屏幕")),
                      Gesture(kind: .front, symbol: "arrow.uturn.backward", title: L("settings.gesture.front", "转回正面"), how: L("settings.gesture.front.touch", "点两下机身")),
@@ -324,7 +486,7 @@ struct GesturesPane: View {
 
     /// 键盘：哪种输入方式都一样
     private var keyRows: [(symbol: String, title: String, how: String)] {
-        [("space", L("settings.gesture.key.carplay", "CarPlay ⇄ 主屏幕"), L("settings.gesture.key.carplay.how", "空格键，跟 👀 同一条路")),
+        [("space", L("settings.gesture.key.carplay", "CarPlay ⇄ 主屏幕"), L("settings.gesture.key.carplay.how", "空格键")),
          ("arrow.left.arrow.right", L("settings.gesture.key.pages", "换页、换表盘"), L("settings.gesture.key.pages.how", "← →")),
          ("arrow.up.arrow.down", L("settings.gesture.key.levels", "进一层、退一层"), L("settings.gesture.key.levels.how", "↑ 主屏幕与资源库，↓ 或 Esc 退回")),
          ("switch.2", L("settings.gesture.control", "控制中心"), L("settings.gesture.key.control.how", "C")),
@@ -335,18 +497,10 @@ struct GesturesPane: View {
 
     var body: some View {
         Form {
-            Section {
-                Picker(selection: Binding(get: { input }, set: { v in input = v; withAnimation(.easeOut(duration: 0.2)) { selected = .home } })) {
-                    Text(L("intro.input.mouse", "鼠标")).tag(IntroInput.mouse)
-                    Text(L("intro.input.trackpad", "触控板")).tag(IntroInput.trackpad)
-                    Text(L("settings.gestures.tab.touch", "触控")).tag(IntroInput.touch)
-                } label: { EmptyView() }
-                .pickerStyle(.segmented).labelsHidden()
-                .frame(maxWidth: .infinity)
-                .listRowInsets(EdgeInsets())
-                .listRowBackground(Color.clear)
-            } header: {
-                IllustrationHeader(scene: .gesture(selected, input), note: L("settings.gestures.rule", "屏幕上的拖动归画面，拖机身才转身体"))
+            StageSection {
+                ZStack { IllustrationStage(scene: .gesture(selected, input)).id(selected).transition(.blurFade) }
+                    .animation(.easeOut(duration: 0.2), value: selected)
+                    .padding(12)
             }
             Section {
                 ForEach(Self.gestures(input)) { g in
@@ -355,30 +509,44 @@ struct GesturesPane: View {
                             .foregroundStyle(Color.accentColor)
                             .opacity(selected == g.kind ? 1 : 0)
                     } label: {
-                        RowLabel(title: g.title, subtitle: g.how, symbol: g.symbol, tint: tint)
+                        RowLabel(title: g.title, subtitle: g.how)
                     }
                     .contentShape(Rectangle())
                     .onHover { inside in
-                        // 停 80 ms 才换：指标从上往下扫过时不会一路换好几段
+                        // 停 150 ms 才播（设计稿的动画规格）：指标从上往下扫过时不会一路换好几段
                         hoverIntent?.cancel()
                         guard inside else { return }
                         hoverIntent = Task { @MainActor in
-                            try? await Task.sleep(nanoseconds: 80_000_000)
+                            try? await Task.sleep(nanoseconds: 150_000_000)
                             if !Task.isCancelled { pick(g.kind) }
                         }
                     }
                     .onTapGesture { hoverIntent?.cancel(); pick(g.kind) }
                     .accessibilityAddTraits(selected == g.kind ? [.isButton, .isSelected] : .isButton)
+                    .settingsRow(Self.titleKey(g.kind))
                 }
+            } footer: {
+                Text(L("settings.gestures.rule", "屏幕上的拖动归画面，拖机身才转身体")).foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
             }
             Section {
                 ForEach(keyRows, id: \.title) { r in
-                    InfoRow(title: r.title, subtitle: r.how, symbol: r.symbol, tint: .gray)
+                    InfoRow(title: r.title, subtitle: r.how)
                 }
             } header: {
                 Text(L("settings.gesture.keys", "键盘"))
             }
-            IntroGuideSection()   // 開場手勢引導：重看、依照的輸入方式、新手勢提示（Intro/IntroGuide.swift）
+            Section {
+                Picker(selection: Binding(get: { input }, set: { v in input = v; withAnimation(.easeOut(duration: 0.2)) { selected = .home } })) {
+                    Text(L("intro.input.mouse", "鼠标")).tag(IntroInput.mouse)
+                    Text(L("intro.input.trackpad", "触控板")).tag(IntroInput.trackpad)
+                    Text(L("settings.gestures.tab.touch", "触控")).tag(IntroInput.touch)
+                } label: {
+                    RowLabel(title: L("settings.gestures.input", "我用的是"), subtitle: L("settings.gestures.input.sub", "示范会跟着换"))
+                }
+                .pickerStyle(.segmented)
+                .settingsRow("settings.gestures.input")
+            }
         }
         .formStyle(.grouped)
     }
@@ -391,7 +559,6 @@ struct GesturesPane: View {
 
 struct CarPlayPane: View {
     @EnvironmentObject var m: SettingsModel
-    private let tint = SettingsSection.carplay.tint
     /// 圆角：副标题只写一句（一行放得下），完整说明与这台 iPhone 的内收量放进 ⓘ
     private var cornerShort: String {
         switch m.cornerStyle {
@@ -410,15 +577,40 @@ struct CarPlayPane: View {
         guard let px = m.cornerInset else { return what }
         return what + String(format: L("settings.corners.inset", "（这台 iPhone 每边内收 %d px）"), px)
     }
+
     var body: some View {
         Form {
+            PaneHeaderCard(section: .carplay)
             Section {
-                ToggleRow(title: L("prefs.plugConnect", "后台自动连接"), subtitle: L("prefs.plugConnect.short", "开机后在后台等 iPhone"), symbol: "antenna.radiowaves.left.and.right", tint: tint,
+                if m.phones.isEmpty {
+                    InfoRow(title: L("settings.noPhonesTitle", "还没有 iPhone"), subtitle: L("settings.noPhones.sub", "用数据线连一次就会记住"))
+                }
+                ForEach(m.phones, id: \.address) { phone in
+                    let current = m.currentPhone.map { CarPlayPhoneBook.normalize($0) == CarPlayPhoneBook.normalize(phone.address) } ?? false
+                    LabeledContent {
+                        RowMenu {
+                            if !current { Button(L("settings.usePhone", "使用")) { m.perform("menuUsePhone:", phone.address) } }
+                            Button(L("settings.forget", "忘记…"), role: .destructive) { m.perform("menuForgetPhone:", phone.address) }
+                        }
+                    } label: {
+                        RowLabel(title: phone.name.isEmpty ? phone.address : phone.name,
+                                 subtitle: current ? L("settings.phone.current", "正在使用") : nil)
+                    }
+                }
+                ToggleRow(title: L("prefs.plugConnect", "后台自动连接"), subtitle: L("prefs.plugConnect.short", "开机后在后台等 iPhone"), symbol: "",
                           info: L("prefs.plugConnect.sub", "开机在后台等待 iPhone；插线一次，之后无线自动连"),
                           isOn: Binding(get: { m.autoConnect }, set: { _ in m.perform("menuAgentToggle") }))
-                Toggle(isOn: Binding(get: { m.carVideo }, set: { m.app?.setCarVideoAllowed($0); m.refresh() })) {
-                    RowLabel(title: L("settings.carVideo", "在 CarPlay 播放视频"), subtitle: L("settings.carVideo.sub", "Mac 不会移动，视为一直停着"), symbol: "play.rectangle.fill", tint: tint)
+                    .settingsRow("prefs.plugConnect")
+            } header: {
+                Text(L("menu.iphone", "iPhone"))
+            } footer: {
+                FooterButtons {
+                    Button(L("menu.pairNewPhone", "配对新 iPhone…")) { m.perform("menuPairNewPhone") }
+                    Button(L("settings.restorePhones", "恢复已忘记的…")) { m.perform("menuRestorePhones") }
+                    Button(L("menu.wifiPassword", "Wi-Fi 设置…")) { m.perform("menuWiFiPassword") }
                 }
+            }
+            Section {
                 LabeledContent {
                     Picker("", selection: Binding(get: { m.callGain }, set: { m.setCallGain($0) })) {
                         ForEach([0.0, 3, 6, 9, 12, 15], id: \.self) { db in
@@ -427,8 +619,23 @@ struct CarPlayPane: View {
                     }
                     .pickerStyle(.menu).labelsHidden().fixedSize()
                 } label: {
-                    RowLabel(title: L("settings.callVolume", "通话音量"), subtitle: L("settings.callVolume.sub", "与媒体音量分开；默认 +6 dB"), symbol: "phone.fill", tint: tint)
+                    RowLabel(title: L("settings.callVolume", "通话音量"), subtitle: L("settings.callVolume.sub", "与媒体音量分开；默认 +6 dB"))
                 }
+                .settingsRow("settings.callVolume")
+                Toggle(isOn: Binding(get: { m.carVideo }, set: { m.app?.setCarVideoAllowed($0); m.refresh() })) {
+                    RowLabel(title: L("settings.carVideo", "在 CarPlay 播放视频"), subtitle: L("settings.carVideo.sub", "Mac 不会移动，视为一直停着"))
+                }
+                .settingsRow("settings.carVideo")
+                LabeledContent {
+                    Button(L("settings.airplay.open", "打开设置…")) { AirPlayWatch.openSettings() }
+                } label: {
+                    RowLabel(title: L("settings.airplay", "用 AirPlay 投到这台 Mac"), subtitle: L("settings.airplay.sub", "任何 App 都行，包括 Apple TV+"))
+                }
+                .settingsRow("settings.airplay")
+            } header: {
+                Text(L("settings.carplay.av", "声音与视频"))
+            }
+            Section {
                 LabeledContent {
                     HStack(spacing: 10) {
                         InfoButton(cornerNote)
@@ -443,72 +650,53 @@ struct CarPlayPane: View {
                         .pickerStyle(.segmented).labelsHidden().fixedSize()
                     }
                 } label: {
-                    RowLabel(title: L("settings.corners", "圆角"), subtitle: cornerShort, symbol: "app.fill", tint: tint)
+                    RowLabel(title: L("settings.corners", "圆角"), subtitle: cornerShort)
                 }
-                LabeledContent {
-                    Button(L("settings.airplay.open", "打开设置…")) { AirPlayWatch.openSettings() }
-                } label: {
-                    RowLabel(title: L("settings.airplay", "用 AirPlay 投到这台 Mac"), subtitle: L("settings.airplay.sub", "任何 App 都行，包括 Apple TV+"), symbol: "airplayvideo", tint: tint)
-                }
-            } header: {
-                IllustrationHeader(scene: .charge, note: L("settings.carplay.note", "插线一次，之后无线"))
+                .settingsRow("settings.corners")
             }
-            Section {
-                if m.phones.isEmpty {
-                    InfoRow(title: L("settings.noPhonesTitle", "还没有 iPhone"), subtitle: L("settings.noPhones.sub", "用数据线连一次就会记住"), symbol: "iphone", tint: .gray)
-                }
-                ForEach(m.phones, id: \.address) { phone in
-                    let current = m.currentPhone.map { CarPlayPhoneBook.normalize($0) == CarPlayPhoneBook.normalize(phone.address) } ?? false
-                    LabeledContent {
-                        RowMenu {
-                            if !current { Button(L("settings.usePhone", "使用")) { m.perform("menuUsePhone:", phone.address) } }
-                            Button(L("settings.forget", "忘记…"), role: .destructive) { m.perform("menuForgetPhone:", phone.address) }
-                        }
-                    } label: {
-                        RowLabel(title: phone.name.isEmpty ? phone.address : phone.name,
-                                 subtitle: current ? L("settings.phone.current", "正在使用") : nil, symbol: "iphone", tint: current ? tint : .gray)
-                    }
-                }
-            } header: {
-                Text(L("menu.iphone", "iPhone"))
-            } footer: {
-                FooterButtons {
-                    Button(L("menu.pairNewPhone", "配对新 iPhone…")) { m.perform("menuPairNewPhone") }
-                    Button(L("settings.restorePhones", "恢复已忘记的…")) { m.perform("menuRestorePhones") }
-                    Button(L("menu.wifiPassword", "Wi-Fi 设置…")) { m.perform("menuWiFiPassword") }
-                }
-            }
-            PhoneHandoffSection()   // 2.0 promo：從 iPhone 傳網頁（Settings/PhoneHandoffSection.swift）
-            SelfShareSection()      // CarPlay 連著時傳到 iPhone 改走訊息傳給自己：選帳號（Settings/SelfShareSection.swift）
         }
         .formStyle(.grouped)
     }
 }
 
+/// 相机：跟随我、转向与俯仰幅度、房间光线。舞台是正面的即时机身：打开「跟随我」时，游标在舞台上移动，机身转过来看它。
 struct CameraPane: View {
     @EnvironmentObject var m: SettingsModel
-    private let tint = SettingsSection.camera.tint
+    private var pose: BodyStagePose {
+        var p = BodyStagePose.front
+        p.wall = m.viewMode == .wall
+        p.finish = m.finish
+        return p
+    }
     var body: some View {
         Form {
+            StageSection {
+                BodyStage(pose: pose, follow: m.gazeFollow ? (m.followDegrees, m.gazePitch) : nil)
+            }
             Section {
                 Toggle(isOn: Binding(get: { m.gazeFollow }, set: { _ in m.app?.toggleGazeFollow(); m.refresh() })) {
-                    RowLabel(title: L("settings.follow.title", "跟随我"), subtitle: L("settings.follow.sub", "CarPlay 显示时也会转向你"), symbol: "person.crop.square.fill", tint: tint)
+                    RowLabel(title: L("settings.follow.title", "跟随我"), subtitle: L("settings.follow.sub", "CarPlay 显示时也会转向你"))
                 }
-                ValueSlider(title: L("settings.followRange", "转向幅度"), symbol: "arrow.left.and.right", tint: tint,
+                .settingsRow("settings.follow.title")
+                ValueSlider(title: L("settings.followRange", "转向幅度"),
                             value: Binding(get: { m.followDegrees }, set: { m.app?.setFollowDegrees($0); m.followDegrees = $0 }),
                             range: 10...25, step: 5, minLabel: "10°", maxLabel: "25°") { "\(Int($0))°" }
                     .disabled(!m.gazeFollow)
-                ValueSlider(title: L("settings.followPitch", "俯仰幅度"), symbol: "arrow.up.and.down", tint: tint,
+                    .settingsRow("settings.followRange")
+                ValueSlider(title: L("settings.followPitch", "俯仰幅度"),
                             value: Binding(get: { m.gazePitch }, set: { let v = ($0 * 2).rounded() / 2; m.app?.view.setGazePitch(CGFloat(v)); m.gazePitch = v }),
                             range: 0...8, step: 0.5, minLabel: "0°", maxLabel: "8°") { String(format: "%.1f°", $0) }
                     .disabled(!m.gazeFollow)
-            } header: {
-                IllustrationHeader(scene: .follow, note: L("settings.follow.note", "只认人脸位置，不录制、不上传"))
+                    .settingsRow("settings.followPitch")
             }
             Section {
                 Toggle(isOn: Binding(get: { m.roomLight }, set: { _ in m.app?.toggleRoomLight(); m.refresh() })) {
-                    RowLabel(title: L("settings.roomLight.title", "房间光线"), subtitle: L("settings.roomLight.note", "机身反光跟着房间变"), symbol: "lightbulb.fill", tint: .yellow)
+                    RowLabel(title: L("settings.roomLight.title", "房间光线"), subtitle: L("settings.roomLight.note", "机身反光跟着房间变"))
                 }
+                .settingsRow("settings.roomLight.title")
+            } footer: {
+                Text(L("settings.follow.note", "只认人脸位置，不录制、不上传")).foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
         .formStyle(.grouped)
@@ -517,25 +705,26 @@ struct CameraPane: View {
 
 /// 家庭（B 方案，2026-10-26）：沒有小幫手時用 macOS 捷徑的家庭動作。
 /// HomeKit 的權利只跟著 App Store 的 provisioning profile，Developer ID 版拿不到，
-/// 所以這裡只管理「捷徑名稱」與執行；配件清單、即時狀態都不會有。怎麼建捷徑由頁首的動畫示範，不再列文字步驟。
+/// 所以這裡只管理「捷徑名稱」與執行；配件清單、即時狀態都不會有。
 struct HomePane: View {
     @EnvironmentObject var m: SettingsModel
     @State private var name = HomeShortcut.name
-    private let tint = SettingsSection.home.tint
 
     var body: some View {
         Form {
+            PaneHeaderCard(section: .home)
             Section {
                 LabeledContent {
-                    TextField("", text: $name, prompt: Text(L("settings.home.name.prompt", "例：回家")))
-                        .labelsHidden().frame(width: 200)
-                        .onChange(of: name) { _, v in HomeShortcut.name = v; m.refresh() }
+                    HStack(spacing: 10) {
+                        InfoButton(L("settings.home.note", "HomePlay 不能直接读 HomeKit，所以用捷径代替。执行时会切到捷径 App；这里没有配件清单，也没有即时状态。"))
+                        TextField("", text: $name, prompt: Text(L("settings.home.name.prompt", "例：回家")))
+                            .labelsHidden().frame(width: 200)
+                            .onChange(of: name) { _, v in HomeShortcut.name = v; m.refresh() }
+                    }
                 } label: {
-                    RowLabel(title: L("settings.home.name", "捷径名称"), subtitle: L("settings.home.name.sub", "跟「捷径」App 里的名字一样"), symbol: "house.fill", tint: tint)
+                    RowLabel(title: L("settings.home.name", "捷径名称"), subtitle: L("settings.home.demoNote", "在「捷径」加「控制家庭」，再把名字填进来"))
                 }
-            } header: {
-                IllustrationHeader(scene: .shortcut, note: L("settings.home.demoNote", "在「捷径」加「控制家庭」，再把名字填进来"),
-                                   info: L("settings.home.note", "HomePlay 不能直接读 HomeKit，所以用捷径代替。执行时会切到捷径 App；这里没有配件清单，也没有即时状态。"))
+                .settingsRow("settings.home.name")
             } footer: {
                 FooterButtons {
                     Button(L("settings.home.openApp", "打开捷径 App")) { HomeShortcut.openApp() }
@@ -546,15 +735,16 @@ struct HomePane: View {
             Section {
                 InfoRow(title: L("settings.home.helper.title", "HomePlay Home 小帮手"),
                         subtitle: HomeLink.helperInstalled ? L("settings.home.helper.onShort", "已安装，优先使用") : L("settings.home.helper.offShort", "未安装"),
-                        symbol: "puzzlepiece.extension.fill", tint: .gray,
                         info: HomeLink.helperInstalled ? L("settings.home.helper.on", "已安装：会优先使用小帮手，配件直接出现在家庭 App。")
                                                        : L("settings.home.helper.off", "未安装：公开版没有小帮手（HomeKit 只给 App Store 版）。"))
+                    .settingsRow("settings.home.helper.title")
             }
         }
         .formStyle(.grouped)
     }
 }
 
+/// 隐私与安全性：HomePlay 用到的权限，以及会离开这台 Mac 的数据（资料去向的说明只写在这一页）
 struct PermissionsPane: View {
     @EnvironmentObject var m: SettingsModel
     private func name(_ k: PermissionKind) -> String {
@@ -581,20 +771,10 @@ struct PermissionsPane: View {
         case .reminders: return L("settings.perm.reminders.short", "看清单、点圆圈完成")
         }
     }
-    private func symbol(_ k: PermissionKind) -> (String, Color) {
-        switch k {
-        case .camera: return ("camera.fill", .gray)
-        case .microphone: return ("mic.fill", .orange)
-        case .inputMonitoring: return ("keyboard.fill", .gray)
-        case .automation: return ("music.note", .pink)
-        case .calendar: return ("calendar", .red)
-        case .photos: return ("photo.fill", .indigo)
-        case .location: return ("location.fill", .blue)
-        case .reminders: return ("checklist", .orange)
-        }
-    }
+
     var body: some View {
         Form {
+            PaneHeaderCard(section: .permissions)
             Section {
                 ForEach(PermissionKind.allCases, id: \.self) { k in
                     LabeledContent {
@@ -610,25 +790,50 @@ struct PermissionsPane: View {
                             }
                         }
                     } label: {
-                        RowLabel(title: name(k), subtitle: summary(k), symbol: symbol(k).0, tint: symbol(k).1)
+                        RowLabel(title: name(k), subtitle: summary(k))
                     }
+                    .settingsRow(Self.key(k))
                 }
+            } header: {
+                Text(L("settings.privacy.perms", "HomePlay 用到的权限"))
             } footer: {
                 Text(L("settings.perm.footer", "系统询问前，桌宠会先说明用途")).foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
-            WebAppsSection()   // 2.0 Web App：每個 Web App 的權限與網站資料（Settings/WebAppsSection.swift）
+            Section {
+                InfoRow(title: L("settings.cliotalk", "ClioTalk"), subtitle: L("clio.privacy.short", "直接送到你选的公司"),
+                        info: L("clio.privacy", "你问的话和回答时用到的资料（例如那几笔日历），会直接从这台 Mac 送到你选的公司，按它的条款处理；这和 Apple 的私有云计算不一样。密钥只存在这台 Mac 的钥匙串，HomePlay 不会传给任何人。选「Apple Intelligence」就完全不联网，但只有它打开时能用，回答也比较简短。选「这台 Mac（LM Studio）」时对话留在这台 Mac，用你载入的模型回答；只有开着「网页搜索」又有 DeepSeek 密钥时，搜索词才会送给 DeepSeek。"))
+                    .settingsRow("clio.privacy.title")
+                InfoRow(title: L("settings.lyrics", "歌词"),
+                        subtitle: LyricsStore.enabled ? L("settings.privacy.on", "开启中") : L("settings.privacy.off", "关闭"),
+                        info: L("settings.lyrics.sub", "依序向 LRCLIB、酷狗、QQ 音乐查同步歌词：只送歌名、歌手和长度，存在这台 Mac 上"))
+            } header: {
+                Text(L("settings.privacy.data", "会离开这台 Mac 的数据"))
+            }
         }
         .formStyle(.grouped)
     }
+
+    /// 搜索用：每种权限那一行的标题键
+    static func key(_ k: PermissionKind) -> String {
+        switch k {
+        case .camera: return "settings.perm.camera"
+        case .microphone: return "settings.perm.mic"
+        case .inputMonitoring: return "settings.perm.input"
+        case .automation: return "settings.perm.automation"
+        case .calendar: return "settings.perm.calendar"
+        case .photos: return "settings.perm.photos"
+        case .location: return "settings.perm.location"
+        case .reminders: return "settings.perm.reminders"
+        }
+    }
 }
 
-/// 設定 › 手勢：手勢引導（原生分組表單列；2.0 設定改版從「一般」搬來）
+/// 設定 › 通用 › 手势引导（原生分组表单列；從「手勢」搬回「通用」：设计稿写手势说明「可从一般重看」）
 struct IntroGuideSection: View {
     @EnvironmentObject var m: SettingsModel
     @State private var input = IntroGuide.setting
     @State private var tips = IntroGuide.newGestureTips
-    private let tint = SettingsSection.gestures.tint
     var body: some View {
         Section {
             LabeledContent {
@@ -637,8 +842,9 @@ struct IntroGuideSection: View {
                     Button(L("settings.intro.replay", "重看…")) { m.perform("menuShowHints") }
                 }
             } label: {
-                RowLabel(title: L("settings.intro", "手势引导"), subtitle: L("settings.intro.sub", "在桌宠上重新播一次开场的手势说明"), symbol: "play.rectangle.fill", tint: tint)
+                RowLabel(title: L("settings.intro", "手势引导"), subtitle: L("settings.intro.sub", "在桌宠上重新播一次开场的手势说明"))
             }
+            .settingsRow("settings.intro")
             Picker(selection: Binding(get: { input }, set: { input = $0; IntroGuide.setting = $0 })) {
                 Text(L("settings.intro.auto", "自动")).tag(IntroInputSetting.auto)
                 Divider()
@@ -646,11 +852,13 @@ struct IntroGuideSection: View {
                 Text(L("intro.input.trackpad", "触控板")).tag(IntroInputSetting.trackpad)
                 Text(L("settings.intro.touch", "手指（触控屏幕、Sidecar）")).tag(IntroInputSetting.touch)
             } label: {
-                RowLabel(title: L("settings.intro.input", "引导依照的输入方式"), subtitle: L("settings.intro.input.short", "自动＝看你最近用的"), symbol: "hand.point.up.left.fill", tint: tint)
+                RowLabel(title: L("settings.intro.input", "引导依照的输入方式"), subtitle: L("settings.intro.input.short", "自动＝看你最近用的"))
             }
+            .settingsRow("settings.intro.input")
             Toggle(isOn: Binding(get: { tips }, set: { tips = $0; IntroGuide.newGestureTips = $0 })) {
-                RowLabel(title: L("settings.intro.tips", "遇到新手势时提示一次"), subtitle: L("settings.intro.tips.sub", "例如第一次把桌宠拖到触控屏幕上"), symbol: "lightbulb.fill", tint: tint)
+                RowLabel(title: L("settings.intro.tips", "遇到新手势时提示一次"), subtitle: L("settings.intro.tips.sub", "例如第一次把桌宠拖到触控屏幕上"))
             }
+            .settingsRow("settings.intro.tips")
         } header: {
             Text(L("settings.intro.header", "手势引导"))
         }

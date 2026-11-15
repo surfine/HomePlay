@@ -368,6 +368,8 @@ final class WorldClockApp: PetApp {
             }
         }
         g.restoreGState()
+        // 下一層頁首的標題（shell-layout.md 第 3 節）：返回鈕與時間由外殼畫
+        HPComponents.bigTitle(g, face, title, color: Self.ink)
         // 頁點
         let n = pageCount
         if n > 1 {

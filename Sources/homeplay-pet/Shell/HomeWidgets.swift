@@ -23,23 +23,6 @@ extension Shell {
         let b = HPTokens.backButton, w: CGFloat = 196
         return CGRect(x: 1024 - b.minX - w, y: b.minY, width: w, height: b.height)
     }
-    /// 左上「＋」：就是返回鈕的位置（圓心在螢幕圓角的圓心上）
-    static var editAddRect: CGRect { HPTokens.backButton }
-    /// 「−」：圖示（或小工具）左上角，畫 56、點按範圍 88
-    static func badgeRect(_ item: CGRect, widget: Bool) -> CGRect {
-        let ir = widget ? item : iconRect(in: item)
-        let d: CGFloat = 56
-        return CGRect(x: ir.minX - d * 0.3, y: ir.minY - d * 0.3, width: d, height: d)
-    }
-
-    /// 圖庫 sheet：左右離螢幕 72、圓角跟螢幕同心
-    static let galleryCard = CGRect(x: 72, y: 150, width: 880, height: 760)
-    static func galleryRows() -> [(HomeWidgetKind, CGRect)] {
-        let side: CGFloat = 236, gap: CGFloat = 46
-        let x0 = galleryCard.midX - (side * 3 + gap * 2) / 2
-        return HomeWidgetKind.allCases.enumerated().map { ($0.element, CGRect(x: x0 + CGFloat($0.offset) * (side + gap), y: galleryCard.minY + 150, width: side, height: side)) }
-    }
-    static var galleryResetRect: CGRect { CGRect(x: galleryCard.midX - 260, y: galleryCard.maxY - 140, width: 520, height: 92) }
 
     // MARK: 資料舊了：「更新於 …」
 
@@ -82,19 +65,6 @@ extension Shell {
         face.drawUpright(g, img, in: r)   // makeImage 畫布上照常畫好的圖：跟其他 Core Graphics 圖一樣轉正貼上
     }
 
-    /// 清透／染色：圖示與小工具的底是 Liquid Glass——一個容器（HPGlass 一次取樣），取樣的是面板之前的桌布（玻璃不取樣玻璃）
-    static func drawAccentedGlassBases(_ g: CGContext, face: Face, items: [(CGRect, HomeItem)], backdrop: CGImage?) {
-        guard HomeAppearance.current.glassBase else { return }
-        for (r, item) in items {
-            if case .app = item {
-                let ir = iconRect(in: r)
-                HPGlass.add(continuousRoundedRect(ir, radius: ir.width * 0.2237)) { _ in }
-            } else {
-                HPGlass.add(continuousRoundedRect(r, radius: widgetRadius)) { _ in }
-            }
-        }
-        HPGlass.flush(g, face: face, clear: true, backdrop: backdrop)
-    }
 }
 
 // MARK: - 小工具框：照渲染模式
@@ -135,15 +105,6 @@ extension HPComponents {
 // MARK: - 畫：天氣、世界時鐘、編輯模式、圖庫
 
 extension Face {
-    /// 主畫面右上那一格（照這個人的排列）
-    func drawHomeWidget(_ g: CGContext, _ kind: HomeWidgetKind, _ r: CGRect, now: Double) {
-        switch kind {
-        case .photos: drawPhotosWidget(g, r)
-        case .weather: drawWeatherWidget(g, r, appearance: HomeAppearance.current)
-        case .worldClock: drawWorldClockWidget(g, r, appearance: HomeAppearance.current)
-        }
-    }
-
     /// 天氣 small 小工具（照 iOS 天氣小工具：天色漸層底、城市＋定位箭頭、大溫度、符號、狀況、高低溫）
     func drawWeatherWidget(_ g: CGContext, _ wr: CGRect, appearance a: HomeAppearance, preview: Bool = false) {
         let src = WeatherSource.shared
@@ -211,168 +172,6 @@ extension Face {
             drawLeft(g, Face.clipped(lines[1], tf, wr.width - pad * 2), font: tf, x: wr.minX + pad, y: wr.maxY - pad - 2 * k, color: ink.primary)
         }
     }
-
-    /// 世界時鐘 small 小工具：另一個城市的指針錶面（淺色白底、深色 #1C1C1E），城市名與時差
-    func drawWorldClockWidget(_ g: CGContext, _ wr: CGRect, appearance a: HomeAppearance, preview: Bool = false) {
-        let mode = a.renderMode(night: false)
-        let cities = WorldClockApp.cities()
-        let (tz, name) = cities.count > 1 ? cities[1] : cities[0]
-        let dark = a.widgetDark
-        let k = wr.width / 158
-        g.saveGState(); defer { g.restoreGState() }
-        g.addPath(continuousRoundedRect(wr, radius: Shell.widgetRadius)); g.clip()
-        let bg = dark ? srgb(0x1C1C1E) : NSColor.white
-        HPComponents.widgetFrame(g, wr, top: bg.cgColor, bottom: bg.cgColor, mode: mode, appearance: a == .dark ? .light : a, standalone: preview, radius: Shell.widgetRadius)
-        let ink: WidgetInk = mode == .accented ? WidgetInk.of(a)
-            : WidgetInk(primary: dark ? .white : .black, accent: srgb(0xFF9500), secondary: (dark ? NSColor.white : NSColor.black).withAlphaComponent(0.55))
-        // 錶面：直徑 100 pt，上方置中
-        let cr = CGRect(x: wr.midX - 50 * k, y: wr.minY + 12 * k, width: 100 * k, height: 100 * k)
-        let center = CGPoint(x: cr.midX, y: cr.midY)
-        for i in 0..<12 {
-            let ang = CGFloat(i) / 12 * .pi * 2
-            let r0 = cr.width / 2 - (i % 3 == 0 ? 9 : 6) * k, r1 = cr.width / 2 - 2 * k
-            g.move(to: CGPoint(x: center.x + sin(ang) * r0, y: center.y - cos(ang) * r0))
-            g.addLine(to: CGPoint(x: center.x + sin(ang) * r1, y: center.y - cos(ang) * r1))
-        }
-        g.setStrokeColor(ink.secondary.cgColor); g.setLineWidth(1.6 * k); g.setLineCap(.round); g.strokePath()
-        var cal = Calendar(identifier: .gregorian); cal.timeZone = tz
-        let comp = cal.dateComponents([.hour, .minute], from: Face.displayDate)
-        let h = CGFloat((comp.hour ?? 10) % 12), m = CGFloat(comp.minute ?? 9)
-        func hand(_ frac: CGFloat, _ len: CGFloat, _ w: CGFloat, _ col: NSColor) {
-            let ang = frac * .pi * 2
-            g.move(to: center); g.addLine(to: CGPoint(x: center.x + sin(ang) * len, y: center.y - cos(ang) * len))
-            g.setStrokeColor(col.cgColor); g.setLineWidth(w); g.setLineCap(.round); g.strokePath()
-        }
-        hand((h + m / 60) / 12, 26 * k, 4 * k, ink.primary)
-        hand(m / 60, 38 * k, 3 * k, ink.primary)
-        g.setFillColor(ink.accent.cgColor); g.fillEllipse(in: CGRect(x: center.x - 3 * k, y: center.y - 3 * k, width: 6 * k, height: 6 * k))
-        // 城市名與時差（今天／明天，+N 小時）
-        let nf = HPType.sf(13 * k, .semibold), sf = HPType.sf(11 * k, .regular)
-        let n = Face.clipped(name, nf, wr.width - 24 * k)
-        drawLeft(g, n, font: nf, x: wr.midX - Typo.width(n, nf) / 2, y: wr.maxY - 24 * k, color: ink.primary)
-        let diff = (tz.secondsFromGMT() - TimeZone.current.secondsFromGMT()) / 3600
-        let off = String(format: L("home.worldClock.offset", "%+d 小时"), diff)
-        drawLeft(g, off, font: sf, x: wr.midX - Typo.width(off, sf) / 2, y: wr.maxY - 10 * k, color: ink.secondary)
-    }
-
-    /// 編輯模式：「−」、「＋」、「完成」（控制層，系統玻璃，renderShell 收尾一起算）；圖庫開著時換成圖庫
-    func drawHomeEditChrome(_ g: CGContext, items: [(CGRect, HomeItem)]) {
-        guard Shell.homeEditing else { return }
-        if Shell.widgetGallery { drawWidgetGallery(g, current: PersonHome.current.widget); return }
-        for (r, item) in items {
-            let isWidget: Bool = { if case .app = item { return false }; return true }()
-            let b = Shell.badgeRect(r, widget: isWidget)
-            HPGlass.addCapsule(b, interactive: true) { [weak self] c in
-                self?.drawSymbol(c, "minus", in: b.insetBy(dx: b.width * 0.3, dy: b.height * 0.3), color: HPGlass.ink, weight: .bold)
-            }
-        }
-        let add = Shell.editAddRect
-        HPGlass.addCapsule(add, interactive: true) { [weak self] c in
-            self?.drawSymbol(c, "plus", in: add.insetBy(dx: add.width * 0.33, dy: add.height * 0.33), color: HPGlass.ink, weight: .semibold)
-        }
-        let done = Shell.editDoneRect
-        HPGlass.addCapsule(done, interactive: true) { [weak self] c in
-            let s = L("home.done", "完成"), f = HPType.sf(34, .semibold)
-            self?.drawLeft(c, s, font: f, x: done.midX - Typo.width(s, f) / 2, y: done.midY + f.capHeight / 2, color: HPGlass.ink)
-        }
-    }
-
-    /// 小工具圖庫（sheet）：三個預覽、名稱、說明；目前放的那個打勾；最下面「還原預設主畫面」
-    func drawWidgetGallery(_ g: CGContext, current: HomeWidgetKind?) {
-        let full = CGRect(x: 0, y: 0, width: 1024, height: 1024)
-        g.setFillColor(NSColor.black.withAlphaComponent(0.45).cgColor); g.fill(full)
-        let card = Shell.galleryCard
-        let radius = Screen.concentric(inset: card.minX)
-        let a = HomeAppearance.current
-        if !ShellGlass.draw(g, face: self, path: continuousRoundedRect(card, radius: radius), key: "gallery|\(a.cacheKey)") {
-            g.addPath(continuousRoundedRect(card, radius: radius)); g.setFillColor(srgb(0x2c2c30, 0.96).cgColor); g.fillPath()
-        }
-        drawLeft(g, L("home.gallery.title", "小组件"), font: HPType.sf(48, .bold), x: card.minX + 56, y: card.minY + 92, color: .white)
-        for (kind, r) in Shell.galleryRows() {
-            switch kind {
-            case .photos:
-                g.saveGState(); g.addPath(continuousRoundedRect(r, radius: Shell.widgetRadius * r.width / 391)); g.clip()
-                let px = Int((r.width * renderPixelScale).rounded())
-                let img = WidgetImageTreatment.accented(PhotosDemoArt.image(px: max(64, px)), appearance: a)
-                if a.glassBase { HPComponents.widgetFrame(g, r, top: CGColor(gray: 0, alpha: 0), bottom: CGColor(gray: 0, alpha: 0), mode: .accented, appearance: a, standalone: true) }
-                g.setAlpha(WidgetImageTreatment.alpha(a))
-                drawUpright(g, img, in: r)
-                g.restoreGState()
-            case .weather: drawWeatherWidget(g, r, appearance: a, preview: true)
-            case .worldClock: drawWorldClockWidget(g, r, appearance: a, preview: true)
-            }
-            if kind == current {
-                g.saveGState(); g.addPath(continuousRoundedRect(r.insetBy(dx: -8, dy: -8), radius: Shell.widgetRadius * r.width / 391 + 8))
-                g.setStrokeColor(srgb(0x0A84FF).cgColor); g.setLineWidth(5); g.strokePath(); g.restoreGState()
-            }
-            let nf = HPType.sf(32, .semibold)
-            let n = Face.clipped(kind.title, nf, r.width + 30)
-            drawLeft(g, n, font: nf, x: r.midX - Typo.width(n, nf) / 2, y: r.maxY + 52, color: .white)
-            let bf = HPType.sf(24, .regular)
-            var y = r.maxY + 92
-            for line in Self.photosWrap(kind.blurb, bf, r.width + 30, maxLines: 3) {
-                let s = Face.clipped(line, bf, r.width + 30)
-                drawLeft(g, s, font: bf, x: r.midX - Typo.width(s, bf) / 2, y: y, color: NSColor.white.withAlphaComponent(0.6))
-                y += 32
-            }
-        }
-        // 還原預設：玻璃上的按鈕用填色（不准玻璃疊玻璃）
-        let rr = Shell.galleryResetRect
-        g.addPath(HPComponents.capsulePath(rr)); g.setFillColor(NSColor(white: 1, alpha: 0.16).cgColor); g.fillPath()
-        let s = L("home.gallery.reset", "还原默认主屏幕"), f = HPType.fitted(L("home.gallery.reset", "还原默认主屏幕"), size: 32, weight: .semibold, maxWidth: rr.width - 48)
-        drawLeft(g, s, font: f, x: rr.midX - Typo.width(s, f) / 2, y: rr.midY + f.capHeight / 2, color: .white)
-    }
-}
-
-// MARK: - 點按（ShellInput.shellTap 的主畫面那一段先問這裡）
-
-extension PetView {
-    /// 長按主畫面：進編輯模式（訪客、認不出的人、官方示範不能編輯）
-    func enterHomeEdit() -> Bool {
-        guard Shell.nav.screen == .home, PersonHome.canEdit else { return false }
-        let ids = Set(PeopleRegistry.shared.people.map(\.id))
-        if !ids.isEmpty { PersonHome.prune(keeping: ids) }
-        Shell.homeEditing = true; Shell.widgetGallery = false
-        Shell.homeLayer = nil; face.forceDirty = true
-        log("shell home edit")
-        return true
-    }
-
-    /// 編輯模式或圖庫開著時的點按；用掉了回 true
-    func homeEditTap(_ p: CGPoint) -> Bool {
-        guard Shell.homeEditing, Shell.nav.screen == .home else { return false }
-        defer { Shell.homeLayer = nil; face.forceDirty = true }
-        guard let id = PersonHome.viewerID, PersonHome.canEdit else { Shell.homeEditing = false; Shell.widgetGallery = false; return true }
-        var layout = PersonHome.current
-        if Shell.widgetGallery {
-            if let k = Shell.galleryRows().first(where: { $0.1.insetBy(dx: -20, dy: -20).contains(p) })?.0 {
-                layout.setWidget(k); PersonHome.set(layout, for: id); Shell.widgetGallery = false
-            } else if Shell.galleryResetRect.insetBy(dx: -8, dy: -8).contains(p) {
-                PersonHome.set(.official, for: id); Shell.widgetGallery = false
-            } else if !Shell.galleryCard.contains(p) {
-                Shell.widgetGallery = false
-            }
-            return true
-        }
-        if Shell.editDoneRect.insetBy(dx: -8, dy: -8).contains(p) { Shell.homeEditing = false; return true }
-        if Shell.editAddRect.insetBy(dx: -8, dy: -8).contains(p) { Shell.widgetGallery = true; return true }
-        let items = layout.items()
-        // 「−」的點按範圍 88（畫 56）
-        for (r, item) in items {
-            let isWidget = HomeWidgetKind.from(item) != nil
-            let b = Shell.badgeRect(r, widget: isWidget)
-            guard b.insetBy(dx: -16, dy: -16).contains(p) else { continue }
-            if case .app(let a) = item { layout.remove(app: a) } else { layout.setWidget(nil) }
-            PersonHome.set(layout, for: id)
-            return true
-        }
-        if let (_, item) = items.first(where: { $0.0.contains(p) }) {
-            if HomeWidgetKind.from(item) != nil { Shell.widgetGallery = true }   // 點小工具本身：換一個
-            return true                                                          // 點圖示：編輯模式裡不開 App
-        }
-        Shell.homeEditing = false   // 點空白處：離開編輯模式
-        return true
-    }
 }
 
 // MARK: - selftest
@@ -383,13 +182,6 @@ enum HomeWidgetsSelftest {
         check(Shell.weatherUpdatedCaption(now.addingTimeInterval(-3600), now: now) == nil, "天氣小工具：1 小時前的資料不標更新時間")
         check(Shell.weatherUpdatedCaption(now.addingTimeInterval(-3 * 3600), now: now) != nil && Shell.weatherUpdatedCaption(nil, now: now) == nil,
               "天氣小工具：超過 2 小時標「更新於 …」；沒有資料不標")   // l10n-ignore：selftest 訊息
-        let rows = Shell.galleryRows()
-        check(rows.count == HomeWidgetKind.allCases.count && rows.allSatisfy { Shell.galleryCard.contains($0.1) && $0.1.width >= 88 },
-              "小工具圖庫：每個小工具一張預覽，都在 sheet 裡、夠大")   // l10n-ignore：selftest 訊息
-        let items = HomeLayout.official.items()
-        let badges = items.map { Shell.badgeRect($0.0, widget: HomeWidgetKind.from($0.1) != nil).insetBy(dx: -16, dy: -16) }
-        check(badges.allSatisfy { $0.width >= 88 } && Shell.editDoneRect.height >= 88 && !Shell.editDoneRect.intersects(Shell.editAddRect),
-              "編輯模式：「−」「＋」「完成」點按範圍都 ≥ 88")   // l10n-ignore：selftest 訊息
         check(HomeWidgetKind.allCases.allSatisfy { !$0.blurb.isEmpty && HomeWidgetKind.from($0.item) == $0 }, "小工具圖庫：每個都有說明")
     }
 }

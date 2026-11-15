@@ -44,12 +44,12 @@ final class MusicApp: PetApp {
     // 兩欄大方形封面，名稱與灰色副標在封面底下；內容捲到頂端列底下時柔和淡出；底下浮著一條玻璃迷你播放器。
     // 2.0 r2：資料庫跟著淺／深色（影片 v1 02:19 的 Music 搜尋頁是淺色）；大標題「音乐」放回左上
     private static var bg: NSColor { HPComponents.bg }
-    private static let side: CGFloat = 436, gap: CGFloat = 24, x0: CGFloat = 64
+    private static let gap: CGFloat = 24, x0: CGFloat = HPGrid.Content.leading, side: CGFloat = (HPGrid.Content.width - 24) / 2
     /// 一格＝封面＋底下兩行字
-    private static let cellH: CGFloat = 436 + 108, rowGap: CGFloat = 28
+    private static let cellH: CGFloat = side + 108, rowGap: CGFloat = 28
     private static let headerH: CGFloat = 84
     private static let top: CGFloat = 206
-    private static let miniPlayer = CGRect(x: 64, y: 1024 - 56 - 112, width: 896, height: 112)
+    private static let miniPlayer = CGRect(x: HPGrid.Content.leading, y: 1024 - 56 - 112, width: HPGrid.Content.width, height: 112)
     private static var cardRadius: CGFloat { 36 }
 
     func didOpen(now: Double) {
@@ -105,6 +105,7 @@ final class MusicApp: PetApp {
             if !NowPlayingPage.shared.render(g, face: face, now: now, withLibraryStrip: true) {
                 Self.openButton(g, face, L("music.open", "打开音乐"))
                 NowPlayingPage.drawLibraryStrip(g, face: face)
+                AppUI.title(g, face, title)   // 沒在播放＝一般的下一層頁（shell-layout.md 第 3 節）；正在播放是豁免的滿版頁
             }
         case .library:
             renderLibrary(g, face)

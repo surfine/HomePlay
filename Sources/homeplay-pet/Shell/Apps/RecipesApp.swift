@@ -49,29 +49,26 @@ final class RecipesApp: PetApp {
     /// 食材頁的程式捲動（語音勾到看不到的那一行、示範）：從哪捲到哪、何時開始
     private var scrollAnim: (from: CGFloat, to: CGFloat, start: Double)?
 
-    /// 沒有 JSON-LD 食譜時的後備（ClioTalk 之後掛在這裡：傳入網頁純文字與網址，整理成 Recipe 後呼叫 show）
-    nonisolated(unsafe) static var clioFallback: ((_ pageText: String, _ url: URL, _ done: @escaping (Recipe?) -> Void) -> Void)?
-
     // MARK: 版面（1024 畫布）
     // 2.0 r2：首頁、食材、步驟跟著淺／深色（影片 v1 00:27.25 步驟頁是白底黑字）；封面是照片滿版（深色內容，白字）
     static var bg: NSColor { HPComponents.bg }
     /// 步驟頁的卡：淺色時純白、深色時黑
     static var stepBG: NSColor { HPTokens.dark ? .black : .white }
-    private static let bottomY: CGFloat = 834, bottomH: CGFloat = 112, sideX: CGFloat = 78
+    private static let bottomY: CGFloat = 834, bottomH: CGFloat = 112, sideX: CGFloat = HPGrid.Content.leading
     private static var accent: NSColor { HPComponents.orange }
 
     private static func bottomRow(_ weights: [CGFloat]) -> [CGRect] {
-        let gap: CGFloat = 14, total = 1024 - 2 * sideX - gap * CGFloat(weights.count - 1)
+        let gap: CGFloat = 16, total = 1024 - 2 * sideX - gap * CGFloat(weights.count - 1)
         let unit = total / weights.reduce(0, +)
         var x = sideX
         return weights.map { w in defer { x += w * unit + gap }; return CGRect(x: x, y: bottomY, width: w * unit, height: bottomH) }
     }
     // 2.0 逼真化：首頁不重複「食谱」標題；有最近的食譜時，上面一顆主要動作、底下 inset grouped 清單（列高 112、分隔線縮排）
     private static func pasteButton(_ hasRecents: Bool) -> CGRect {
-        hasRecents ? CGRect(x: 64, y: 860, width: 896, height: 104) : CGRect(x: 512 - 290, y: 670, width: 580, height: 104)
+        hasRecents ? CGRect(x: HPGrid.Content.leading, y: 860, width: HPGrid.Content.width, height: 104) : CGRect(x: 512 - 290, y: 670, width: 580, height: 104)
     }
     private static let recentsTop: CGFloat = 226, recentsBottom: CGFloat = 836
-    private static func recentRow(_ i: Int) -> CGRect { CGRect(x: 64, y: recentsTop + CGFloat(i) * 120, width: 896, height: 120) }
+    private static func recentRow(_ i: Int) -> CGRect { CGRect(x: HPGrid.Content.leading, y: recentsTop + CGFloat(i) * 120, width: HPGrid.Content.width, height: 120) }
     private static func removeZone(_ row: CGRect) -> CGRect { CGRect(x: row.maxX - 104, y: row.minY, width: 104, height: row.height) }
     private static let backButton = CGRect(x: 512 - 150, y: 660, width: 300, height: 104)
     /// 封面頁底下兩顆清玻璃膠囊（影片 v1 O-037：各約 410×120、間距約 30、底距約 60）
@@ -84,12 +81,11 @@ final class RecipesApp: PetApp {
         return StepDuration.find(in: first.text) != nil ? .timer(0) : .step(0)
     }
 
-    // 2.0 r2（R1）：封面頁是照片滿版——外殼的返回鈕與時間不畫，自己畫白色的；食材、步驟是子頁（‹）
-    // R15：步驟頁也自己畫頂列（影片 v1 00:27.25：✕ 左上、中央小標＋頁點、右上時間）
-    private var onStep: Bool { if case .step = screen { return true }; return false }
-    // 2.0 promo：食材頁也自己畫頂列（影片：✕、中央食譜名＋「食材」、右上時間）；計時器全螢幕不要外殼的鈕
+    // 2.0 r2（R1）：封面頁是照片滿版——外殼的返回鈕與時間不畫，自己畫白色的（豁免）；計時器全螢幕不要外殼的鈕（豁免：計時器）。
+    // 2026-11-12 外殼版面規格（shell-layout.md 第 3 節）：食材、步驟是一般的下一層頁——外殼的返回鈕與時間、App 畫大標題
+    //（原本照影片 v1 00:27.25 自己畫中央小標＋頁點的頂列）
     private var ownsTopBar: Bool {
-        switch screen { case .overview, .ingredients, .step, .timer: return true; default: return false }
+        switch screen { case .overview, .timer: return true; default: return false }
     }
     var showsCloseButton: Bool { !ownsTopBar }
     var showsClock: Bool { !ownsTopBar }
@@ -244,14 +240,15 @@ final class RecipesApp: PetApp {
         guard hasRecents else {
             HPComponents.emptyState(g, face, symbol: "fork.knife", tint: Self.accent, title: L("recipe.start", "开始烹饪"), body: hint, top: 260)
             HPComponents.filledButton(g, face, pb, L("recipe.home.paste", "从剪贴板打开"), tint: Self.accent, symbol: "doc.on.clipboard")
+            AppUI.title(g, face, title)   // 下一層頁首一定有標題（shell-layout.md 第 3 節）
             return
         }
         // 清單（捲到上面時在分區標題底下淡出）
         maxScroll = max(0, CGFloat(shelf.items.count) * 120 - (Self.recentsBottom - Self.recentsTop))
         scroll = min(scroll, maxScroll)
         g.saveGState(); g.clip(to: CGRect(x: 0, y: Self.recentsTop, width: 1024, height: Self.recentsBottom - Self.recentsTop))
-        let card = CGRect(x: 64, y: Self.recentsTop - scroll, width: 896, height: CGFloat(shelf.items.count) * 120)
-        HPComponents.groupCard(g, card, radius: 52)
+        let card = CGRect(x: HPGrid.Content.leading, y: Self.recentsTop - scroll, width: HPGrid.Content.width, height: CGFloat(shelf.items.count) * 120)
+        HPComponents.groupCard(g, card)
         for (i, r) in shelf.items.enumerated() {
             let row = Self.recentRow(i).offsetBy(dx: 0, dy: -scroll)
             guard row.maxY > Self.recentsTop, row.minY < Self.recentsBottom else { continue }
@@ -365,7 +362,7 @@ final class RecipesApp: PetApp {
     // 食材（2.0 promo，照宣傳片 3.0–5.6 s）：頂列＝✕＋中央食譜名、底下小字「食材」＋右上時間；
     // 每一行是自己一張圓角卡（不是分組清單），左邊空心圈、份量灰字；勾了變實心圈＋整行變淡加刪除線。捲到最後是「開始烹飪」
     private static let ingFont = HPComponents.sf(40, weight: .regular)
-    private static let ingX: CGFloat = 64, ingW: CGFloat = 896, ingTextX: CGFloat = 168, ingGap: CGFloat = 14
+    private static let ingX: CGFloat = HPGrid.Content.leading, ingW: CGFloat = HPGrid.Content.width, ingTextX: CGFloat = HPGrid.Content.leading + 104, ingGap: CGFloat = 14
     private static let ingTop: CGFloat = 226, ingBottom: CGFloat = 1024
     private func ingredientLines(_ r: Recipe) -> [[String]] {
         r.ingredients.map { line in
@@ -445,17 +442,15 @@ final class RecipesApp: PetApp {
             HPComponents.filledButton(g, face, b, L("recipe.start", "开始烹饪"), tint: Self.accent, symbol: "frying.pan")
         }
         g.restoreGState()
-        // 捲到頂列底下時柔邊；頂列：✕、中央食譜名＋「食材」、右上時間
+        // 捲到頂列底下時柔邊；頁首：外殼的返回鈕與時間＋大標題「食材」
         HPComponents.topFade(g, Self.bg, solidTo: 190, height: 30)
-        HPComponents.pageTopBar(g, face, title: r.title, pages: 1, page: 0)
-        let sf = HPComponents.sf(28, weight: .regular)
-        HPComponents.center(g, face, L("recipe.ingredients", "食材"), sf, y: HPTokens.Media.pageTitleBaseline + 36, HPComponents.secondary)
+        AppUI.title(g, face, L("recipe.ingredients", "食材"))
     }
 
 
     // 步驟（R5：內文 56–60；影片 v1 O-043：SF Pro Text Regular ≈62 px、行高 1.15、左右邊距 0.10 W）
     private static let stepSizes: [CGFloat] = [60, 56, 50, 44, 40]
-    private static let textTop: CGFloat = 240, textBottom: CGFloat = 800, textX: CGFloat = 102
+    private static let textTop: CGFloat = 240, textBottom: CGFloat = 800, textX: CGFloat = HPGrid.Content.leading
 
     /// 這一步的字：從大到小挑第一個放得下的字級；都放不下就用最小的、可以滾
     private func stepLayout(_ text: String) -> (font: NSFont, lines: [String], lineHeight: CGFloat) {
@@ -497,9 +492,9 @@ final class RecipesApp: PetApp {
     private func renderStep(_ g: CGContext, _ face: Face, _ i: Int, _ now: Double) {
         guard let r = recipe, r.steps.indices.contains(i) else { return }
         let step = r.steps[i]
-        // R15：頂列＝✕、中央小標（食譜名）＋頁點、右上時間（影片 v1 00:27.25 O-042）
+        // 頁首：外殼的返回鈕與時間＋大標題（食譜名）；第幾步寫在內容第一行
         let n = r.steps.count
-        HPComponents.pageTopBar(g, face, title: r.title, pages: n, page: i)
+        AppUI.title(g, face, r.title)
         // 「步骤 i／n」灰字，分段名（有的話）接在後面
         var head = String(format: L("recipe.step", "步骤 %d／%d"), i + 1, n)
         if let sec = step.section { head += " · " + sec }
@@ -684,7 +679,6 @@ final class RecipesApp: PetApp {
             if hit(b[1]) { beginCoverStart(now: now); return true }
             return false
         case .ingredients:
-            if HPComponents.hitMediaBack(p) { go(.overview, now: now, kind: .blurFade); return true }
             guard let r = recipe, p.y >= 196 else { return false }
             let rows = ingredientRows(r).map { $0.offsetBy(dx: 0, dy: -scroll) }
             if let b = rows.last, hit(b) { go(.step(0), now: now, kind: .slideFromRight); return true }
@@ -704,7 +698,6 @@ final class RecipesApp: PetApp {
             guard let r = recipe, r.steps.indices.contains(i) else { return false }
             let dur = StepDuration.find(in: r.steps[i].text)
             let b = stepButtonRects(dur != nil)
-            if HPComponents.hitMediaBack(p) { go(.overview, now: now, kind: .blurFade); return true }
             if hit(b.prev) { go(i == 0 ? .overview : .step(i - 1), now: now, kind: i == 0 ? .blurFade : .slideFromLeft); return true }
             if hit(b.next) { go(i >= r.steps.count - 1 ? .overview : .step(i + 1), now: now, kind: i >= r.steps.count - 1 ? .blurFade : .slideFromRight); return true }
             if let tb = b.timer, dur != nil, hit(tb) {
@@ -774,8 +767,6 @@ final class RecipesApp: PetApp {
         stepTimers[i] = Shell.timers.add(seconds: max(1, total - elapsed), label: timerLabel(i), now: TimersApp.wallNow, total: total)
         Shell.reconcileTimers(face, now: CACurrentMediaTime())
     }
-    /// 示範：直接換頁（走正式的過場）
-    func demoGo(ingredients: Bool, now: Double = CACurrentMediaTime()) { go(ingredients ? .ingredients : .overview, now: now, kind: .blurFade) }
     func demoShowTimer(step i: Int, now: Double = CACurrentMediaTime()) { go(.timer(i), now: now, kind: .blurFade) }
     /// 示範：食材第 i 行現在在畫布上的哪裡（手指點那裡）
     func demoIngredientRow(_ i: Int) -> CGRect? {

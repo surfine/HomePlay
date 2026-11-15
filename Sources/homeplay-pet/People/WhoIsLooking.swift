@@ -33,7 +33,6 @@ final class WhoIsLooking {
     private(set) var contradictsOwner = false
     /// 主人的 iPhone 在不在旁边。STUB：还没接（接收器的蓝牙／同 Wi-Fi 信号以后接在这里）；nil 表示不知道。
     var phonePresence: (() -> Bool)?
-    var onViewerChange: ((Viewer) -> Void)?
 
     var personalContentAllowed: Bool {
         Self.gate(viewer: viewer, contradictsOwner: contradictsOwner, requirePhone: Self.requireOwnerPhone, phonePresent: phonePresence?())
@@ -160,7 +159,6 @@ final class WhoIsLooking {
             viewer = new
             // 只记「换了一类人」，不记名字
             log("people: viewer -> \(new.logLabel)")
-            onViewerChange?(new)
             if let id = new.personID, let p = PeopleRegistry.shared.person(id) { PeopleOverlay.greet(p) }
         }
     }

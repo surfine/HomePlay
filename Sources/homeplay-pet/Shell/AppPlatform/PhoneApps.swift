@@ -15,6 +15,9 @@ struct PhoneCarPlayEntry: Equatable {
     var name: String
     var url: String
     var path: String
+    /// 佔位 App 的 Info.plist 裡的 LSApplicationCategoryType（例如 public.app-category.travel）；沒有就是 nil。
+    /// App 資料庫拿它把 iPhone 的 App 混進各分類（Shell/SpringBoard/SBLibraryCategories.swift）
+    var genre: String? = nil
 }
 
 enum PhoneCarPlayCatalog {
@@ -39,11 +42,12 @@ enum PhoneCarPlayCatalog {
     static func entry(path: String, info: [String: Any], entitlements: [String: Any]) -> PhoneCarPlayEntry? {
         guard let bid = info["CFBundleIdentifier"] as? String else { return nil }
         let name = ((path as NSString).lastPathComponent as NSString).deletingPathExtension
-        if let u = systemURLs[bid] { return PhoneCarPlayEntry(bundleID: bid, name: name, url: u, path: path) }
+        let genre = info["LSApplicationCategoryType"] as? String
+        if let u = systemURLs[bid] { return PhoneCarPlayEntry(bundleID: bid, name: name, url: u, path: path, genre: genre) }
         guard entitlements.keys.contains(where: { $0.hasPrefix("com.apple.developer.carplay-") }) else { return nil }
         let schemes = (info["CFBundleURLTypes"] as? [[String: Any]] ?? []).flatMap { $0["CFBundleURLSchemes"] as? [String] ?? [] }
         guard let s = pickScheme(schemes, bundleID: bid, name: name) else { return nil }
-        return PhoneCarPlayEntry(bundleID: bid, name: name, url: s + "://", path: path)
+        return PhoneCarPlayEntry(bundleID: bid, name: name, url: s + "://", path: path, genre: genre)
     }
 
     /// appplaceholdersyncd 的佔位資料夾（找容器的 metadata 認名字，不寫死 UUID）
@@ -215,12 +219,14 @@ enum PhoneIconCache {
         return img
     }
 
+    /// 徽章直徑佔圖示的比例：四分之一，貼右下角（2026-11-12 定案；原本 0.36）
+    static let badgeRatio: CGFloat = 0.25
     /// 乾淨圖示＋右下角小小的車（像 iPhone 鏡像的 App 角標：一眼看得出是開在 iPhone／CarPlay 上）
     static func badge(_ clean: CGImage, px: Int = 256) -> CGImage? {
         draw(px) { r in
             let s = r.width
             NSGraphicsContext.current?.cgContext.draw(clean, in: r)
-            let d = s * 0.36, b = NSRect(x: s - d - s * 0.02, y: s * 0.02, width: d, height: d)
+            let d = s * badgeRatio, b = NSRect(x: s - d - s * 0.02, y: s * 0.02, width: d, height: d)
             NSColor.black.withAlphaComponent(0.85).setFill(); NSBezierPath(ovalIn: b).fill()
             NSColor.white.setStroke(); let ring = NSBezierPath(ovalIn: b.insetBy(dx: 1.5, dy: 1.5)); ring.lineWidth = s * 0.012; ring.stroke()
             if let car = NSImage(systemSymbolName: "car.fill", accessibilityDescription: nil)?
@@ -324,14 +330,17 @@ enum PhoneAppsSelfTest {
         ud.set(false, forKey: PhoneAppProvider.showKey)
         check(p.apps(viewer: nil).isEmpty && p.app("iphone:com.a") != nil, "iPhone App：「顯示 iPhone App」關掉就從資源庫與搜尋消失，主畫面上的照常認得")   // l10n-ignore
         ud.set(true, forKey: PhoneAppProvider.showKey)
-        if let music = AppRegistry.app("music") {
-            let secs = SBUI.librarySections(p.apps(viewer: nil) + [music])
-            let phone = secs.first { $0.title == L("sb.library.iphone", "iPhone") }
-            let own = secs.filter { $0.title != L("sb.library.iphone", "iPhone") }
-            check(phone?.apps.map(\.title) == ["Alpha", "Bravo"] && own.contains { $0.apps.contains { $0.id == "music" } }
-                  && own.allSatisfy { $0.title != nil },
-                  "iPhone App：資源庫另一區「iPhone」，照名字排；自己的 App 照分類")   // l10n-ignore
-            check(SBUI.librarySections([music]).count == 1, "iPhone App：沒有 iPhone App 時不出現分類")   // l10n-ignore
+        if let music = AppRegistry.app("music"), let podcasts = AppRegistry.app("podcasts") {
+            // 2026-11-12 定案：iPhone 的 App 混進各分類（有 genre 的照 genre，沒有的進「其他」），用徽章區分，不另成一區。
+            // 分類至少 3 個 App 才自成一區（shell-layout.md 第 7 節），所以娛樂這一類放三個
+            let ec = PhoneCarPlayEntry(bundleID: "com.c", name: "Charlie", url: "c://", path: "/x/com.c-1.0/Charlie.app", genre: "public.app-category.music")
+            let mixed = SBUI.librarySections(p.apps(viewer: nil) + [PhoneCarPlayApp(ec), music, podcasts])
+            let other = mixed.first { $0.title == SBLibraryCategory.other.title }
+            let ent = mixed.first { $0.title == SBLibraryCategory.entertainment.title }
+            check(other?.apps.map(\.title) == ["Alpha", "Bravo"] && ent?.apps.map(\.id).sorted() == ["iphone:com.c", "music", "podcasts"]
+                  && !mixed.contains { $0.title == L("sb.library.iphone", "iPhone") },
+                  "iPhone App：混進各分類（音樂類進娛樂、沒有類別的進其他），不另成一區")   // l10n-ignore
+            check(SBUI.librarySections([music]).count == 1 && PhoneIconCache.badgeRatio == 0.25, "iPhone App：沒有 iPhone App 時只有自己的分類；徽章是圖示的四分之一")   // l10n-ignore
         }
         check(PhoneIconCache.key(eb) == "com.b-2.0" && SBAX.appLabel(p.apps(viewer: nil)[0]).hasSuffix(L("sb.ax.openInCarPlay", "（在 CarPlay 打开）")),
               "iPhone App：圖示快取照 <bundle>-<版本>；VoiceOver 念「在 CarPlay 打开」")   // l10n-ignore

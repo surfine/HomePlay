@@ -332,8 +332,6 @@ enum HomeAppModel {
         func acc(_ id: String, _ name: String, _ room: String, _ cat: String, _ cs: [HomeCharacteristic], camera: Bool = false) -> HomeAccessory {
             HomeAccessory(id: id, name: name, home: "h1", room: room, category: "x", categoryName: cat, reachable: true, characteristics: cs, camera: camera ? true : nil)
         }
-        let living = L("homemod.demo.livingRoom", "客厅")
-        _ = living
         let rooms = [HomeRoom(id: "r1", name: L("home.demo.living", "客厅"), home: "h1"), HomeRoom(id: "r2", name: L("home.demo.bedroom", "卧室"), home: "h1"),
                      HomeRoom(id: "r3", name: L("home.demo.entry", "玄关"), home: "h1"), HomeRoom(id: "r4", name: L("home.demo.kitchen", "厨房"), home: "h1")]
         let accs = [

@@ -7,7 +7,7 @@ private typealias M = DemoMath
 private let deg = DemoMath.deg
 
 enum IllusScene: Hashable {
-    case pinch, three, force, facing, facingFront, follow, charge, onTop, light
+    case pinch, three, force, facing, facingFront, follow, charge, onTop
     case shortcut, clio, people, devices      // 家庭、ClioTalk、家人、iPhone 與 iPad 的頁首（SettingsPageDemos.swift）
     case gesture(GestureKind, IntroInput)     // 手勢頁：選中哪一行就播哪一個（SettingsGestureDemos.swift）
 
@@ -17,7 +17,7 @@ enum IllusScene: Hashable {
         case .three: return 4.2
         case .force, .onTop: return 4.4
         case .facing, .facingFront: return 4.8
-        case .follow, .charge, .light: return 6.0
+        case .follow, .charge: return 6.0
         case .shortcut: return 6.4
         case .clio: return 5.2
         case .people: return 5.0
@@ -35,7 +35,6 @@ enum IllusScene: Hashable {
         case .follow: return 1.7
         case .charge: return 2.2
         case .onTop: return 1.4
-        case .light: return 2.3
         case .shortcut: return 4.6
         case .clio: return 1.8
         case .people: return 2.4
@@ -54,7 +53,6 @@ enum IllusScene: Hashable {
         case .follow: Self.followL(g, p, t)
         case .charge: Self.chargeL(g, p, t)
         case .onTop: Self.onTopL(g, p, t)
-        case .light: Self.lightL(g, p, t)
         case .shortcut: PageDemo.shortcutL(g, p, t)
         case .clio: PageDemo.clioL(g, p, t)
         case .people: PageDemo.peopleL(g, p, t)
@@ -72,7 +70,6 @@ enum IllusScene: Hashable {
         case .follow: Self.followR(g, p, t)
         case .charge: Self.chargeR(g, p, t)
         case .onTop: Self.onTopR(g, p, t)
-        case .light: Self.lightR(g, p, t)
         case .shortcut: PageDemo.shortcutR(g, p, t)
         case .clio: PageDemo.clioR(g, p, t)
         case .people: PageDemo.peopleR(g, p, t)
@@ -293,73 +290,5 @@ enum IllusScene: Hashable {
         let wx = Track(-110, [(0.4, 0, .glide), (2.6, -110, .glide)])(t)
         OutPanel.window(g, 40 + wx, 18, 104, 76); OutPanel.sun(g, 176, 22, 6)
         FlatHome(x: 136, y: 102, S: 44, yaw: -10 * deg, blink: M.blink(t, at: 3.6)).draw(g, p)
-    }
-
-    // MARK: 跟著房間的光
-
-    private static let dayPhase = Track(0, [(0.5, 1, .walk), (2.6, 2, .walk), (4.3, 0, .walk)])
-    private static func lightL(_ g: GraphicsContext, _ p: IllusPalette, _ t: Double) {
-        let ph = dayPhase(t)
-        InPanel.stroke(g, DemoShape.line([DemoShape.pt(24, 96), DemoShape.pt(176, 96)]), p.line)
-        g.stroke(Path { q in q.addArc(center: CGPoint(x: 100, y: 96), radius: 62, startAngle: .radians(.pi), endAngle: .zero, clockwise: false) },
-                 with: .color(p.line2), style: StrokeStyle(lineWidth: 1.6, lineCap: .round, dash: [2, 5]))
-        let a = Double.pi + 0.12 + M.clamp(ph / 1.2) * .pi * 0.76
-        let sun = CGPoint(x: 100 + 62 * cos(a), y: 96 + 62 * sin(a))
-        let sunA = M.clamp(1.5 - ph), moonA = M.clamp(ph - 1.2)
-        if sunA > 0.01 {
-            InPanel.stroke(g, DemoShape.circle(sun, 8), p.dot.opacity(sunA))
-            InPanel.stroke(g, Path { q in
-                for i in 0..<8 { let an = Double(i) * .pi / 4
-                    q.move(to: CGPoint(x: sun.x + cos(an) * 12, y: sun.y + sin(an) * 12)); q.addLine(to: CGPoint(x: sun.x + cos(an) * 15, y: sun.y + sin(an) * 15)) }
-            }, p.dot.opacity(sunA), 2)
-        }
-        if moonA > 0.01 {
-            InPanel.stroke(g, Path { q in
-                q.addArc(center: CGPoint(x: 70, y: 50), radius: 9, startAngle: .radians(0.35 * .pi), endAngle: .radians(1.65 * .pi), clockwise: false)
-                q.addArc(center: CGPoint(x: 74, y: 46), radius: 7, startAngle: .radians(1.5 * .pi), endAngle: .radians(0.5 * .pi), clockwise: true)
-            }, p.dot.opacity(moonA), 2.2)
-        }
-        InPanel.stroke(g, DemoShape.line([DemoShape.pt(150, 96), DemoShape.pt(150, 70)]), p.line)
-        let shade = DemoShape.path([DemoShape.pt(140, 70), DemoShape.pt(160, 70), DemoShape.pt(155, 58), DemoShape.pt(145, 58)])
-        if moonA > 0.01 { g.fill(shade, with: .color(Ink.sun.opacity(moonA))) }
-        InPanel.stroke(g, shade, p.line)
-    }
-
-    private struct Room { var wall: [Double]; var sky0: [Double]; var sky1: [Double]; var tint: [Double]; var dim: Double }
-    private static let rooms = [
-        Room(wall: [226, 236, 248], sky0: [130, 191, 246], sky1: [214, 234, 255], tint: [255, 255, 255, 0], dim: 0),
-        Room(wall: [255, 214, 170], sky0: [255, 120, 98], sky1: [255, 196, 120], tint: [255, 150, 80, 0.18], dim: 0.05),
-        Room(wall: [44, 48, 86], sky0: [20, 26, 60], sky1: [70, 56, 130], tint: [255, 186, 120, 0.14], dim: 0.4)]
-    private static func lightR(_ g: GraphicsContext, _ p: IllusPalette, _ t: Double) {
-        let ph = dayPhase(t)
-        let i = min(1, Int(M.clamp(ph, 0, 1.999))), f = M.clamp(ph - Double(i))
-        let A = rooms[i], B = rooms[i + 1]
-        func mix(_ a: [Double], _ b: [Double]) -> [Double] { zip(a, b).map { M.lerp($0, $1, f) } }
-        func rgb(_ c: [Double], _ a: Double = 1) -> Color { Color(.sRGB, red: c[0] / 255, green: c[1] / 255, blue: c[2] / 255, opacity: a) }
-        let wall = mix(A.wall, B.wall), s0 = mix(A.sky0, B.sky0), s1 = mix(A.sky1, B.sky1), ti = mix(A.tint, B.tint)
-        g.fill(Illus.full, with: .color(rgb(wall)))
-        g.fill(Path(CGRect(x: 0, y: 100, width: Illus.W, height: 25)), with: .color(.black.opacity(0.08)))
-        let win = DemoShape.round(126, 16, 56, 60, 6)
-        do {
-            var c = g
-            c.clip(to: win)
-            c.fill(win, with: .linearGradient(Gradient(colors: [rgb(s0), rgb(s1)]), startPoint: CGPoint(x: 0, y: 16), endPoint: CGPoint(x: 0, y: 76)))
-            c.fill(DemoShape.circle(146 + 14 * M.clamp(ph), 34 + 30 * M.clamp(ph), 9), with: .color(.demo(0xFFE08A, M.clamp(1.4 - ph))))
-            let moonA = M.clamp(ph - 1.3)
-            if moonA > 0.01 {
-                c.fill(DemoShape.circle(166, 30, 5), with: .color(.demo(0xF0F2FF, moonA)))
-                c.fill(DemoShape.circle(168.5, 28.5, 4.3), with: .color(rgb(s0)))
-            }
-        }
-        g.fill(Path(CGRect(x: 153, y: 16, width: 2, height: 60)), with: .color(.white.opacity(0.75)))
-        let night = M.clamp(ph - 1)
-        g.fill(Path(CGRect(x: 30, y: 70, width: 3, height: 30)), with: .color(Ink.navy))
-        g.fill(DemoShape.path([DemoShape.pt(20, 70), DemoShape.pt(43, 70), DemoShape.pt(38, 56), DemoShape.pt(25, 56)]), with: .color(night > 0.01 ? Ink.sun : .white))
-        if night > 0.01 {
-            g.fill(Illus.full, with: .radialGradient(Gradient(colors: [Ink.sun.opacity(0.45 * night), Ink.sun.opacity(0)]),
-                                                     center: CGPoint(x: 31, y: 72), startRadius: 0, endRadius: 70))
-        }
-        FlatHome(x: 86, y: 104, S: 58, yaw: 8 * deg, blink: M.blink(t, at: 4.8), dim: M.lerp(A.dim, B.dim, f),
-                 tint: ti[3] > 0.005 ? rgb(ti, ti[3]) : nil, room: true).draw(g, p)
     }
 }

@@ -191,14 +191,6 @@ extension Face {
         }
     }
 
-    /// 主畫面的「下一個行程」在訪客時：只畫鎖與一句話
-    func drawGuestUpNext(_ g: CGContext, _ r: CGRect) {
-        drawSymbol(g, "lock.fill", in: CGRect(x: r.minX + 34, y: r.minY + 36, width: 34, height: 40), color: NSColor.white.withAlphaComponent(0.78))
-        drawLeft(g, L("guest.title", "访客模式"), font: FaceType.sf(28, .bold, mono: false), x: r.minX + 80, y: r.minY + 66, color: NSColor.white.withAlphaComponent(0.78))
-        let bf = FaceType.sf(36, .bold, mono: false)
-        drawLeft(g, Face.clipped(L("guest.upNextHidden", "行程已隐藏"), bf, r.width - 68), font: bf, x: r.minX + 34, y: r.minY + 124, color: .white)
-    }
-
     /// 鎖住的個人 App：深色底＋大圖示＋「需要主人」
     /// 10-grid：垂直節奏——圖示 236…436，標題基線 436＋96、原因基線再＋64（HPGrid.scale）
     static let lockIconY: CGFloat = 236

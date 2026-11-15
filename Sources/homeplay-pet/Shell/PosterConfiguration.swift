@@ -216,6 +216,24 @@ extension PosterConfiguration.Item.Kind {
             self = .widget(k)
         }
     }
+
+    /// --poster items 寫法的反向（--poster-list 印格子用）
+    var tokenName: String {
+        switch self {
+        case .placeholder: return "placeholder"
+        case .activity: return "activity"
+        case .widget(let k): return k.rawValue
+        }
+    }
+
+    /// W3 九格編輯器的循環順序：佔位 → Live Activity → 畫得出來的小工具（posterTile 支援的六種）→ 佔位。
+    /// 不列畫不出來的小工具種類（編了永遠不顯示，違反「有資料才畫」）。純函式，selftest 釘住。
+    static let slotWidgetKinds: [SBWidgetKind] = [.weather, .calendar, .timers, .alarms, .music, .batteries]
+    static func nextSlotKind(_ k: Self) -> Self {
+        let order: [Self] = [.placeholder, .activity] + slotWidgetKinds.map { .widget($0) }
+        guard let i = order.firstIndex(of: k) else { return .placeholder }
+        return order[(i + 1) % order.count]
+    }
 }
 
 // MARK: - 頁首日期（header.dateFormat）
@@ -439,6 +457,19 @@ struct PosterLibrary: Equatable, Codable {
         items[index] = c
     }
 
+    /// W2 排序：把第 from 張移到 to（畫廊編輯器的 ‹ ›）。index 跟著「目前那張」走：
+    /// 移的是自己＝index 跟過去；別人往右越過它＝−1、往左越過它＝＋1；沒越過就不動。純函式，selftest 釘四種情形。
+    @discardableResult
+    mutating func move(from: Int, to: Int) -> Bool {
+        guard items.indices.contains(from), items.indices.contains(to), from != to else { return false }
+        let moved = items.remove(at: from)
+        items.insert(moved, at: to)
+        if from == index { index = to }
+        else if from < index, to >= index { index -= 1 }
+        else if from > index, to <= index { index += 1 }
+        return true
+    }
+
     /// 舊檔沒有錶面種類時補上，不改 index。已經認得的不覆蓋。
     func assigningFaceKind(_ raw: String) -> PosterLibrary {
         var l = self
@@ -447,6 +478,23 @@ struct PosterLibrary: Equatable, Codable {
             l.items[i].extras.faceKind = fallback
         }
         return l
+    }
+
+    /// W1 遷移（handoff 2026-11-10）：舊使用者只有 1 張海報，但習慣在錶面上滑 12 款——
+    /// 把 FaceStyle.lineup 各建一張（Look／字體／數字沿用目前那張，faceKind 各不同），
+    /// index 指到「當時那張」（這張的錶面種類在陣容裡的位置）；其他張不帶名字（用種類名）。
+    /// 純函式：張數、順序、index、沿用欄位＝可 selftest。不是 1 張就原樣回去。
+    func expandedToLineup() -> PosterLibrary {
+        guard items.count == 1 else { return self }
+        let base = items[0]
+        let idx = FaceStyle.lineup.firstIndex(of: base.galleryFace) ?? 0
+        let out = FaceStyle.lineup.enumerated().map { i, st -> PosterConfiguration in
+            var c = base
+            c.extras.faceKind = st.rawValue
+            if i != idx { c.extras.displayName = "" }   // 只有「當時那張」留著原本的名字
+            return c
+        }
+        return PosterLibrary(items: out, index: idx)
     }
 }
 
@@ -459,22 +507,37 @@ enum FaceGallery {
 
 enum PosterLibraryStore {
     static let defaultsKey = "HomePlayPosterLibrary"
+    /// W1 遷移旗標：1 張→12 張做過一次就不再跑（PosterLibrary.expandedToLineup）
+    static let migration12Key = "HomePlayFaceLibrary12"
     nonisolated(unsafe) private static var lib: PosterLibrary = loadFromDisk()
 
     static var all: [PosterConfiguration] { lib.items }
     static var index: Int { lib.index }
     static var current: PosterConfiguration { lib.current }
 
-    private static func loadFromDisk() -> PosterLibrary {
-        let face = UserDefaults.standard.string(forKey: FaceStyle.defaultsKey) ?? FaceStyle.island.rawValue
-        if let data = UserDefaults.standard.data(forKey: defaultsKey),
-           let l = try? JSONDecoder().decode(PosterLibrary.self, from: data) {
-            return l.assigningFaceKind(face)   // 舊檔缺錶面種類：補成目前這張，不改 index
+    /// 讀檔＋一次性遷移（可注入 suite 給 selftest；正式路徑用 UserDefaults.standard）。
+    /// 遷移觸發＝1 張＋沒有旗標＋「升級上來的人」（有儲存的 library、或任何舊鍵）——
+    /// 全新使用者不建 12 張（不留偏好痕跡）；遷移要在讀檔路徑做，不在畫面層（handoff 陷阱 3）。
+    static func loadLibrary(_ d: UserDefaults) -> PosterLibrary {
+        let face = d.string(forKey: FaceStyle.defaultsKey) ?? FaceStyle.island.rawValue
+        let stored = d.data(forKey: defaultsKey)
+        var lib: PosterLibrary
+        if let stored, let l = try? JSONDecoder().decode(PosterLibrary.self, from: stored) {
+            lib = l.assigningFaceKind(face)   // 舊檔缺錶面種類：補成目前這張，不改 index
+        } else {
+            // 舊版只有一張臉：現在這份就是第一張（不寫檔，等真的新增／切換才落盤）
+            lib = PosterLibrary(items: [PosterStore.load(d)], index: 0).assigningFaceKind(face)   // 直接讀舊鍵，避免 current ↔ library 循環初始化
         }
-        // 舊版只有一張臉：現在這份就是第一張（不寫檔，等真的新增／切換才落盤）
-        let one = PosterLibrary(items: [PosterStore.load()], index: 0).assigningFaceKind(face)
-        return one   // 直接讀舊鍵，避免 current ↔ library 循環初始化
+        if lib.items.count == 1, !d.bool(forKey: migration12Key),
+           stored != nil || d.object(forKey: FaceStyle.defaultsKey) != nil || PosterStore.legacyKeys.contains(where: { d.object(forKey: $0) != nil }) {
+            lib = lib.expandedToLineup()
+            d.set(true, forKey: migration12Key)
+            if let data = try? JSONEncoder().encode(lib) { d.set(data, forKey: defaultsKey) }
+        }
+        return lib
     }
+
+    private static func loadFromDisk() -> PosterLibrary { loadLibrary(UserDefaults.standard) }
 
     private static func persist() {
         if let data = try? JSONEncoder().encode(lib) { UserDefaults.standard.set(data, forKey: defaultsKey) }
@@ -489,10 +552,17 @@ enum PosterLibraryStore {
         if persistChanges { persist() }
     }
     @discardableResult static func select(_ i: Int) -> Bool { let ok = lib.select(i); if ok { persist() }; return ok }
+    /// 快照用：只換記憶體裡的 index，不落盤（--poster-select／--face-drag 的換頁路徑，快照不寫偏好）
+    @discardableResult static func selectInMemory(_ i: Int) -> Bool { lib.select(i) }
     @discardableResult static func add(_ c: PosterConfiguration) -> Int { let i = lib.add(c); persist(); return i }
     @discardableResult static func remove(_ i: Int) -> Bool { let ok = lib.remove(i); if ok { persist() }; return ok }
+    /// W2 排序：移動後 index 跟著目前那張走（畫廊編輯器）
+    @discardableResult static func move(from: Int, to: Int) -> Bool { let ok = lib.move(from: from, to: to); if ok { persist() }; return ok }
     static var listText: String {
-        lib.items.enumerated().map { "[\($0.offset)] \($0.element.look) · \($0.element.typeface.rawValue) · \($0.element.style.rawValue)\($0.offset == lib.index ? "  ←" : "")" }.joined(separator: "\n")
+        lib.items.enumerated().map { i, c in
+            let items = c.items.isEmpty ? "" : " · items=" + c.items.map(\.kind.tokenName).joined(separator: "|")
+            return "[\(i)] \(c.galleryName) · \(c.look) · \(c.typeface.rawValue) · \(c.style.rawValue) · \(c.galleryFace.rawValue)\(items)\(i == lib.index ? "  ←" : "")"
+        }.joined(separator: "\n")
     }
 }
 
@@ -561,6 +631,30 @@ enum PosterConfigurationSelfTest {
               "多臉：刪掉目前那張會退回前一張")   // l10n-ignore
         var one = PosterLibrary()
         check(!one.remove(0) && one.items.count == 1, "多臉：最後一張不能刪（官方：刪臉不會刪 App 或資料）")   // l10n-ignore
+
+        // W2 排序：move 的四種情形——移自己、別人往右越過、別人往左越過、頭尾與不合法
+        func lib3(_ names: [String]) -> PosterLibrary {
+            PosterLibrary(items: names.map { n in var c = P(); c.look = n; return c }, index: 1)
+        }
+        var mSelf = lib3(["A", "B", "C"])   // 目前＝B；移自己往左
+        check(mSelf.move(from: 1, to: 0) && mSelf.items.map(\.look) == ["B", "A", "C"] && mSelf.index == 0,
+              "多臉排序：移自己，index 跟著走")   // l10n-ignore
+        var mCrossR = lib3(["A", "B", "C"])   // A 從左邊移到右邊，越過目前的 B
+        check(mCrossR.move(from: 0, to: 2) && mCrossR.items.map(\.look) == ["B", "C", "A"] && mCrossR.index == 0,
+              "多臉排序：別人往右越過目前那張 → index−1")   // l10n-ignore
+        var mCrossL = lib3(["A", "B", "C"])   // C 從右邊移到左邊，越過目前的 B
+        check(mCrossL.move(from: 2, to: 0) && mCrossL.items.map(\.look) == ["C", "A", "B"] && mCrossL.index == 2,
+              "多臉排序：別人往左越過目前那張 → index＋1")   // l10n-ignore
+        var mSwap = lib3(["A", "B", "C"])   // A 移到 B 的位置＝交換，也算越過
+        check(mSwap.move(from: 0, to: 1) && mSwap.items.map(\.look) == ["B", "A", "C"] && mSwap.index == 0,
+              "多臉排序：移到目前那張的位置（交換）也算越過 → index−1")   // l10n-ignore
+        var mNoCross = lib3(["A", "B", "C"]); mNoCross.index = 2   // A 在 index 右側的同側挪（沒越過目前的 C）
+        check(mNoCross.move(from: 0, to: 1) && mNoCross.items.map(\.look) == ["B", "A", "C"] && mNoCross.index == 2
+              && !mNoCross.move(from: 2, to: 2) && !mNoCross.move(from: -1, to: 0) && !mNoCross.move(from: 0, to: 9),
+              "多臉排序：沒越過 index 不動；from==to 與越界不動作")   // l10n-ignore
+        var mEdge = lib3(["A", "B", "C"]); mEdge.index = 2   // 頭尾：末張移到最前（移自己）
+        check(mEdge.move(from: 2, to: 0) && mEdge.items.map(\.look) == ["C", "A", "B"] && mEdge.index == 0,
+              "多臉排序：末張移到最前，index 跟到 0")   // l10n-ignore
         check((try? enc.encode(lib)).flatMap { try? dec.decode(PosterLibrary.self, from: $0) } == lib,
               "多臉：整疊編碼再解碼原樣回來")   // l10n-ignore
 
@@ -579,6 +673,57 @@ enum PosterConfigurationSelfTest {
         named.extras.faceKind = "photos"
         check(named.galleryName == "Snoopy" && named.galleryFace == .photos && filled.items[0].galleryFace == .modular,
               "多臉：畫廊名字用顯示名，沒有就用錶面種類")   // l10n-ignore
+
+        // W1 遷移（handoff 2026-11-10）：舊使用者只有 1 張但習慣滑 12 款——各建一張，index 指到當時那張
+        var mine = P(); mine.look = "Mocha"; mine.extras.displayName = "Snoopy"; mine.extras.faceKind = "modular"
+        let exp = PosterLibrary(items: [mine], index: 0).expandedToLineup()
+        let midx = FaceStyle.lineup.firstIndex(of: .modular)!
+        check(exp.items.count == FaceStyle.lineup.count && exp.index == midx
+              && zip(exp.items, FaceStyle.lineup).allSatisfy { $0.extras.faceKind == $1.rawValue }
+              && exp.items.allSatisfy { $0.look == "Mocha" && $0.typeface == mine.typeface && $0.numerals == mine.numerals }
+              && exp.items[midx].extras.displayName == "Snoopy" && exp.items.filter { !$0.extras.displayName.isEmpty }.count == 1,
+              "多臉遷移：1 張 → 陣容 12 張（順序＝FaceStyle.lineup、Look／字體／數字沿用、只有當時那張留名字）")   // l10n-ignore
+        check(PosterLibrary(items: [mine, mine], index: 0).expandedToLineup().items.count == 2, "多臉遷移：不是 1 張就原樣回去")   // l10n-ignore
+
+        // W3 九格編輯器：循環順序＝佔位 → 即時動態 → 六種畫得出來的小工具 → 回佔位（共 8 站）；列表外的種類回佔位
+        typealias IK = PosterConfiguration.Item.Kind
+        var k = IK.placeholder
+        var seen: [IK] = []
+        for _ in 0..<8 { seen.append(k); k = IK.nextSlotKind(k) }
+        check(seen.count == 8 && seen[0] == .placeholder && seen[1] == .activity && seen[2] == .widget(.weather)
+              && seen[7] == .widget(.batteries) && k == .placeholder && IK.nextSlotKind(.widget(.photos)) == .placeholder,
+              "九格編輯器：槽位循環佔位→即時動態→六種小工具→回佔位；畫不出來的種類回佔位")   // l10n-ignore
+        let suite12 = "homeplay.selftest.posterlib12"
+        let ud12 = UserDefaults(suiteName: suite12)!
+        ud12.removePersistentDomain(forName: suite12)
+        defer { ud12.removePersistentDomain(forName: suite12) }
+        ud12.set("photos", forKey: FaceStyle.defaultsKey)   // 舊使用者：當時那張＝photos
+        let lib1 = PosterLibraryStore.loadLibrary(ud12)
+        check(lib1.items.count == FaceStyle.lineup.count && lib1.items.map(\.galleryFace) == FaceStyle.lineup
+              && lib1.index == FaceStyle.lineup.firstIndex(of: .photos) && ud12.bool(forKey: PosterLibraryStore.migration12Key),
+              "多臉遷移：讀檔路徑做（1 張＋舊鍵 → 12 張、旗標寫下、index 指到當時那張）")   // l10n-ignore
+        ud12.set("island", forKey: FaceStyle.defaultsKey)
+        check(PosterLibraryStore.loadLibrary(ud12) == lib1, "多臉遷移：再讀一次不重做（旗標擋住，舊鍵不再左右 index）")   // l10n-ignore
+        // beta 使用者最常見的路徑：改過任何海報設定 → 存了「1 張的 library 資料」（current 的 didSet 落盤）。
+        // 他們在 beta 也是滑 12 款種類——一樣展開 12 張。
+        let suiteBeta = "homeplay.selftest.posterlibbeta"
+        let udBeta = UserDefaults(suiteName: suiteBeta)!
+        udBeta.removePersistentDomain(forName: suiteBeta)
+        defer { udBeta.removePersistentDomain(forName: suiteBeta) }
+        var beta1 = mine; beta1.extras.faceKind = "photos"
+        let stored1 = PosterLibrary(items: [beta1], index: 0)
+        udBeta.set(try? enc.encode(stored1), forKey: PosterLibraryStore.defaultsKey)   // 有存檔、沒有旗標、沒有舊鍵
+        let libBeta = PosterLibraryStore.loadLibrary(udBeta)
+        check(libBeta.items.count == FaceStyle.lineup.count && libBeta.index == FaceStyle.lineup.firstIndex(of: .photos)
+              && libBeta.items.map(\.galleryFace) == FaceStyle.lineup && udBeta.bool(forKey: PosterLibraryStore.migration12Key),
+              "多臉遷移：存了 1 張 library 的 beta 使用者也展開 12 張（index 指到那張的種類）")   // l10n-ignore
+        let suiteNew = "homeplay.selftest.posterlibnew"
+        let udNew = UserDefaults(suiteName: suiteNew)!
+        udNew.removePersistentDomain(forName: suiteNew)
+        defer { udNew.removePersistentDomain(forName: suiteNew) }
+        let libNew = PosterLibraryStore.loadLibrary(udNew)
+        check(libNew.items.count == 1 && !udNew.bool(forKey: PosterLibraryStore.migration12Key) && udNew.object(forKey: PosterLibraryStore.defaultsKey) == nil,
+              "多臉遷移：全新使用者不建 12 張、不留任何偏好（首次設定照樣會出現）")   // l10n-ignore
 
         // 派生：ClockLook 與配置雙向一致        // 派生：ClockLook 與配置雙向一致
         var d = P(); var l = ClockLook(); l.font = .rail; l.swatch = .pink; l.weight = 0.2; l.glass = false

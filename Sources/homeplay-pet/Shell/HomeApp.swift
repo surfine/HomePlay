@@ -186,14 +186,15 @@ final class HomeApp: PetApp {
         let k = r.height / (2 * M.cell + M.gap), cy = r.minY + M.chevronY * k, dx = M.chevronInset * k
         return (CGRect(x: r.minX + dx - 48, y: cy - 48, width: 96, height: 96), CGRect(x: r.maxX - dx - 48, y: cy - 48, width: 96, height: 96))
     }
-    /// 攝影機子頁（大標題底下 2×2）；11-grid-apps：格線對齊 App 內容區 64…960（磚 432、欄距 32，列距 328 給標籤留 85）
+    /// 攝影機子頁（標題底下 2×2）：格線對齊內容邊線 98.5…925.5（欄距 32 → 磚 397.5 × 224，列距＝磚高＋85 給標籤）
     static func cameraCells(_ n: Int) -> [CGRect] {
         if n > 4 {   // 2.0 P10：五路以上排 3×3（官方 Home Camera 九路）
             typealias C = HPTokens.HomeCameras
             let w = (1024 - 2 * C.x - CGFloat(C.gridColumns - 1) * C.gap) / CGFloat(C.gridColumns), h = (w * 9 / 16).rounded()
             return (0..<n).map { i in CGRect(x: C.x + CGFloat(i % C.gridColumns) * (w + C.gap), y: HPTokens.contentTop + 8 + CGFloat(i / C.gridColumns) * (h + C.labelGap + C.gap), width: w, height: h) }
         }
-        return (0..<n).map { i in CGRect(x: 64 + CGFloat(i % 2) * (432 + 32), y: HPTokens.contentTop + 8 + CGFloat(i / 2) * 328, width: 432, height: 243) }
+        let w = (HPGrid.Content.width - 32) / 2, h = (w * 9 / 16).rounded()
+        return (0..<n).map { i in CGRect(x: HPGrid.Content.leading + CGFloat(i % 2) * (w + 32), y: HPTokens.contentTop + 8 + CGFloat(i / 2) * (h + 85), width: w, height: h) }
     }
     // 攝影機全螢幕：底部三顆 150 px 圓鈕（紅黃兩顆靠中、格狀鈕貼右；影片 v1 O-84）
     private static let camY: CGFloat = 1024 - Screen.cornerRadius
@@ -1190,8 +1191,8 @@ enum HomeCamArt {
 
 extension HomeApp {
     /// 攝影機頁底下是 ✕／麥克風／格狀鈕：橫幅改放在標題下面，不蓋按鈕也不擋太多畫面
-    static func alertBannerRect(camera: Bool) -> CGRect { CGRect(x: 64, y: camera ? 232 : 1024 - 96 - 152, width: 896, height: 152) }
-    /// 圓角跟螢幕同心（左右離螢幕 64；152 高的連續圓角最多畫到約 50，見 EdgeContainers）
+    static func alertBannerRect(camera: Bool) -> CGRect { CGRect(x: HPGrid.Content.leading, y: camera ? 232 : 1024 - 96 - 152, width: HPGrid.Content.width, height: 152) }
+    /// 圓角跟螢幕同心（照離螢幕最近的那一邊；見 EdgeContainers）
     static func alertBannerRadius(_ r: CGRect) -> CGFloat { HPTokens.Radius.concentric(rect: r) }
 
     func drawAlertBanner(_ g: CGContext, _ face: Face, now: Double) {

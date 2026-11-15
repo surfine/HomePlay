@@ -94,7 +94,8 @@ extension Face {
     }
 
     func drawPeopleOverlay(_ g: CGContext, _ now: Double) {
-        let demoPerson = Person(id: "demo", name: PeopleRegistry.systemOwnerName(), colorIndex: 0, isOwner: true)
+        // --demo-official：用示範的 Erica（同主畫面），不拿這台 Mac 主人的真名去拍官網素材
+        let demoPerson = Shell.demoPerson ?? Person(id: "demo", name: PeopleRegistry.systemOwnerName(), colorIndex: 0, isOwner: true)
         if let e = PeopleOverlay.enroll {
             PeopleOverlay.lastDraw = now
             drawEnrollCard(g, e, now)
@@ -119,7 +120,7 @@ extension Face {
     // MARK: 个人问候
 
     private func drawGreetingCard(_ g: CGContext, _ person: Person, alpha: CGFloat) {
-        let hour = hourNow
+        let hour = Shell.greetingHour(self)   // --demo-official 照示範時間 10:09（早安），其他時候就是現在
         let fmt = hour >= 5 && hour < 11 ? L("people.greet.morning", "早安，%@")
             : hour >= 11 && hour < 18 ? L("people.greet.afternoon", "午安，%@") : L("people.greet.evening", "晚安，%@")
         let title = String(format: fmt, person.name)

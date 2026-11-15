@@ -102,7 +102,7 @@ struct PosterLibrarySection: View {
                             .minimumScaleFactor(0.6))
                         .frame(width: 42, height: 28)
                     VStack(alignment: .leading, spacing: 2) {
-                        Text(c.look)
+                        Text(c.galleryName)   // W2：列表用這張臉的名字（自己的顯示名，沒有就用種類名）
                         Text(subtitle(c)).font(.caption).foregroundStyle(.secondary)
                     }
                     Spacer(minLength: 0)
@@ -155,6 +155,7 @@ struct PosterLibrarySection: View {
     private func apply() {
         PosterConfiguration.current = PosterLibraryStore.current
         HPLook.select(PosterLibraryStore.current.look)   // 明確選了外觀：日曆／Typograph 也跟這個 Look
+        m.app?.view.setFaceStyle(PosterLibraryStore.current.galleryFace)   // W1：選一張臉就真的換那一張（原本只換 Look 不換臉）
         items = PosterLibraryStore.all
         index = PosterLibraryStore.index
         m.app?.view.face.forceDirty = true

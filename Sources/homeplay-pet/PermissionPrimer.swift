@@ -139,6 +139,7 @@ enum PermissionCenter {
                 done(st == noErr || st == OSStatus(procNotFound))
             }
         case .calendar:
+            guard CalendarSource.canRequest else { done(false); return }   // 沒有用途說明的執行檔去問會被系統直接殺掉
             EKEventStore().requestFullAccessToEvents { ok, _ in done(ok) }
         case .photos:
             // 沒有用途說明（沒打包的執行檔）就去問，系統會直接讓進程崩掉：當作沒允許
@@ -546,16 +547,6 @@ extension Face {
             g.addLine(to: CGPoint(x: c.x + 6, y: c.y + 20)); g.addLine(to: CGPoint(x: c.x + 22, y: c.y + 8))
             g.addLine(to: CGPoint(x: frame.maxX + 4, y: frame.maxY - 6)); g.strokePath()
             g.restoreGState()
-        case .location:
-            // Wi-Fi 扇形：底下一點，三道弧由內往外依次點亮（要的是網路名稱，不是地圖）
-            let base = CGPoint(x: c.x, y: c.y + 40)
-            g.fillEllipse(in: CGRect(x: base.x - 9, y: base.y - 9, width: 18, height: 18))
-            let lit = calm ? 3 : Int(phase * 2.5) % 4
-            for i in 0..<3 {
-                g.setStrokeColor(NSColor.white.withAlphaComponent(i < lit ? 1 : 0.35).cgColor)
-                g.addArc(center: base, radius: CGFloat(30 + i * 24), startAngle: -.pi * 0.75, endAngle: -.pi * 0.25, clockwise: false)
-                g.strokePath()
-            }
         }
         g.restoreGState()
     }

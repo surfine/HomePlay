@@ -3,7 +3,7 @@ import SwiftUI
 
 // 設定「ClioTalk」一頁：照 BYOK.dc.html，系統的分組表單。
 // 用哪家 → 金鑰（SecureField，只存鑰匙圈，畫面只顯示末四碼）＋檢查 → 平常／難一點的模型 → 自動升級；
-// 可以用的資料（每組工具一個同意開關）；每月上限、這個月用了多少、朗讀、F5、清除對話紀錄；最後一段照實寫隱私。
+// 可以用的資料（每組工具一個同意開關）；每月上限、這個月用了多少、朗讀、清除對話紀錄；最後一段照實寫隱私。
 
 final class ClioPaneModel: ObservableObject {
     enum KeyState: Equatable { case none, saved, checking, ok(String?), invalid, network, other(String) }
@@ -77,12 +77,12 @@ final class ClioPaneModel: ObservableObject {
 
 struct ClioTalkPane: View {
     @StateObject private var m = ClioPaneModel()
+    @EnvironmentObject private var settings: SettingsModel
     @State private var confirmClear = false
     @State private var tools: [ClioToolGroup: Bool] = Dictionary(uniqueKeysWithValues: ClioToolGroup.allCases.map { ($0, ClioSettings.toolOn($0)) })
     @State private var autoEscalate = ClioSettings.autoEscalate
     @State private var cap = ClioSettings.monthlyCap
     @State private var speak = ClioSettings.speak
-    @State private var f5 = ClioSettings.f5OpensClioTalk
     @State private var followUp = ClioSettings.followUpListening
     @State private var shareNameCity = ClioSettings.shareNameAndCity
 
@@ -120,6 +120,7 @@ struct ClioTalkPane: View {
 
     var body: some View {
         Form {
+            PaneHeaderCard(section: .cliotalk)
             Section {
                 Picker(selection: Binding(get: { m.provider }, set: { m.setProvider($0) })) {
                     ForEach(ClioProviderID.allCases, id: \.self) { Text(providerName($0)).tag($0) }
@@ -127,6 +128,7 @@ struct ClioTalkPane: View {
                     RowLabel(title: L("clio.provider", "用哪家的模型"), symbol: "cpu.fill", tint: tint)
                 }
                 .pickerStyle(.menu)
+                .settingsRow("clio.provider")
                 if m.provider.needsKey {
                     LabeledContent {
                         HStack(spacing: 8) {
@@ -165,8 +167,8 @@ struct ClioTalkPane: View {
                     InfoRow(title: L("clio.onDevice.title", "Apple Intelligence"), subtitle: m.onDeviceStatus, symbol: "apple.intelligence", tint: tint)
                 }
             } header: {
-                IllustrationHeader(scene: .clio, note: L("clio.demoNote", "按住 F5 说话，用你自己的模型回答"),
-                                   info: L("clio.worldview", "ClioTalk 不替你发声：用你名义送出的，先念给你听、你说「好」才做。回答是暂时的，说「留下」才存。模型用你自己的，能在这台 Mac 上就在这台 Mac 上。"))
+                SectionTitle(title: L("clio.section.answer", "谁来回答"),
+                             info: L("clio.worldview", "ClioTalk 不替你发声：用你名义送出的，先念给你听、你说「好」才做。回答是暂时的，说「留下」才存。模型用你自己的，能在这台 Mac 上就在这台 Mac 上。"))
             } footer: {
                 if m.provider.needsKey {
                     FooterButtons {
@@ -210,20 +212,25 @@ struct ClioTalkPane: View {
                 } label: {
                     RowLabel(title: L("clio.cap", "每月最多花"), subtitle: L("clio.cap.sub", "到了就先不回答；0 表示不限"), symbol: "dollarsign.circle.fill", tint: .green)
                 }
+                .settingsRow("clio.cap")
                 InfoRow(title: L("clio.usage", "这个月用了"),
                         subtitle: String(format: L("clio.usage.short", "约 US$%.2f · %d 轮"), m.spent, m.turns), symbol: "chart.bar.fill", tint: .green,
                         info: L("clio.usage.note", "这是估算，以账单为准"))
                 Toggle(isOn: Binding(get: { speak }, set: { speak = $0; ClioSettings.speak = $0 })) {
                     RowLabel(title: L("clio.speak", "念出回答"), subtitle: L("clio.speak.sub", "一句一句念；点「停止」就停"), symbol: "speaker.wave.2.fill", tint: tint)
                 }
-                Toggle(isOn: Binding(get: { f5 }, set: { f5 = $0; ClioSettings.f5OpensClioTalk = $0 })) {
-                    RowLabel(title: L("clio.f5", "F5 叫 ClioTalk"), subtitle: L("clio.f5.short", "CarPlay 直播时 F5 仍给 Siri"), symbol: "mic.fill", tint: tint)
-                }
+                .settingsRow("clio.speak")
                 ToggleRow(title: L("clio.followUp", "回答完再听 8 秒"), subtitle: L("clio.followUp.short", "不用再按 F5 就能接着问"), symbol: "ear.fill", tint: tint,
                           info: L("clio.followUp.sub", "不用再按 F5 就能接着问；声音只在这台 Mac 上转成文字"),
                           isOn: Binding(get: { followUp }, set: { followUp = $0; ClioSettings.followUpListening = $0 }))
-                InfoRow(title: L("clio.privacy.title", "资料送到哪里"), subtitle: L("clio.privacy.short", "直接送到你选的公司"), symbol: "hand.raised.fill", tint: .blue,
-                        info: L("clio.privacy", "你问的话和回答时用到的资料（例如那几笔日历），会直接从这台 Mac 送到你选的公司，按它的条款处理；这和 Apple 的私有云计算不一样。密钥只存在这台 Mac 的钥匙串，HomePlay 不会传给任何人。选「Apple Intelligence」就完全不联网，但只有它打开时能用，回答也比较简短。选「这台 Mac（LM Studio）」时对话留在这台 Mac，用你载入的模型回答；只有开着「网页搜索」又有 DeepSeek 密钥时，搜索词才会送给 DeepSeek。"))
+                    .settingsRow("clio.followUp")
+                // 资料去向只写在「隐私与安全性」：这里一句话连过去
+                LabeledContent {
+                    Button(L("settings.privacy.open", "隐私与安全性…")) { settings.go(.permissions) }
+                } label: {
+                    RowLabel(title: L("clio.privacy.title", "资料送到哪里"), subtitle: L("clio.privacy.short", "直接送到你选的公司"))
+                }
+                .settingsRow("clio.privacy.title")
             } footer: {
                 FooterButtons { Button(L("clio.clear", "清除对话纪录…")) { confirmClear = true } }
             }

@@ -140,19 +140,26 @@ enum ShellAccessibility {
         }
     }
 
-    /// 2.0 align C：藥丸＝Home 鍵，一條按鈕，標籤跟著層級（App 裡「返回上一層」、資料庫「回到主畫面」、主畫面「回到錶面」）；
-    /// 有活動時把它念成值（長按展開它）
+    /// 頂端把手＝Home 鍵（2.0 align C；2026-11-12 從 👀 藥丸換成把手）：一條按鈕「主畫面把手」，
+    /// 值念它會去哪（App 裡「返回上一層」、資料庫「回到主畫面」、主畫面「回到錶面」），有活動時接著念活動（長按展開它）。
+    /// 把手隱藏時元件照樣在；按下去直接是 Home 鍵（不必先讓它現身）
     private static func pillItem(face: Face, now: Double) -> ShellAXItem? {
-        let label: String
+        let goes: String
         switch Shell.nav.screen {
-        case .app: label = L("a11y.pill.back", "返回上一层")
-        case .library, .switcher: label = L("a11y.pill.home", "回到主屏幕")
-        case .home: label = L("a11y.pill.face", "回到表盘")
+        case .app: goes = L("a11y.pill.back", "返回上一层")
+        case .library, .switcher: goes = L("a11y.pill.home", "回到主屏幕")
+        case .home: goes = L("a11y.pill.face", "回到表盘")
         case .face: return nil
         }
-        let r = Shell.pillRect(Shell.pillT)
-        let value = face.shellActivity(now).map { act in act.detail.isEmpty ? act.title : String(format: L("a11y.pair", "%1$@，%2$@"), act.title, act.detail) }
-        return ShellAXItem(id: "pill", kind: .chrome, role: .button, label: label, value: value, rect: r, shape: .capsule,
+        let r = Shell.pillT > 0.02 ? Shell.pillRect(Shell.pillT) : HomeHandle.focusRect
+        // 中間那顆是 CarPlay（會話在背景）：按下去回 CarPlay，不是 Home 鍵
+        if Shell.pillT > 0.02, let a = LiveActivityStack.shown.first, LiveActivityStack.isCarPlay(a) {
+            return ShellAXItem(id: "pill", kind: .chrome, role: .button, label: CarPlayApp.shared.title, value: L("a11y.pill.carplay", "回到 CarPlay"), rect: r,
+                               shape: .capsule, press: .tap(center(r)), roleDescription: L("a11y.liveActivity", "实时活动"))
+        }
+        let activity = face.shellActivity(now).map { act in act.detail.isEmpty ? act.title : String(format: L("a11y.pair", "%1$@，%2$@"), act.title, act.detail) }
+        let value = activity.map { String(format: L("a11y.pair", "%1$@，%2$@"), goes, $0) } ?? goes
+        return ShellAXItem(id: "pill", kind: .chrome, role: .button, label: L("a11y.handle", "主屏幕把手"), value: value, rect: r, shape: .capsule,
                            press: .tap(center(r)))
     }
 
@@ -181,7 +188,8 @@ enum ShellAccessibility {
                 out.append(ShellAXItem(id: "la.\(b)", kind: .chrome, role: .button, label: label, rect: r, shape: .capsule, press: .tap(center(r))))
             case .minimal(let i) where !expanded && i < S.shown.count:
                 let a = S.shown[i]
-                out.append(ShellAXItem(id: "la.minimal.\(i)", kind: .chrome, role: .button, label: a.title.isEmpty ? a.detail : a.title,
+                out.append(ShellAXItem(id: "la.minimal.\(i)", kind: .chrome, role: .button,
+                                       label: S.isCarPlay(a) ? CarPlayApp.shared.title : (a.title.isEmpty ? a.detail : a.title),
                                        value: a.title.isEmpty || a.detail.isEmpty ? nil : a.detail, rect: r, shape: .capsule, press: .tap(center(r)),
                                        roleDescription: L("a11y.liveActivity", "实时活动")))
             default: break
@@ -351,7 +359,7 @@ final class ShellAXElement: NSAccessibilityElement {
     override func accessibilityValueDescription() -> String? { if case .slider = item.role { return item.value }; return nil }
     override func accessibilityMinValue() -> Any? { if case .slider = item.role { return NSNumber(value: 0) }; return nil }
     override func accessibilityMaxValue() -> Any? { if case .slider = item.role { return NSNumber(value: 1) }; return nil }
-    override func accessibilityHelp() -> String? { item.id == "face" ? L("a11y.help", "重按屏幕进出 CarPlay，右键打开菜单") : nil }
+    override func accessibilityHelp() -> String? { item.id == "face" ? L("a11y.help", "按空格键进出 CarPlay，右键打开菜单") : nil }
     override func isAccessibilityFocused() -> Bool { ShellFocus.id == item.id }
     override func accessibilityPerformPress() -> Bool { view?.shellAXPress(item) ?? false }
     override func accessibilityPerformIncrement() -> Bool { view?.shellAXStep(item, by: 0.1) ?? false }

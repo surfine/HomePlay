@@ -102,7 +102,7 @@ enum SBBoardSelftest {
         check(SBUI.galleryEntries().allSatisfy { SBUI.sheetCard.contains($0.1) } && SBUI.galleryEntries().count == SBWidgetKind.allCases.count,   // 2.0 Web App 的不在圖庫（＋Smart Stack −Web App）
               "SpringBoard：圖庫清單每個小工具（含 Smart Stack）都在 sheet 裡")   // l10n-ignore：selftest 訊息
         // 2026-11-09：瀏覽時改成豆莢網格（3 欄），檢查的是豆莢裡每一顆圖示
-        let podIcons = Array(SBUI.libraryPodIcons().values)
+        let podIcons = SBUI.libraryPodIcons().map(\.rect)
         let podBottom = SBUI.libraryTop + SBLPodGrid.contentHeight(SBUI.libraryPods())
         let podScroll = max(0, podBottom - (1024 - 30))
         check(!podIcons.isEmpty && podIcons.allSatisfy { r in
@@ -133,9 +133,9 @@ enum SBBoardSelftest {
 enum SBLayoutSelftest {
     static func run(_ check: (Bool, String) -> Void) {
         check(Shell.gridTop == 241 && Shell.rowPitch == 240 && SBUI.dotsY == 976, "主畫面：首列頂 241、列距 240、頁點 976（官方量的值）")   // l10n-ignore
-        let pill = Shell.pillRect(0)
+        let pill = Shell.pillSlot
         check(pill.minY >= HPTokens.Home.panelInset + 8 && pill.maxY < HPTokens.Home.greetingBaseline,
-              "主畫面：眼睛膠囊整顆在玻璃面板裡，上緣至少留 8，不壓到問候語")   // l10n-ignore
+              "主畫面：即時動態的藥丸槽整顆在玻璃面板裡，上緣至少留 8，不壓到問候語")   // l10n-ignore
         let w = Shell.widgetRect(col: 0, row: 0)
         check(abs(w.width - 392) < 0.5 && abs(w.height - 392) < 0.5, "主畫面：2×2 小工具 392（＝iOS small 158 pt）")   // l10n-ignore
         let row3Icon = SB.iconRect(in: SB.frame(col: 0, row: 2, span: (1, 1)))

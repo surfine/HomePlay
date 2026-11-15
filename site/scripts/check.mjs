@@ -57,11 +57,18 @@ for (const file of files) {
   }
   if (file.endsWith('.js') || file.endsWith('.css')) {
     const t = await readFile(file, 'utf8');
-    for (const m of t.matchAll(/https?:\/\/([^/\s"'`)]+)/g)) errors.push(`${name}: remote URL ${m[0]}`);
+    // 設計稿試看頁的「開機」按鈕嵌入 Infinite Mac（該頁 CSP 的 frame-src 只放行這一個主機）
+    for (const m of t.matchAll(/https?:\/\/([^/\s"'`)]+)/g)) if (!(name === 'history/dig/dig.js' && m[1] === 'infinitemac.org')) errors.push(`${name}: remote URL ${m[0]}`);
   }
   if (!file.endsWith('.html')) continue;
   pages++;
   const html = await readFile(file, 'utf8');
+  // 設計稿試看頁：單獨一頁、只有繁中、不進搜尋（noindex），有自己的 CSP（見 build.mjs 的 _headers）。
+  // 正式頁的 SEO、三語、無行內樣式等規則不套用；只要求它標了 noindex、沒有被 sitemap 收錄。
+  if (name.startsWith('history/dig/')) {
+    if (!html.includes('<meta name="robots" content="noindex">')) errors.push(`${name}: draft page must be noindex`);
+    continue;
+  }
   const is404 = name === '404.html';
 
   // 1. 引用的本地資源都要存在（src / href / srcset / og:image / twitter:image）

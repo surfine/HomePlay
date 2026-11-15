@@ -45,9 +45,16 @@ enum EdgeContainers {
             Entry(name: "手勢引導：升級提示卡", rect: IntroHint.card, radius: IntroHint.radius),   // l10n-ignore
         ]
         // 下面幾個在畫的地方寫 Screen.concentric(inset: card.minX)：登記它們的框，框改了讓 minX 不再是最近的那邊時這裡會擋
-        for (name, r) in [("小工具圖庫 sheet", Shell.galleryCard), ("切換家人 sheet", Shell.sheetCard),   // l10n-ignore
+        for (name, r) in [("切換家人 sheet", Shell.sheetCard),   // l10n-ignore
                           ("加入網頁 App 卡", AddToHomeSheet.card), ("主畫面 sheet", SBUI.sheetCard)] {   // l10n-ignore
             list.append(Entry(name: name, rect: r, radius: Screen.concentric(inset: r.minX)))
+        }
+        // 2026-11-12：貼內容邊線 98.5 的分組卡 39.5（螢幕上的設定第一頁的兩張、尋找的兩張地圖卡）
+        for (i, r) in SettingsApp.rootCards.enumerated() {
+            list.append(Entry(name: "設定分組卡 \(i + 1)", rect: r, radius: HPTokens.Radius.contentCard))   // l10n-ignore
+        }
+        for (name, r) in [("尋找：地圖卡", HPTokens.FindMy.map), ("尋找：細節地圖卡", HPTokens.FindMy.detailMap)] {   // l10n-ignore
+            list.append(Entry(name: name, rect: r, radius: HPTokens.Radius.group))
         }
         list.append(Entry(name: "計時器橫幅", rect: HPTokens.bannerCard, radius: Face.bannerRadius))   // l10n-ignore
         list.append(Entry(name: "世界時鐘地圖卡", rect: HPTokens.WorldClock.mapCard, radius: HPTokens.WorldClock.mapRadius))   // l10n-ignore
@@ -61,6 +68,8 @@ enum EdgeContainers {
             Nested(name: "AirDrop 收件卡的縮圖", parentRect: AirDropCard.rect, parentRadius: AirDropCard.radius, padding: 32, radius: AirDropCard.thumbRadius),   // l10n-ignore
             Nested(name: "CarPlay AirDrop 卡的圖示", parentRect: cp, parentRadius: CarPlayAirDropCard.radius(cp), padding: CarPlayAirDropCard.pad,   // l10n-ignore
                    radius: CarPlayAirDropCard.iconRadius(cp)),
+            Nested(name: "設定列首的圖示方塊", parentRect: SettingsApp.rootCards[0], parentRadius: HPTokens.Radius.contentCard, padding: SettingsApp.inset,   // l10n-ignore
+                   radius: SettingsApp.iconTileRadius),
         ]
     }
 
@@ -77,6 +86,14 @@ enum EdgeContainers {
             let want = max(12, drawn - n.padding)
             check(abs(n.radius - want) < 0.5, "同心（巢狀）：\(n.name) 圓角 \(Int(n.radius)) 應為父 \(Int(drawn)) − 內距 \(Int(n.padding))")   // l10n-ignore
         }
+        // 2026-11-12 共用規則：貼內容邊線的分組卡 39.5，往內逐層減內距（31.5、15.5，最小 12）；不貼邊的容器＝內容圓角＋內距
+        let card = HPTokens.Radius.contentCard
+        check(abs(card - (R - HPGrid.Content.leading)) < 0.01 && abs(card - 39.5) < 0.5, "同心：貼內容邊線 98.5 的分組卡圓角 39.5")   // l10n-ignore
+        check(abs(HPTokens.Radius.concentric(parent: card, padding: 8) - 31.5) < 0.5
+              && abs(HPTokens.Radius.concentric(parent: card, padding: 24) - 15.5) < 0.5
+              && HPTokens.Radius.concentric(parent: card, padding: 40) == 12, "同心：分組卡往內逐層減內距（31.5、15.5），最小 12")   // l10n-ignore
+        check(HPTokens.Radius.group == card, "同心：整台的分組卡同一個固定圓角 39.5（清單中段的卡片不逐張算同心）")   // l10n-ignore
+        check(HPTokens.Radius.enclosing(content: 16, padding: 13) == 29, "同心：不貼邊的容器＝內容圓角＋內距（16 + 13 = 29）")   // l10n-ignore
         check(HPTokens.Radius.edgeInset(CGRect(x: 96, y: 96, width: 832, height: 888)) == 40, "同心：inset 取四邊最近的那邊（下緣 40，不是 minX 96）")   // l10n-ignore
     }
 }

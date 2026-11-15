@@ -110,9 +110,6 @@ final class HomeLink: @unchecked Sendable {
     // 主執行緒
     private(set) var snapshot = HomeSnapshot.empty
     private(set) var connected = false
-    var onSnapshot: ((HomeSnapshot) -> Void)?
-    var onChanged: ((HomeChange) -> Void)?
-    var onConnection: ((Bool) -> Void)?
 
     static let socketPath = NSHomeDirectory() + "/Library/Application Support/HomePlay/home.sock"
     static let backoff: [Double] = [1, 2, 5, 10, 30]
@@ -129,11 +126,6 @@ final class HomeLink: @unchecked Sendable {
         guard !running else { return }
         running = true
         Thread.detachNewThread { [self] in loop() }
-    }
-
-    func stop() {
-        lock.lock(); running = false; let f = fd; lock.unlock()
-        if f >= 0 { shutdown(f, SHUT_RDWR) }
     }
 
     func set(characteristic: String, value: Any, completion: ((Bool, String?) -> Void)? = nil) {
@@ -314,7 +306,6 @@ final class HomeLink: @unchecked Sendable {
     private func setConnected(_ c: Bool) {
         guard connected != c else { return }
         connected = c
-        onConnection?(c)
         NotificationCenter.default.post(name: .homeLinkConnection, object: c)
     }
 
@@ -324,7 +315,6 @@ final class HomeLink: @unchecked Sendable {
         // 家庭警報：資料端記一筆就好；卡片靠 HomeAlerts.version 自己發現（不再發沒人接的 homeAlertFired 通知）
         _ = HomeAlerts.note(old: snapshot, new: s, now: CACurrentMediaTime())   // HomeView 對齊後續 #3：家庭警報（Shell/HomeAlerts.swift）
         snapshot = s
-        onSnapshot?(s)
         NotificationCenter.default.post(name: .homeLinkSnapshot, object: s)
     }
 
@@ -335,7 +325,6 @@ final class HomeLink: @unchecked Sendable {
                 snapshot.accessories[ai].characteristics[ci].value = ch.value
             }
         }
-        onChanged?(ch)
         NotificationCenter.default.post(name: .homeLinkChanged, object: ch)
     }
 

@@ -21,18 +21,30 @@ enum GridSelftest {
         check(menus.allSatisfy { $0.minX >= 48 && $0.maxX <= 976 && $0.minY >= 48 && $0.maxY <= 1000 }, "網格：長按選單都在畫面內（左右邊距 48）")
         check(SBUI.menuPanel(anchor: icon, rows: 3, sizes: true).minX == icon.minX, "網格：長按選單沒夾到邊時左緣對齊錨點左緣（\(HPTokens.Home.gridMargin)）")
 
-        // 3. App 資料庫：豆莢各佔主畫面兩欄，外緣就是 98.5／925.5；搜尋欄佔前三欄，中線對齊頭像。
+        // 3. App 資料庫：三欄豆莢的外緣貼內容邊線（2026-11-12 外殼版面規格）；搜尋結果與展開頁用主畫面 4 欄。搜尋欄佔第 1–3 欄，中線對齊頭像。
         let cells = SBUI.libraryCells(8)
-        let pod0 = SBLPodGrid.podFrame(0, top: 0), pod1 = SBLPodGrid.podFrame(1, top: 0)
-        check(abs(pod0.minX - HPGrid.Home.margin) < 0.01 && abs(pod1.maxX - HPGrid.Home.trailing) < 0.01, "網格：App 資料庫豆莢外緣就是主畫面的外緣")
+        check(abs(SBLPodGrid.podFrame(0, top: 0).minX - HPGrid.Content.leading) < 0.01
+              && abs(SBLPodGrid.podFrame(SBLPodGrid.columns - 1, top: 0).maxX - HPGrid.Content.trailing) < 0.01,
+              "網格：App 資料庫豆莢的外緣貼內容邊線 98.5／925.5")   // l10n-ignore
         check(SBUI.libraryIcon(cells[0]).minX == HPTokens.Home.gridMargin && SBUI.libraryIcon(cells[3]).maxX == HPGrid.Home.trailing, "網格：App 資料庫搜尋結果仍用主畫面的 4 欄")
         let savedScreen = Shell.nav.screen
         Shell.nav.screen = .library   // 頭像在資料庫頁跟搜索欄中線（其他頁 152 照舊）
         check(abs(SBUI.librarySearch.minX - HPGrid.Home.margin) < 0.01 && SBUI.librarySearch.midY == Shell.avatarRect.midY, "網格：App 資料庫搜尋欄左緣對齊主畫面，並跟頭像同一條垂直中線")
         Shell.nav.screen = savedScreen
 
-        // 4. 橫幅通知：左右落在 HPGrid.App 的 64／960
-        check(HPTokens.bannerCard.minX == HPGrid.App.leading && HPTokens.bannerCard.maxX == HPGrid.App.trailing, "網格：橫幅通知左右落在 \(Int(HPGrid.App.leading))／\(Int(HPGrid.App.trailing))")
+        // 3b. 內容邊線（2026-11-12）：98.5／925.5 就是主畫面第 1、4 欄圖示的外緣；欄心 174.5…849.5；列高 96／120 不小於點按範圍，節奏取自 scale
+        let col0 = SBUI.libraryCell(0, 0), col3 = SBUI.libraryCell(3, 0)
+        check(HPGrid.Content.leading == col0.minX && HPGrid.Content.trailing == col3.maxX && HPGrid.Content.leading == 98.5 && HPGrid.Content.trailing == 925.5,
+              "網格：內容邊線 98.5／925.5 就是主畫面第 1、4 欄圖示的外緣")   // l10n-ignore
+        check((0..<4).map { HPGrid.Content.columnCenter($0) } == [174.5, 399.5, 624.5, 849.5] && HPGrid.Content.columnCenter(0) == col0.midX,
+              "網格：四欄欄心 174.5、399.5、624.5、849.5")   // l10n-ignore
+        check(HPTokens.Size.listRow == 96 && HPTokens.Size.listRowSub == 120 && HPTokens.Size.listRow >= HPGrid.tap
+              && HPGrid.Rhythm.groupGap == 24 && HPGrid.Rhythm.sectionGap == 32
+              && HPGrid.scale.contains(HPGrid.Rhythm.groupGap) && HPGrid.scale.contains(HPGrid.Rhythm.sectionGap),
+              "網格：內容清單列高 96／120（≥ 點按範圍 88），分組間距 24、區段間距 32")   // l10n-ignore
+
+        // 4. 橫幅通知：左右落在內容邊線 98.5／925.5
+        check(HPTokens.bannerCard.minX == HPGrid.Content.leading && HPTokens.bannerCard.maxX == HPGrid.Content.trailing, "網格：橫幅通知左右落在內容邊線 98.5／925.5")
 
         // 5. 鎖卡：垂直節奏取自 HPGrid.scale
         let d1 = Face.lockTitleY - (Face.lockIconY + 200), d2 = Face.lockWhyY - Face.lockTitleY

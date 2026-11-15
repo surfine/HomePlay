@@ -1,17 +1,17 @@
 // 2.0 外殼的輸入：main.swift 的 PetView 滑鼠／滾輪／鍵盤各在開頭一行呼叫這裡（回 true＝外殼吃掉了）。
 //
-// 桌寵本身的手勢：拖機身＝轉、兩指旋轉＝原地轉身、雙擊＝回正、長按螢幕＝錶面總覽、重按＝CarPlay、⌘拖＝搬視窗。
+// 桌寵本身的手勢：拖機身＝轉、兩指旋轉＝原地轉身、雙擊＝回正、長按螢幕＝錶面總覽、智慧縮放＝放大／回原本大小、⌘拖＝搬視窗。
 // 外殼只認這幾種，而且先「暫時接住」，確定不是自己的就把按下那一下原封不動重播給原本的處理（螢幕拖、點膠囊、System 6…）。
 //
 // 手勢語法（2026-11-07 拍板，docs/plans/gestures.md）：橫軸只有一條〔錶面們〕〔主畫面各頁〕〔資源庫〕、不繞圈；縱向＝深淺（底緣上拉只是往深一層：
 // 錶面→主畫面、主畫面→資源庫）；按住＝對手指下的東西做更多；螢幕是內容、機身是物件（螢幕上的拖只歸畫面，轉身體只認拖機身）；
 // 沒在互動時第一下只喚醒（休眠、海報期、閒置變暗：吞到放手）、慣性捲動中碰一下只停住（不點）。
-// 回主畫面的主次：觸控／觸控板以「👀 往下拉」為主、「點 👀」為快捷；鍵盤以空白鍵（＝👀）為主，↓／Esc 是回上一層。
+// 回主畫面的主次：觸控／觸控板以「從頂端把手往下拉」為主、「點把手」為快捷（只有 CarPlay 上隱藏時第一下只現身）；鍵盤以空白鍵（＝👀）為主，↓／Esc 是回上一層。
 //
-// 手勢總表（2026-11-06 拍板：👀 膠囊兼任 Home Indicator，判定與歸屬在 Shell/HomeIndicator.swift）
+// 手勢總表（2026-11-06 拍板：頂端的 Home Indicator，判定與歸屬在 Shell/HomeIndicator.swift；2026-11-12：外殼畫面上是預設隱藏的把手，Shell/HomeHandle.swift）
 // | 區域                         | 錶面                     | 主畫面／切換器            | App                        | CarPlay 畫面               |
 // |------------------------------|--------------------------|---------------------------|----------------------------|----------------------------|
-// | 👀 膠囊（頂端中間、藥丸）     | 下拉＝主畫面；拉住停＝切換器；點＝已在最外層（眼神回應當確認）；長按＝ClioTalk | 拉住停＝切換器（資料庫、切換器下拉＝主畫面）；點＝Home 鍵／動態；長按＝ClioTalk（有動態時＝展開） | 下拉＝主畫面；拉住停＝切換器；點＝Home 鍵；長按同左 | 外圈帶上的膠囊：下拉＝主畫面（會話留背景）；拉住停＝切換器；長按＝ClioTalk；點＝Home 鍵（回主畫面，會話留背景） |
+// | 頂端把手（錶面上是 👀 膠囊）  | 下拉＝主畫面；拉住停＝切換器；點＝已在最外層（眼神回應當確認）；長按＝ClioTalk | 拉住停＝切換器（資料庫、切換器下拉＝主畫面）；點＝把手隱藏時只現身、看得見時 Home 鍵／動態；長按＝ClioTalk（有動態時＝展開） | 下拉＝主畫面；拉住停＝切換器；點同左；長按同左 | 外圈帶上的把手：下拉＝主畫面（會話留背景）；拉住停＝切換器；長按＝ClioTalk；點＝隱藏時只現身、看得見時 Home 鍵（回主畫面，會話留背景） |
 // | 右上角往下拉                 | 控制中心                 | 控制中心                  | 控制中心                   | 給 iPhone（不變：CarPlay 上沒有控制中心手勢） |
 // | 底緣往上拉（往深一層）       | 主畫面                   | 全部 App                  | （不當回家）               | 給 iPhone                  |
 // | 左緣右滑／內容左側右滑       | 同中間起手：橫拖換錶面（錶面是最上層，沒有返回） | 主畫面：第一頁往右翻過頭＝回錶面（其他頁＝換頁）；切換器：沒有（同 iOS，點空白回主畫面） | 返回 | 給 iPhone |
@@ -19,6 +19,8 @@
 // | 其他拖動                     | 橫拖換錶面（第一個往右＝不動，最後一個往左＝主畫面）；其他不做事 | 換頁（第一頁往右＝回錶面）／捲卡片、卡片上滑拿掉 | App 捲動 | 給 iPhone |
 // 優先序：喚醒（沒在互動時）→ AirDrop 卡片 → 疊層（控制中心、ClioTalk）→ 慣性中只停 → 膠囊 → 控制中心角 → 底緣／左緣 → 畫面自己。螢幕上的拖到此為止，不轉身體。
 // 一個手勢從起手到放手只歸一個層級：膠囊一接住，CarPlay、轉身體、換頁都拿不到這一下。
+// - 捲動（2026-11-12，Shell/PointerInput.swift）：游標在頂端把手的命中區起手往下捲＝下拉把手（卡片跟手，門檻同按住拖）；
+//   右上角起手往下捲＝控制中心。歸屬只看起手那一點：清單捲過頂只回彈，慣性不能自己開始。方向跟系統的捲動設定。
 // - 滾輪：錶面最後一個再滾一格到主畫面（第一個往回不動）、主畫面滾動換頁（資源庫再往後不動、第一頁往回＝錶面）、切換器左右捲。
 //
 // 鍵盤（2026-11-07 拍板，整套）
@@ -32,7 +34,7 @@
 // | Esc           | 收掉焦點框、回上一層                                      | 返回                                        |
 // | C             | 控制中心                                                  | —                                           |
 // 資源庫搜尋時打字的空白照舊是文字。焦點框只由 Tab 或方向鍵叫出（ShellAccessibility.summonsFocus），空白鍵不叫。
-// 離開 CarPlay（👀 下拉、空白鍵、選單「退出 CarPlay」、重按）一律落在主畫面、會話留背景（PetView.carPlayToHome）。
+// 離開 CarPlay（把手下拉、空白鍵、選單「退出 CarPlay」）一律落在主畫面、會話留背景（PetView.carPlayToHome）。
 //
 // 輸入方式（觸控 Mac 與觸控 Sidecar，macOS 27；Shell/TouchInput.swift、docs/plans/touch.md）
 // | 動作                     | 滑鼠                         | 觸控板                         | 觸控（手指）                                        |
@@ -42,17 +44,20 @@
 // | 換頁（錶面、主畫面、資源庫）| 橫拖、滾輪               | 兩指橫滑                       | 單指橫拖（同一套跟手、橡皮筋、速度判定）            |
 // | 螢幕上的其他拖動         | 歸畫面（捲動；不轉身體）     | 歸畫面（點按拖、兩指滑都不轉） | 歸畫面（不轉身體）                                  |
 // | 轉身體                   | 拖機身                       | 拖機身；兩指滑（機身上）；兩指旋轉 | 單指拖機身；兩指拖機身；兩指旋轉                |
-// | 回主畫面                 | 從 👀 往下拖（主）；點 👀（快捷）；空白鍵 | 同滑鼠             | 從 👀 往下拉（主）；點 👀（快捷）                   |
+// | 回主畫面                 | 游標在頂端把手上往下捲、或往下拖（主）；點把手（快捷）；空白鍵 | 同滑鼠（兩指往下滑） | 從頂端把手往下拉（主）；點把手（快捷） |
+// | 控制中心                 | 游標在右上角往下捲、或往下拖；C 鍵 | 同滑鼠（兩指往下滑）           | 右上角往下拉                                        |
 // | 沒在互動時（休眠、海報、變暗）| 第一下只喚醒            | 同滑鼠                         | 同滑鼠                                              |
 // | 慣性捲動中碰一下         | 只停住、不點                 | 同滑鼠                         | 同滑鼠                                              |
 // | 長按（圖示選單、總覽、編輯模式拖圖示）| 按住            | 按住                           | 按住；按住再拖＝拖圖示                              |
-// | 右鍵選單                 | 右鍵                         | 兩指點                         | 機身上按住                                          |
-// | 縮放桌寵                 | ⌥＋滾輪、選單                | 捏合（與兩指旋轉先過門檻者勝） | 兩指捏合（捏合、旋轉、兩指拖同時只認一個）          |
-// | 拆開／組回               | 選單                         | 兩指輕點兩下                   | 選單（機身上按住）                                  |
+// | 情境選單（只打開選單）   | 右鍵：圖示／小工具＝長按那一份；錶面、空白處含「編輯」「錶面總覽」；返回鈕含「主畫面」；其他＝桌寵選單 | 兩指點（同滑鼠） | 機身上按住 |
+// | 預覽與選單               | —                            | 重按圖示或小工具（其他地方不做事） | 按住                                             |
+// | 縮放桌寵                 | ⌘＋ ⌘− ⌘0、選單、⌥＋滾輪；Magic Mouse 單指輕點兩下＝放大／回原本大小 | 捏合（與兩指旋轉先過門檻者勝）；兩指輕點兩下＝放大／回原本大小 | 兩指捏合（捏合、旋轉、兩指拖同時只認一個） |
+// | 拆開／組回               | 選單                         | 選單                           | 選單（機身上按住）                                  |
 // | 回正                     | 雙擊機身                     | 雙擊機身                       | 點兩下機身                                          |
 // | 返回（左緣、內容左側右滑）| 拖                          | 拖                             | 滑（系統設定關掉「滑動切換頁面」時不做）            |
 // | 搬視窗                   | ⌘拖、拖底座                  | 三指拖                         | 拖底座                                              |
-// | 懸停才有的               | 零件標籤、靠近亮起、影片控制列 | 同滑鼠                        | 點零件釘住標籤；碰過＝靠近；碰一下浮出控制列        |
+// | 懸停才有的               | 零件標籤、靠近亮起、影片控制列；圖示放大 4%、按鈕與清單列出現底色、把手現身；頭頂來回＝摸頭 | 同滑鼠 | 點零件釘住標籤；碰過＝靠近；碰一下浮出控制列 |
+// | 震動（可在輔助使用關掉） | —                            | 下拉把手越過門檻、編輯模式圖示進格子、捏合到極限 | —                                    |
 // | 👀 眼神                  | 看游標                       | 看游標                         | 按著看手指，放開 1 秒後回到平常                     |
 // | CarPlay                  | 點、拖送 iPhone              | 兩指拖送 iPhone                | 單指點、拖送 iPhone（兩指：實驗旗標，預設關）       |
 
@@ -124,7 +129,7 @@ enum ShellInput {
         return nil
     }
 
-    /// 重按（Force Touch）碰上外殼的手勢：拖到一半＝不理（不在手勢中間進出 CarPlay）；按著還沒動＝先把這一下安靜收掉再照舊進出
+    /// 重按（Force Touch）碰上外殼的手勢：拖到一半＝不理；按著還沒動＝先把這一下安靜收掉，再顯示預覽（圖示、小工具；Shell/PointerInput.swift）
     enum ForcePress: Equatable { case ignore, cancelPressThenEnter, enter }
     static func forcePress(dragging: Bool, pressing: Bool) -> ForcePress {
         dragging ? .ignore : (pressing ? .cancelPressThenEnter : .enter)
@@ -148,7 +153,8 @@ enum ShellInput {
 }
 
 extension PetView {
-    private var faceIndex: Int { FaceStyle.lineup.firstIndex(of: face.style.inLineup) ?? 0 }
+    /// W1：目前那張臉在 library 裡的下標（換頁的尾端／頭端邊界照它）
+    private var faceIndex: Int { PosterLibraryStore.index }
     var shellBlocked: Bool { showingVideo || carVideo.active }
 
     // MARK: 導覽（狀態機 + 過場）
@@ -164,7 +170,7 @@ extension PetView {
             face.forceDirty = true; return true
         }
         let before = Shell.nav
-        let r = Shell.nav.handle(e, faceIndex: faceIndex, faceCount: FaceStyle.lineup.count)
+        let r = Shell.nav.handle(e, faceIndex: faceIndex, faceCount: PosterLibraryStore.all.count)
         guard r.handled else { return false }
         if case .page(let d) = e { Face.pageDirOverride = d }   // 2.0 R14：主畫面 ↔ 頭尾錶面也是分頁滑動
         Shell.peopleSheet = false
@@ -201,8 +207,10 @@ extension PetView {
             ControlCenter.willOpen()   // 2.0 cc：眼前這個人的版面、第一頁
         }
         if let f = r.face {
-            if FaceStyle.lineup[f] == face.style.inLineup { face.beginFaceTransition() }   // 同一個錶面：setFaceStyle 不會過場，自己滑
-            setFaceStyle(FaceStyle.lineup[f])
+            // W1：r.face 是 library 下標（主畫面往回＝臉的尾端那張）；同一張且同種類時 setFaceStyle 不會過場，自己滑
+            if PosterLibraryStore.all.indices.contains(f),
+               PosterLibraryStore.all[f].galleryFace == face.style, PosterLibraryStore.index == f { face.beginFaceTransition() }
+            applyLibraryFace(f)
         }
         Face.pageDirOverride = nil
         face.forceDirty = true
@@ -254,7 +262,7 @@ extension PetView {
     func shellStep(_ now: Double) {
         if mood.near || forceNear { Shell.lastActive = now }
         let gate = PersonalGate.allowed
-        if gate != PersonalGate.cached, face.style == .modular { face.forceDirty = true }   // 2.0 depth：模組錶面的「下一個行程」跟著門開關
+        if gate != PersonalGate.cached { face.forceDirty = true }   // 門一開關就重畫：模組錶面的「下一個行程」、主畫面的行事曆／提醒事項小工具都在繪製當下才查門，不重畫會讓上一位的內容多留到下一分鐘
         if let card = (NSApp.delegate as? AppDelegate)?.callCard.model, card.hidden == gate { card.hidden = !gate }   // 來電卡響著時門開關：名字跟著藏／露
         PersonalGate.cached = gate   // ClioTalk 的引擎在背景讀
         let aud = PersonalGate.audience   // 2.0：共享相簿給家人看；觀眾一變，小工具與錶面的相片來源重挑（不留上一位的照片）
@@ -267,7 +275,11 @@ extension PetView {
         ControlCenter.followOn = gazeEnabled || PersonalGate.viewerOverride != nil   // 2.0 P09 快照：--looking 模擬認人開著（不然鎖定頁會先說「打開跟隨我」）
         ControlCenter.carPlayOn = [.live, .paused, .pausedResume, .background].contains(face.status)
         let open = Shell.nav.screen != .face || Shell.nav.overlay != .none
-        indicatorStep(now); indicatorSettleStep(now)   // 👀 膠囊：拉住停一下、放手後的卡片（Shell/HomeIndicator.swift）
+        indicatorStep(now); indicatorSettleStep(now)   // 頂端把手：拉住停一下、放手後的卡片（Shell/HomeIndicator.swift）
+        pointerStep(now)   // 捲動下拉：一般滾輪停住＝放開；游標回饋的淡入淡出（Shell/PointerInput.swift）
+        // 頂端把手看不看得見（Shell/HomeHandle.swift）：換畫面顯示 2 秒；游標在命中區、手指按著、正在拉＝一直顯示
+        HomeHandle.step(now: now, surface: "\(indicatorSurface)|\(Shell.nav.screen)", onShell: indicatorSurface != .face,
+                        held: HomeHandle.hover || ShellInput.down?.kind == .indicator || HomeIndicator.pull != nil)
         // CarPlay 畫面優先：直播一來，外殼的疊層收掉、CarPlay App 在前面；膠囊疊在畫面頂端那條帶（CarPlayChrome.swift）
         if shellBlocked {
             if !carVideo.active, Shell.nav.screen != .app(CarPlayApp.id) || Shell.nav.overlay != .none { shellNavigate(.carPlay) }
@@ -339,12 +351,14 @@ extension PetView {
     func shellMouseDown(_ e: NSEvent, uv uv0: CGPoint?) -> Bool {
         let S = ShellInput.self, uv = S.uvOverride ?? uv0
         if S.passThrough { return false }
+        if PointerInput.scrollPull.active { return true }   // 正用捲動拉著把手／控制中心：一個手勢只歸一個層級，這一下按鍵不接
         if S.beginPress() { facePageCancel(now: CACurrentMediaTime()) }   // 上一下沒收乾淨的換頁（重播交回、早退的路）：新的一下不繼承
         // CarPlay 畫面上：只有膠囊那條帶歸外殼，其餘照舊全部送給 iPhone（HomeIndicator.owner）
         if showingVideo, !carVideo.active {
             guard let p = shellPoint(uv), e.clickCount == 1, !e.modifierFlags.contains(.command),
                   HomeIndicator.owner(p, on: .carPlay, pill: nil, inset: HomeIndicator.inset) == .indicator else { return false }
             S.down = (e, uv, .indicator, e.locationInWindow); indicatorArm(e)
+            HomeHandle.pressBegan(now: CACurrentMediaTime())   // 手指碰到命中區：把手現身（先記下這一刻看不看得見）
             return true
         }
         guard !shellBlocked, !face.onboardingActive, !face.inOverview, !PermissionPrimer.visible else { return false }
@@ -372,7 +386,10 @@ extension PetView {
         guard let kind else { return false }
         S.down = (e, uv, kind, at)
         if kind == .tap, !S.coastStopped, let p = shellPoint(uv) { HPGlass.pressDown(p); face.forceDirty = true }   // 2.0 R14：按下那一刻就變亮放大（停住慣性的那一下不亮）
-        if kind == .indicator { indicatorArm(e) }   // 長按膠囊＝ClioTalk（取代 align D 的長按藥丸兩顆切換：CarPlay 改在切換器裡）
+        if kind == .indicator {
+            indicatorArm(e)   // 長按把手＝ClioTalk（取代 align D 的長按藥丸兩顆切換：CarPlay 改在切換器裡）
+            HomeHandle.pressBegan(now: CACurrentMediaTime())   // 手指碰到命中區：把手現身（先記下這一刻看不看得見）
+        }
         if kind == .switcher { S.switcherAxis = 0; S.switcherSamples = [] }
         return true
     }
@@ -489,7 +506,14 @@ extension PetView {
             case .none: HomeIndicator.consumed = false; return true   // 長按開了 ClioTalk、拖離藥丸再放開（取消）
             case .settle: indicatorRelease(now: CACurrentMediaTime()); return true
             case .tap:
-                if showingVideo { _ = carPlayToHome(reason: "👀 tap"); return true }   // CarPlay 上點 👀＝Home 鍵（同空白鍵、往下拉）
+                // 點把手＝Home 鍵；只有 CarPlay 畫面上、把手還看不見時，第一下只讓它現身（按下那一刻已經現身了）。
+                // 即時動態的藥丸本來就看得見，照舊；點按範圍以外的地方照舊交給頁面
+                let livePill = !showingVideo && Shell.pillT > 0.02
+                let onHandle = showingVideo || (Shell.nav.screen.coversFace && (shellPoint(d.uv).map { HomeHandle.tapZone.contains($0) } ?? false))
+                if onHandle, HomeHandle.tap(shownAtDown: HomeHandle.shownAtDown, livePill: livePill, onCarPlay: showingVideo) == .reveal {
+                    log("handle: tap only reveals"); return true
+                }
+                if showingVideo { _ = carPlayToHome(reason: "handle tap"); return true }   // CarPlay 上點看得見的把手＝Home 鍵（同空白鍵、往下拉）
                 break
             }
         case .switcher:
@@ -626,13 +650,11 @@ extension PetView {
             return
         }
         // 頂端藥丸＝Home 鍵（2.0 align C）：點＝回上一層（跟 Esc 同一條前置順序）、按住＝展開第一個活動、分體小藥丸點＝開它自己的活動、
-        // 大卡外面點一下＝收回（Shell/LiveActivityStack.swift）。2.0 兩邊互通（2026-11-09）：CarPlay 在背景（藥丸有綠色角標）時，
-        // 點藥丸＝切回 CarPlay；沒有背景會話才照舊當 Home 鍵。
-        if LiveActivityStack.tap(p, long: long, now: now, face: face, open: { a in LiveActivityStack.open(a) { shellOpenApp($0) } },
-                                 home: {
-                                     if SourceSwitcher.capsuleTap(carPlayBehind: SourceSwitcher.carPlayBehind(self.face)) == .carPlay { self.onSwitchSource?() }
-                                     else { self.shellHomeKey(now: now) }
-                                 }) {
+        // 大卡外面點一下＝收回（Shell/LiveActivityStack.swift）。CarPlay 在背景時是一顆車子圖示的藥丸，點它＝切回 CarPlay（2026-11-13，
+        // 原本是藥丸上的綠色角標）。
+        if LiveActivityStack.tap(p, long: long, now: now, face: face,
+                                 open: { a in if LiveActivityStack.isCarPlay(a) { self.onSwitchSource?() } else { LiveActivityStack.open(a) { self.shellOpenApp($0) } } },
+                                 home: { self.shellHomeKey(now: now) }) {   // CarPlay 在背景時有自己的一顆藥丸（點它回 CarPlay，2026-11-13），其他藥丸照舊是 Home 鍵
             face.forceDirty = true; return
         }
         switch Shell.nav.screen {
@@ -689,13 +711,14 @@ extension PetView {
             }
         }
         S.down = nil; S.claimed = false; S.replayed = false; S.dragUV = nil
+        PointerInput.scrollPull.cancel()
         S.backSamples = []; S.switcherAxis = 0; S.switcherSamples = []
         HomeIndicator.consumed = false; HomeIndicator.moved = false
         AirDropCard.pressed = false
         face.forceDirty = true
     }
 
-    /// 現在是不是有外殼的手勢拖到一半（重按不在這時候進出 CarPlay）
+    /// 現在是不是有外殼的手勢拖到一半（重按這時候不理）
     var shellGestureDragging: Bool {
         let S = ShellInput.self
         if S.claimed || HomeIndicator.pull != nil || HomeIndicator.settle != nil || Shell.ccDragging { return true }
@@ -711,14 +734,14 @@ extension PetView {
     /// 拉滿要多遠（視窗點）：螢幕大約佔視窗高的六成，拉過螢幕一半＝全開
     private var ccDragSpan: CGFloat { max(80, bounds.height * 0.3) }
 
-    private func ccBeginDrag() {
+    func ccBeginDrag() {   // 捲動拉開控制中心也走這三個（Shell/PointerInput.swift）
         Shell.ccDragging = true
         ShellInput.ccSamples = []
         ShellInput.ccDragFrom = Shell.ccT
         Shell.lastActive = CACurrentMediaTime()
     }
     /// p：手指帶到的進度（0 關 … 1 開）；超過頭用 rubber band
-    private func ccTrack(_ p: CGFloat) {
+    func ccTrack(_ p: CGFloat) {
         let now = CACurrentMediaTime()
         var x = p
         // 動效包：有螢幕上的手指位置就照它算（內容位移＝手指位移，HPMotion.T.ccTravel），沒有才用視窗點估
@@ -730,7 +753,7 @@ extension PetView {
         face.forceDirty = true
     }
     /// 放手：速度交給彈簧，落點照 Apple 的投射挑最近的停點（開／關）
-    private func ccEndDrag() {
+    func ccEndDrag() {
         let now = CACurrentMediaTime()
         let sm = ShellInput.ccSamples
         var v: CGFloat = 0
@@ -904,7 +927,7 @@ extension PetView {
             if args.contains("--library") { Shell.nav.screen = .library }   // 快照用：全部 App
             if args.contains("--people-sheet") { Shell.peopleSheet = true }
             if app != nil, AppRegistry.app(app!) == nil { log("--app 只认：\(AppRegistry.all.map(\.id).joined(separator: " "))") }
-            Shell.pillT = face.shellActivity(CACurrentMediaTime()) == nil ? 0 : 1
+            Shell.pillT = face.pillActivities(CACurrentMediaTime()).isEmpty ? 0 : 1
         }
         Shell.applyMediaDemoFlags(face: face)   // 2.0: --demo-music [页]、--demo-recipe [屏]
         recipeRegisterDrag()                     // 2.0: 把食譜網址拖到桌寵上
@@ -937,6 +960,12 @@ extension PetView {
         applyCarPlayDemo()   // --demo-carplay、--switcher（Shell/AppSwitcher.swift）
         applyIndicatorDemo()   // --indicator-pull（Shell/HomeIndicator.swift）
         applyTouchSnapshotFlags()   // --touch-tip、HOMEPLAY_TOUCH_EXPAND（Shell/TouchInput.swift）
+        // 快照：HOMEPLAY_HOVER=u,v＝游標停在螢幕那一點（圖示放大、按鈕與清單列的底色；Shell/PointerInput.swift）
+        if let hv = ProcessInfo.processInfo.environment["HOMEPLAY_HOVER"]?.split(separator: ",").compactMap({ Double($0) }), hv.count == 2 {
+            _ = face.render()   // App 的按鈕框要畫過一次才有
+            PointerHover.snapshot = true
+            pointerHover(CGPoint(x: hv[0], y: hv[1]))
+        }
         if let script = ProcessInfo.processInfo.environment["HOMEPLAY_SHELL_SCRIPT"] { runShellScript(script) }
     }
 
@@ -946,6 +975,17 @@ extension PetView {
     /// hold:x,y,du,dv＝按住 0.6 s 再拖到 (x+du, y+dv)（uv）放手（長按藥丸的兩顆切換，2.0 align D）
     /// 觸控（假觸控走 TouchInput 的同一條路）：ttap:x,y、tdrag:x,y,du,dv（uv，12 步）、thold:x,y（按住 0.8 s）、
     /// tcancel:x,y,du,dv（同 tdrag，但最後被系統收走：驗取消的收尾）
+    /// key:N 的字元：字母（⇧ 大寫）、數字、空白；其他鍵沒有字元（W2：改名輸入的腳本驗證要用）
+    static func scriptChar(keyCode: Int, shift: Bool) -> String {
+        let letters = [0: "a", 1: "s", 2: "d", 3: "f", 4: "h", 5: "g", 6: "z", 7: "x", 8: "c", 9: "v", 11: "b",
+                       12: "q", 13: "w", 14: "e", 15: "r", 16: "y", 17: "t", 31: "o", 32: "u", 34: "i", 35: "p",
+                       37: "l", 38: "j", 40: "k", 45: "n", 46: "m"]
+        if let ch = letters[keyCode] { return shift ? ch.uppercased() : ch }
+        if keyCode == 49 { return " " }
+        let digits = [18: "1", 19: "2", 20: "3", 21: "4", 22: "5", 23: "6", 24: "7", 25: "8", 29: "0"]
+        return digits[keyCode] ?? ""
+    }
+
     private func runShellScript(_ script: String) {
         let steps = script.split(separator: ";").map(String.init)
         for (i, step) in steps.enumerated() {
@@ -992,7 +1032,7 @@ extension PetView {
                     let path = nums.count == 4 ? (0...12).map { CGPoint(x: nums[0] + nums[2] * Double($0) / 12, y: nums[1] + nums[3] * Double($0) / 12) } : [p0]
                     self.touchInject(path, hold: op == "thold" ? 0.8 : 0, cancel: op == "tcancel")
                 case "key" where nums.count == 1, "skey" where nums.count == 1:   // skey＝按著 ⇧
-                    let ch = nums[0] == 49 ? " " : ""   // 空白鍵帶字元（資源庫搜尋時是文字）
+                    let ch = PetView.scriptChar(keyCode: Int(nums[0]), shift: op == "skey")   // 字母／數字／空白帶字元（搜尋、改名輸入要用）
                     if let e = NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: op == "skey" ? [.shift] : [], timestamp: ProcessInfo.processInfo.systemUptime,
                                                 windowNumber: win.windowNumber, context: nil, characters: ch, charactersIgnoringModifiers: ch,
                                                 isARepeat: false, keyCode: UInt16(nums[0])) { self.keyDown(with: e) }

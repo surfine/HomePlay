@@ -608,21 +608,4 @@ enum GlassPassShim {
         guard let part = img.cropping(to: crop), let c = Shell.averageColor(part)?.usingColorSpace(.sRGB) else { return nil }
         return Double(0.2126 * c.redComponent + 0.7152 * c.greenComponent + 0.0722 * c.blueComponent)
     }
-    static func draw(_ g: CGContext, _ path: CGPath, tint: NSColor?) {
-        let box = path.boundingBox
-        // chan-notes G8：小玻璃依背後內容各自翻淺／深（不是看全域主題）；不加外框（S7）
-        let dark = box.width <= 240 && box.height <= 240 ? (luminance(g, box).map { $0 < 0.5 } ?? HPTokens.dark) : HPTokens.dark
-        g.saveGState()
-        g.setShadow(offset: CGSize(width: 0, height: 4), blur: 18, color: NSColor(white: 0, alpha: dark ? 0.35 : 0.12).cgColor)
-        let fill = tint.map { $0.withAlphaComponent(0.82 * $0.alphaComponent) } ?? NSColor(white: dark ? 0.5 : 1, alpha: dark ? 0.22 : 0.72)
-        g.addPath(path); g.setFillColor(fill.cgColor); g.fillPath()
-        g.restoreGState()
-        g.saveGState()
-        g.addPath(path); g.setLineWidth(2.5); g.replacePathWithStrokedPath(); g.clip()
-        let rim = CGGradient(colorsSpace: CGColorSpace(name: CGColorSpace.sRGB),
-                             colors: [NSColor(white: 1, alpha: 0.5).cgColor, NSColor(white: 1, alpha: 0.06).cgColor, NSColor(white: 1, alpha: 0.22).cgColor] as CFArray,
-                             locations: [0, 0.5, 1])!
-        g.drawLinearGradient(rim, start: CGPoint(x: box.minX, y: box.minY), end: CGPoint(x: box.maxX, y: box.maxY), options: [])
-        g.restoreGState()
-    }
 }

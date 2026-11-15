@@ -233,7 +233,7 @@ final class RemindersApp: PetApp {
     static var addButtonRect: CGRect { addButton }
     private static var addButton: CGRect {
         let w = HPTokens.Size.pairedButton.width, h = HPTokens.Size.pill
-        return CGRect(x: 512 - w / 2, y: 1024 - HPGrid.Inset.app - h, width: w, height: h)
+        return CGRect(x: 512 - w / 2, y: 1024 - HPGrid.Content.leading - h, width: w, height: h)
     }
     /// 底部的捲動邊緣（iOS 26 scroll edge effect）：y0 起 70 px 由透明漸到底色，之後實心到底
     static func bottomEdge(_ g: CGContext, from y0: CGFloat) {
@@ -298,17 +298,18 @@ final class RemindersApp: PetApp {
         case .completed: return L("reminders.smart.completed", "已完成")
         }
     }
-    // 2.0 r2：大標題「提醒事项」放回左上；四格從 y 220 開始
-    private static func tileRect(_ i: Int) -> CGRect { CGRect(x: 64 + CGFloat(i % 2) * 460, y: 220 + CGFloat(i / 2) * 172, width: 436, height: 152) }
+    // 2.0 r2：大標題「提醒事项」放回左上；四格從內容起點開始，兩欄排在內容邊線之間
+    /// 同一組相鄰的磚：上下左右都隔 24（shell-layout.md 第 5 節；原本列距 172＝縫 20）
+    private static func tileRect(_ i: Int) -> CGRect { CGRect(x: HPGrid.Content.leading + CGFloat(i % 2) * ((HPGrid.Content.width - 24) / 2 + 24), y: HPTokens.contentTop + CGFloat(i / 2) * (152 + 24), width: (HPGrid.Content.width - 24) / 2, height: 152) }
     private static let listsHead: CGFloat = 606
     private static let listRow: CGFloat = 112, listGap: CGFloat = 0
     private func listRowRect(_ i: Int) -> CGRect {
-        CGRect(x: 64, y: Self.listsHead + 28 + CGFloat(i) * (Self.listRow + Self.listGap) - scroll.offset, width: 896, height: Self.listRow)
+        CGRect(x: HPGrid.Content.leading, y: Self.listsHead + 28 + CGFloat(i) * (Self.listRow + Self.listGap) - scroll.offset, width: HPGrid.Content.width, height: Self.listRow)
     }
-    private static let itemTop: CGFloat = 224, itemH: CGFloat = 116
+    private static let itemTop: CGFloat = HPTokens.contentTop, itemH: CGFloat = 116
     /// P12：清單頁頂端柔邊（scroll edge effect）：實心蓋到 174、柔邊接到第一列（itemTop）；靜止時第一列不受影響
     private static let fadeSolid: CGFloat = 174
-    private func rowRect(_ i: Int) -> CGRect { CGRect(x: 64, y: Self.itemTop + CGFloat(i) * Self.itemH - scroll.offset, width: 896, height: Self.itemH) }
+    private func rowRect(_ i: Int) -> CGRect { CGRect(x: HPGrid.Content.leading, y: Self.itemTop + CGFloat(i) * Self.itemH - scroll.offset, width: HPGrid.Content.width, height: Self.itemH) }
 
     private func items(for d: Dest) -> [ReminderItem] {
         let now = today
@@ -339,7 +340,7 @@ final class RemindersApp: PetApp {
             let (name, color) = destTitle(.list(id)); HPComponents.bigTitle(g, face, name, color: color)
             let note = memberListID != nil ? L("reminders.member.note", "你自己的清单：换回主人就看得到全部")
                                            : L("reminders.shared.note", "家人共用的清单：大家都看得到、都能勾")
-            AppUI.center(face, g, note, AppUI.font(28), cx: 512, y: 1024 - HPGrid.Inset.app, AppUI.secondary)
+            AppUI.center(face, g, note, AppUI.font(28), cx: 512, y: 1024 - HPGrid.Content.leading, AppUI.secondary)
             return
         }
         if !PersonalGate.allowed { AppUI.title(g, face, title); AppUI.drawLock(g, face, title: title); return }
@@ -411,7 +412,7 @@ final class RemindersApp: PetApp {
 
     private var homeContentHeight: CGFloat { Self.listsHead + 28 + CGFloat(src.lists.count) * (Self.listRow + Self.listGap) + 40 + Self.addRoom }
     /// 底部浮著「＋ 新增提醒」：清單最後幾列要能捲到它上面
-    private static var addRoom: CGFloat { HPTokens.Size.pill + HPGrid.Inset.app }
+    private static var addRoom: CGFloat { HPTokens.Size.pill + HPGrid.Content.leading }
 
     private func dueText(_ r: ReminderItem) -> String? {
         guard let d = r.due else { return nil }

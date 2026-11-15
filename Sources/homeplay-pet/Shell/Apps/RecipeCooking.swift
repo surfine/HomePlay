@@ -65,7 +65,7 @@ enum RecipeChecks {
     static func save(_ checked: Set<Int>, for r: Recipe) {
         var all = (try? Data(contentsOf: url)).flatMap { try? JSONDecoder().decode([String: [Int]].self, from: $0) } ?? [:]
         all[key(r)] = checked.isEmpty ? nil : checked.sorted()
-        if all.count > 30 { for k in all.keys.sorted().prefix(all.count - 30) { all[k] = nil } }
+        if all.count > 30 { for k in all.keys.filter({ $0 != key(r) }).sorted().prefix(all.count - 30) { all[k] = nil } }   // 不淘汰剛存的這一份
         try? FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
         if let d = try? JSONEncoder().encode(all) { try? d.write(to: url, options: .atomic) }
     }

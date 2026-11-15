@@ -17,11 +17,14 @@ enum HPGrid {
         static var trailing: CGFloat { canvas - margin }   // 925.5
     }
 
-    /// App 內容：左右邊距與主要對齊線
-    enum App {
-        static let margin = HPTokens.Space.margin            // 64
-        static var leading: CGFloat { margin }
-        static var trailing: CGFloat { canvas - margin }    // 960
+    /// 內容邊線（2026-11-12 設計稿定案）：整台只留這一條——主畫面第 1 欄與第 4 欄圖示的外緣。
+    /// 所有 App 的內容區、頂列、橫幅通知都貼這條線（舊的 App 邊距 64／960 已經拿掉）。
+    enum Content {
+        static var leading: CGFloat { HPTokens.Space.content }      // 98.5
+        static var trailing: CGFloat { canvas - leading }           // 925.5
+        static var width: CGFloat { trailing - leading }            // 827
+        /// 四欄的欄心（174.5、399.5、624.5、849.5）：App 資料庫的豆莢對這裡
+        static func columnCenter(_ col: Int) -> CGFloat { leading + Home.icon / 2 + CGFloat(col) * Home.pitch }
     }
 
     /// 滿版面板／磚牆的外緣
@@ -33,18 +36,19 @@ enum HPGrid {
     static let scale: [CGFloat] = [8, 16, 24, 32, 48, 64, 96]
     /// 最小點按範圍（44 pt × 2）
     static let tap = HPTokens.Size.tap                       // 88
+    /// 外觀比 88 小的可點元件：以它為中心把點按範圍補到至少 88 × 88（外觀不變；shell-layout.md 第 2 節）
+    static func hitRect(_ r: CGRect) -> CGRect {
+        r.insetBy(dx: min(0, (r.width - tap) / 2), dy: min(0, (r.height - tap) / 2))
+    }
 
     /// 內縮合約（2026-10-28）：一個容器只有**一條**左緣、一條右緣。
     /// 以前圖庫是 32/40/48/54/56 五種、控制中心展開是 24/40 兩種，所以看起來邏輯錯亂。
     enum Inset {
-        /// 卡片／Sheet 的內容邊線（標題、清單、預覽、主按鈕全部對這條）
+        /// 浮層（控制中心、Sheet、長按選單、橫幅通知）的卡片內容邊線（標題、清單、預覽、主按鈕全部對這條；
+        /// docs/plans/shell-layout.md 第 3 節。長按選單原本另用 12，2026-11-12 起一樣是 40）
         static let card: CGFloat = 40
         /// 卡片內「行」的內距（行本身仍然貼 card 邊線；行裡的字與圖示再縮 nested）
         static let nested: CGFloat = 24
-        /// 長按選單內唯一的邊線（清單列、分隔線、尺寸塊都對它）
-        static let menu: CGFloat = 12
-        /// App 內容左右邊距（沿用）
-        static var app: CGFloat { App.margin }
     }
 
     /// 卡片內部的節奏：只用這三個

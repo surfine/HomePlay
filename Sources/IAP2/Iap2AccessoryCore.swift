@@ -67,6 +67,7 @@ package final class Iap2AccessoryCore {
 
     /// 传输已通：发 marker＋SYNC 开跑；250ms 心跳驱动链路层重传/延迟确认。
     package func start() {
+        guard !finished else { return }   // 開通道逾時已 finish，遲到的 open-complete 不再起心跳
         fileTransfer = FileTransferReceiver()
         link.start()
         drain()
@@ -103,7 +104,8 @@ package final class Iap2AccessoryCore {
 
     /// 主动发一帧（主线程）。
     package func send(_ frame: Iap2Csm.Frame) {
-        link.sendControl(frame.encoded)
+        guard let out = Iap2Csm.handoffFiltered(frame, Iap2Csm.wifiHandoff) else { return }   // 斷網實驗（HOMEPLAY_WIFI_HANDOFF）
+        link.sendControl(out.encoded)
         drain()
     }
 
@@ -116,6 +118,8 @@ package final class Iap2AccessoryCore {
         if exitCode == 0 { exitCode = code }
         transportTeardown?(exitCode)
         onFinished?(exitCode)
+        // 這些回呼通常捕獲配件自己（acc → core → 閉包 → acc）；結束後不放掉，每次連線嘗試就漏一組配件
+        onPhase = nil; onMessage = nil; onArtwork = nil; onFinished = nil
     }
 
     // MARK: 車機定位探針
@@ -199,7 +203,7 @@ package final class Iap2AccessoryCore {
                     bluetoothMac: Iap2AccessoryCore.localBluetoothAddress, ssid: info.ssid,
                     transport: info.transport, location: info.fakeGPS != nil)
                 if info.fakeGPS != nil { log("識別資訊宣告車機定位元件（參數 22）") }
-                link.sendControl(reply.encoded)
+                link.sendControl((Iap2Csm.handoffFiltered(reply, Iap2Csm.wifiHandoff) ?? reply).encoded)
             case Iap2Csm.Identify.accepted:
                 setPhase(.mfi)
                 log("识别通过（0x1D02）")
@@ -257,7 +261,7 @@ package final class Iap2AccessoryCore {
                 finish(8)
             default:
                 if phase == .authenticated, let onMessage {
-                    for reply in onMessage(frame) { link.sendControl(reply.encoded) }
+                    for reply in onMessage(frame) { if let out = Iap2Csm.handoffFiltered(reply, Iap2Csm.wifiHandoff) { link.sendControl(out.encoded) } }
                 } else {
                     log(String(format: "别的消息 0x%04x（阶段 %@）", frame.messageId, phase.rawValue))
                     // 協議取證：HOMEPLAY_TRACE_CSM=1 時把沒見過的訊息連同可讀字串記下來，

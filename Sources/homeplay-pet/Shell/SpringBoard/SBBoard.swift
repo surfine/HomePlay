@@ -173,7 +173,16 @@ enum SB {
         anims.removeAll()
         // App 資源庫這一格：翻到就是資源庫畫面（不走霧化過場，畫面已經跟著手滑過去了）；翻回來就是主畫面
         if libraryReachable, to == librarySlot {
-            if Shell.nav.screen == .home { Shell.nav.screen = .library; libraryQuery = ""; librarySearching = false; setLibraryExpanded(nil, now: CACurrentMediaTime(), immediate: true); menu = nil; Shell.peopleSheet = false }
+            if Shell.nav.screen == .home {
+                let discard = !libraryBrowsing || libraryExpanded != nil
+                Shell.nav.screen = .library
+                libraryQuery = ""
+                librarySearching = false
+                setLibraryExpanded(nil, now: now, immediate: true)
+                if discard { resetLibraryScroll(now: now) }
+                menu = nil
+                Shell.peopleSheet = false
+            }
         } else if Shell.nav.screen == .library {
             Shell.nav.screen = .home
         }
@@ -247,10 +256,21 @@ enum SB {
     }
     nonisolated(unsafe) static var libraryQuery = ""
     nonisolated(unsafe) static var librarySearching = false
-    /// 點豆莢標題展開的那一類（nil＝豆莢總覽）。
+    /// 字還沒打：豆莢或展開頁留著。打了字才換成搜尋結果。
+    static var libraryBrowsing: Bool { libraryQuery.trimmingCharacters(in: .whitespaces).isEmpty }
+    /// 返回一層。展開頁先收回；沒有展開頁才翻回主畫面。有搜尋字時留給結果。
+    enum LibraryBackTarget: Equatable { case home, pods }
+    static var libraryBackTarget: LibraryBackTarget? {
+        guard libraryBrowsing, menu == nil, sheet == nil else { return nil }
+        return libraryExpanded == nil ? .home : .pods
+    }
+    /// 橫滑翻回主畫面。展開頁先收回；有搜尋字時留給結果；搜尋欄只是焦點、字還沒打，豆莢還在，橫滑照舊。
+    static var libraryAllowsPaging: Bool { libraryBackTarget == .home }
+    /// 點豆莢標題展開的那一頁（nil＝豆莢總覽）。
     /// 系統的對應物是 `SBHLibraryPodFolderController`／`expandedCategoryPodIconSpacing`：
-    /// 豆莢標題點下去開該類的展開頁，點豆莢裡的圖示才是直接開 App。
-    nonisolated(unsafe) static var libraryExpanded: SBLibraryCategory? = nil
+    /// 豆莢標題點下去開展開頁，點豆莢裡的圖示才是直接開 App。
+    /// 建議最多 4 顆、全部畫在豆莢上，沒有展開頁。最近添加容量 8，豆莢只畫 7 顆，第 8 顆在展開頁。
+    nonisolated(unsafe) static var libraryExpanded: SBLibraryPage? = nil
     /// 0＝豆莢總覽、1＝展開頁。`+[SBHLibraryPodZoomSettings _defaultCrossfadeSettings]` 把 duration 設成 0.2
     /// （`__DATA` 0x1c5d74850）。臨界阻尼走到 95% 的 response＝0.2/0.76。
     nonisolated(unsafe) static var libraryReveal = MotionValue("sbLibReveal", spring: Spring.settling(0.2), from: 0, to: 0, now: 0)
@@ -261,10 +281,10 @@ enum SB {
     nonisolated(unsafe) static var libraryClosing = false
 
     /// 點豆莢標題展開、點空白收回。快照直接落在終點，畫面才不會停在半透明。
-    static func setLibraryExpanded(_ cat: SBLibraryCategory?, now: Double, immediate: Bool = SnapshotPrivacy.active) {
-        if let cat {
+    static func setLibraryExpanded(_ page: SBLibraryPage?, now: Double, immediate: Bool = SnapshotPrivacy.active) {
+        if let page {
             libraryClosing = false
-            libraryExpanded = cat
+            libraryExpanded = page
             if immediate {
                 libraryReveal.set(1, velocity: 0, now: now)
                 libraryZoom.set(1, velocity: 0, now: now)
@@ -296,15 +316,13 @@ enum SB {
     /// 內容比畫面高多少（px）；0＝不用捲（16 個內建 App 剛好四列）
     static var libraryMaxScroll: CGFloat {
         let bottom: CGFloat
-        if SB.libraryQuery.isEmpty && !SB.librarySearching {
+        if libraryBrowsing {
             if libraryShowingExpanded {   // 展開的類別頁
                 bottom = (SBUI.libraryExpandedCells().last?.maxY ?? SBUI.libraryTop) + HPTokens.Home.labelBaseline
             } else {
-                // 捲動以一整列豆莢為一格：最後一列要能捲到第一列的位置，不能停在切半的地方。
-                let n = SBUI.libraryPods().count
-                let rows = (n + SBLPodGrid.columns - 1) / SBLPodGrid.columns
-                bottom = SBUI.libraryTop + CGFloat(max(0, rows - 1)) * SBLPodGrid.rowPitch + SBLPodGrid.podHeight + SBLPodGrid.labelBand
-                return max(0, bottom - SBUI.libraryPodClipBottom)
+                // 最後一顆豆莢的底要能捲到面板下緣。列距固定，不把半列藏起來。
+                bottom = SBUI.libraryTop + SBLPodGrid.contentHeight(SBUI.libraryPods())
+                return max(0, bottom - SBUI.panel.maxY)
             }
         } else {
             let last = SBUI.libraryLayout().cells.last?.minY ?? SBUI.libraryTop   // 分區標題也算進去（iPhone 分類）
@@ -331,6 +349,44 @@ enum SB {
         let to = max(0, min(libraryMaxScroll, libraryScrollDrag + HPMotion.project(v)))
         libraryScroll.retarget(to, now: now, velocity: v)
         SBInputState.libWheel = nil
+    }
+    /// 搜尋清單和豆莢的內容不一樣高。沿用另一份的捲動，短的那份會整頁捲出畫面。
+    static func resetLibraryScroll(now: Double) {
+        libraryScrollDragging = false
+        libraryScrollSamples = []
+        libraryScrollDrag = 0
+        libraryScroll = MotionValue("sbLibScroll", spring: SBMotion.settle, from: 0, to: 0, now: now)
+        SBInputState.libWheel = nil
+    }
+    /// 點搜尋欄只把焦點放進去。展開頁留著，跟直接打字同一條；Esc 先收搜尋，再收回展開頁。
+    static func focusLibrarySearch() {
+        librarySearching = true
+    }
+    /// 收起搜尋。有打過字才回到豆莢頂；只是焦點在空搜尋欄，捲動留著。
+    static func dismissLibrarySearch(now: Double) {
+        let hadQuery = !libraryBrowsing
+        libraryQuery = ""
+        librarySearching = false
+        if hadQuery { resetLibraryScroll(now: now) }
+    }
+    /// 點空白收回展開頁。字還沒打時，搜尋欄的焦點一起收掉。
+    static func closeLibraryExpanded(now: Double) {
+        setLibraryExpanded(nil, now: now)
+        resetLibraryScroll(now: now)
+        if libraryBrowsing { librarySearching = false }
+    }
+    /// Esc 的層：選單、搜尋、展開頁。都沒有才交給回主畫面。
+    static func dismissLibraryTop(now: Double) -> Bool {
+        if menu != nil { menu = nil; return true }
+        if librarySearching || !libraryQuery.isEmpty {
+            dismissLibrarySearch(now: now)
+            return true
+        }
+        if libraryExpanded != nil {
+            closeLibraryExpanded(now: now)
+            return true
+        }
+        return false
     }
     /// 動畫中的位置（key → x、y 彈簧；只算目前這一頁）
     nonisolated(unsafe) static var anims: [String: (x: MotionValue, y: MotionValue, page: Int)] = [:]
@@ -454,8 +510,26 @@ enum SB {
         return widgets + apps + inFolders
     }
     static func libraryItems() -> [(CGRect, HomeItem)] {
-        let apps = SBUI.libraryApps()
-        return zip(apps, SBUI.libraryCells(apps.count)).map { ($0.1, .app($0.0.id)) }
+        let off = libraryScrollNow
+        if libraryBrowsing {
+            if libraryShowingExpanded {
+                return zip(SBUI.libraryExpandedApps(), SBUI.libraryExpandedCells()).compactMap { app, cell in
+                    let ir = cell.offsetBy(dx: 0, dy: -off)
+                    guard SBUI.libraryMostlyVisible(ir) else { return nil }
+                    return (ir, .app(app.id))
+                }
+            }
+            return SBUI.libraryPodIcons().compactMap { icon in
+                let ir = icon.rect.offsetBy(dx: 0, dy: -off)
+                guard SBUI.libraryMostlyVisible(ir) else { return nil }
+                return (ir, .app(icon.id))
+            }
+        }
+        return zip(SBUI.libraryApps(), SBUI.libraryLayout().cells).compactMap { app, cell in
+            let ir = SBUI.libraryIcon(cell).offsetBy(dx: 0, dy: -off)
+            guard SBUI.libraryMostlyVisible(ir) else { return nil }
+            return (ir, .app(app.id))
+        }
     }
 
     // MARK: 編輯動作

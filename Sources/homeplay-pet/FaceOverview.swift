@@ -7,7 +7,7 @@ import AppKit
 
 /// 总览的状态（extension 不能存属性，放在这里；桌宠只有一张 Face）
 enum FaceOverview {
-    enum Page { case gallery, templates, editor }
+    enum Page { case gallery, templates, editor, slots }
     /// 快照用：--overview 强制进入，也不会闲置退出
     static var forced = false
     static var active = false
@@ -45,9 +45,21 @@ enum FaceOverview {
         CGRect(x: 88 + CGFloat(i % 4) * 216, y: 180 + CGFloat(i / 4) * 150, width: 200, height: 134)
     }
     static func editorRow(_ i: Int) -> CGRect {
-        CGRect(x: 96, y: 708 + CGFloat(i) * 52, width: 832, height: 46)
+        CGRect(x: 96, y: 692 + CGFloat(i) * 52, width: 832, height: 46)
+    }
+    static let editorPreview = CGRect(x: 232, y: 100, width: 560, height: 560)
+    /// W3 九格編輯頁的格子（3×3；順序照海報：由左到右、再往上）。只有家庭版式會進這頁。
+    static func posterSlotRect(_ i: Int) -> CGRect {
+        CGRect(x: 96 + CGFloat(i % 3) * 288, y: 224 + CGFloat(i / 3) * 208, width: 256, height: 184)
     }
     static let editorDone = CGRect(x: 392, y: 28, width: 240, height: 56)
+    static let editorTrash = CGRect(x: 96, y: 28, width: 208, height: 56)   // W2：刪這一張（兩段確認；文案照官方）
+    static let editorMoveL = CGRect(x: 316, y: 28, width: 64, height: 56)   // W2：排序＝往前一張
+    static let editorMoveR = CGRect(x: 644, y: 28, width: 64, height: 56)   // W2：排序＝往後一張
+    /// 垃圾桶點了一下：再點一次才真的刪（換頁或點別處就收）
+    static var deleteArmed = false
+    /// 改名中的輸入緩衝（nil＝不在改名；空字串＝回種類名）
+    static var renaming: String?
     static let templateCancel = CGRect(x: 392, y: 900, width: 240, height: 56)
 
     /// 选中往前/往后挪一格，到头就停（不绕回，跟页点一致）
@@ -83,6 +95,7 @@ extension Face {
         }
         S.active = true
         S.page = .gallery
+        S.deleteArmed = false; S.renaming = nil
         S.sel = min(PosterLibraryStore.index, max(0, S.slotCount - 1))
         S.pos = CGFloat(S.sel); S.vel = 0
         S.enter = animated ? 0 : 1; S.enterV = 0
@@ -181,6 +194,7 @@ extension Face {
         switch S.page {
         case .templates: drawTemplatePage(g)
         case .editor: drawEditorPage(g, now, live)
+        case .slots: drawSlotsPage(g)
         case .gallery: drawGallery(g, now, live, e, ek)
         }
     }
@@ -271,41 +285,110 @@ extension Face {
         drawCentered(g, L("sb.cancel", "取消"), font: Self.rounded(24, weight: .semibold), kern: 0, y: cancel.midY + 8, color: .white)
     }
 
-    /// 全螢幕編輯：上面是這張臉，下面是已有的四個欄位再加上錶面種類。不畫佔位槽。
+    /// 全螢幕編輯：上面是這張臉，下面是已有的四個欄位＋錶面種類＋名字（W2：點了改）。不畫佔位槽。
     private func drawEditorPage(_ g: CGContext, _ now: Double, _ live: CGImage) {
+        let S = FaceOverview.self
         let items = PosterLibraryStore.all
-        guard items.indices.contains(FaceOverview.sel) else { return }
-        let c = items[FaceOverview.sel]
-        let preview = CGRect(x: 232, y: 100, width: 560, height: 560)
-        let img = (FaceOverview.sel == PosterLibraryStore.index && c.galleryFace == style) ? live : overviewThumb(FaceOverview.sel, now)
+        guard items.indices.contains(S.sel) else { return }
+        let c = items[S.sel]
+        let preview = S.editorPreview
+        let img = (S.sel == PosterLibraryStore.index && c.galleryFace == style) ? live : overviewThumb(S.sel, now)
         g.saveGState()
         let path = continuousRoundedRect(preview, radius: Screen.cornerRadius * preview.width / Screen.side)
         g.addPath(path); g.clip()
         drawUpright(g, img, in: preview)
         g.restoreGState()
-        let done = FaceOverview.editorDone
+        // W2：頂排＝刪除（兩段確認）· ‹ 排序 › · 完成
+        let canDelete = items.count > 1, armed = S.deleteArmed
+        let trash = S.editorTrash
+        g.setFillColor(armed ? NSColor(srgbRed: 0.58, green: 0.14, blue: 0.14, alpha: 1).cgColor
+                             : NSColor(white: 0.16, alpha: canDelete ? 1 : 0.35).cgColor)
+        g.addPath(continuousRoundedRect(trash, radius: 28)); g.fillPath()
+        drawCentered(g, armed ? L("overview.delete.confirm", "再点一次删除") : L("overview.delete", "删除"),
+                     font: Self.rounded(20, weight: .semibold), kern: 0, y: trash.midY + 7,
+                     color: NSColor.white.withAlphaComponent(canDelete ? 1 : 0.5))
+        if armed {   // 文案照官方：刪臉不會刪 App 或資料
+            drawCentered(g, L("settings.posters.delete.message", "不会删除任何 App 或数据。"),
+                         font: Self.rounded(20, weight: .semibold), kern: 0.4, y: 668, color: NSColor.white.withAlphaComponent(0.6))
+        }
+        for (rect, glyph, enabled) in [(S.editorMoveL, "‹", S.sel > 0), (S.editorMoveR, "›", S.sel < items.count - 1)] {
+            g.setFillColor(NSColor(white: 0.16, alpha: enabled ? 1 : 0.35).cgColor)
+            g.addPath(continuousRoundedRect(rect, radius: 20)); g.fillPath()
+            drawCentered(g, glyph, font: Self.rounded(30, weight: .semibold), kern: 0, y: rect.midY + 10,
+                         color: NSColor.white.withAlphaComponent(enabled ? 1 : 0.5))
+        }
+        let done = S.editorDone
         g.setFillColor(NSColor(white: 0.16, alpha: 1).cgColor)
         g.addPath(continuousRoundedRect(done, radius: 28)); g.fillPath()
         drawCentered(g, L("overview.done", "完成"), font: Self.rounded(24, weight: .semibold), kern: 0, y: done.midY + 8, color: .white)
+        // W2 改名中：名字列亮著＋輸入提示
+        if S.renaming != nil {
+            drawCentered(g, L("overview.rename.hint", "输入名字 · Return 完成 · Esc 取消"),
+                         font: Self.rounded(20, weight: .semibold), kern: 0.4, y: 668, color: NSColor.white.withAlphaComponent(0.6))
+        }
+        let nameValue = S.renaming.map { $0.isEmpty ? " " : $0 + "▏" } ?? c.galleryName
         let rows: [(String, String)] = [
             (L("overview.field.look", "Look"), c.look),
             (L("overview.field.typeface", "字体"), c.typeface.title),
             (L("overview.field.numerals", "数字"), c.numerals == nil ? L("settings.posters.autoNumerals", "自动数字") : L("settings.posters.customNumerals", "自订数字")),
             (L("overview.field.style", "版式"), c.style.title),
             (L("overview.field.face", "表面"), c.galleryFace.title),
+            (L("overview.field.name", "名字"), nameValue),
         ]
         for (i, row) in rows.enumerated() {
             let r = FaceOverview.editorRow(i)
-            g.setFillColor(NSColor(white: 0.12, alpha: 1).cgColor)
+            let isNaming = S.renaming != nil && i == 5
+            g.setFillColor(NSColor(white: isNaming ? 0.22 : 0.12, alpha: 1).cgColor)
             g.addPath(continuousRoundedRect(r, radius: 16)); g.fillPath()
             drawLeft(g, row.0, font: Self.rounded(22, weight: .semibold), x: r.minX + 22, y: r.midY + 8, color: NSColor(white: 1, alpha: 0.55))
-            drawLeft(g, row.1, font: Self.rounded(22, weight: .semibold), x: r.maxX - 22 - Typo.width(row.1, Self.rounded(22, weight: .semibold)), y: r.midY + 8, color: .white)
+            drawLeft(g, row.1, font: Self.rounded(22, weight: .semibold), x: r.maxX - 22 - Typo.width(row.1, Self.rounded(22, weight: .semibold)), y: r.midY + 8,
+                     color: .white)
         }
     }
 
     private func lerp(_ a: CGRect, _ b: CGRect, _ t: CGFloat) -> CGRect {
         CGRect(x: a.minX + (b.minX - a.minX) * t, y: a.minY + (b.minY - a.minY) * t,
                width: a.width + (b.width - a.width) * t, height: a.height + (b.height - a.height) * t)
+    }
+
+    /// W3 九格編輯頁：九個槽點了循環（佔位 → Live Activity → 小工具 → …）。
+    /// 證據（2026-11-10）：固件 items[] 固定九個 placeholder，但風格名＝threeColumnSixItems（六格），
+    /// 且 HomePlay 實測幾何第三排會超出 1024 畫布——結論：畫面只畫前六格，資料形狀照固件留九格。
+    /// 第七～九格在這裡明確標「後備」，不讓使用者編了看不到。
+    private func drawSlotsPage(_ g: CGContext) {
+        let S = FaceOverview.self
+        guard PosterLibraryStore.all.indices.contains(S.sel) else { return }
+        let c = PosterLibraryStore.all[S.sel]
+        drawCentered(g, L("poster.slots.title", "格子"), font: Self.rounded(34, weight: .bold), kern: 0, y: 900, color: .white)
+        let done = S.editorDone
+        g.setFillColor(NSColor(white: 0.16, alpha: 1).cgColor)
+        g.addPath(continuousRoundedRect(done, radius: 28)); g.fillPath()
+        drawCentered(g, L("overview.done", "完成"), font: Self.rounded(24, weight: .semibold), kern: 0, y: done.midY + 8, color: .white)
+        for i in 0..<9 {
+            let r = S.posterSlotRect(i)
+            let dim = i >= AmbientPoster.slotCapacity   // 後備格：畫面不畫
+            let kind = c.items.indices.contains(i) ? c.items[i].kind : .placeholder
+            let card = continuousRoundedRect(r, radius: HPTokens.Radius.concentric(rect: r))
+            g.setFillColor(NSColor(white: 0.12, alpha: dim ? 0.5 : 1).cgColor)
+            g.addPath(card); g.fillPath()
+            g.setStrokeColor(NSColor(white: 1, alpha: dim ? 0.15 : 0.3).cgColor); g.setLineWidth(2); g.strokePath()
+            drawLeft(g, "\(i + 1)", font: Self.rounded(20, weight: .semibold), x: r.minX + 20, y: r.maxY - 34,
+                     color: NSColor(white: 1, alpha: 0.45))
+            let name: String
+            switch kind {
+            case .placeholder: name = L("poster.slots.placeholder", "占位")
+            case .activity: name = L("a11y.liveActivity", "实时活动")
+            case .widget(let k): name = k.title
+            }
+            drawCentered(g, name, font: Self.rounded(26, weight: .semibold), kern: 0, y: r.midY + (dim ? 26 : 8),
+                         color: NSColor.white.withAlphaComponent(dim ? 0.55 : 1))
+            if dim {
+                drawCentered(g, L("poster.slots.reserve", "后备 · 画面不画"), font: Self.rounded(18, weight: .medium), kern: 0, y: r.midY - 26,
+                             color: NSColor.white.withAlphaComponent(0.4))
+            }
+        }
+        drawCentered(g, L("poster.slots.hint", "点一格换内容 · 前六格画在家庭版式"), font: Self.rounded(20, weight: .semibold), kern: 0.4, y: 132,
+                     color: NSColor.white.withAlphaComponent(0.42))
     }
 }
 
@@ -319,7 +402,7 @@ extension PetView {
     private func confirmOverview() {
         let S = FaceOverview.self
         switch S.page {
-        case .editor: S.page = .gallery; face.forceDirty = true; return
+        case .editor, .slots: S.page = .gallery; face.forceDirty = true; return
         case .templates: return
         case .gallery: break
         }
@@ -389,11 +472,12 @@ extension PetView {
         let p = CGPoint(x: uv.x * 1024, y: uv.y * 1024)
         switch S.page {
         case .editor: return editorClick(p)
+        case .slots: return slotsClick(p)
         case .templates: return templateClick(p)
         case .gallery:
             if abs(dx) > 30 { face.moveOverview(dx < 0 ? 1 : -1); return true }
             if FaceOverview.customizeRect.insetBy(dx: -8, dy: -8).contains(p), PosterLibraryStore.all.indices.contains(S.sel) {
-                S.page = .editor; overviewTouch(); face.forceDirty = true; return true
+                S.page = .editor; S.deleteArmed = false; S.renaming = nil; overviewTouch(); face.forceDirty = true; return true
             }
             if FaceOverview.addRect.insetBy(dx: -8, dy: -8).contains(p) {
                 let f = FaceGallery.focusAdd(count: PosterLibraryStore.all.count, index: PosterLibraryStore.index)
@@ -408,14 +492,125 @@ extension PetView {
 
     private func editorClick(_ p: CGPoint) -> Bool {
         overviewTouch()
+        if FaceOverview.renaming != nil { commitRename(); return true }   // W2：改名中任何點按＝先寫回
         if FaceOverview.editorDone.contains(p) {
-            FaceOverview.page = .gallery; face.forceDirty = true; return true
+            FaceOverview.page = .gallery; FaceOverview.deleteArmed = false; face.forceDirty = true; return true
+        }
+        if FaceOverview.editorTrash.insetBy(dx: -8, dy: -8).contains(p) {
+            editorDelete(); return true
+        }
+        if FaceOverview.editorMoveL.insetBy(dx: -8, dy: -8).contains(p) {
+            moveEditorPoster(-1); return true
+        }
+        if FaceOverview.editorMoveR.insetBy(dx: -8, dy: -8).contains(p) {
+            moveEditorPoster(1); return true
         }
         for i in 0..<5 where FaceOverview.editorRow(i).contains(p) {
+            FaceOverview.deleteArmed = false
             cycleEditorField(i); return true
         }
-        FaceOverview.page = .gallery; face.forceDirty = true
+        if FaceOverview.editorRow(5).contains(p), PosterLibraryStore.all.indices.contains(FaceOverview.sel) {
+            // W2：名字＝點了改（鍵盤輸入），不是循環切換
+            FaceOverview.renaming = PosterLibraryStore.all[FaceOverview.sel].extras.displayName
+            FaceOverview.deleteArmed = false
+            face.forceDirty = true
+            return true
+        }
+        // W3：點這張臉的預覽 → 家庭版式的九格編輯頁（其他版式不畫格子，照舊回畫廊）
+        if FaceOverview.editorPreview.contains(p), PosterLibraryStore.all.indices.contains(FaceOverview.sel),
+           PosterLibraryStore.all[FaceOverview.sel].style == .threeColumnSixItems {
+            FaceOverview.page = .slots; FaceOverview.deleteArmed = false; face.forceDirty = true
+            return true
+        }
+        FaceOverview.page = .gallery; FaceOverview.deleteArmed = false; face.forceDirty = true
         return true
+    }
+
+    /// W3 九格編輯頁的點按：格子循環、Done／其他地方回編輯器
+    private func slotsClick(_ p: CGPoint) -> Bool {
+        overviewTouch()
+        if FaceOverview.editorDone.contains(p) || !CGRect(x: 64, y: 100, width: 896, height: 860).contains(p) {
+            FaceOverview.page = .editor; face.forceDirty = true; return true
+        }
+        for i in 0..<9 where FaceOverview.posterSlotRect(i).contains(p) {
+            cyclePosterSlot(i)
+            return true
+        }
+        FaceOverview.page = .editor; face.forceDirty = true
+        return true
+    }
+
+    /// W3：第 i 格循環到下一個內容（佔位 → Live Activity → 小工具 → 佔位），寫回這張海報。
+    /// 資料形狀照固件：正規化成九格（identifier slot-0…8）。快照不寫偏好。
+    private func cyclePosterSlot(_ i: Int) {
+        let s = FaceOverview.sel
+        guard PosterLibraryStore.all.indices.contains(s), (0..<9).contains(i) else { return }
+        var c = PosterLibraryStore.all[s]
+        while c.items.count < 9 { c.items.append(.init(identifier: "slot-\(c.items.count)", kind: .placeholder)) }
+        c.items[i].kind = PosterConfiguration.Item.Kind.nextSlotKind(c.items[i].kind)
+        PosterLibraryStore.replace(s, with: c, persistChanges: !Face.snapshotFreeze)
+        if s == PosterLibraryStore.index {
+            if Face.snapshotFreeze {
+                PosterConfiguration.suppressLibraryWrite = true
+                PosterConfiguration.current = c
+                PosterConfiguration.suppressLibraryWrite = false
+            } else {
+                PosterConfiguration.current = c
+            }
+        }
+        face.forceDirty = true
+        log("overview slot \(i) → \(String(describing: c.items[i].kind))")
+    }
+
+    /// W2：寫回名字。空白＝回種類名（galleryName 既有規則）。快照不寫偏好。
+    private func commitRename() {
+        guard let buf = FaceOverview.renaming else { return }
+        FaceOverview.renaming = nil
+        let i = FaceOverview.sel
+        guard PosterLibraryStore.all.indices.contains(i) else { return }
+        var c = PosterLibraryStore.all[i]
+        c.extras.displayName = String(buf.trimmingCharacters(in: .whitespacesAndNewlines).prefix(24))
+        PosterLibraryStore.replace(i, with: c, persistChanges: !Face.snapshotFreeze)
+        if i == PosterLibraryStore.index {
+            if Face.snapshotFreeze {
+                PosterConfiguration.suppressLibraryWrite = true
+                PosterConfiguration.current = c
+                PosterConfiguration.suppressLibraryWrite = false
+            } else {
+                PosterConfiguration.current = c
+            }
+        }
+        FaceOverview.thumbs = [:]
+        face.forceDirty = true
+        log("overview rename \(i) → \(c.extras.displayName.isEmpty ? "(default)" : c.extras.displayName)")
+    }
+
+    /// W2：刪掉編輯中的這一張。兩段確認；至少留一張（remove 擋）；刪的是目前那張 → 畫面換到新的目前那張。
+    private func editorDelete() {
+        let i = FaceOverview.sel
+        guard PosterLibraryStore.all.indices.contains(i), PosterLibraryStore.all.count > 1 else { return }
+        guard FaceOverview.deleteArmed else { FaceOverview.deleteArmed = true; face.forceDirty = true; return }
+        FaceOverview.deleteArmed = false
+        let wasCurrent = i == PosterLibraryStore.index
+        guard PosterLibraryStore.remove(i) else { return }
+        if wasCurrent { applyLibraryFace(PosterLibraryStore.index) }
+        FaceOverview.sel = min(FaceOverview.sel, max(0, PosterLibraryStore.all.count - 1))
+        FaceOverview.pos = CGFloat(FaceOverview.sel); FaceOverview.vel = 0
+        FaceOverview.page = .gallery
+        FaceOverview.thumbs = [:]
+        face.forceDirty = true
+        log("overview delete poster \(i)")
+    }
+
+    /// W2：把編輯中的這一張往前／往後移一格。畫面上的臉不變（同一張），目前那張的 index 由 move 自己跟。
+    private func moveEditorPoster(_ d: Int) {
+        let i = FaceOverview.sel, to = i + d
+        guard PosterLibraryStore.all.indices.contains(to), PosterLibraryStore.move(from: i, to: to) else { return }
+        FaceOverview.sel = to
+        FaceOverview.deleteArmed = false
+        FaceOverview.thumbs = [:]   // 順序變了，縮圖全部重畫
+        face.forceDirty = true
+        log("overview move poster \(i) → \(to)")
     }
 
     private func templateClick(_ p: CGPoint) -> Bool {
@@ -519,9 +714,27 @@ extension PetView {
         guard face.inOverview, !showingVideo, !e.modifierFlags.contains(.command) else { return false }
         overviewTouch()
         let S = FaceOverview.self
+        if let buf = S.renaming {   // W2：改名中鍵盤全收（字母進緩衝、⌫ 刪、Return 寫回、Esc 取消）
+            switch e.keyCode {
+            case 53: S.renaming = nil
+            case 36, 76: commitRename()
+            case 51: if !buf.isEmpty { S.renaming = String(buf.dropLast()) }
+            default:
+                // 方向鍵、F 鍵、Home 等會給出 U+F700–F8FF 的私用區字元，Ctrl 組合給控制字元：都不是名字的一部分
+                let typed = (e.charactersIgnoringModifiers ?? "").unicodeScalars.filter {
+                    !(0xF700...0xF8FF).contains($0.value) && $0.properties.generalCategory != .control
+                }
+                if !typed.isEmpty, buf.count < 24 {
+                    S.renaming = buf + String(String.UnicodeScalarView(typed))
+                }
+            }
+            face.forceDirty = true
+            return true
+        }
         switch e.keyCode {
         case 53:
-            if S.page != .gallery { S.page = .gallery; face.forceDirty = true }
+            if S.page == .slots { S.page = .editor; face.forceDirty = true }   // W3：格子頁的 Esc 回編輯器
+            else if S.page != .gallery { S.page = .gallery; face.forceDirty = true }
             else { face.endOverview(confirm: false) }
         case 36, 76: confirmOverview()
         case 123: face.moveOverview(-1)

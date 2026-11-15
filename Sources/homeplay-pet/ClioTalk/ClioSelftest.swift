@@ -227,9 +227,8 @@ enum ClioSelftest {
         check(a == ["今天晴。"] && b == ["明天下雨！", "Price is 3.5 today."] && sp.flush() == "Done", "朗讀：串流文字逐句切（3.5 不切）")
 
         var f5 = ClioF5Router()
-        check(!f5.route(down: true, carPlayLive: true, clioEnabled: true) && !f5.route(down: false, carPlayLive: false, clioEnabled: true), "F5：直播中給 iPhone，放開跟著同一邊")
-        check(f5.route(down: true, carPlayLive: false, clioEnabled: true) && f5.route(down: false, carPlayLive: true, clioEnabled: true), "F5：沒直播給 ClioTalk，放開也歸 ClioTalk")
-        check(!f5.route(down: true, carPlayLive: false, clioEnabled: false), "F5：設定關掉就照舊")
+        check(!f5.route(down: true, carPlayLive: true) && !f5.route(down: false, carPlayLive: false), "F5：直播中給 iPhone，放開跟著同一邊")
+        check(f5.route(down: true, carPlayLive: false) && f5.route(down: false, carPlayLive: true), "F5：沒直播給 ClioTalk，放開也歸 ClioTalk")
 
         let d = ClioDates.parse("2026-10-27T18:30")
         let c = d.map { Calendar.current.dateComponents([.month, .day, .hour, .minute], from: $0) }
@@ -269,6 +268,18 @@ enum ClioSelftest {
         var reloaded = 0
         wait { reloaded = await make(p1).messages.count }
         check(reloaded == 2 && store.load().first?.text.contains("hello") == true, "引擎：重開後讀回紀錄")
+        // 存進磁碟的版本：只留問的與答的——[Context]、工具結果的內容都不落地；過期的從檔案裡刪掉
+        check(store.load().first?.text == "hello", "引擎：存檔不帶每句前面的 [Context]")   // l10n-ignore：selftest
+        let disk = ClioHistoryStore.forDisk([ClioMessage(role: .assistant, blocks: [.toolUse(id: "t1", name: "messages_read_recent", input: "{}")]),
+                                             ClioMessage(role: .user, blocks: [.toolResult(id: "t1", content: "secret body", isError: false)])])
+        check(disk[0].toolUses.first?.id == "t1" && disk[1].blocks == [.toolResult(id: "t1", content: ClioHistoryStore.notKept, isError: false)],
+              "引擎：工具結果的內容不存檔，呼叫與結果的配對留著")   // l10n-ignore：selftest
+        let oldDir = dir.appendingPathComponent("old"), oldStore = ClioHistoryStore(dir: oldDir)
+        oldStore.save([ClioMessage(role: .user, blocks: [.text("old")], at: Date(timeIntervalSinceNow: -30 * 3600)),
+                       ClioMessage(role: .user, blocks: [.text("new")], at: Date())])
+        let kept = oldStore.load()
+        let onDisk = (try? Data(contentsOf: oldDir.appendingPathComponent("history.json"))).flatMap { String(data: $0, encoding: .utf8) } ?? ""
+        check(kept.map(\.text) == ["new"] && !onDisk.contains("old"), "引擎：超過 24 小時的輪次載入時從檔案裡刪掉")   // l10n-ignore：selftest
 
         // 2. 快模型叫 escalate → 同一份紀錄交給深模型，escalate 那則不留
         store.clear()
