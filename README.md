@@ -10,9 +10,9 @@ At night, it falls asleep before you do.
 
 <img src="assets/github/hero-v2.gif" alt="The home screen pulls back from the eyes to the whole device" width="720">
 
-[Download 2.0 beta 6](https://github.com/surfine/HomePlay/releases/download/v2.0.0-beta.6/HomePlay-2.0-beta6-macOS-arm64.zip) · [Stable 1.0.6](https://github.com/surfine/HomePlay/releases/download/v1.0.6/HomePlay-macOS-arm64.zip)
+[Download 2.0 beta 8](https://github.com/surfine/HomePlay/releases/download/v2.0.0-beta.8/HomePlay-2.0-beta8-macOS-arm64.zip) · [Stable 1.0.6](https://github.com/surfine/HomePlay/releases/download/v1.0.6/HomePlay-macOS-arm64.zip)
 
-macOS 14 or later, on Apple silicon. Both apps are Developer ID signed and notarized. 2.0 beta 6 is the preview, and it can have bugs. 1.0.6 is the stable build. GPL-3.0-or-later.
+macOS 14 or later, on Apple silicon. Both apps are Developer ID signed and notarized. 2.0 beta 8 is the preview, and it can have bugs. 1.0.6 is the stable build. GPL-3.0-or-later.
 
 1.0 is the eyes, and CarPlay from an iPhone. 2.0 is the rest of HomeView: a Home Screen, faces, apps, and ClioTalk. This repository builds 1.0, the same app as 1.0.6. The 2.0 app is the beta download. The 2.0 source is not published here.
 
@@ -76,6 +76,8 @@ A mouse, a trackpad, and a keyboard all work. On a touch Mac, and in Sidecar, a 
 
 ## What beta 6 puts on the glass
 
+This section describes beta 6. Beta 7 and beta 8 changed some of it (beta 8, for one, replaces the 👀 capsule above the Home Screen and apps with a hidden handle); see the [beta 7](https://github.com/surfine/HomePlay/releases/tag/v2.0.0-beta.7) and [beta 8](https://github.com/surfine/HomePlay/releases/tag/v2.0.0-beta.8) release notes.
+
 Hold an icon for half a second and the icons jiggle. Drop one on another and you get a folder. Widgets of the same size can stack, and the stack puts the right one on top for the time of day. Four looks, as on an iPhone: light, dark, clear, tinted. There is no Dock. The last page is the App Library.
 
 The Home Screen uses Liquid Glass where macOS can draw it. On an older system, HomePlay draws the glass itself. Liquid Glass, on-device speech, and on-device models need macOS 26 or later.
@@ -126,6 +128,8 @@ Those numbers are general image features. Do not use them as a lock.
 You can enroll six people. The first is the Mac's owner. Look at the camera, then turn your head a little to each side. A guest, and a face it does not know, sees the default Home Screen. Messages, photos, and calendars stay with the owner.
 
 ## Limits in beta 6
+
+Written for beta 6; the [beta 8 release notes](https://github.com/surfine/HomePlay/releases/tag/v2.0.0-beta.8) list what that build still needs.
 
 - Liquid Glass, on-device speech, and on-device models need macOS 26 or later.
 - Cloud ClioTalk needs your own key.

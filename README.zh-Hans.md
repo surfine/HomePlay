@@ -10,9 +10,9 @@ HomePlay 是放在 Mac 桌面上的 HomeView。它大部分时间看着你，不
 
 <img src="assets/github/hero-v2.gif" alt="从主画面上的眼睛拉远，看到整台机器" width="720">
 
-[下载 2.0 beta 6](https://github.com/surfine/HomePlay/releases/download/v2.0.0-beta.6/HomePlay-2.0-beta6-macOS-arm64.zip) · [稳定版 1.0.6](https://github.com/surfine/HomePlay/releases/download/v1.0.6/HomePlay-macOS-arm64.zip)
+[下载 2.0 beta 8](https://github.com/surfine/HomePlay/releases/download/v2.0.0-beta.8/HomePlay-2.0-beta8-macOS-arm64.zip) · [稳定版 1.0.6](https://github.com/surfine/HomePlay/releases/download/v1.0.6/HomePlay-macOS-arm64.zip)
 
-需要 macOS 14 及以上，Apple 芯片。两个 App 都有 Developer ID 签名，并通过 Apple 公证。2.0 beta 6 是预览版，可能有错。1.0.6 是稳定版。GPL-3.0-or-later。
+需要 macOS 14 及以上，Apple 芯片。两个 App 都有 Developer ID 签名，并通过 Apple 公证。2.0 beta 8 是预览版，可能有错。1.0.6 是稳定版。GPL-3.0-or-later。
 
 1.0 是那双眼睛，加上 iPhone 的 CarPlay。2.0 补上 HomeView 的其余部分：主屏幕、表盘、App，还有 ClioTalk。这个仓库编译的是 1.0，和 1.0.6 是同一个 App。2.0 请下载测试版。2.0 的源代码不在这里发布。
 
@@ -76,6 +76,8 @@ CarPlay 第一次用线配对。在 iPhone 上点「信任」，再点「配对�
 
 ## beta 6 的玻璃上有什么
 
+这一节写的是 beta 6。beta 7 和 beta 8 改了其中一些，例如 beta 8 把主屏幕和 App 上方的 👀 胶囊换成了平时隐藏的把手；详见 [beta 7](https://github.com/surfine/HomePlay/releases/tag/v2.0.0-beta.7) 和 [beta 8](https://github.com/surfine/HomePlay/releases/tag/v2.0.0-beta.8) 的发布说明。
+
 长按图标半秒，图标开始抖动。把一个图标拖到另一个上面，就变成文件夹。同样尺寸的小组件可以叠成一叠，它会按时段把合适的那个换到最上面。四种外观，和 iPhone 一样：浅色、深色、透明、着色。这个主屏幕没有 Dock。最后一页是 App 资源库。
 
 系统画得出 Liquid Glass 的时候，主屏幕就用系统的。更早的系统上，玻璃由 HomePlay 自己画。Liquid Glass、设备端语音和设备端模型，需要 macOS 26 及以上。
@@ -126,6 +128,8 @@ AirDrop 到 Mac 时会弹出卡片。你可以把照片、网页或菜谱发到 
 最多可以录入六个人。第一位是这台 Mac 的主人。看着镜头，再把头往两边转一下。访客，以及认不出的脸，看到的是默认主屏幕。信息、照片和日历只给主人看。
 
 ## beta 6 的限制
+
+这一节写于 beta 6；beta 8 还要注意的事，见 [beta 8 的发布说明](https://github.com/surfine/HomePlay/releases/tag/v2.0.0-beta.8)。
 
 - Liquid Glass、设备端语音和设备端模型需要 macOS 26 及以上。
 - 云端的 ClioTalk 需要你自己的密钥。
