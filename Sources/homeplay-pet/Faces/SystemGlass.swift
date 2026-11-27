@@ -26,10 +26,6 @@ struct SystemGlassParams {
 
     /// 鎖定畫面時間／HomeView Portraits：NSGlassEffectView .clear 的參數
     static let portrait = SystemGlassParams()
-    /// Flow 泡泡字：更厚、更亮、更飽和
-    static let bubble = SystemGlassParams(refractionHeight: 1.0, refractionAmount: -3.4, blurRadius: 3, highlight: 0.55,
-                                          white: 1.0, black: 0.12, saturation: 1.3, fill: 0.06, rim: 1.0,
-                                          keyAmount: 1.0, fillAmount: 0.6, ringShadow: 0.5)
 }
 
 final class SystemGlass {

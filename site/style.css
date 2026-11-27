@@ -169,7 +169,6 @@ header .btn{height:36px;padding:0 16px;font-size:14px}
 @media (max-width:700px){.apart-parts ol{grid-template-columns:1fr 1fr;gap:6px 16px}.apart-parts li{font-size:14px}}
 
 
-.c3{background:#151821;color:#e9ecf2} .c3 p{color:#9198a6}
 
 /* ── 跑起來 ── */
 .run .wrap{max-width:860px}
@@ -228,16 +227,13 @@ footer .links{display:flex;gap:8px 20px;flex-wrap:wrap}
 
 /* 進場：首屏用純 CSS（不等腳本），其餘每段標題浮一下；捲動不劫持。只動 transform 與 opacity。 */
 @keyframes rise{from{opacity:0;transform:translateY(16px)}}
-@keyframes breathe{0%,100%{transform:scale(1)}50%{transform:scale(1.004)}}
-@media (prefers-reduced-motion:no-preference){
-}
 @media (prefers-reduced-motion:no-preference) and (scripting:enabled){
   .rise{opacity:0;transform:translateY(16px);transition:opacity .7s ease,transform .8s var(--ease-out)}
   .rise.in{opacity:1;transform:none}
 }
 @media (prefers-reduced-motion:reduce){
   html{scroll-behavior:auto}
-  .pet,.pet img,.btn,.row,summary::after,.spin-stage img,.spin-stage canvas,.spin-hint,.copy{transition:none}
+  .pet,.pet img,.btn,.row,summary::after,.spin-stage img,.spin-stage canvas,.spin-hint,.copy,.style img{transition:none}
   .dot{display:none}
 }
 
@@ -298,16 +294,12 @@ footer .links{display:flex;gap:8px 20px;flex-wrap:wrap}
 .m-iris{fill:#5a2a00;stroke:#e2ab00;stroke-width:1.2}
 .m-key{fill:var(--panel);stroke:var(--line);stroke-width:1.2}
 .m-cap{font:600 12px/1 var(--font);fill:var(--muted);text-anchor:middle}
-.m-wave rect{fill:var(--accent);transform-box:fill-box;transform-origin:center;transform:scaleY(.25)}
 .m-blink{transform-box:fill-box;transform-origin:center}
 @media (prefers-reduced-motion:no-preference){
   .hl-grid.in .m-cable{stroke-dasharray:40;animation:m-unplug 4.8s var(--ease-in-out) infinite}
   .hl-grid.in .m-waves path{animation:m-wave 4.8s ease-in-out infinite}
   .hl-grid.in .m-waves path:nth-child(2){animation-delay:.15s} .hl-grid.in .m-waves path:nth-child(3){animation-delay:.3s}
   .hl-grid.in .m-blink{animation:m-blink 4.2s ease-in-out infinite}
-  .hl-grid.in .hl-siri .m-press{animation:m-hold 3.6s var(--ease-in-out) infinite}
-  .hl-grid.in .m-wave rect{animation:m-talk 3.6s ease-in-out infinite}
-  .hl-grid.in .m-wave .w1{animation-delay:.08s}.hl-grid.in .m-wave .w2{animation-delay:.16s}.hl-grid.in .m-wave .w3{animation-delay:.24s}.hl-grid.in .m-wave .w4{animation-delay:.32s}.hl-grid.in .m-wave .w5{animation-delay:.4s}
   .hl-grid.in .hl-keys .m-press{animation:m-tap 2.4s var(--spring) infinite}
   .m-press{transform-box:fill-box;transform-origin:center}
 }
@@ -316,8 +308,6 @@ footer .links{display:flex;gap:8px 20px;flex-wrap:wrap}
 @keyframes m-wave{0%,40%{opacity:.18}60%,85%{opacity:1}100%{opacity:.18}}
 @keyframes m-blink{0%,44%,52%,100%{transform:scaleY(1)}48%{transform:scaleY(.08)}}
 /* 按住 F5：鍵壓下時聲波起伏，放開就停 */
-@keyframes m-hold{0%,8%{transform:scale(1)}14%,70%{transform:scale(.92)}78%,100%{transform:scale(1)}}
-@keyframes m-talk{0%,12%{transform:scaleY(.25)}22%{transform:scaleY(.9)}32%{transform:scaleY(.45)}42%{transform:scaleY(1)}52%{transform:scaleY(.35)}62%{transform:scaleY(.8)}72%,100%{transform:scaleY(.25)}}
 @keyframes m-tap{0%,20%{transform:scale(1)}28%{transform:scale(.88)}40%,100%{transform:scale(1)}}
 
 /* ── 錶面一覽 ── */

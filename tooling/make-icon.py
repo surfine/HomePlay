@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """HomePlay 圖示。顏色取自開機 hello 那一幕（深藍 → 藕紫 → 杏橘的晨昏漸層），主角是「島」的一雙眼睛。
 
-  python3 tooling/make-icon.py            # 三個方向的設計稿 → .build/icon/sheet.png
+  python3 tooling/make-icon.py            # 三個方向的設計稿 → docs/design-drafts/圖示設計稿.png
   python3 tooling/make-icon.py --final A  # 定稿：assets/icon/AppIcon.icns + 官網圖示
 
 全部用 4 倍超取樣畫，再縮回 1024，邊緣才乾淨。macOS 圖示格線：1024 畫布、824 主體、四周留 100。

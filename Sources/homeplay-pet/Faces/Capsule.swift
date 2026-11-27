@@ -122,13 +122,13 @@ extension Face {
 
     /// 玻璃（Liquid Glass）：系統的玻璃零件，背景是這一刻已經畫好的錶面；位置與分鐘不變就用快取
     func glassPill(_ g: CGContext, _ r: CGRect) -> Bool {
-        guard let backdrop = g.makeImage() else { return false }
         let ri = r.integral, sc = renderPixelScale
         let key = "\(style.rawValue)|\(Int(ri.minX)),\(Int(ri.minY)),\(Int(ri.width)),\(Int(ri.height))|\(Int(sc * 100))|\(Int(Date().timeIntervalSince1970 / 60))"
         let path = CGPath(roundedRect: r, cornerWidth: r.height / 2, cornerHeight: r.height / 2, transform: nil)
         if let hit = Self.pillCache, hit.key == key {
             drawPillImage(g, hit.image, hit.rect, path); return true
         }
+        guard let backdrop = g.makeImage() else { return false }   // 快取沒中才拍背景：拍了再畫會整張複製一次
         var p = SystemGlassParams.portrait
         p.refractionAmount = -2.4; p.blurRadius = 9; p.highlight = 0.55; p.fill = 0.12; p.ringShadow = 0.3
         guard let out = SystemGlass.shared.render(path: path, key: "pill|\(key)", scale: sc, backdrop: backdrop, params: p) else { return false }

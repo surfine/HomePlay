@@ -50,7 +50,6 @@ final class LiquidGlass {
             } catch { log("liquid glass shader: \(error)") }
         }
     }
-    var available: Bool { pipeline != nil }
 
     /// 畫一組字形（同一個玻璃）：path 是 1024 邏輯座標（左上原點）；backdrop／frosted 是整張 1024² 背景（任意像素大小）。
     /// 回傳透明底的圖與它在 1024 座標的位置；失敗回 nil（呼叫端退回 CG 版玻璃）。

@@ -193,7 +193,6 @@ extension Wireless {
         }
         s.onActive = {
             live = true
-            Wireless.liveSinceHook?()
             // 學圓角的連線：手機 4 秒內沒送遮罩就當這版不送，回到平常模式（不讓使用者卡在學習連線）
             if s.config.info.main.cornerMasks == true {
                 DispatchQueue.main.asyncAfter(deadline: .now() + 4) {
@@ -221,7 +220,6 @@ extension Wireless {
         }
         s.onEnded = { why in
             live = false
-            Wireless.liveEndedHook?()
             note("会话结束：\(why)")
             let reason: SessionEndReason
             if why == "手机结束会话" { reason = .phoneTeardown }
@@ -245,7 +243,6 @@ extension Wireless {
         Wireless.cornerChanged = { why in
             if Thread.isMainThread { applyCorner(why) } else { DispatchQueue.main.async { applyCorner(why) } }
         }
-        Wireless.reopenNow = { _ in DispatchQueue.main.async { feed(.displayChanged) } }
         // 設定 › CarPlay › 圓角：桌寵寫 carplay-display.json；每秒看一次修改時間，改了就立刻套用
         let displayFile = HomePlayState.directory.appendingPathComponent("carplay-display.json")
         var displayStamp = (try? displayFile.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate
@@ -478,24 +475,11 @@ extension Wireless {
         // 插线时手机还没配对：先暂缓开 CarPlay 画面，让用户在 iPhone 的蓝牙设置里点这台 Mac（真机：手机端配对几秒就成，
         // Mac 主动呼叫多半叫不到）。配好或 60 秒到了才把扣下的 0x4300 交给状态机开会话。
         var noServiceStreak: [String: Int] = [:]   // 每支手機連續查不到 iAP2 服務的次數
-        var pairFirstUntil: Date?
-        var heldAvailability: ConnectionEvent?
-        var pairFirstTimer: DispatchWorkItem?
-        func releaseHeldAvailability(_ why: String) {
-            guard pairFirstUntil != nil else { return }
-            pairFirstUntil = nil
-            pairFirstTimer?.cancel(); pairFirstTimer = nil
-            if let e = heldAvailability {
-                heldAvailability = nil
-                note("插线配对：\(why) → 开会话")
-                feed(e)
-            }
-        }
         func notifyNeedPairing() {
             guard Date().timeIntervalSince(lastPairNotify) > 30 else { return }
             lastPairNotify = Date()
             if let text = Wireless.pairingHintPayload(host: hostName, stale: !Iap2BluetoothAccessory.ignoredAddresses.isEmpty,
-                                                      cable: pairFirstUntil.map { $0 > Date() } ?? false) {
+                                                      cable: false) {
                 Wireless.setPairingHint(text)
                 server.broadcastText(text)
             }
@@ -518,7 +502,6 @@ extension Wireless {
             note("蓝牙配对完成：\(phone.name)（\(phone.address)）→ 刷新 SDP 后连接")
             Wireless.setPairingHint(nil)
             server.broadcastText(#"{"type":"pairingDone"}"#)
-            releaseHeldAvailability("蓝牙配对完成")
             startBeaconIfNeeded()
             publishPhones(force: true)
             sdpBusy += 1
@@ -764,7 +747,7 @@ extension Wireless {
                 feed(.linkAuthenticated(gen: gen))
                 // 首次：iPhone 要使用者解鎖、在 CarPlay 提示上點「連接」才會往下走。20 秒還沒動靜就提醒一次
                 DispatchQueue.main.asyncAfter(deadline: .now() + 20) {
-                    guard links[gen] != nil, !live, !pairingGuide, pairFirstUntil == nil,
+                    guard links[gen] != nil, !live, !pairingGuide,
                           diag.availabilityAt == nil, diag.transportAt == nil, diag.firstStartAt == nil else { return }
                     showConnectHint("认证 20 秒仍没开始 CarPlay")
                 }
@@ -824,8 +807,6 @@ extension Wireless {
         }
         func startBeaconIfNeeded() {
             guard beacon == nil else { return }
-            // 登录项常驻：桌宠没连（没人在看）时不广播，避免开机就弹配对
-            if o.background, server.clientCount == 0 { return }
             let b = BluetoothBeacon(advertiseClass: true, log: { note("蓝牙广播：" + $0) })
             b.onIncoming = { device, channel in
                 // IOBluetooth 回调线程 → 主队列
@@ -902,9 +883,6 @@ extension Wireless {
                 server.broadcastText(#"{"type":"trustDone"}"#)
             }
         }
-        var pairAttempt: Date = .distantPast
-        var pairingHandoffInFlight = false
-        var pairingHandoffTimeout: DispatchWorkItem?
         var pairingAttemptedSerials = Set<String>()   // 每台 USB 设备在这段插线里只自动让位配对一次
         // HOMEPLAY_USB_CARKIT=1 可强制走 carkit（排障／偏好有线）。平常已配对手机的线只充电：
         // 真机 2026-10-22 14:59——只要 USB 上有 iAP2 链路，手机就把会话绑在它上面，拔线 115 ms 内结束会话。
@@ -961,7 +939,6 @@ extension Wireless {
                     note("这段插线已经尝试过配对：保持有线；拔线再插可重试，或右键「配对新 iPhone」")
                     return
                 }
-                guard pairFirstUntil == nil else { return }
                 if let serial = activeUSB?.serial { pairingAttemptedSerials.insert(serial) }
                 // 手机端配对优先：USB 留着，先不开画面；桌宠显示「到 iPhone 设置 › 蓝牙点这台 Mac」，Mac 保持可被发现
                 // 有線一定先出畫面（不等藍牙）；藍牙配對在背景引導，配好之後拔線就能改走無線
@@ -979,7 +956,7 @@ extension Wireless {
                 askPhoneForWiFi(acc.core, gen: gen)   // 插線時就把之後無線要的 Wi-Fi 備好
                 // 插线第一次也有 CarPlay 同意提示（iOS 27 叫「CarPlay Ultra」）：20 秒没动静提醒一次；插线配对暂缓时不算
                 DispatchQueue.main.asyncAfter(deadline: .now() + 20) {
-                    guard links[gen] != nil, !live, pairFirstUntil == nil, heldAvailability == nil,
+                    guard links[gen] != nil, !live,
                           diag.availabilityAt == nil, diag.transportAt == nil, diag.firstStartAt == nil else { return }
                     showConnectHint("有线认证 20 秒仍没开始 CarPlay")
                 }
@@ -999,12 +976,7 @@ extension Wireless {
                     let a = Iap2Csm.carPlayAvailability(frame)
                     note("USB CarPlay 可用性（0x4300）：\(a?.summary ?? "?")")
                     let event = ConnectionEvent.availability(gen: gen, wired: a?.wiredAvailable ?? false, wireless: a?.wirelessAvailable ?? false)
-                    if let until = pairFirstUntil, until > Date() {
-                        heldAvailability = event   // 等手机端配对（见 releaseHeldAvailability）
-                        note("插线配对：先等 iPhone 上配对，再开画面")
-                    } else {
-                        feed(event)
-                    }
+                    feed(event)
                     return []
                 case Iap2Csm.CarPlay.wifiConfigRequest:
                     note("USB 会话里手机要 Wi-Fi 配置 → 回 \(ssid)（密码不打印）")
@@ -1396,16 +1368,10 @@ extension Wireless {
             guard let serial = usbArrival.last, let device = devices.first(where: { $0.serial == serial }) else {
                 guard activeUSB != nil else { return }
                 activeUSB = nil
-                pairAttempt = .distantPast   // 拔线再插＝新的重试机会，不必等 30 秒冷却
                 if usbTrustHintShown {
                     usbTrustHintShown = false
                     Wireless.setTrustHint(nil)
                     server.broadcastText(#"{"type":"trustDone"}"#)   // 拔线：收起「点信任」卡片
-                }
-                if pairingHandoffInFlight {
-                    // 不再等 200 秒安全计时：线拔了这次插线配对就算结束，再插就是新的一次（真机 2026-10-24 09:04 卡了 2 分多钟）
-                    note("插线配对当中拔了线：结束这次插线配对")
-                    pairingHandoffTimeout?.perform()
                 }
                 note("USB 拔线")
                 if usbHelpReason != "usbNoData" { showUsbHelp(nil) }
@@ -1443,44 +1409,6 @@ extension Wireless {
         try? Data().write(to: Wireless.runningMarker)
         // 车机类 + iAP2/CarPlay SDP 必须在配对前就广播：iPhone 在配对时做 SDP 发现，
         // 那一刻看不到 CarPlay 服务，就只会把 Mac 当普通电脑，之后也不再提示 CarPlay。
-        if o.background {
-            // 登录项常驻：等桌宠（WS 客户端）连上再广播；没人时就撤掉广播并退出。
-            // 这样「退出 app 后 iPhone 一直弹配对请求」不会发生。
-            var idleSince: TimeInterval?
-            var idleExitScheduled = false
-            var firstPairGuideStarted = false
-            let watch = Timer(timeInterval: 5, repeats: true) { _ in
-                if server.clientCount > 0 {
-                    idleSince = nil
-                    if beacon == nil {
-                        startBeaconIfNeeded()
-                        note("桌宠已连接：开始/恢复蓝牙广播")
-                    }
-                    // 首次设定的配对引导后台模式不随启动跑（那时没人看）；桌宠连上再补。
-                    // 不补的话，「第一次点连接就装了常驻」的新用户等不到「让 Mac 可被发现」，首配卡死。
-                    if o.phoneAddress == nil, !firstPairGuideStarted {
-                        firstPairGuideStarted = true
-                        startPairingGuide("第一次设定：让 iPhone 在蓝牙「其他装置」找得到这台 Mac")
-                    }
-                    return
-                }
-                if idleSince == nil { idleSince = Date().timeIntervalSince1970 }
-                let idle = Date().timeIntervalSince1970 - (idleSince ?? 0)
-                if idle >= 15, let b = beacon {
-                    b.stop()
-                    beacon = nil
-                    Wireless.beacon = nil
-                    note("后台空闲：已停止蓝牙广播（iPhone 不再把 Mac 看成车机）")
-                }
-                if idle >= 120, !idleExitScheduled {
-                    idleExitScheduled = true
-                    note("后台空闲 2 分钟：结束会话并退出，等桌宠下次打开再拉起")
-                    Wireless.shutdown()   // 先干净收掉手机会话，再照 SIGTERM 的规矩退出
-                    DispatchQueue.main.asyncAfter(deadline: .now() + Wireless.exitGrace) { exit(0) }
-                }
-            }
-            RunLoop.main.add(watch, forMode: .common)
-        }
         startBeaconIfNeeded()
         publishPhones(force: true)
         // 先看一次 USB（线可能本来就插着），再开始连：状态机据此决定先走藍牙还是 USB
@@ -1494,7 +1422,7 @@ extension Wireless {
         }
         note("双模：一个连线状态机统一决定连谁、怎么连；已配对手机插线只充电，会话走蓝牙→Wi-Fi")
         // 第一次設定（還沒記住任何 iPhone）：一開就讓 Mac 可被發現、開配對引導，使用者不必自己去開藍牙設定
-        if o.phoneAddress == nil, !o.background {
+        if o.phoneAddress == nil {
             DispatchQueue.main.asyncAfter(deadline: .now() + 1) { startPairingGuide("第一次设定：让 iPhone 在蓝牙「其他装置」找得到这台 Mac") }
         }
         // Mac 睡眠／喚醒：像車機熄火再發動——睡前把會話乾淨收掉（手機立刻回到自己的畫面），

@@ -112,12 +112,14 @@ enum SettingsSection: String, CaseIterable, Identifiable {
     private var keywordKeys: [String] {
         switch self {
         case .general: return ["settings.loginItem", "settings.alwaysOnTop", "settings.language", "settings.size", "prefs.nowPlaying", "prefs.calendar.on", "prefs.hints"]
-        case .appearance: return ["settings.facing", "settings.angle", "settings.finish", "settings.face"]
+        case .appearance: return ["settings.facing", "settings.angle", "settings.finish", "settings.face", "settings.capsule", "clockLook.title",
+                                  "island.clock", "island.bg", "island.era", "typograph.material", "system6.layout", "settings.photos"]
         case .gestures: return ["settings.gesture.pinch.title", "settings.gesture.slide.title", "settings.gesture.three.title", "settings.gesture.force.title",
-                                "settings.gesture.liveSlide", "settings.gesture.reset", "settings.gesture.apart", "settings.gesture.overview", "settings.gesture.keys"]
-        case .carplay: return ["prefs.plugConnect", "menu.iphone", "menu.pairNewPhone", "menu.wifiPassword"]
+                                "settings.gesture.liveSlide", "settings.gesture.reset", "settings.gesture.apart", "settings.gesture.overview", "settings.gesture.keys", "settings.gesture.move", "settings.gesture.scroll"]
+        case .carplay: return ["prefs.plugConnect", "menu.iphone", "menu.pairNewPhone", "menu.wifiPassword", "settings.carVideo", "settings.callVolume",
+                               "settings.corners", "settings.airplay", "settings.restorePhones"]
         case .camera: return ["settings.follow.title", "settings.followRange", "settings.followPitch", "settings.roomLight.title"]
-        case .permissions: return ["settings.perm.camera", "settings.perm.mic", "settings.perm.input", "settings.perm.automation", "settings.perm.calendar"]
+        case .permissions: return ["settings.perm.camera", "settings.perm.mic", "settings.perm.input", "settings.perm.automation", "settings.perm.calendar", "settings.perm.location"]
         }
     }
     func matches(_ query: String) -> Bool {

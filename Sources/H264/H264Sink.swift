@@ -29,7 +29,7 @@ package final class H264Sink {
 
     private let lock = NSRecursiveLock()   // 几路屏幕流各有自己的队列，WebSocket 线程也会读 lastConfig
 
-    // 診斷開關：HOMEPLAY_DUMP=/path.h264 把手機送來的 access unit 原樣落盤（display-lab 量排版用）
+    // 診斷開關：HOMEPLAY_DUMP=/path.h264 把手機送來的 access unit 原樣落盤（量排版用）
     private static let dumpPath = ProcessInfo.processInfo.environment["HOMEPLAY_DUMP"]
     private var dumpHandle: FileHandle?
 
@@ -97,7 +97,6 @@ package final class H264Sink {
 
     private func hevcNal(_ n: [UInt8], type: Int) {
         let vcl = type <= 31
-        if vcl && auHasVCL { /* 同一個 AU：CarPlay 一條訊息一個 AU，靠 endAccessUnit 收尾 */ }
         switch type {
         case 32: if vps != n { vps = n; hevcSPS = nil; hevcPPS = nil }
         case 33: if hevcSPS != n { hevcSPS = n; hevcPPS = nil }

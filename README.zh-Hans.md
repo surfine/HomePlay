@@ -14,7 +14,7 @@ HomePlay 是放在 Mac 桌面上的 HomeView。它大部分时间看着你，不
 
 需要 macOS 14 及以上，Apple 芯片。两个 App 都有 Developer ID 签名，并通过 Apple 公证。2.0 beta 8 是预览版，可能有错。1.0.6 是稳定版。GPL-3.0-or-later。
 
-1.0 是那双眼睛，加上 iPhone 的 CarPlay。2.0 补上 HomeView 的其余部分：主屏幕、表盘、App，还有 ClioTalk。这个仓库编译的是 1.0，和 1.0.6 是同一个 App。2.0 请下载测试版。2.0 的源代码不在这里发布。
+1.0 是那双眼睛，加上 iPhone 的 CarPlay。2.0 补上 HomeView 的其余部分：主屏幕、表盘、App，还有 ClioTalk。`main` 分支编译的是 1.0，和 1.0.6 是同一个 App。2.0 的源代码在 [`beta`](https://github.com/surfine/HomePlay/tree/beta) 分支。
 
 - [放到桌上](#放到桌上)
 - [眼睛就是回家的按钮](#眼睛就是回家的按钮)
@@ -162,7 +162,7 @@ HomePlay 在功能需要时才询问对应权限。
 
 ## 从源代码编译 1.0
 
-这个仓库编译的是 1.0：桌宠和 CarPlay 接收器。这个构建对应 1.0.6。2.0 的 App 请下载测试版。2.0 的源代码不在这个仓库里。
+`main` 分支编译的是 1.0：桌宠和 CarPlay 接收器。这个构建对应 1.0.6。要编译 2.0，切到 [`beta`](https://github.com/surfine/HomePlay/tree/beta) 分支，步骤一样。
 
 需要 macOS 14 及以上，以及 Swift 6 工具链。这份源代码不含 Apple 的 HomeView USDZ。把 `apple-homeview.usdz` 放进 `Sources/homeplay-pet/Resources/`。没有这个文件，机身不会加载。签名的 App 里已经带了这个文件。
 

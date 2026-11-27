@@ -121,9 +121,6 @@ extension Wireless {
             Wireless.setTrustHint(nil)
             DispatchQueue.main.async { server.broadcastText(#"{"type":"session","state":"started"}"#) }
             DispatchQueue.main.async { cancelFallback() }
-            // 会话成功建立 = 手机状态已恢复：清掉自愈节流戳，下一次异常可以立即自愈。
-            let stamp = HomePlayState.directory.appendingPathComponent("selfheal.stamp")
-            try? FileManager.default.removeItem(at: stamp)
             note("会话开始，等画面")
         }
         s.onEnded = { why in
@@ -381,8 +378,8 @@ extension Wireless {
                 let slow = live
                 scheduleBluetoothRetry(after: backoff.next(live: slow), because: slow ? "会话进行中，慢速保活" : "退避重连")
             }
-            acc.onMessage = { frame in
             acc.onArtwork = { id, data in publishArtwork(id: id, data: data, server: server) }
+            acc.onMessage = { frame in
                 switch frame.messageId {
                 case Iap2Csm.CarPlay.wifiConfigRequest:
                     note("iPhone 要 Wi-Fi 配置 → 回 \(ssid)（\(Self.securityLabel(currentSecurity()))，密码不打印）")
@@ -433,7 +430,7 @@ extension Wireless {
                         note("iPhone 未连回控制口：确认 iPhone 与 Mac 在同一个 Wi-Fi（\(ssidName)）；若仍不行，右键 → Wi-Fi 设置 里核对 SSID 与密码（系统设置 › Wi-Fi › 详细信息可查看密码）")
                         if let help = Wireless.wifiHelpPayload(ssid: ssidName, passphraseMissing: passphrase.isEmpty) { server.broadcastText(help) }
                     }
-                    return [startMessage([ip])]
+                    return [startMessage([liveIP])]   // 送的要和日誌印的一樣：DHCP 換過位址後不能送啟動時那個
                 case Iap2Csm.Communications.callStateUpdate, Iap2Csm.Communications.update:
                     publishTelephony(frame, server: server)
                     return []
@@ -557,7 +554,6 @@ extension Wireless {
         }
         startBeaconIfNeeded = {
             guard beacon == nil else { return }
-            if o.background, server.clientCount == 0 { return }   // 后台没人看时不广播
             let b = BluetoothBeacon(advertiseClass: true, log: { note("蓝牙广播：" + $0) })
             b.onIncoming = { device, channel in handleBeaconIncoming?(device, channel) }
             beacon = b
@@ -567,38 +563,6 @@ extension Wireless {
         // 那一刻看不到 CarPlay 服务，就只会把 Mac 当普通电脑，之后也不再提示 CarPlay。
         // （MacPlay 的蓝牙桥就是启动即发布；这里不再等"配对成功后"才发。）
         startBeaconIfNeeded?()
-        if o.background {
-            // 登录项常驻：桌宠（唯一的 WS 客户端）不在时，不该继续把自己广播成一台 CarPlay 车机，
-            // 否则附近的 iPhone 会反复发起蓝牙配对。15 秒宽限后撤掉广播；再 2 分钟没人用就退出。
-            // KeepAlive 只拉起异常退出，这里用 exit(0)，launchd 不会重启。
-            var idleSince: TimeInterval?
-            var idleExitScheduled = false
-            let watch = Timer(timeInterval: 5, repeats: true) { _ in
-                if server.clientCount > 0 {
-                    idleSince = nil
-                    if beacon == nil {   // 桌宠回来了：恢复广播
-                        startBeaconIfNeeded?()
-                        note("桌宠已连接：恢复蓝牙广播")
-                    }
-                    return
-                }
-                if idleSince == nil { idleSince = Date().timeIntervalSince1970 }
-                let idle = Date().timeIntervalSince1970 - (idleSince ?? 0)
-                if idle >= 15, let b = beacon {
-                    b.stop()
-                    beacon = nil
-                    Wireless.beacon = nil
-                    note("后台空闲：已停止蓝牙广播（iPhone 不再把 Mac 看成车机）")
-                }
-                if idle >= 120, !idleExitScheduled {
-                    idleExitScheduled = true
-                    note("后台空闲 2 分钟：结束会话并退出，等桌宠下次打开再拉起")
-                    Wireless.shutdown()   // 先干净收掉手机会话，再照 SIGTERM 的规矩退出
-                    DispatchQueue.main.asyncAfter(deadline: .now() + Wireless.exitGrace) { exit(0) }
-                }
-            }
-            RunLoop.main.add(watch, forMode: .common)
-        }
         startBluetooth()
         note("等 iPhone：蓝牙认证 → Wi-Fi 交接 → 回连控制口（断了自动重连）")
         RunLoop.main.run()

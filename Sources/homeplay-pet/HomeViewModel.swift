@@ -433,6 +433,7 @@ final class HomeViewModel {
     private(set) var wall = false
     func setWall(_ on: Bool) {
         wall = on
+        picker = nil   // 挑零件的清單建立時會濾掉停用的零件；掛牆切換後要重建，否則底座永遠點不到
         baseGroup?.isEnabled = !on
         for name in ["TlTyQAuZSZnkfBS", "UHiMdHobqyuoBpP"] { usdzRoot?.findEntity(named: name)?.isEnabled = !on }   // 铰链上下两半
         setRig(pitch: 0, yaw: 0)
@@ -542,8 +543,6 @@ final class HomeViewModel {
             shell.baseColor.tint = srgb(hex)
             shell.metallic.scale = f == .gray ? 0.75 : 1
             shell.roughness.scale = f == .gray ? 0.78 : 0.70
-        } else {
-            return
         }
         shell.blending = .transparent(opacity: opacity)
         shell.opacityThreshold = 0.5

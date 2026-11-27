@@ -85,6 +85,8 @@ final class PetView: NSView {
     /// CarPlay 的 Back（Esc → 旋鈕 back HID）；由 AppDelegate 接到 WS client
     var onCarPlayBack: (() -> Void)?
     var onCancelConnect: (() -> Void)?   // 菜单「取消连线」
+    /// 菜单「暂停 CarPlay」：分钟数；nil＝暂停到用户自己继续
+    var onPauseCarPlay: ((Double?) -> Void)?
     /// 重按（Force Touch）＝进入 CarPlay；AppDelegate 负责拉起 receiver 并连接
     var onForceEnter: (() -> Void)?
     /// 右键「使用 iPhone」/「配对新 iPhone…」：AppDelegate 负责保存并通知 receiver
@@ -267,7 +269,6 @@ final class PetView: NSView {
 
     private weak var liveTimerItem: NSMenuItem?   // 打开的菜单里的「计时器」父项
     private var menuTicker: Timer?                // 菜单打开期间逐秒刷新倒计时
-    private var gazePitchValueLabel: NSTextField? // 俯仰角度弹窗里的数值
     private enum Drag { case none, rotate, resize, touch, move }
     private var drag: Drag = .none
     private var threeFinger: [CGPoint]?   // 三指拖移的上一帧归一化位置
@@ -1131,13 +1132,12 @@ final class PetView: NSView {
     // 追人（摄像头）：人脸框 → 转头/歪头；没人时做待机扫视。
     var gazeEnabled = false
     var gazePresent = false
-    var gazeX: CGFloat = 0, gazeY: CGFloat = 0, gazeRoll: CGFloat = 0, gazeSize: CGFloat = 0
+    var gazeX: CGFloat = 0, gazeY: CGFloat = 0
     private var gazeLastSeen: Double = 0
     private var gazeWasPresent = false
-    private var gazeHeadOn = false    // 头部 yaw 的迟滞：小侧移只动眼睛，明显侧移才转头
     static let gazePitchKey = "HomePlayGazePitch"
     private(set) var gazePitchDegrees: CGFloat = {
-        let v = (UserDefaults.standard.object(forKey: "HomePlayGazePitch") as? Double) ?? 2.5
+        let v = (UserDefaults.standard.object(forKey: PetView.gazePitchKey) as? Double) ?? 2.5
         return CGFloat(min(8, max(0, v.isFinite ? v : 2.5)))
     }()
     private var screenLocked = false  // 锁屏期间不因为「重新可见」把摄像头拉起来
@@ -1155,12 +1155,8 @@ final class PetView: NSView {
             // 左右摇是主戏（G4 约 11.5°，其它约 7.5°）；俯仰只加一点点：
             // 以 0.65 当作「正常坐姿」的中位（摄像头通常比脸高），只回应明显起身/凑近，
             // 非 G4 最多约 2°，G4 最多约 3.7°——Mac 是效率工具，桌宠只做轻微回应。
-            // 头部有 0.08–0.14 的迟滞：小幅侧移只动眼睛，明显侧移才转头，避免一直微调。
             let g4 = model.finish == .g4
-            let ax = abs(gazeX)
-            if ax > 0.14 { gazeHeadOn = true } else if ax < 0.08 { gazeHeadOn = false }
             // 左右转交给整机（aim，±25° DockKit 式）；铰链只留俯仰
-            _ = ax
             gx = 0
             // 俯仰上限由菜单里的「跟随我俯仰角度」控制（0–8°，默认 2.5°，G4 略大）。
             let maxPitch = gazePitchDegrees * (g4 ? 1.25 : 1.0) * .pi / 180
@@ -1218,11 +1214,10 @@ final class PetView: NSView {
     /// 菜单开关：关掉时把追人状态清干净，让机器回正。
     func setGazeEnabled(_ on: Bool) {
         gazeEnabled = on
-        gazeHeadOn = false
         if !on {
             gazePresent = false
             gazeWasPresent = false
-            gazeX = 0; gazeY = 0; gazeRoll = 0; gazeSize = 0
+            gazeX = 0; gazeY = 0
         }
         log("gaze follow \(on ? "on" : "off")")
     }
@@ -1236,11 +1231,10 @@ final class PetView: NSView {
     func applyGaze(_ s: GazeTracker.Sample) {
         if s.present {
             gazePresent = true
-            gazeX = s.x; gazeY = s.y; gazeRoll = s.roll; gazeSize = s.size
+            gazeX = s.x; gazeY = s.y
             gazeLastSeen = CACurrentMediaTime()
             if !gazeWasPresent {
                 gazeWasPresent = true
-                gazeHeadOn = false
                 // 错峰：眼睛先到（Face.pointer 每帧更新、14/s 追过去），
                 // 头随后（0.6 s 弹簧），落定前再点一下头、补一个眨眼。
                 mood.show(.surprised, for: 0.3, now: CACurrentMediaTime())
@@ -1257,7 +1251,6 @@ final class PetView: NSView {
         } else if gazeWasPresent {
             gazeWasPresent = false
             gazePresent = false
-            gazeHeadOn = false
             face.blinkSoon(after: 0.12)
             log("gaze lost")
         }
@@ -2039,8 +2032,9 @@ final class PetView: NSView {
         if showingVideo { return (L("menu.exitCarPlay", "退出 CarPlay"), #selector(menuToggleLive), L("menu.hint.liveToggle", "重按或空格"), "car.fill") }
         switch face.status {
         case .connecting: return (L("menu.cancelConnect", "取消连接"), #selector(menuCancelConnect), nil, "xmark.circle")
-        case .pausedResume, .paused: return (L("menu.resumeCarPlay", "继续 CarPlay"), #selector(menuToggleLive), L("menu.hint.space", "空格"), "play.fill")
-        case .reconnecting: return (L("menu.reconnectCarPlay", "重新连接 CarPlay"), #selector(menuEnterCarPlay), nil, "arrow.clockwise")
+        case .pausedResume: return (L("menu.resumeCarPlay", "继续 CarPlay"), #selector(menuToggleLive), L("menu.hint.space", "空格"), "play.fill")
+        case .reconnecting, .away: return (L("menu.reconnectCarPlay", "重新连接 CarPlay"), #selector(menuEnterCarPlay), nil, "arrow.clockwise")
+        case .background: return (L("menu.backToCarPlay", "回到 CarPlay"), #selector(menuEnterCarPlay), L("menu.hint.forceClick", "重按"), "car.fill")
         default: return (L("menu.enterCarPlay", "进入 CarPlay"), #selector(menuEnterCarPlay), L("menu.hint.forceClick", "重按"), "car")
         }
     }
@@ -2053,6 +2047,7 @@ final class PetView: NSView {
         // 直播中＝退出（同一手势可再进）；已暂停＝继续；重连中＝重新连接；连线中＝取消。
         let cp = carPlayAction
         menu.addItem(menuItem(cp.title, cp.action, hint: cp.hint, symbol: cp.symbol))
+        if let pause = pauseCarPlayMenuItem() { menu.addItem(pause) }
         // 配对过两台以上：手机直接列在第一层，打勾的是现在这台，点一下就换（不用进偏好设定）
         let phones = CarPlayPhoneBook.menuEntries()
         if phones.count > 1 {
@@ -2269,15 +2264,7 @@ final class PetView: NSView {
         face.photos = PhotoShelf(folder: url); face.forceDirty = true
         log("photo folder \(url.path)")
     }
-    @objc private func menuCalendarAllow() {
-        (NSApp.delegate as? AppDelegate)?.withPermission(.calendar) { ok in
-            if ok { CalendarSource.shared.requestAccess() }   // 已授权：只是同步状态、开始读
-        }
-    }
     @objc private func menuCalendarToggle() { CalendarSource.enabled.toggle(); CalendarSource.shared.refresh() }
-    @objc private func menuCalendarSettings() {
-        if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Calendars") { NSWorkspace.shared.open(url) }
-    }
     @objc private func menuNowPlaying() {
         if NowPlayingPoller.enabled {
             NowPlayingPoller.enabled = false; NowPlayingPoller.shared.stop(); return
@@ -2291,44 +2278,10 @@ final class PetView: NSView {
     @objc private func menuGazeToggle() {
         (NSApp.delegate as? AppDelegate)?.toggleGazeFollow()
     }
-    @objc private func menuMicPermission() {
-        (NSApp.delegate as? AppDelegate)?.showMicrophonePermission()
-    }
-    @objc private func menuGazePitch() {
-        NSApp.activate(ignoringOtherApps: true)
-        let alert = NSAlert()
-        alert.messageText = L("gaze.pitch.title", "跟随我：俯仰角度")
-        alert.informativeText = L("gaze.pitch.body", "拖动滑块调整抬头/低头的最大角度；0° 只转头不点头。设置会记住。")
-        let box = NSView(frame: NSRect(x: 0, y: 0, width: 360, height: 48))
-        let slider = NSSlider(value: Double(gazePitchDegrees), minValue: 0, maxValue: 8,
-                              target: self, action: #selector(gazePitchSliderChanged(_:)))
-        slider.frame = NSRect(x: 0, y: 8, width: 300, height: 26)
-        slider.numberOfTickMarks = 5
-        slider.allowsTickMarkValuesOnly = false
-        let value = NSTextField(labelWithString: String(format: "%.1f°", Double(gazePitchDegrees)))
-        value.frame = NSRect(x: 308, y: 11, width: 52, height: 20)
-        value.alignment = .right
-        gazePitchValueLabel = value
-        box.addSubview(slider); box.addSubview(value)
-        alert.accessoryView = box
-        alert.addButton(withTitle: L("wifi.save", "保存"))
-        alert.addButton(withTitle: L("wifi.cancel", "取消"))
-        let response = alert.runModal()
-        gazePitchValueLabel = nil
-        if response == .alertFirstButtonReturn {
-            setGazePitch(CGFloat(slider.doubleValue))
-        }
-    }
-    @objc private func gazePitchSliderChanged(_ sender: NSSlider) {
-        gazePitchValueLabel?.stringValue = String(format: "%.1f°", sender.doubleValue)
-    }
     func setGazePitch(_ degrees: CGFloat) {
         gazePitchDegrees = min(8, max(0, degrees))
         UserDefaults.standard.set(Double(gazePitchDegrees), forKey: Self.gazePitchKey)
         log(String(format: "gaze pitch %.1f°", Double(gazePitchDegrees)))
-    }
-    @objc private func menuRoomLightToggle() {
-        (NSApp.delegate as? AppDelegate)?.toggleRoomLight()
     }
     @objc private func menuShowHints() { Onboarding.armed = false; Onboarding.active = false; face.armOnboarding() }
     @objc private func menuAbout() {
@@ -2342,6 +2295,22 @@ final class PetView: NSView {
     }
     @objc private func menuCancelConnect() { onCancelConnect?() }
 
+    /// 「暂停 CarPlay」：像 AirDrop 的「所有人（10 分钟）」，到时间自己恢复，不怕忘了开回来。
+    /// 暂停时手机真的结束 CarPlay（不再是驾驶状态），AirDrop 等连续互通功能就不会被它挡着。
+    /// 已经暂停、或从没配过手机时不出现。
+    private func pauseCarPlayMenuItem() -> NSMenuItem? {
+        guard face.status != .pausedResume, !CarPlayPhoneBook.phones.isEmpty else { return nil }
+        let sub = NSMenu()
+        for (title, minutes) in [(L("menu.pause10m", "10 分钟"), 10.0), (L("menu.pause1h", "1 小时"), 60.0)] {
+            let item = menuItem(title, #selector(menuPauseCarPlay(_:)), symbol: "timer")
+            item.representedObject = minutes
+            sub.addItem(item)
+        }
+        sub.addItem(menuItem(L("menu.pauseUntilResume", "直到我继续"), #selector(menuPauseCarPlay(_:)), symbol: "pause"))
+        return submenuItem(L("menu.pauseCarPlay", "暂停 CarPlay"), sub, symbol: "pause.circle")
+    }
+    @objc private func menuPauseCarPlay(_ sender: NSMenuItem) { onPauseCarPlay?(sender.representedObject as? Double) }
+
     // 重按（Force Touch，stage 2）＝进入 CarPlay。直播时按在屏幕上不抢：那一按本来就是 CarPlay 长按。
     override func pressureChange(with event: NSEvent) {
         endPoster()
@@ -2353,15 +2322,6 @@ final class PetView: NSView {
     }
 
     @objc func menuEnterCarPlay() { onForceEnter?() }
-    @objc func menuPairPhone() {
-        guard !showingVideo else { return }
-        CarPlayOverlayState.needsPairing = true      // 立即显示配对卡片
-        CarPlayOverlayState.needsTrust = false       // 同一时间只亮一张引导卡
-        CarPlayOverlayState.needsCable = false
-        CarPlayOverlayState.bluetoothPairing = false
-        CarPlayOverlayState.bluetoothPairFailed = false
-        onForceEnter?()                              // 拉起 receiver，等 USB
-    }
     @objc private func menuUsePhone(_ sender: NSMenuItem) {
         guard let address = sender.representedObject as? String, !address.isEmpty else { return }
         onSelectPhone?(address)

@@ -12,9 +12,6 @@
   const hasIO = 'IntersectionObserver' in window;
   const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
   const pad = n => String(n).padStart(2, '0');
-  let HV = {}; try { HV = JSON.parse(document.body.dataset.helloV || '{}'); } catch {}
-  const HELLO = document.body.dataset.hello || '/media/renders/hello/';
-  const helloSrc = n => HELLO + pad(n) + '.webp' + (HV[pad(n) + '.webp'] ? '?v=' + HV[pad(n) + '.webp'] : '');
   // 只在元素進入視口時跑 rAF：回傳 {visible}，進入時 start、離開時 stop，不監聽 scroll。
   function whileVisible(el, start, stop, margin = '0px') {
     if (!hasIO) { start(); return; }
@@ -293,14 +290,6 @@
     addEventListener('pagehide', stop);
   })();
 
-  // 時間線三拍：進場時一個接一個浮上來（CSS 用 nth-child 排延遲）
-  (() => {
-    const ol = $('#beats'); if (!ol) return;
-    if (reduce || !hasIO) { ol.classList.add('in'); return; }
-    const io = new IntersectionObserver(es => { if (es.some(e => e.isIntersecting)) { ol.classList.add('in'); io.disconnect(); } }, { threshold: .2 });
-    io.observe(ol);
-  })();
-
   // ── CarPlay：資料點只在看得到這一段時才動 ──
   (() => {
     const sec = $('#carplay'); if (!sec) return;
@@ -401,68 +390,6 @@
     });
   })();
 
-  // ── 開機 hello：進場時逐格寫一次，之後可以再看一次 ──
-  (() => {
-    const cell = $('#hello-cell'); if (!cell || reduce) return;
-    const canvas = $('.hello-canvas', cell), img = $('.shot img', cell), btn = $('#replay');
-    const N = +cell.dataset.frames || 16, ctx = canvas.getContext && canvas.getContext('2d');
-    if (!ctx) return;
-    let frames = null, loading = null, playing = false, played = false, timer = 0;
-    const load = () => loading || (loading = Promise.all(Array.from({ length: N }, (_, i) => loadImg(helloSrc(i)))).then(f => (frames = f)));
-    const paint = i => {
-      const f = frames[i]; if (!f) return;
-      const box = canvas.getBoundingClientRect(), dpr = Math.min(2, devicePixelRatio || 1);
-      const cw = Math.round(box.width * dpr), ch = Math.round(box.height * dpr);
-      if (canvas.width !== cw || canvas.height !== ch) { canvas.width = cw; canvas.height = ch; }
-      ctx.clearRect(0, 0, cw, ch);
-      const s = Math.min(cw / f.naturalWidth, ch / f.naturalHeight);
-      const w = f.naturalWidth * s, h = f.naturalHeight * s;
-      ctx.drawImage(f, (cw - w) / 2, ch - h, w, h);
-    };
-    async function play() {
-      if (playing) return; playing = true; btn.disabled = true;
-      await load();
-      if (!frames.every(Boolean)) { playing = false; btn.disabled = false; return; }
-      canvas.hidden = false; cell.classList.add('playing');
-      let i = 0; paint(0);
-      const step = () => {
-        i++; paint(i);
-        if (i < N - 1) timer = setTimeout(step, 150);
-        else { playing = false; played = true; btn.hidden = false; btn.disabled = false; }
-      };
-      timer = setTimeout(step, 150);
-    }
-    btn.addEventListener('click', play);
-    if (!hasIO) return;
-    new IntersectionObserver(es => { if (es.some(e => e.isIntersecting)) load(); }, { rootMargin: '600px 0px' }).observe(cell);
-    const io = new IntersectionObserver(es => { if (es.some(e => e.isIntersecting) && !played) { io.disconnect(); play(); } }, { threshold: .6 });
-    io.observe(cell);
-    addEventListener('pagehide', () => clearTimeout(timer));
-  })();
-
-  // ── 夜晚那格：同一張渲染上疊眨眼，安靜地活著 ──
-  (() => {
-    const cell = $('#ambient-cell'); if (!cell || reduce || !hasIO) return;
-    const shot = $('.shot', cell); if (!shot) return;
-    const fx = new Image();
-    fx.alt = ''; fx.decoding = 'async'; fx.className = 'fx blink moment-fx';
-    fx.addEventListener('load', () => { fx.dataset.ready = '1'; });
-    fx.addEventListener('error', () => { fx.dataset.ready = 'no'; });
-    fx.src = src('fx/blink-ambient-night.webp');
-    shot.append(fx);
-    let visible = false, t = 0;
-    const schedule = () => { clearTimeout(t); if (visible) t = setTimeout(blink, 3000 + Math.random() * 4200); };
-    const blink = () => {
-      if (!visible) return;
-      if (fx.dataset.ready !== '1') { schedule(); return; }
-      fx.classList.add('on');
-      setTimeout(() => fx.classList.remove('on'), 90);
-      schedule();
-    };
-    whileVisible(cell, () => { visible = true; schedule(); }, () => { visible = false; clearTimeout(t); fx.classList.remove('on'); });
-  })();
-
-  // ── 複製指令 ──
   // ── 天光：整個頁面只有這一個持續動畫。滾動進度只寫一個 CSS 變數 --day。──
   (() => {
     const sky = document.querySelector('.sky');
@@ -487,6 +414,7 @@
     update();
   })();
 
+  // ── 複製指令 ──
   (() => {
     const btn = $('#copy'); if (!btn || !navigator.clipboard || !navigator.clipboard.writeText) return;
     btn.hidden = false;

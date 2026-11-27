@@ -133,7 +133,7 @@ package final class TimingServer {
             t.schedule(deadline: .now() + 1, repeating: 1)
             t.setEventHandler { [weak self] in self?.sendRequest() }
             t.resume(); timer = t
-            // 3s 一报：心跳是否真的在流动（手机时钟不同步就会拆会话）
+            // 开始 3 秒后报一次：心跳是否真的在流动（手机时钟不同步就会拆会话）
             queue.asyncAfter(deadline: .now() + 3) { [weak self] in
                 guard let self else { return }
                 self.onStats?("计时心跳（3s）：已发 \(self.requestsSent)、收到应答 \(self.repliesReceived)、手机来探 \(self.responsesSent)、已同步 \(self.synced)")

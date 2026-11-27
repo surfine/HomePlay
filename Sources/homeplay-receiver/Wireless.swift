@@ -95,8 +95,6 @@ enum Wireless {
         /// 用户显式指定了 --security：发送时不再被自动探测覆盖（真 WPA3-only 网络要发 4）
         var securityExplicit = false
         var iface = "en0"
-        /// 登录项常驻（agent 拉起）：桌宠不在时停广播，闲置一段时间就退出，避免一直以车机身份出现
-        var background = false
         var controlPort: UInt16 = 17000
         // 真机分辨率：1088×1088 @220ppi（apple-homeview/specs）。
         // HOMEPLAY_DISPLAY_W/H 可覆盖（含比例实验，如 900×1200 直屏）——接收器由桌寵拉起，環境變量會傳下去
@@ -225,12 +223,6 @@ enum Wireless {
         return String(data: data, encoding: .utf8)
     }
 
-    static func wifiHelpPayload(ssid: String) -> String? {
-        let payload: [String: Any] = ["type": "wifiHelp", "ssid": ssid]
-        guard let data = try? JSONSerialization.data(withJSONObject: payload) else { return nil }
-        return String(data: data, encoding: .utf8)
-    }
-
     /// 没回连时给桌宠的 Wi-Fi 排障提示。passphraseMissing＝本地没存密码（大概率就是它连不上）：
     /// 桌宠直接弹一次 Wi-Fi 密码框，而不是让用户自己去翻「右键 → Wi-Fi 设置」。
     static func wifiHelpPayload(ssid: String, passphraseMissing: Bool, reason: String? = nil) -> String? {
@@ -287,26 +279,6 @@ enum Wireless {
 
     static func needCablePayload() -> String? {
         guard let data = try? JSONSerialization.data(withJSONObject: ["type": "needCable"]) else { return nil }
-        return String(data: data, encoding: .utf8)
-    }
-
-    /// 插线配对的进度，给桌宠画引导卡片。phase：
-    /// request＝已向 iPhone 发出配对请求（host＝它在 iPhone 上看到的这台 Mac 的名字）；
-    /// confirm＝两边进入数字比对，code＝两边应显示的 6 位数字，iPhone 上点「配对」；
-    /// retry＝第一次叫不到手机，几秒后再叫一次。timeout＝这一轮还剩几秒。
-    static func bluetoothPairingPayload(phase: String = "request", code: String? = nil, timeout: Int? = nil, host: String? = nil) -> String? {
-        var d: [String: Any] = ["type": "bluetoothPairing", "phase": phase]
-        if let code { d["code"] = code }
-        if let timeout { d["timeout"] = timeout }
-        if let host { d["host"] = host }
-        guard let data = try? JSONSerialization.data(withJSONObject: d) else { return nil }
-        return String(data: data, encoding: .utf8)
-    }
-
-    /// 插线配对没成。reason：noResponse＝叫不到手机（藍牙关着、没解锁、离太远）；
-    /// notConfirmed＝手机上没点「配对」（或点了取消）；other＝其他错误。
-    static func bluetoothPairFailedPayload(reason: String = "other") -> String? {
-        guard let data = try? JSONSerialization.data(withJSONObject: ["type": "bluetoothPairFailed", "reason": reason]) else { return nil }
         return String(data: data, encoding: .utf8)
     }
 
@@ -544,11 +516,6 @@ enum Wireless {
     nonisolated(unsafe) static var cornerChanged: ((String) -> Void)?
     /// 正在直播的手機換了：重發手機清單（runDual 接上）
     nonisolated(unsafe) static var phonesChanged: (() -> Void)?
-    /// 主會話開始／結束（runDual 的待命連線用來判斷穩不穩）
-    nonisolated(unsafe) static var liveSinceHook: (() -> Void)?
-    nonisolated(unsafe) static var liveEndedHook: (() -> Void)?
-    /// 立刻重開會話（runDual 接上）
-    nonisolated(unsafe) static var reopenNow: ((String) -> Void)?
     /// 這次學習連線收到遮罩了沒（等不到就當這版不送）
     nonisolated(unsafe) static var maskSeen = false
     /// 最後一份圓角遮罩訊息：桌寵晚連上（重開）時補送

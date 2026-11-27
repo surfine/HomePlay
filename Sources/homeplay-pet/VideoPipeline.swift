@@ -77,7 +77,6 @@ final class VideoDecoder {
     var onTexture: ((MTLTexture, Int, Int) -> Void)?
     var onDecoded: (() -> Void)?        // 主线程
     var onDecodeError: (() -> Void)?    // 主线程
-    var frames = 0
     private var lastConfig: (UInt8, Data, Int, Int)?
     private var texCache: CVMetalTextureCache?
     private var framesSinceFlush = 0
@@ -185,7 +184,7 @@ final class VideoDecoder {
     }
 
     private func present(_ img: CVImageBuffer) {
-        stateLock.lock(); frames += 1; framesSinceFlush += 1; stateLock.unlock()
+        stateLock.lock(); framesSinceFlush += 1; stateLock.unlock()
         guard claimPresent() else { return }
         // 定期清掉纹理缓存里没人用的条目（分辨率切换、长时间直播后不再膨胀）。
         if framesSinceFlush >= 120, let texCache {

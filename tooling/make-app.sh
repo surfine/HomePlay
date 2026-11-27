@@ -7,7 +7,7 @@
 # 接收器常駐時 `open HomePlay.app` 會被判「已在執行」而失敗（-600），桌寵就開不起來。
 # Resources 裡的執行檔不參與 App 登記（lsappinfo 實測對照）。
 # Info.plist 寫明各權限的用途說明：沒有這些，系統不會跳行事曆、自動化、藍牙、區域網路的授權。
-# 最後 ad-hoc 簽名，讓權限記在這個 App 名下。
+# 最後簽名（有 Developer ID 就用它，沒有退回 ad-hoc），讓權限記在這個 App 名下。
 # 用法：tooling/make-app.sh [輸出路徑，預設 dist/HomePlay.app]
 # 首次配對演練版：HOMEPLAY_VARIANT=rehearsal tooling/make-app.sh → dist/HomePlay Rehearsal.app
 #   另一個 bundle id（偏好設定、權限都是全新的）、狀態放 ~/Library/Application Support/HomePlay Rehearsal、
@@ -53,8 +53,6 @@ ${EXTRA_PLIST}
   <key>CFBundleIconFile</key><string>AppIcon</string>
   <key>CFBundleShortVersionString</key><string>1.0.6</string>
   <key>CFBundleVersion</key><string>${BUILD}</string>
-  <key>CFBundleDevelopmentRegion</key><string>en</string>
-  <key>CFBundleLocalizations</key><array><string>en</string><string>zh-Hans</string><string>zh-Hant</string></array>
   <key>LSMinimumSystemVersion</key><string>14.0</string>
   <key>LSUIElement</key><true/>
   <key>LSMultipleInstancesProhibited</key><true/>

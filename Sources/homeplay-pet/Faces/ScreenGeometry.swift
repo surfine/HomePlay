@@ -28,10 +28,6 @@ enum Screen {
         case .bottomRight: return CGPoint(x: side - R - half, y: side - R)
         }
     }
-    /// 整個螢幕的形狀（裁切、縮圖用）
-    static func path(in r: CGRect = CGRect(x: 0, y: 0, width: side, height: side)) -> CGPath {
-        continuousRoundedRect(r, radius: cornerRadius * r.width / side)
-    }
 }
 
 /// iOS 的連續曲率圓角矩形（UIBezierPath 圓角的同一組係數）：直線進入圓弧時曲率是漸變的，不會有「接縫」。

@@ -14,8 +14,6 @@ final class BluetoothBeacon: NSObject {
     private var notifications: [IOBluetoothUserNotification] = []
     private var classTimer: Timer?
     private var serviceTimer: Timer?
-    private(set) var iap2Channel: BluetoothRFCOMMChannelID = 0
-    private(set) var carPlayChannel: BluetoothRFCOMMChannelID = 0
 
     /// 车机 A/V 设备类（MacPlay 同款）。服务类包含 Audio，主类 0x04。
     private static let carClass: BluetoothClassOfDevice = 0x200408
@@ -25,12 +23,6 @@ final class BluetoothBeacon: NSObject {
     private static let carPlayUUIDBytes: [UInt8] = [
         0xec, 0x88, 0x43, 0x48, 0xcd, 0x41, 0x40, 0xa2,
         0x97, 0x27, 0x57, 0x5d, 0x50, 0xbf, 0x1f, 0xd3]
-
-    override init() {
-        self.advertiseClass = true
-        super.init()
-        start()
-    }
 
     /// 测试/诊断用：advertiseClass=false 只发布 SDP，不改 Mac 的蓝牙设备类。
     /// log 在 start() 之前装好，init 阶段（设备类/SDP 发布结果）的日志才不会丢。
@@ -180,7 +172,6 @@ final class BluetoothBeacon: NSObject {
             records.append(iap2)
             var channel: BluetoothRFCOMMChannelID = 0
             if iap2.getRFCOMMChannelID(&channel) == kIOReturnSuccess {
-                iap2Channel = channel
                 registerIncoming(channel)
             }
             log?("iAP2 SDP 服务已发布（RFCOMM \(channel)）")
@@ -211,7 +202,6 @@ final class BluetoothBeacon: NSObject {
             records.append(carPlay)
             var channel: BluetoothRFCOMMChannelID = 0
             if carPlay.getRFCOMMChannelID(&channel) == kIOReturnSuccess {
-                carPlayChannel = channel
                 registerIncoming(channel)
             }
             log?("CarPlay SDP 服务已发布（RFCOMM \(channel)）")

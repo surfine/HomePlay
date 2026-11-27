@@ -89,7 +89,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private static let gazeFollowKey = "HomePlayGazeFollow"
     private static let roomLightKey = "HomePlayRoomLight"
     private let roomLight = RoomLightEstimator()
-    private var roomLightStored = UserDefaults.standard.object(forKey: "HomePlayRoomLight") as? Bool
+    private var roomLightStored = UserDefaults.standard.object(forKey: AppDelegate.roomLightKey) as? Bool
     var roomLightOn: Bool { roomLightStored ?? false }
 
     private func startRoomLight(announce: Bool) {
@@ -163,6 +163,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// WS 断开后先快探：接收器重启 1–3 s 就绪，别让桌宠干等 5 s 退避
     private static let fastProbeWindow: Double = 15, fastProbeInterval: Double = 0.3
     private var disconnectedAt: CFTimeInterval?   // 这一轮断线从何时起；出画面归零
+    private var pauseResumeTimer: Timer?          // 定时暂停到点自动继续
+    private var awayWork: DispatchWorkItem?       // 断线久了改成「iPhone 不在附近」
+    /// 断线这么久还没回来，多半是手机带出门了：收起担心脸，安静等（重试照旧在后台跑）
+    private static let phoneAwayAfter: TimeInterval = 180
     private var reconnectProbing = false
     private var lastStats = (t: CACurrentMediaTime(), recv: 0, dec: 0)
     private var rememberFrame = false
@@ -635,26 +639,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    func showMicrophonePermission() {
-        switch AVCaptureDevice.authorizationStatus(for: .audio) {
-        case .notDetermined:
-            requestMicrophoneIfNeeded(announce: true, reason: "menu") { [weak self] ok in
-                if !ok { self?.showMicDenied() }
-            }
-        case .denied, .restricted:
-            showMicDenied()
-        case .authorized:
-            NSApp.activate(ignoringOtherApps: true)
-            let a = NSAlert()
-            a.messageText = L("mic.allowed.title", "麦克风已允许")
-            a.informativeText = L("mic.allowed.body", "CarPlay 通话和 Siri 可以使用麦克风；屏幕画面与本地播放不受影响。")
-            a.addButton(withTitle: L("gaze.denied.ok", "好"))
-            a.runModal()
-        @unknown default:
-            showMicDenied()
-        }
-    }
-
     private func showGazeDenied(_ reason: String?) {
         if (reason == nil || reason == "camera permission denied"),
            window?.isVisible == true, !view.occluded, !view.showingVideo {
@@ -787,6 +771,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         view.onToggleLive = { [weak self] in self?.toggle() }
         view.onCarPlayBack = { [weak self] in self?.client?.sendKnob("back") }
         view.onCancelConnect = { [weak self] in self?.cancelConnect() }
+        view.onPauseCarPlay = { [weak self] minutes in self?.pauseCarPlay(minutes: minutes) }
         view.onForceEnter = { [weak self] in self?.enterCarPlay() }
         view.onSelectPhone = { [weak self] address in self?.switchPhone(to: address) }
         view.onPairNewPhone = { [weak self] in self?.pairNewPhone() }
@@ -912,6 +897,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // 不抢焦点；指针在桌宠上才缩放，失败就继续用 ⌥＋双指滚动。
             let mtDevices = TrackpadPinch.shared.start()
             if mtDevices > 0 {
+                // 捏合只在机身上起手才缩放（和「机身上起手才转身体」同一条规则）；透明边、CarPlay 画面上不缩放。
+                TrackpadPinch.shared.shouldBeginPinch = { [weak self] in
+                    guard let self, let w = self.window, w.frame.contains(NSEvent.mouseLocation) else { return false }
+                    let p = self.view.convert(w.convertPoint(fromScreen: NSEvent.mouseLocation), from: nil)
+                    return self.view.classifyGesturePoint(p) == .rotate
+                }
                 TrackpadPinch.shared.onMagnify = { [weak self] factor in
                     guard let self, let w = self.window else { return }
                     guard w.frame.contains(NSEvent.mouseLocation) else { return }
@@ -1072,9 +1063,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// 效能基準：數實際渲染幀數 + 讀 process CPU 時間，跑 N 秒後印一行並結束。
     private func startBench() {
         Face.renderCount = 0
-        Face.dbgBlink = 0; Face.dbgApproach = 0; Face.dbgScreen = 0; Face.dbgLive = 0; Face.dbgOther = 0
+        Face.dbgBlink = 0; Face.dbgApproach = 0; Face.dbgScreen = 0; Face.dbgLive = 0
         Face.dbgPal = 0; Face.dbgReveal = 0; Face.dbgFlow = 0; Face.dbgHello = 0; Face.dbgExpr = 0
-        Face.renderSeconds = 0; Face.bgSeconds = 0; Face.textSeconds = 0; Face.islandSeconds = 0
+        Face.renderSeconds = 0; Face.textSeconds = 0; Face.islandSeconds = 0
         Face.cacheHits = 0; Face.cacheMisses = 0
         Face.pocketA = 0; Face.pocketC = 0; Face.pocketD = 0
         // 以 step() 的实际更新帧数计（RealityKit 的内部渲染帧没有公开回调）
@@ -1097,7 +1088,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                        Face.renderCount, Int(self.view.render.__preferredFrameRate),
                        self.view.frames3D - frames3D0, Double(self.view.frames3D - frames3D0) / wall, self.view.cycles3D - cycles3D0, self.view.patches3D,
                        Face.dbgBlink, Face.dbgApproach, Face.dbgScreen, Face.dbgLive, Face.dbgExpr))
-            log("dirty screen: pal=\(Face.dbgPal) reveal=\(Face.dbgReveal) flow=\(Face.dbgFlow) hello=\(Face.dbgHello) faceMs=\(String(format: "%.2f", Face.renderSeconds / Double(max(1, Face.renderCount)) * 1000)) bgMs=\(String(format: "%.2f", Face.bgSeconds / Double(max(1, Face.renderCount)) * 1000)) textMs=\(String(format: "%.2f", Face.textSeconds / Double(max(1, Face.renderCount)) * 1000)) islandMs=\(String(format: "%.2f", Face.islandSeconds / Double(max(1, Face.renderCount)) * 1000)) cache=\(Face.cacheHits)/\(Face.cacheHits + Face.cacheMisses) pocket=\(String(format: "%.2f/%.2f/%.2f", Face.pocketA / Double(max(1, Face.renderCount)) * 1000, Face.pocketC / Double(max(1, Face.renderCount)) * 1000, Face.pocketD / Double(max(1, Face.renderCount)) * 1000))")
+            log("dirty screen: pal=\(Face.dbgPal) reveal=\(Face.dbgReveal) flow=\(Face.dbgFlow) hello=\(Face.dbgHello) faceMs=\(String(format: "%.2f", Face.renderSeconds / Double(max(1, Face.renderCount)) * 1000)) textMs=\(String(format: "%.2f", Face.textSeconds / Double(max(1, Face.renderCount)) * 1000)) islandMs=\(String(format: "%.2f", Face.islandSeconds / Double(max(1, Face.renderCount)) * 1000)) cache=\(Face.cacheHits)/\(Face.cacheHits + Face.cacheMisses) pocket=\(String(format: "%.2f/%.2f/%.2f", Face.pocketA / Double(max(1, Face.renderCount)) * 1000, Face.pocketC / Double(max(1, Face.renderCount)) * 1000, Face.pocketD / Double(max(1, Face.renderCount)) * 1000))")
             log(String(format: "state reveal %.3f target %.3f near %d style %@ mouse %.0f,%.0f frame %@",
                        Double(self.view.face.reveal), Double(self.view.face.revealTarget), self.view.mood.near ? 1 : 0,
                        self.view.face.style.rawValue, NSEvent.mouseLocation.x, NSEvent.mouseLocation.y,
@@ -1168,7 +1159,59 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     /// 菜单「取消连线」：停掉这次连接，不再自动重连，直到下次「进入 CarPlay」
+    /// 暂停 CarPlay：请接收器结束手机会话并退出（launchd 不会再拉起），手机离开驾驶状态。
+    /// minutes＝nil 暂停到用户自己继续；有值就到点自动继续。下次登录接收器照常常驻、自动连。
+    func pauseCarPlay(minutes: Double?) {
+        handoffFreeze = false
+        handoffTimeoutWork?.cancel(); handoffTimeoutWork = nil
+        awayWork?.cancel(); awayWork = nil
+        userStopped = true; reconnectTimer?.invalidate(); reconnectTimer = nil
+        switchingPhone = false
+        carPlayInBackground = false
+        PhoneNowPlayingBridge.shared.clear()
+        client?.requestTeardown()          // 讓 iPhone 端也結束 CarPlay，而不是只關畫面
+        isLive = false
+        if view.showingVideo { view.showVideo(false) }
+        view.mood.disconnected = false
+        pauseResumeTimer?.invalidate(); pauseResumeTimer = nil
+        CarPlayOverlayState.pauseUntil = nil
+        if let minutes {
+            let until = Date().addingTimeInterval(minutes * 60)
+            CarPlayOverlayState.pauseUntil = until
+            let t = Timer(fire: until, interval: 0, repeats: false) { [weak self] _ in
+                guard let self, self.userStopped else { return }
+                log("CarPlay pause over: resuming")
+                self.enterCarPlay()
+            }
+            RunLoop.main.add(t, forMode: .common)
+            pauseResumeTimer = t
+        }
+        view.face.status = .pausedResume
+        view.face.forceDirty = true
+        view.mood.show(.wink, for: 0.6, now: CACurrentMediaTime())
+        log("CarPlay paused \(minutes.map { "for \(Int($0)) min" } ?? "until resumed")")
+    }
+    private func clearPause() {
+        pauseResumeTimer?.invalidate(); pauseResumeTimer = nil
+        CarPlayOverlayState.pauseUntil = nil
+    }
+
+    /// 断线后过一阵子还没回来：改成安静的「iPhone 不在附近」，不再一直挂着担心脸
+    private func watchForPhoneAway() {
+        awayWork?.cancel()
+        let work = DispatchWorkItem { [weak self] in
+            guard let self, !self.isLive, !self.userStopped, self.view.face.status == .reconnecting else { return }
+            self.view.mood.disconnected = false
+            self.view.face.status = .away
+            log("phone away: quiet wait")
+        }
+        awayWork = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + Self.phoneAwayAfter, execute: work)
+    }
+
     func cancelConnect() {
+        clearPause()
+        awayWork?.cancel(); awayWork = nil
         userStopped = true; reconnectTimer?.invalidate(); reconnectTimer = nil
         switchingPhone = false
         PhoneNowPlayingBridge.shared.clear()
@@ -1388,7 +1431,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    /// 插线换新 iPhone：USB 已结束、手机蓝牙恢复；给用户看配对卡，等 BondAssist/系统配对完成。
+    /// 插线换新 iPhone：USB 已结束、手机蓝牙恢复；给用户看配对卡，等系统配对完成。
     private func beginPairingHandoffView() {
         view.wakeFromPosterForGuide()
         beginHandoffFreeze(seconds: 200)
@@ -1443,6 +1486,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 // 出第一帧：点一下头。断过线的同时笑一下（它回来了），画面不等表情。
                 if !wasQuiet { self.requestMicrophoneIfNeeded(announce: false, reason: "CarPlay live") }
                 self.reconnectStep = 0; self.disconnectedAt = nil; self.health.reset(now: now)
+                self.awayWork?.cancel(); self.awayWork = nil
                 self.switchingPhone = false
                 CarPlayOverlayState.needsPairing = false
                 CarPlayOverlayState.pairingHost = nil
@@ -1466,6 +1510,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 PhoneNowPlayingBridge.shared.clear()
                 if self.view.showingVideo { self.view.mood.disconnected = true }
                 if !wasQuiet { self.view.showVideo(false) }   // 安静挂接时不要打扰桌宠
+                if !self.userStopped { self.watchForPhoneAway() }
                 self.scheduleReconnect(quiet: wasQuiet)
             }
         }
@@ -1532,6 +1577,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     PhoneNowPlayingBridge.shared.clear()
                     self.view.showVideo(false)
                     self.view.face.status = self.switchingPhone ? .connecting : .reconnecting
+                    if !self.switchingPhone { self.watchForPhoneAway() }
                 }
                 return
             }
@@ -1768,6 +1814,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         carPlayInBackground = false
         view.showVideo(true)
         view.face.status = .live
+        view.decoder.rebuild()   // 退到背景時 reset 清了 format；接收器只補關鍵幀不重送 config，不重建就每幀都丟
         client?.requestKeyframe()
         log("CarPlay back to the front")
         return true
@@ -1777,13 +1824,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         handoffFreeze = false
         handoffTimeoutWork?.cancel(); handoffTimeoutWork = nil
         if view.showingVideo {
-            userStopped = true; reconnectTimer?.invalidate()
-            PhoneNowPlayingBridge.shared.clear()
-            client?.requestTeardown()          // 讓 iPhone 端也結束 CarPlay，而不是只關畫面
-            view.showVideo(false); view.face.status = .pausedResume
+            pauseCarPlay(minutes: nil)         // 退出＝暫停到使用者自己繼續（重按、空格或選單）
         } else if let endpoint {
+            clearPause()
             userStopped = false; client?.close(); client = nil
             ensureReceiver { [weak self] in self?.connect(endpoint) }   // receiver 已退出時重新拉起
+        } else if view.face.status == .pausedResume {
+            enterCarPlay()   // 沒掛接過接收器就暫停的：空格／「繼續」照樣能連回來
         }
     }
 
@@ -1793,6 +1840,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // 同一個手勢進出：已經在直播就退出（等同空格／選單的暫停直播）
         if view.showingVideo { toggle(); return }
         if resumeFromBackground() { return }
+        clearPause()
         view.mood.show(.surprised, for: 0.35, now: CACurrentMediaTime())
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { [weak self] in
             self?.view.mood.show(.thinking, for: 12, now: CACurrentMediaTime())

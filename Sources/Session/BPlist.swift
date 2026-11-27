@@ -150,13 +150,10 @@ package enum CarPlayPlist {
         let pcmMedia = is48 ? 0x8000 : 0x800
         let opus = 0x70000000
         let aacLC = is48 ? 0x800000 : 0x400000
-        // 不宣告 Opus 輸出：Opus 解碼器還沒接，宣告了手機會送來卻被當「暫不解」丟掉。
-        // 導航/Siri 改走 PCM/AAC；輸入端仍保留 Opus 位，麥克風是另一個未做項。
         // 無線時 PCM 是 USB-only，實時媒體流（100/101）必須也宣告 AAC-LC，否則手機會認為
         // 沒有可用的無線音頻格式、乾脆不建音頻流（2026-10-20 真機：/info 只有 PCM 時一個
         // SETUP 音頻都不來）。AAC-LC 在 audioCodec 裡本來就能解。
-        // 与 MacPlay 完全一致（含 Opus）——先确认无线时手机选哪一路；Opus 解码还没接，
-        // 真收到 Opus 只会占位不出声。确认后再决定要不要接 Opus 解码器。
+        // 与 MacPlay 完全一致（含 Opus）；Opus 下行用 libopus 解（OpusCodec.swift）。
         return [f(100, "compatibility", pcm, pcmMono), f(101, "compatibility", pcm),
                 f(100, "default", pcm | opus, pcmMono | opus), f(100, "alert", pcm | opus),
                 f(100, "media", pcmMedia), f(100, "telephony", pcmMono | opus, pcmMono | opus),

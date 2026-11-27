@@ -6,7 +6,7 @@
   python3 scripts/render-media.py --lang en  # 英文屏幕，輸出到 renders/en/（官網 /en/ 用）
 
 同一組（例如十個表情）共用一個裁切框，網頁上疊圖切換時機身不會跳。
-表情／外觀／夜晚這幾組會在同一個行程裡多拍「瞄一眼」「閉眼」兩張，只差眼睛；
+表情這一組會在同一個行程裡多拍「瞄一眼」「閉眼」兩張，只差眼睛；
 轉成一張全尺寸透明疊圖（fx/），官網在原本的靜態圖上做眨眼與眼神動畫。
 """
 import math, os, subprocess, sys, tempfile, time
@@ -23,14 +23,8 @@ GROUPS = {
                for f in "g4 silver starlight rose gray".split()],
     "views": [
         ("view-front", ["--finish", "g4", "--face", "idle", "--yaw", "0", "--pitch", "0", "--near"]),
-        ("view-side", ["--finish", "silver", "--face", "idle", "--yaw", "1.45", "--pitch", "0.05", "--near"]),
         ("view-back", ["--finish", "silver", "--face", "idle", "--yaw", "3.0", "--pitch", "0.12", "--near"]),
         ("view-apart", ["--finish", "silver", "--face", "surprised", "--apart"]),
-    ],
-    "moments": [
-        ("hello", ["--finish", "g4", "--yaw", "0.28", "--pitch", "0.1", "--near", "--hello", "--snapshot-at", "2.2"]),
-        ("ambient-night", ["--finish", "gray", "--face", "idle", "--yaw", "0.28", "--pitch", "0.1", "--hour", "22", "--time", "23:12"]),
-        ("asleep-night", ["--finish", "gray", "--face", "asleep", "--yaw", "0.28", "--pitch", "0.1", "--hour", "2", "--time", "02:07"]),
     ],
     # 錶面一覽：正面、同一個時間（10:09，像 Apple 的產品圖），八款各一張
     "styles": [(f"style-{st}", ["--finish", "silver", "--face", "idle", "--style", st, "--clock", "bold", "--yaw", "0", "--pitch", "0.04",
@@ -39,12 +33,9 @@ GROUPS = {
     # 轉一圈：每 10° 一張，官網拖動／捲動時逐張換
     "spin": [(f"spin/{i:02d}", ["--finish", "g4", "--face", "idle", "--yaw", f"{i * 2 * math.pi / 36:.4f}", "--pitch", "0.1", "--near", "--hour", "10"])
              for i in range(36)],
-    # 開機寫 hello 的過程：0.3–1.95 秒，寫完就停（之後會淡出換成時鐘）。跟語言無關，只拍一套
-    "hello-seq": [(f"hello/{i:02d}", ["--finish", "g4", "--yaw", "0.28", "--pitch", "0.1", "--near", "--hello", "--snapshot-at", f"{0.3 + i * 0.11:.2f}"])
-                  for i in range(16)],
 }
-SHARED_BOX = ("faces", "finish", "spin", "hello-seq", "styles")   # 這些組逐張疊放，要共用裁切框，機身才不會跳
-WIDTH = {"faces": 1200, "finish": 1200, "spin": 640, "hello-seq": 640, "styles": 640}
+SHARED_BOX = ("faces", "finish", "spin", "styles")   # 這些組逐張疊放，要共用裁切框，機身才不會跳
+WIDTH = {"faces": 1200, "finish": 1200, "spin": 640, "styles": 640}
 # 只有這些表情拍眨眼／瞄一眼；睡著已經閉眼、眨眼沒有意義
 NO_BLINK = {"face-asleep"}
 NO_GLANCE = {"face-asleep", "face-wink"}
@@ -65,7 +56,7 @@ def shoot(path, args, env=None):
     raise RuntimeError(f"shoot failed 3 times: {path}")
 
 def paired(name, group):
-    return group == "faces" and name not in NO_BLINK or group == "finish" or name == "ambient-night"
+    return group == "faces" and name not in NO_BLINK
 
 def shoot_pair(tmp, name, args):
     stem = os.path.join(tmp, name.replace("/", "-"))
@@ -131,8 +122,7 @@ def main():
             boxes = [im.getchannel("A").getbbox() for _, im in opens]
             box = (min(b[0] for b in boxes), min(b[1] for b in boxes), max(b[2] for b in boxes), max(b[3] for b in boxes))
         w = WIDTH.get(g, 900)
-        # hello 逐格跟語言無關，只留一份（/en/ 與 /zh-Hans/ 共用）
-        outdir = os.path.join(OUT, "..") if (g == "hello-seq" and LANG != "zh-Hant") else OUT
+        outdir = OUT
         for name, openp, gp, bp in shots:
             box = box if g in SHARED_BOX else Image.open(openp).getchannel("A").getbbox()
             def crop(im):

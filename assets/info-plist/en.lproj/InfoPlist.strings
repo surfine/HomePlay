@@ -4,3 +4,5 @@
 "NSBluetoothAlwaysUsageDescription" = "Pairs with your iPhone over Bluetooth to set up wireless CarPlay.";
 "NSLocalNetworkUsageDescription" = "Receives CarPlay video and audio from your iPhone over the local network.";
 "NSMicrophoneUsageDescription" = "Uses the Mac's microphone only for Siri and phone calls in CarPlay.";
+"NSLocationUsageDescription" = "Reads the Wi-Fi network name so your iPhone can join wireless CarPlay on the same network, and uses your approximate location for the Weather face.";
+"NSLocationWhenInUseUsageDescription" = "Reads the Wi-Fi network name so your iPhone can join wireless CarPlay on the same network, and uses your approximate location for the Weather face.";

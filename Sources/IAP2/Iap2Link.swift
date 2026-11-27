@@ -3,7 +3,7 @@ import Foundation
 // iAP2 链路层（sans-io：字节进、字节与事件出，时间由 tick 注入）。
 // 照 MacPlay iap2-link 的 LinkEngine 逐行为对齐——这三件事是手机肯往下走的关键：
 //   1) 收到对端 SYNC 立即回 ACK；2) 只有「自己的 SYNC 被 ACK」才进 running；
-//   3) marker 每 1s、SYNC 每 500ms 重发直到握手完成。
+//   3) marker 开跑时发一次、SYNC 每 500ms 重发直到握手完成。
 // 对端 LSP 整体采纳（窗口/重传/确认策略全按手机说的来）；本端声明 zero-ack（全零定时器、出窗 4、控制会话 v2）。
 // 线格式：FF 5A | u16 总长 | u8 控制 | u8 序号 | u8 确认 | u8 会话 | u8 头校验 | 载荷 | u8 载荷校验；marker FF 55 02 00 EE 10。
 
@@ -22,7 +22,6 @@ package struct Iap2Link {
     package static let controlEak: UInt8 = 0x20
     package static let controlReset: UInt8 = 0x10
     package static let initialSequence: UInt8 = 99
-    static let detectResendMs: UInt64 = 1000
     static let negotiateResendMs: UInt64 = 500
 
     /// 同步载荷：版本 1、出窗、最大帧长、重传/确认超时、最大重传、最大累计确认、会话三元组。
@@ -115,7 +114,6 @@ package struct Iap2Link {
     private var outOfSequence: [(psn: UInt8, session: UInt8, data: [UInt8])] = []
     private var cumulativeAckCounter: UInt32 = 0
 
-    private var detectDeadline: UInt64?
     private var negotiateDeadline: UInt64?
     private var sendAckDeadline: UInt64?
     private var recvAckDeadline: UInt64?
@@ -134,7 +132,6 @@ package struct Iap2Link {
         guard state == .detecting else { return }
         let now = clock()
         outgoing += Self.marker
-        detectDeadline = now + Self.detectResendMs
         enterNegotiate(now: now)
     }
 
@@ -151,13 +148,6 @@ package struct Iap2Link {
     /// 时间前进：重发 marker/SYNC、延迟确认、数据重传都靠它（传输层定期调）。
     package mutating func tick() {
         let now = clock()
-        if let d = detectDeadline, d <= now {
-            detectDeadline = nil
-            if state == .detecting {
-                outgoing += Self.marker
-                detectDeadline = now + Self.detectResendMs
-            }
-        }
         if let d = negotiateDeadline, d <= now {
             negotiateDeadline = nil
             if state == .negotiating {
@@ -214,7 +204,6 @@ package struct Iap2Link {
 
     private mutating func enterNegotiate(now: UInt64) {
         state = .negotiating
-        detectDeadline = nil
         appendSyncPacket()
         negotiateDeadline = now + Self.negotiateResendMs
     }
@@ -222,7 +211,7 @@ package struct Iap2Link {
     private mutating func dead(_ reason: String) {
         guard state != .dead else { return }
         state = .dead
-        detectDeadline = nil; negotiateDeadline = nil; sendAckDeadline = nil; recvAckDeadline = nil
+        negotiateDeadline = nil; sendAckDeadline = nil; recvAckDeadline = nil
         events.append(.dead(reason))
     }
 
@@ -416,7 +405,6 @@ package struct Iap2Link {
         var acknowledgement: UInt8
         var session: UInt8
         var payload: [UInt8]
-        var isMarker: Bool
     }
 
     /// 从缓冲解出一个完整链路包（或 marker）；垃圾与坏校验的字节跳过后继续找。
@@ -424,7 +412,7 @@ package struct Iap2Link {
         while !received.isEmpty {
             if received.starts(with: Self.marker) {
                 received.removeFirst(Self.marker.count)
-                return Packet(control: 0, sequence: 0, acknowledgement: 0, session: 0, payload: [], isMarker: true)
+                return Packet(control: 0, sequence: 0, acknowledgement: 0, session: 0, payload: [])
             }
             guard received.count >= 2, received[0] == 0xff, received[1] == 0x5a else {
                 received.removeFirst()
@@ -447,7 +435,7 @@ package struct Iap2Link {
                 ? Array(whole[Self.headerBytes..<(length - Self.checksumBytes)])
                 : []
             return Packet(control: whole[4], sequence: whole[5], acknowledgement: whole[6],
-                          session: whole[7], payload: payload, isMarker: false)
+                          session: whole[7], payload: payload)
         }
         return nil
     }

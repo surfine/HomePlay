@@ -33,14 +33,12 @@ enum CarVideoSetting {
 final class CarVideoPlayer: NSObject {
     /// 有影片在播（或暫停中）：桌寵螢幕顯示影片，CarPlay 畫面先讓位
     private(set) var active = false
-    private(set) var itemUUID: Any?
     let player = AVPlayer()
     private var output: AVPlayerItemVideoOutput?
     private var frameTimer: Timer?
     private var stateTimer: Timer?
     private var statusObs: NSKeyValueObservation?
     private var endObs: NSObjectProtocol?
-    private var failObs: NSObjectProtocol?
     private var lastStateSent = ""
     /// 控制列：游標在螢幕上或剛點過
     var controlsUntil: Double = 0
@@ -89,7 +87,6 @@ final class CarVideoPlayer: NSObject {
 
     private func load(_ url: URL, startMs: Int, uuid: Any?) {
         stop(notify: false)
-        itemUUID = uuid
         let item = AVPlayerItem(url: url)
         let out = AVPlayerItemVideoOutput(pixelBufferAttributes: [
             kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA,
@@ -135,7 +132,6 @@ final class CarVideoPlayer: NSObject {
         stateTimer?.invalidate(); stateTimer = nil
         statusObs = nil
         if let e = endObs { NotificationCenter.default.removeObserver(e); endObs = nil }
-        if let e = failObs { NotificationCenter.default.removeObserver(e); failObs = nil }
         player.pause()
         player.replaceCurrentItem(with: nil)
         output = nil; lastFrame = nil

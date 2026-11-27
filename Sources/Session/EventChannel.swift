@@ -67,7 +67,13 @@ package final class EventChannel {
         if let sealer {
             cipherBuffer.append(data)
             do { let r = try sealer.open(cipherBuffer); cipherBuffer = r.rest; plain = r.plain }
-            catch { onError?("event channel decrypt failed: \(error)"); return }
+            catch {
+                // 計數器已經往前推，這條通道救不回來：和控制通道一樣斷線，讓手機重建，不留一條假裝連著的死通道
+                onError?("event channel decrypt failed: \(error)")
+                cipherBuffer = Data()
+                if let dead = conn { conn = nil; dead.cancel(); onClosed?() }
+                return
+            }
         }
         for m in parser.feed(plain) {
             if m.isResponse { continue }   // 手机对我们命令的应答
@@ -106,11 +112,6 @@ package final class EventChannel {
     package func sendKnob(_ state: KnobState, momentary: Bool = true) {
         sendHIDReport(uuid: HID.knobUID, report: HID.knobReport(state))
         if momentary { sendHIDReport(uuid: HID.knobUID, report: HID.knobReport(KnobState())) }
-    }
-
-    /// 车机 Siri 键：requestSiri buttonDown(2) + buttonUp(3)（MacPlay invokeSiri 同款）
-    package func sendSiri() {
-        for action in [2, 3] { sendSiri(action: action) }
     }
 
     /// 單一 Siri 鍵動作：2＝按下（開始聽）、3＝放開（結束）。按住說話時分開送。

@@ -60,7 +60,7 @@ final class Verifier: NSObject, URLSessionWebSocketDelegate {
                 FileHandle.standardError.write("VIDEO_CONFIG：\(w)x\(h)，avcC \(avcC.count)B\n".data(using: .utf8)!) }
         } else if b[0] == 2 { // VIDEO_FRAME
             framesSeen += 1
-            guard let fmt = format else { return }
+            guard let fmt = format, b.count >= 11 else { return }
             let annexB = Array(b[11...])
             decodeAndSave(annexB: annexB, fmt: fmt)
         }

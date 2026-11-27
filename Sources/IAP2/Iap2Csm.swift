@@ -9,9 +9,7 @@ package enum Iap2Csm {
     package static let start: UInt16 = 0x4040
     package static let headerBytes = 6
     package static let maxFrameBytes = 0xffff
-    package static let maxBodyBytes = maxFrameBytes - headerBytes
     package static let paramHeaderBytes = 4
-    package static let maxParamBytes = 0xffff
 
     /// 识别信息要按链路换布局：USB（carkit）要 USB host transport 组件（param 16），
     /// 蓝牙要 bluetooth + wireless CarPlay 组件（param 17/24），不能混用。
@@ -103,7 +101,6 @@ package enum Iap2Csm {
         package static let succeeded: UInt16 = 0xaa05
 
         package static let maximumChallengeBytes = 128
-        package static let maximumCertificateBytes = 65_525
     }
 
     // MARK: 识别信息（0x1d01）的参数布局

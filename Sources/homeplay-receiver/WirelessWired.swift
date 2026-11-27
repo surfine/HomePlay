@@ -97,8 +97,8 @@ extension Wireless {
                 note("USB iAP2 结束（\(code)）")
                 scheduleUsbRetry(after: backoff.next(live: live), because: live ? "会话进行中，慢速" : "退避重连")
             }
-            acc.onMessage = { frame in
             acc.onArtwork = { id, data in publishArtwork(id: id, data: data, server: server) }
+            acc.onMessage = { frame in
                 switch frame.messageId {
                 case Iap2Csm.CarPlay.availability:
                     if live { note("会话进行中，忽略重复的 CarPlay 可用通知"); return [] }

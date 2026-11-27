@@ -130,10 +130,8 @@ final class WindowSource: NSObject, SCStreamOutput {
                 FileHandle.standardError.write("找不到标题含 \"\(titleQuery)\" 的窗。现有窗口标题：\n  \(titles.joined(separator: "\n  "))\n".data(using: .utf8)!)
                 exit(3)
             }
-            let scale = Int(window.frame.width > 0 ? 2 : 2) // Retina；SCStream 的 width/height 是像素
             let pxW = Int(window.frame.width) * (NSScreen.main?.backingScaleFactor != nil ? Int(NSScreen.main!.backingScaleFactor) : 2)
             let pxH = Int(window.frame.height) * (NSScreen.main?.backingScaleFactor != nil ? Int(NSScreen.main!.backingScaleFactor) : 2)
-            _ = scale
             let enc = Encoder(width: pxW, height: pxH, fps: fps)
             enc.onConfig = { [weak self] avcC in
                 let cfg = Wire.videoConfig(width: pxW, height: pxH, avcC: avcC)
@@ -611,12 +609,11 @@ if sourceKind == "wireless" || sourceKind == "usb" || sourceKind == "auto" {
     // --address 不给＝自动匹配：扫已配对设备的 iAP2 服务（iPhone 签名），连谁记谁。
     guard let dir = flag("--identity-dir")
           ?? ProcessInfo.processInfo.environment["HOMEPLAY_IDENTITY_DIR"]
-          ?? defaultIdentityDir(),
-          sourceKind != "wireless" || flag("--ssid") != nil else {
+          ?? defaultIdentityDir() else {
         FileHandle.standardError.write("""
-        --source wireless 需要：
+        找不到 MFi 身份目录。--source wireless：
           --address <蓝牙地址>    可选：不给就自动匹配（iap2-probe --list 可列已配对设备）
-          --ssid <名称>           iPhone 所连 Wi-Fi（和 Mac 同一个局域网）
+          --ssid <名称>           可选：iPhone 所连 Wi-Fi；不给就读 wireless.json，再不行自动取当前 Wi-Fi
           身份：默认用仓库自带的 identity/，或 --identity-dir <目录> 指定自己的 identity.pk8 + certificate.p7b
           密码：环境变量 HOMEPLAY_WIFI_PASSPHRASE 或 --passphrase
           可选：--channel N  --iface en0  --control-port 17000  --size 1200x1200  --security wpa2|wpa3|wpa3-only|none
@@ -642,10 +639,8 @@ if sourceKind == "wireless" || sourceKind == "usb" || sourceKind == "auto" {
         o.iface = w
     }
     if let p = flag("--control-port"), let n = UInt16(p) { o.controlPort = n }  // --port 是 WS 口（WSServer），別混
-    // 2026-11-01：--background（桌宠不在就撤 SDP 广播、闲置退出）关掉。手机还连着的时候把自己从车机
-    // SDP 里撤掉，iPhone 之后就不接受这台 Mac 的通道——10/30 与 11/01 两次实测都卡死，只能重开 iPhone
-    // 再重启 Mac 蓝牙才救得回来。1.0.5 回到接收器常驻：参数照收，但忽略（与 2.0 的 02ff84f 同一决定）。
-    o.background = false
+    // 接收器常驻：不解析 --background（桌宠的 LaunchAgent 旧参数仍会带，直接忽略）。
+    // 2026-11-01：手机还连着的时候把自己从车机 SDP 里撤掉，iPhone 之后就不接受这台 Mac 的通道。
     if let sz = flag("--size") {
         let wh = sz.split(separator: "x").compactMap { Int($0) }
         if wh.count == 2 { o.width = wh[0]; o.height = wh[1] }

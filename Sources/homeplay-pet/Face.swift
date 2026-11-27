@@ -45,7 +45,7 @@ final class Face {
     var renderPixelScale: CGFloat = 0.5
     var wallpaperGeneration = 0
     static var cacheHits = 0, cacheMisses = 0
-    static var dbgBlink = 0, dbgApproach = 0, dbgScreen = 0, dbgLive = 0, dbgOther = 0
+    static var dbgBlink = 0, dbgApproach = 0, dbgScreen = 0, dbgLive = 0
     static var dbgPal = 0, dbgReveal = 0, dbgFlow = 0, dbgHello = 0, dbgExpr = 0
     /// 官網素材用：在同一格畫面強制眨眼／瞄一眼，第二張與第一張只差眼睛
     static var blinkOverride: CGFloat?
@@ -53,7 +53,7 @@ final class Face {
     /// 官網素材用：固定好奇時的眼珠方向，不受拍照時滑鼠在哪影響
     static var pointerOverride: CGPoint?
     static var renderSeconds = 0.0
-    static var bgSeconds = 0.0, textSeconds = 0.0, islandSeconds = 0.0
+    static var textSeconds = 0.0, islandSeconds = 0.0
     static var pocketA = 0.0, pocketC = 0.0, pocketD = 0.0
     /// 這段時間很值得用 60fps 畫（眨眼／hello／引導）——環境漂動不算
     func needsSmooth(_ now: Double) -> Bool {

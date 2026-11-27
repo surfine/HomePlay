@@ -36,7 +36,7 @@ package final class MicUplink {
     private var preRoll: [Float] = []
     private var preRollRate: Double = 48000
     private var preRollFlushed = false
-    private let preRollMaxSeconds = 3.0
+    private let preRollMaxSeconds = 1.0   // 補發只取最近 1 秒（flushPreRollLocked），多留只是每次 tap 多搬記憶體
     /// 上行數位增益。Studio Display／外接螢幕的麥克風距離人較遠，實測說話 RMS 只有
     /// -30…-54 dBFS（遠場），Siri 很容易聽不到；預設 +18 dB 抬到 -12…-36 dBFS，再由軟限幅器
     /// 擋住過大的峰值。`HOMEPLAY_MIC_GAIN_DB` 可改（0＝不增益）。
@@ -133,7 +133,7 @@ package final class MicUplink {
     /// 會話級預熱引擎：stream 關閉時只停上行，不關引擎/播放器。
     package var isPrewarm: Bool { prewarmMode }
     /// 下行是不是真的從這台 VPIO 引擎的 player 出來；false 時 CarPlayAudioPlayer 才是出聲者。
-    package var downlinkRendersThroughMic: Bool { vpioActive }
+    package var downlinkRendersThroughMic: Bool { vpioActive && !downlinkOutsideVoiceProcessing }
 
     /// 哪些 100 流要開語音處理：電話與 Siri（語音辨識）。`HOMEPLAY_NO_AEC=1` 關掉，對照用。
     package static func wantsVoiceProcessing(audioType: String?,
@@ -141,6 +141,25 @@ package final class MicUplink {
         guard environment["HOMEPLAY_NO_AEC"] != "1" else { return false }
         return audioType == "telephony" || audioType == "speechRecognition"
     }
+
+    /// 哪些 100 流的下行不交給語音處理引擎播：Siri（語音辨識）。
+    /// 語音處理引擎的播放路徑會把 Siri 的提示音播壞（2026-11-11 實測：同一段提示音走一般播放引擎是乾淨的，
+    /// 走這條路每次都破音，和聲道數、起播緩衝、壓縮器都無關）。所以 Siri 的聲音走一般播放引擎，
+    /// 麥克風仍由語音處理引擎收（降噪、自動增益），回音改由 SpeexDSP 拿下行 PCM 當參考來消。
+    /// 電話維持原樣：全雙工要靠語音處理引擎自己的回音消除。`HOMEPLAY_SIRI_SW_AEC=0` 退回舊行為，對照用。
+    package static func playsDownlinkOutsideVoiceProcessing(audioType: String?,
+                                                            environment: [String: String] = ProcessInfo.processInfo.environment) -> Bool {
+        guard environment["HOMEPLAY_SIRI_SW_AEC"] != "0" else { return false }
+        return audioType == "speechRecognition"
+    }
+    /// 這一條流的下行是否改走一般播放引擎（每次 SETUP 依 audioType 設定；多個佇列會讀，用 echoLock 保護）
+    package var downlinkOutsideVoiceProcessing: Bool {
+        get { echoLock.lock(); defer { echoLock.unlock() }; return outsideVoiceProcessing }
+        set { echoLock.lock(); outsideVoiceProcessing = newValue; echoLock.unlock() }
+    }
+    private var outsideVoiceProcessing = false
+    /// SpeexDSP 要不要做事：語音處理引擎沒起來，或它沒在播下行（拿不到回音參考）
+    private var softwareEchoActive: Bool { !vpioActive || downlinkOutsideVoiceProcessing }
 
     private var codecLabel: String { wireCodec == .opus ? "Opus" : "PCM" }
 
@@ -153,7 +172,7 @@ package final class MicUplink {
     /// 呼叫方照舊用自己的引擎放。格式必須是 init 給的下行率與聲道。
     package func playDownlink(_ buffer: AVAudioPCMBuffer) -> Bool {
         echoLock.lock(); let node = echoNode; echoLock.unlock()
-        guard let node, !stopped, buffer.format == downlinkFormat else { return false }
+        guard let node, !stopped, !downlinkOutsideVoiceProcessing, buffer.format == downlinkFormat else { return false }
         let duration = Double(buffer.frameLength) / buffer.format.sampleRate
         echoLock.lock(); downlinkScheduledSeconds += duration; echoLock.unlock()
         node.scheduleBuffer(buffer) { [weak self] in
@@ -355,6 +374,7 @@ package final class MicUplink {
             e.stop()
         }
         engine = nil
+        dynamicsUnit = nil
         vpioActive = false
         echoLock.lock(); echoNode = nil; echoLock.unlock()
         onLog?("音频设备变化，重建麦克风引擎")
@@ -418,6 +438,7 @@ package final class MicUplink {
     /// 之前反過來做（先開 VPIO、後接 player），VPIO 的參考訊號湊不出來，就是 -10875 的來源。
     private func startAudioEngine(voiceProcessing requested: Bool) -> Bool {
         guard !stopped, engine == nil else { return engine != nil }
+        dynamicsUnit = nil   // 上一個引擎（重建或 VPIO 失敗後退回）的 AudioUnit 已隨引擎釋放
         let e = AVAudioEngine()
         let input = e.inputNode
         let output = e.outputNode
@@ -459,7 +480,7 @@ package final class MicUplink {
             do {
                 try input.setVoiceProcessingEnabled(true)
                 // Apple 的 VPIO AGC：和 FaceTime 一樣讓麥克風電平自動對齊，
-                // 不需要我們再用固定 +12 dB 去猜。
+                // 不需要我們再用固定增益去猜。
                 if let unit = input.audioUnit {
                     var agc: UInt32 = 1
                     _ = AudioUnitSetProperty(unit, kAUVoiceIOProperty_VoiceProcessingEnableAGC,
@@ -533,6 +554,7 @@ package final class MicUplink {
         } catch {
             input.removeTap(onBus: 0)
             e.stop()
+            dynamicsUnit = nil
             echoLock.lock(); echoNode = nil; echoLock.unlock()
             vpioActive = false
             onLog?("麦克风引擎起不来（\(requested ? "VPIO \(Int(inFormat.sampleRate)) Hz × \(inFormat.channelCount)" : "原始麦克风")）：\(error)")
@@ -553,7 +575,7 @@ package final class MicUplink {
     /// 麥克風路徑：有 AEC 時先降到 16k 做回聲消除，再升到 Opus 率。
     private func processMic(_ mono: [Float], inputRate: Double) {
         guard !stopped, !mono.isEmpty else { return }
-        guard let aec, !vpioActive else { resampleAndEncode(mono, inputRate: inputRate); return }
+        guard let aec, softwareEchoActive else { resampleAndEncode(mono, inputRate: inputRate); return }
         let pcm16 = resample(mono, from: inputRate, to: 16000,
                              converter: &aecInputResampler, lastRate: &aecInputRate)
         guard !pcm16.isEmpty else { return }
@@ -584,9 +606,9 @@ package final class MicUplink {
 
     /// 下行（type 100）解出的 PCM 當回聲參考。由播放器在排播前叫，切到麥克風佇列處理。
     package func feedReference(_ pcm: [Float], sampleRate refRate: Double) {
-        guard aec != nil, !vpioActive, !stopped else { return }
+        guard aec != nil, softwareEchoActive, !stopped else { return }
         queue.async { [weak self] in
-            guard let self, let aec = self.aec, !self.vpioActive, !self.stopped, self.engine != nil else { return }
+            guard let self, let aec = self.aec, self.softwareEchoActive, !self.stopped, self.engine != nil else { return }
             let pcm16 = self.resample(pcm, from: refRate, to: 16000,
                                       converter: &self.aecRefResampler, lastRate: &self.aecRefRate)
             guard !pcm16.isEmpty else { return }
@@ -713,7 +735,7 @@ package final class MicUplink {
     private func encodeAndSend(_ samples: [Float]) {
         // VPIO 的 AGC 在這台 Studio Display 麥克風上實測仍只有 -60 dBFS，
         // Siri 會聽不到、導致 speechRecognition 流被手機反覆拆掉（聲音中斷）。
-        // 保留 +12 dB 麥克風補償；AGC 仍在上游，峰值有軟限幅。
+        // 保留麥克風補償（預設 +18 dB，HOMEPLAY_MIC_GAIN_DB）；AGC 仍在上游，峰值有軟限幅。
         let gain = micGain
         recordLevel(samples, gain: gain)
         let boosted = gain == 1 ? samples : samples.map { Self.softLimit($0 * gain) }

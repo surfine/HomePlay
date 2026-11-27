@@ -480,7 +480,7 @@
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "不鏽鋼，連線顯示器與鋁圓頂底座"
+            "value": "不鏽鋼，連接顯示器與鋁圓頂底座"
           }
         }
       }
@@ -4511,28 +4511,6 @@
         }
       }
     },
-    "status.paused": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "CarPlay paused"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "CarPlay 已暂停"
-          }
-        },
-        "zh-Hant": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "CarPlay 已暫停"
-          }
-        }
-      }
-    },
     "status.pausedResume": {
       "localizations": {
         "en": {
@@ -5343,94 +5321,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "開啟系統設定"
-          }
-        }
-      }
-    },
-    "mic.allowed.title": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Microphone is allowed"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "麦克风已允许"
-          }
-        },
-        "zh-Hant": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "麥克風已允許"
-          }
-        }
-      }
-    },
-    "mic.allowed.body": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "CarPlay calls and Siri can use the microphone. Video and local playback are unaffected."
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "CarPlay 通话和 Siri 可以使用麦克风；屏幕画面与本地播放不受影响。"
-          }
-        },
-        "zh-Hant": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "CarPlay 通話和 Siri 可以使用麥克風；螢幕畫面與本機播放不受影響。"
-          }
-        }
-      }
-    },
-    "gaze.pitch.title": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Follow Me: Pitch"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "跟随我：俯仰角度"
-          }
-        },
-        "zh-Hant": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "跟隨我：俯仰角度"
-          }
-        }
-      }
-    },
-    "gaze.pitch.body": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Drag the slider to set the maximum head pitch. 0° turns the head without nodding. The setting is remembered."
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "拖动滑块调整抬头/低头的最大角度；0° 只转头不点头。设置会记住。"
-          }
-        },
-        "zh-Hant": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "拖動滑桿調整抬頭/低下的最大角度；0° 只轉頭不點頭。設定會記住。"
           }
         }
       }
@@ -11591,6 +11481,160 @@
           "stringUnit": {
             "state": "translated",
             "value": "點了就會出現畫面"
+          }
+        }
+      }
+    },
+    "status.pausedUntil": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "CarPlay paused · resumes at %@"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "CarPlay 已暂停 · %@ 自动继续"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "CarPlay 已暫停 · %@ 自動繼續"
+          }
+        }
+      }
+    },
+    "status.away": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "iPhone not nearby · reconnects when it's back"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "iPhone 不在附近 · 回来会自动连上"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "iPhone 不在附近 · 回來會自動連上"
+          }
+        }
+      }
+    },
+    "menu.backToCarPlay": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Back to CarPlay"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "回到 CarPlay"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "回到 CarPlay"
+          }
+        }
+      }
+    },
+    "menu.pauseCarPlay": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pause CarPlay"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "暂停 CarPlay"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "暫停 CarPlay"
+          }
+        }
+      }
+    },
+    "menu.pause10m": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "For 10 Minutes"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "10 分钟"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "10 分鐘"
+          }
+        }
+      }
+    },
+    "menu.pause1h": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "For 1 Hour"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "1 小时"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "1 小時"
+          }
+        }
+      }
+    },
+    "menu.pauseUntilResume": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Until I Resume"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "直到我继续"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "直到我繼續"
           }
         }
       }

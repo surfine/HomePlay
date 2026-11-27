@@ -3,7 +3,7 @@ import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
-import { copy, origin, github, notice, releaseDownload, FACES, FINISHES, LANGS } from './content.mjs';
+import { copy, origin, github, notice, releaseDownload, FACES, LANGS } from './content.mjs';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const dist = path.join(root, 'dist');
@@ -27,9 +27,8 @@ function webpSize(file) {
 function sizesFor(dir) {
   const at = (n) => webpSize(path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'public', dir, n));
   return {
-    face: at('face-idle.webp'), finish: at('finish-g4.webp'),
+    face: at('face-idle.webp'),
     spin: at('spin/00.webp'), apart: at('view-apart.webp'),
-    moment: Object.fromEntries(['hello.webp', 'ambient-night.webp', 'asleep-night.webp'].map((m) => [m, at(m)])),
     style: at('style-island.webp'),
   };
 }
@@ -52,11 +51,7 @@ const JS_V = assetVersion('app.js');
 // 鍵是相對於這套渲染圖目錄的檔名（含 spin/NN.webp）。
 const webpsIn = (dir, sub = '') => (existsSync(path.join(mediaRoot, dir, sub)) ? readdirSync(path.join(mediaRoot, dir, sub)).filter((f) => f.endsWith('.webp')).map((f) => sub + f) : []);
 const rendersVersions = (dir) => JSON.stringify(Object.fromEntries([...webpsIn(dir), ...webpsIn(dir, 'spin/'), ...webpsIn(dir, 'fx/')].map((f) => [f, version(dir + f)])));
-// 開機 hello 逐格（不分語言）
-const HELLO = '/media/renders/hello/';
-const helloVersions = () => JSON.stringify(Object.fromEntries(webpsIn(HELLO).map((f) => [f, version(HELLO + f)])));
 const SPIN_FRAMES = 36;
-const SW = { g4: 'sw-g4', silver: 'sw-silver', starlight: 'sw-starlight', rose: 'sw-rose', gray: 'sw-gray' };
 const fill = (tpl, k, v) => tpl.replace(`{${k}}`, v);
 const alternates = LANGS.map((l) => ({ hreflang: l.code, href: origin + l.path }));
 const stripTags = (h) => h.replace(/<[^>]+>/g, '');
@@ -133,7 +128,6 @@ const eye = (cx, cy) => `<g class="eye" data-cx="${cx}" data-cy="${cy}"><ellipse
 const MOTIF = {
   cable: `<svg viewBox="0 0 120 80" aria-hidden="true" focusable="false"><rect x="14" y="10" width="30" height="56" rx="7" class="m-line"/><path d="M29 66 V74" class="m-line"/><path class="m-cable" d="M29 74 C 29 78 40 78 52 70"/><g class="m-waves"><path d="M70 30 a 18 18 0 0 1 0 22"/><path d="M80 24 a 28 28 0 0 1 0 34"/><path d="M90 18 a 38 38 0 0 1 0 46"/></g></svg>`,
   faces: `<svg viewBox="0 0 120 80" aria-hidden="true" focusable="false"><rect x="18" y="16" width="84" height="48" rx="24" class="m-pill"/><g class="m-blink"><ellipse cx="50" cy="40" rx="10" ry="14" class="m-white"/><ellipse cx="72" cy="40" rx="10" ry="14" class="m-white"/><circle cx="46" cy="42" r="5.5" class="m-iris"/><circle cx="68" cy="42" r="5.5" class="m-iris"/></g></svg>`,
-  siri: `<svg viewBox="0 0 120 80" aria-hidden="true" focusable="false"><rect x="10" y="22" width="40" height="36" rx="8" class="m-key m-press"/><text x="30" y="45" class="m-cap">F5</text><g class="m-wave">${[0, 1, 2, 3, 4, 5].map((i) => `<rect x="${62 + i * 9}" y="28" width="5" height="24" rx="2.5" class="w${i}"/>`).join('')}</g></svg>`,
   tiles: `<svg viewBox="0 0 120 80" aria-hidden="true" focusable="false"><rect x="16" y="12" width="40" height="40" rx="11" class="m-line"/><rect x="64" y="12" width="40" height="18" rx="9" class="m-pill"/><rect x="64" y="36" width="40" height="16" rx="8" class="m-line"/><rect x="16" y="58" width="88" height="10" rx="5" class="m-line"/></svg>`,
   keys: `<svg viewBox="0 0 120 80" aria-hidden="true" focusable="false">${['F7', 'F8', 'F9'].map((k, i) => `<g class="${i === 1 ? 'm-press' : ''}"><rect x="${8 + i * 36}" y="22" width="32" height="36" rx="7" class="m-key"/><text x="${24 + i * 36}" y="45" class="m-cap">${k}</text></g>`).join('')}</svg>`,
 };
@@ -154,7 +148,7 @@ function page(c) {
 <head>
 ${head(c, { title: c.title, description: c.description, canonicalPath: c.path, image: c.og, imageAlt: c.ogAlt })}
 </head>
-<body data-renders="${R}" data-renders-v='${rendersVersions(R)}' data-hello="${HELLO}" data-hello-v='${helloVersions()}'>
+<body data-renders="${R}" data-renders-v='${rendersVersions(R)}'>
 <img class="share-fallback" src="/media/share-square.jpg" width="512" height="512" alt="" hidden loading="lazy">
 <div class="sky" aria-hidden="true"><i class="dawn"></i><i class="day"></i><i class="dusk"></i><i class="night"></i></div>
 <div class="day-rail" aria-hidden="true"><span class="t t0">07:17</span><span class="t t1">23:59</span><i class="sun orb"></i><i class="moon orb"></i></div>

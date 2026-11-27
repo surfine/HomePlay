@@ -92,7 +92,16 @@ extension Face {
 
         // ── 右下：島住的那一格——上面一行 HomePlay，中間純黑膠囊，下面一行電量
         let cx: CGFloat = 548
-        drawLeft(g, "HomePlay", font: FaceType.sf(40, .semibold, mono: false), x: cx, y: 576, color: white)
+        if let end = timerEnd {
+            // 計時器在跑（Modular 的島不長開，見 Face.timerInTile，計時器住在這一行）：橘色計時符號＋倒數＋名字。摘自 v2 ec16e17
+            let tf = FaceType.sf(40, .semibold), left = timerClock(max(0, end - now))
+            drawSymbol(g, "timer", in: CGRect(x: cx, y: 576 - 33, width: 38, height: 38), color: srgb(0xff9f0a))
+            drawLeft(g, left, font: tf, x: cx + 50, y: 576, color: white)
+            let lf = FaceType.sf(36, .medium, mono: false), lx = cx + 50 + Typo.width(left, tf) + 14
+            drawLeft(g, Self.clipped(timerLabel, lf, 980 - lx), font: lf, x: lx, y: 576, color: soft)
+        } else {
+            drawLeft(g, "HomePlay", font: FaceType.sf(40, .semibold, mono: false), x: cx, y: 576, color: white)
+        }
         let line: String, lineColor: NSColor
         if let b = battery {
             let state = Self.batteryState(b)

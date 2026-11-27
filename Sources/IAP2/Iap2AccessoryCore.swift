@@ -62,6 +62,7 @@ package final class Iap2AccessoryCore {
 
     /// 传输已通：发 marker＋SYNC 开跑；250ms 心跳驱动链路层重传/延迟确认。
     package func start() {
+        guard !finished else { return }   // 開通道逾時已 finish，遲到的 open-complete 不再起心跳
         fileTransfer = FileTransferReceiver()
         link.start()
         drain()
@@ -93,9 +94,6 @@ package final class Iap2AccessoryCore {
         if !out.isEmpty { onDrain?(out) }
     }
 
-    /// 兼容拉取式调用方：拿走当前待发字节（drain 之后通常为空）。
-    package func takeOutput() -> [UInt8] { link.takeOutput() }
-
     /// 主动发一帧（主线程）。
     package func send(_ frame: Iap2Csm.Frame) {
         link.sendControl(frame.encoded)
@@ -110,6 +108,8 @@ package final class Iap2AccessoryCore {
         if exitCode == 0 { exitCode = code }
         transportTeardown?(exitCode)
         onFinished?(exitCode)
+        // 這些回呼通常捕獲配件自己（acc → core → 閉包 → acc）；結束後不放掉，每次連線嘗試就漏一組配件
+        onPhase = nil; onMessage = nil; onArtwork = nil; onFinished = nil
     }
 
     // MARK: 内部

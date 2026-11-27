@@ -315,8 +315,9 @@ package enum Usbmuxd {
             if status == errSecSuccess { status = SSLSetConnection(ctx, connection) }
             if status == errSecSuccess { status = SSLSetSessionOption(ctx, .breakOnServerAuth, true) }
             if status == errSecSuccess { status = SSLSetCertificate(ctx, certificates as CFArray) }
+            // 這裡所有 stored property 都已初始化，throw 之後 deinit 會跑、由它 deallocate（自己再放一次就是 double free）
             guard status == errSecSuccess else {
-                connection.deallocate(); Darwin.close(fd)
+                Darwin.close(fd)
                 throw MuxError.proto("TLS：上下文设置失败 \(status)")
             }
             // 握手：breakOnServerAuth 会先回 errSSLPeerAuthCompleted（我们不验链），再叫一次继续。
@@ -324,7 +325,7 @@ package enum Usbmuxd {
                 status = SSLHandshake(ctx)
             } while status == errSSLWouldBlock || status == errSSLPeerAuthCompleted
             guard status == errSecSuccess else {
-                connection.deallocate(); Darwin.close(fd)
+                Darwin.close(fd)
                 throw MuxError.proto("TLS：握手失败 \(status)")
             }
         }
@@ -616,6 +617,8 @@ package enum Lockdown {
         } else {
             tls = nil
         }
+        // StartService 失敗（鎖著、信任過期）時 fd 已交給 TLSStream，要由它關；close() 可重入
+        defer { tls?.close() }
 
         let service: [String: Any]
         if let tls {

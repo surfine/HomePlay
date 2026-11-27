@@ -11,6 +11,7 @@ enum CarPlayOverlayState {
     static var lastDraw = -1e9
     static var shownSince = -1.0       // 這次蓋板亮了多久：超過 15 秒換一句可操作的提示
     static var needsPairing = false    // receiver 報告「沒有任何已配對的 iPhone」
+    static var pauseUntil: Date?       // 定時暫停：到這個時刻自動繼續；nil＝暫停到使用者自己繼續
     static var pairingHost: String?    // 這台 Mac 的藍牙名（receiver 送來；iPhone 上要點的名字）
     static var pairingStale = false    // iPhone 裡可能還留著這台 Mac 的舊配對：要先 ⓘ 忘記再重配
     static var pairingSucceededAt: Double?   // 剛配對成功：畫面出來前先給一句確認
@@ -367,7 +368,8 @@ extension Face {
 /// CarPlay 目前的狀態。存的是狀態本身，不是譯好的字：語言切換後下一次畫就是新語言，
 /// 判斷「連線中」也不用去比對字串。
 enum CarPlayStatus {
-    case notConnected, live, paused, reconnecting, connecting, pausedResume, background
+    case notConnected, live, reconnecting, connecting, pausedResume, background
+    case away   // 斷線好幾分鐘了：多半是手機帶出門。安靜等，回來自動連（像車機熄火）
     var text: String {
         switch self {
         case .notConnected:
@@ -378,10 +380,15 @@ enum CarPlayStatus {
             }
             return L("status.notConnected", "CarPlay 未连接 · 重按进入")
         case .live: return L("status.live", "CarPlay 显示中")
-        case .paused: return L("status.paused", "CarPlay 已暂停")
         case .reconnecting: return L("status.reconnecting", "稍后重新连接")
         case .connecting: return L("status.connecting", "CarPlay 连接中…")
-        case .pausedResume: return L("status.pausedResume", "CarPlay 已暂停 · 空格继续")
+        case .pausedResume:
+            if let until = CarPlayOverlayState.pauseUntil {
+                return String(format: L("status.pausedUntil", "CarPlay 已暂停 · %@ 自动继续"),
+                              until.formatted(date: .omitted, time: .shortened))
+            }
+            return L("status.pausedResume", "CarPlay 已暂停 · 空格继续")
+        case .away: return L("status.away", "iPhone 不在附近 · 回来会自动连上")
         case .background: return L("status.background", "CarPlay 在后台 · 重按返回")
         }
     }

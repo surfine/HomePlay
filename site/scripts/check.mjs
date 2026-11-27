@@ -147,11 +147,9 @@ for (const file of files) {
     const dir = c.renders.replace(/^\//, '');
     for (let i = 0; i < 36; i++) if (!(await exists(path.join(root, dir, 'spin', String(i).padStart(2, '0') + '.webp')))) errors.push(`${l.key}: missing ${dir}spin/${String(i).padStart(2, '0')}.webp`);
     if (!(await exists(path.join(root, dir, 'view-apart.webp')))) errors.push(`${l.key}: missing ${dir}view-apart.webp`);
-    for (const f of ['fx/blink-face-idle.webp', 'fx/blink-face-thinking.webp', 'fx/glance-face-idle.webp',
-                     'fx/blink-finish-g4.webp', 'fx/glance-finish-g4.webp', 'fx/blink-ambient-night.webp'])
+    for (const f of ['fx/blink-face-idle.webp', 'fx/blink-face-thinking.webp', 'fx/glance-face-idle.webp'])
       if (!(await exists(path.join(root, dir, f)))) errors.push(`${l.key}: missing ${dir}${f}`);
   }
-  for (let i = 0; i < 16; i++) if (!(await exists(path.join(root, 'media/renders/hello', String(i).padStart(2, '0') + '.webp')))) errors.push(`missing renders/hello/${String(i).padStart(2, '0')}.webp`);
 }
 for (const need of ['_headers', '_redirects', 'robots.txt', 'sitemap.xml', '404.html', 'style.css', 'app.js', 'index.html', 'en/index.html', 'zh-hans/index.html']) {
   if (!files.some((f) => rel(f) === need)) errors.push(`missing ${need}`);
@@ -168,4 +166,4 @@ for (const need of ['2.0/index.html', 'history/index.html']) {
 }
 
 if (errors.length) { console.error(errors.join('\n')); process.exit(1); }
-console.log(`OK: ${files.length} files, ${pages} HTML pages. Local references, meta, hreflang (zh-Hant, zh-Hans, en, x-default), JSON-LD with FAQPage, 1200x630 JPEG share cards, 512x512 share-square, spin, hello and blink/glance frames, no dashes, no third-party hosts, CSP-clean (no inline handlers, styles or scripts).`);
+console.log(`OK: ${files.length} files, ${pages} HTML pages. Local references, meta, hreflang (zh-Hant, zh-Hans, en, x-default), JSON-LD with FAQPage, 1200x630 JPEG share cards, 512x512 share-square, spin and blink/glance frames, no dashes, no third-party hosts, CSP-clean (no inline handlers, styles or scripts).`);

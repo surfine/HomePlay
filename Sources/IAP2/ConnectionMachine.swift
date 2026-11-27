@@ -485,7 +485,6 @@ package struct ConnectionMachine: Sendable {
             scheduleRetry(backoff.next(live: false))
         case .notPaired:
             // 系统清单可能一时读不到：照退避重试；真的不要这台由使用者「忘记」
-            _ = address
             scheduleRetry(backoff.next(live: false))
         case .notFound:
             linkFailed(kind: .bluetooth, code: 3)
@@ -571,10 +570,7 @@ package struct ConnectionMachine: Sendable {
 
     private mutating func onAvailability(_ gen: Int, wired: Bool, wireless: Bool) {
         guard link.gen == gen, !isLive else { return }
-        guard case .up(let kind, let address, _) = link else {
-            if case .handoff = link { return }   // 补发链自己管，不另起一条
-            return
-        }
+        guard case .up(let kind, let address, _) = link else { return }   // 含 .handoff：补发链自己管，不另起一条
         sawAvailability = true
         cancel(.cabledWait)
         phoneWired = wired

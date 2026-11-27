@@ -122,6 +122,24 @@ func runAudioTests() -> Int {
             expect(order == [0, 1, 2], "jitter buffer reorders packets by RTP timestamp")
             jb.close()
         }
+        // RTP 起點隨機：落在高半區（≥ 0x80000000）時一樣要等 latency、照時間戳排
+        do {
+            let q = DispatchQueue(label: "test.jitter.high")
+            let lock = NSLock()
+            var out: [UInt8] = []
+            let jb = OpusJitterBuffer(queue: q, latencyMs: 60) { data in
+                lock.lock(); out.append(data[0]); lock.unlock()
+            }
+            let base: UInt32 = 0xC000_0000
+            jb.push(sample: base &+ 960, payload: Data([1]))
+            Thread.sleep(forTimeInterval: 0.03)   // 舊行為：這 30ms 內 tick 就把 1 放掉，0 來不及排到前面
+            jb.push(sample: base, payload: Data([0]))
+            jb.push(sample: base &+ 1920, payload: Data([2]))
+            Thread.sleep(forTimeInterval: 0.3)
+            lock.lock(); let order = out; lock.unlock()
+            expect(order == [0, 1, 2], "jitter buffer holds and reorders when the first RTP timestamp is in the upper half (\(order))")
+            jb.close()
+        }
 
         // SpeexDSP 回聲消除：App 的電話/Siri 上行用它；先確認 C 橋接與 20ms 幀能跑。
         if let aec = EchoCanceller(sampleRate: 16000, frameMs: 20, filterMs: 100) {

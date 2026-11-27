@@ -41,7 +41,7 @@ SITE_ORIGIN=https://example.com npm run build && SITE_ORIGIN=https://example.com
 - `scripts/check.mjs`：發布前檢查，見下。
 - `public/media/`：全部發布素材，原樣複製進 `dist/`。
 
-`npm run check` 會擋下：引用到不存在的本地檔案、缺 title／description／canonical／og:image／hreflang、分享圖不是 1200 × 630 JPEG、可見文字出現破折號（U+2014、U+2013）、src／href 指向本站與 github.com 以外的主機、行內處理器或行內腳本、圖片缺 width／height。
+`npm run check` 會擋下：引用到不存在的本地檔案、缺 title／description／canonical／og:image／hreflang、分享圖不是 1200 × 630 JPEG、可見文字出現破折號（U+2014、U+2013）、src／href 指向本站、github.com 與 www.bilibili.com（演示影片外連）以外的主機、行內處理器或行內腳本、圖片缺 width／height。
 
 ## 素材與重拍
 
@@ -53,27 +53,26 @@ python3 scripts/render-media.py --lang en       # 英文屏幕 → renders/en/�
 python3 -I scripts/make-og.py       # 重做分享圖與圖示
 ```
 
-`make-og.py` 產生三張分享卡片 `og-v3.jpg`、`og-zh-hans-v3.jpg`、`og-en-v3.jpg`（1200 × 630，冷白底、右邊是該語言屏幕的 `face-curious.webp`、左邊是 `ogTitle`，用 macOS 系統字），以及 512 × 512 的 `share-square.jpg`。
+`make-og.py` 產生三張分享卡片 `og-v4.jpg`、`og-zh-hans-v4.jpg`、`og-en-v4.jpg`（1200 × 630，冷白底、右邊是該語言屏幕的 `face-curious.webp`、左邊是 `ogTitle`，用 macOS 系統字），以及 512 × 512 的 `share-square.jpg`。
 
 首屏第一張表情圖（`face-idle.webp`）直接寫在 HTML 裡並帶 `fetchpriority="high"`；其餘表情與外觀圖由 `app.js` 在頁面載入後或捲近時才建立，視角與三格場景用 `loading="lazy"`。所有圖都有 width／height，避免版面位移。
 
-錶面一覽（`styles` 組）是六款錶面各一張正面圖，同一個時間 10:09，共用裁切框。README 的拼圖由上層 `tooling/make-readme-media.py` 從同一套渲染組出來。
+錶面一覽（`styles` 組）是八款錶面各一張正面圖，同一個時間 10:09，共用裁切框。README 的拼圖由上層 `tooling/make-readme-media.py` 從同一套渲染組出來。
 
-動畫素材也是現拍：`spin` 組是轉一圈的 36 張（每 10°，螢幕朝前的 10 張在同一分鐘拍完，轉回原點時鐘不跳），`hello-seq` 組是開機寫 hello 的 16 幀（寫完就停，跟語言無關，放 `renders/hello/`）。拍照視窗放在螢幕外，錶面固定島錶面，不受本機偏好影響；另一個 session 正在改桌寵時，用 `HOMEPLAY_PET=<固定版執行檔>` 指定一份已提交版本建出來的執行檔再拍。
+動畫素材也是現拍：`spin` 組是轉一圈的 36 張（每 10°，螢幕朝前的 10 張在同一分鐘拍完，轉回原點時鐘不跳）。拍照視窗放在螢幕外，錶面固定島錶面，不受本機偏好影響；另一個 session 正在改桌寵時，用 `HOMEPLAY_PET=<固定版執行檔>` 指定一份已提交版本建出來的執行檔再拍。
 
 圖示由上層 `tooling/make-icon.py --final B` 輸出（`icon-192.png`、`icon-512.png`、`apple-touch-icon.png`），`make-og.py` 只做三張分享卡片與 `share-square.jpg`。
 
 ## 動畫
 
-每個動畫都有理由，「減少動態效果」下全部變成靜止或直接切換；只動 transform／opacity，不監聽 scroll，用 IntersectionObserver 只在區塊可見時跑 rAF。
+每個動畫都有理由，「減少動態效果」下全部變成靜止或直接切換；只動 transform／opacity；scroll 只有兩個 passive 監聽（頁面進度條經 rAF 節流、手機導覽列的邊緣淡出），其餘用 IntersectionObserver 只在區塊可見時跑 rAF。
 
 - 首屏：機身彈起進場、慢慢呼吸；表情照 App 的行為表回應游標。
-- 為什麼是眼睛：一雙跟著游標看的眼睛，會眨眼，停下來就閉上（「知道什麼時候別看」）；時間軸逐段浮現。
+- 為什麼是眼睛：一雙跟著游標看的眼睛，會眨眼，停下來就閉上（「知道什麼時候別看」）。
 - CarPlay：光點沿著資料路徑走，一顆往回走代表點按傳回 iPhone。
 - 轉一圈：canvas 逐張換 36 張實拍，拖動有慣性，沒拖時跟著捲動轉；「拆開看看」切到拆件圖。
-- hello：進入畫面時逐幀寫一次，可以再寫一次。
-- 亮點：四張卡各一個小動畫（線拔掉換成 Wi-Fi、眼睛眨一下、按住 F5 時聲波起伏、F8 被按下），只在卡片捲進畫面後才跑。
-- 錶面一覽：六張依序浮上來；開發者的話：👀 左右看一眼。
+- 亮點：四張卡各一個小圖示，其中三個會動（線拔掉換成 Wi-Fi、眼睛眨一下、F8 被按下），只在卡片捲進畫面後才跑。
+- 錶面一覽：八張依序浮上來；開發者的話：👀 左右看一眼。
 
 ## 規則
 

@@ -11,9 +11,7 @@ import Foundation
 extension Iap2Csm {
 
     package enum Communications {
-        package static let startCallStateUpdates: UInt16 = 0x4154
         package static let callStateUpdate: UInt16 = 0x4155
-        package static let startUpdates: UInt16 = 0x4157
         package static let update: UInt16 = 0x4158
     }
 

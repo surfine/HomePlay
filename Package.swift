@@ -47,6 +47,6 @@ let package = Package(
         .executableTarget(name: "iap2-probe", dependencies: ["IAP2"],
                           linkerSettings: [.linkedFramework("IOBluetooth")]),
         .executableTarget(name: "iap2-offline-tests", dependencies: ["IAP2"]),
-        .executableTarget(name: "session-tests", dependencies: ["Session"], swiftSettings: v5),
+        .executableTarget(name: "session-tests", dependencies: ["Session", "Wire", "H264"], swiftSettings: v5),
     ]
 )

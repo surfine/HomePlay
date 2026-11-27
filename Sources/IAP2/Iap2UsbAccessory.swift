@@ -27,7 +27,7 @@ package final class Iap2UsbAccessory: Iap2AccessoryForwarding, @unchecked Sendab
     /// 停止：关掉 carkit 流，让手机看到正常断开（不留"配件还在会话里"的残留）。
     package func close() { core.finish(0) }
 
-    /// 开跑：接流、发 marker。字节来了跳主线程喂核心，回包从 takeOutput 拿走发回去。
+    /// 开跑：接流、发 marker。字节来了跳主线程喂核心，回包经 core 的 onDrain 发回去。
     package func start() {
         guard !started else { return }
         started = true

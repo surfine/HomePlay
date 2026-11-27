@@ -14,7 +14,7 @@ At night, it falls asleep before you do.
 
 macOS 14 or later, on Apple silicon. Both apps are Developer ID signed and notarized. 2.0 beta 8 is the preview, and it can have bugs. 1.0.6 is the stable build. GPL-3.0-or-later.
 
-1.0 is the eyes, and CarPlay from an iPhone. 2.0 is the rest of HomeView: a Home Screen, faces, apps, and ClioTalk. This repository builds 1.0, the same app as 1.0.6. The 2.0 app is the beta download. The 2.0 source is not published here.
+1.0 is the eyes, and CarPlay from an iPhone. 2.0 is the rest of HomeView: a Home Screen, faces, apps, and ClioTalk. The `main` branch builds 1.0, the same app as 1.0.6. The 2.0 source is on the [`beta`](https://github.com/surfine/HomePlay/tree/beta) branch.
 
 - [Put it on the desk](#put-it-on-the-desk)
 - [The eyes are how you get home](#the-eyes-are-how-you-get-home)
@@ -162,7 +162,7 @@ The camera stays on this Mac. Frames are not saved and not uploaded. For wireles
 
 ## Build 1.0 from source
 
-This repository builds 1.0: the desk pet and the CarPlay receiver. That build matches 1.0.6. Download the beta for the 2.0 app. The 2.0 source is not in this repository.
+The `main` branch builds 1.0: the desk pet and the CarPlay receiver. That build matches 1.0.6. To build 2.0, check out the [`beta`](https://github.com/surfine/HomePlay/tree/beta) branch; the steps are the same.
 
 You need macOS 14 or later, and the Swift 6 toolchain. This source does not include Apple's HomeView USDZ. Put `apple-homeview.usdz` in `Sources/homeplay-pet/Resources/`. Without that file, the body does not load. The signed app already includes it.
 

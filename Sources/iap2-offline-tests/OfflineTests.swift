@@ -23,6 +23,12 @@ func hexBytes(_ s: String) -> [UInt8] {
     }
 
     static func main() {
+        runAll()   // 裡面的 guard…return 只離開 runAll，失敗數照樣在這裡結算
+        if failures > 0 { print("\(failures) FAILED"); exit(1) }
+        print("PASS iap2 offline")
+    }
+
+    static func runAll() {
         // Wi-Fi 資訊分享：0x5700 沒有參數；0x5701 回狀態＋名稱＋密碼（字串可能帶 NUL）
         do {
             expect(Iap2Csm.requestWiFiInformationFrame().messageId == 0x5700, "wifi info request is 0x5700")
@@ -240,7 +246,8 @@ func hexBytes(_ s: String) -> [UInt8] {
                    "file transfer LAST_DATA reassembles")
             let c = FileTransferReceiver()
             _ = c.feed([9, 0x80, 1])
-            expect(c.feed([9, 0x02]).isEmpty && c.feed([9, 0x40, 2]).last != nil, "file transfer CANCEL drops the buffer")
+            expect(c.feed([9, 0x02]).isEmpty && c.feed([9, 0x40, 2]) == [.reply([9, 0x05]), .complete(id: 9, data: Data([2]))],
+                   "file transfer CANCEL drops the buffer")
         }
 
         // MFi：现场生成身份 → pk8/证书文件 → 加载自检 → 签名/验签往返
@@ -534,9 +541,13 @@ func hexBytes(_ s: String) -> [UInt8] {
             let defaultDir = URL(fileURLWithPath: #filePath)          // …/Sources/iap2-offline-tests/OfflineTests.swift
                 .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
                 .appendingPathComponent("identity")
-            let identityDir = ProcessInfo.processInfo.environment["HOMEPLAY_IDENTITY_DIR"] ?? defaultDir.path
-            let identity = try? Iap2MfiIdentity(directory: identityDir)
-            expect(identity != nil, "bundled identity at \(identityDir) loads and self-checks")
+            let override = ProcessInfo.processInfo.environment["HOMEPLAY_IDENTITY_DIR"]
+            let identityDir = override ?? defaultDir.path
+            // 公開快照不含 identity/；沒設 HOMEPLAY_IDENTITY_DIR 又沒有這個目錄時跳過，不算失敗。
+            let skip = override == nil && !FileManager.default.fileExists(atPath: identityDir)
+            if skip { print("skip bundled identity: \(identityDir) not present (public snapshot); set HOMEPLAY_IDENTITY_DIR to check one") }
+            let identity = skip ? nil : try? Iap2MfiIdentity(directory: identityDir)
+            if !skip { expect(identity != nil, "bundled identity at \(identityDir) loads and self-checks") }
             if let identity {
                 let digest = Array(SHA256.hash(data: Data("real identity check".utf8)))
                 let raw = try? identity.sign(digest: digest)
@@ -619,9 +630,6 @@ func hexBytes(_ s: String) -> [UInt8] {
         ConnectionMachineTests.run(expect)
         // 首次配对连不上：失败树与诊断报告
         ConnectDiagnosticsTests.run(expect)
-
-        if failures > 0 { print("\(failures) FAILED"); exit(1) }
-        print("PASS iap2 offline")
     }
 
     /// 生成一份测试身份：PKCS#8 EC P-256 私钥 + 自签证书（DER）。
