@@ -629,9 +629,13 @@ func hexBytes(_ s: String) -> [UInt8] {
             let defaultDir = URL(fileURLWithPath: #filePath)          // …/Sources/iap2-offline-tests/OfflineTests.swift
                 .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
                 .appendingPathComponent("identity")
-            let identityDir = ProcessInfo.processInfo.environment["HOMEPLAY_IDENTITY_DIR"] ?? defaultDir.path
-            let identity = try? Iap2MfiIdentity(directory: identityDir)
-            expect(identity != nil, "bundled identity at \(identityDir) loads and self-checks")
+            let override = ProcessInfo.processInfo.environment["HOMEPLAY_IDENTITY_DIR"]
+            let identityDir = override ?? defaultDir.path
+            // 公開快照不含 identity/；沒設 HOMEPLAY_IDENTITY_DIR 又沒有這個目錄時跳過，不算失敗。
+            let skip = override == nil && !FileManager.default.fileExists(atPath: identityDir)
+            if skip { print("skip bundled identity: \(identityDir) not present (public snapshot); set HOMEPLAY_IDENTITY_DIR to check one") }
+            let identity = skip ? nil : try? Iap2MfiIdentity(directory: identityDir)
+            if !skip { expect(identity != nil, "bundled identity at \(identityDir) loads and self-checks") }
             if let identity {
                 let digest = Array(SHA256.hash(data: Data("real identity check".utf8)))
                 let raw = try? identity.sign(digest: digest)

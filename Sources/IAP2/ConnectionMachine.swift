@@ -384,6 +384,15 @@ package struct ConnectionMachine: Sendable {
         usb = (serial, phone, chargeOnly)
         guard changed else { return }
         usbPreferred = fresh   // 真的插上＝「用这台」：线一定通，直接走 USB
+        // 插上的是目前要连的那台、还没直播：蓝芽正在退避或打不开就直接改走 USB，
+        // 不要让它继续敲 120 秒才轮到线（2026-11-18 真机：插了线还是只充电）
+        let linkIsUp: Bool = { if case .up = link { return true }; return false }()
+        if let phone, fresh, target?.address == phone, !isLive, retryPending || !linkIsUp {
+            if retryPending { retryPending = false; cancel(.retry) }
+            if case .idle = link {} else { closeCurrentLink() }
+            ensureLink()
+            return
+        }
         if let phone {
             // R1.2：真的插上一台不是正在直播的手机 → 换成它
             if fresh, liveOwner != phone, !(target?.address == phone && !isLive) {
@@ -579,8 +588,16 @@ package struct ConnectionMachine: Sendable {
                 republished = true
                 out.append(.republishSDP)
             }
+            // 2026-11-18：手機出門再回來連不上。連續逾時（9）時每 60 秒一直敲門，iPhone 最後會拒絕這台 Mac；
+            // 連續 6 次（約 3 分鐘）重新發布車機 SDP，讓 iPhone 重新看到這台車，退避也拉長到 120 秒。
+            if lastFailCode == 9, failStreak >= 6, !republished {
+                republished = true
+                out.append(.republishSDP)
+            }
         }
-        scheduleRetry(backoff.next(live: false))
+        var delay = backoff.next(live: false)
+        if lastFailCode == 9, failStreak >= 6 { delay = max(delay, 120) }
+        scheduleRetry(delay)
     }
 
     // MARK: - R4 交接

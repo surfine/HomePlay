@@ -117,6 +117,23 @@ enum ConnectionMachineTests {
             expect(s.m.isLive && s.m.failStreak == 0, "2 reconnect succeeds and resets the streak")
         }
 
+        // 2b. 手機久不在：連續逾時 6 次 → 重新發布車機 SDP、退避拉長到 120 秒（2026-11-18）
+        do {
+            var s = MachineSim(paired: [A], nearby: [A], processAge: 300)
+            s.send(.start(preferred: A))
+            var republished = false
+            for i in 1...6 {
+                var fx = s.send(.linkFinished(gen: s.gen, code: 9))
+                // 自愈被 10 分鐘節流擋下才會走退避；模擬器照真機的節流補一個 restartDenied
+                if fx.contains(where: { $0.restart != nil }) { fx += s.send(.restartDenied(.selfHeal)) }
+                if fx.contains(.republishSDP) { republished = true }
+                if i < 6 { s.advance(120) }
+            }
+            let t = s.timers[.retry]
+            expect(republished && t != nil && t!.at - s.env.now >= 120,
+                   "2b six timeouts → republish the car SDP and back off 120 s")
+        }
+
         // 3. 刚起来的行程第一次失败 → 要求重启；被节流挡下 → 照退避
         do {
             var s = MachineSim(paired: [A], nearby: [A], processAge: 3)
@@ -246,6 +263,15 @@ enum ConnectionMachineTests {
             u.connectOK()
             let uf = u.send(.userSelect(B))
             expect(uf.contains { $0.opensUSB } && uf.compactMap(\.opensBluetooth).isEmpty, "6b user picks the cabled phone → USB straight away")
+        }
+
+        // 6b2. 已配对手机插线时蓝牙正在退避：立刻开 USB，不等 120 秒
+        do {
+            var s = MachineSim(paired: [A], nearby: [A], processAge: 300)
+            s.send(.start(preferred: A))
+            s.send(.linkFinished(gen: s.gen, code: 9))
+            let fx = s.send(.usbAttached(serial: "a5a4", phone: A, chargeOnly: true))
+            expect(fx.contains { $0.opensUSB }, "6b2 plugging the failing phone opens USB right away")
         }
 
         // 6d. 插着线的手机藍牙接上了但不报 0x4300 → 5 秒后改走 USB；报了就不动

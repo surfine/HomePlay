@@ -221,11 +221,34 @@ enum PhoneIconCache {
 
     /// 徽章直徑佔圖示的比例：四分之一，貼右下角（2026-11-12 定案；原本 0.36）
     static let badgeRatio: CGFloat = 0.25
+    /// 系統畫出來的 App 圖示自帶 macOS 的透明邊（256 裡 alpha 邊界實測約 15/18），
+    /// 直接畫進格子會比內建 App 小一號、車標又浮在透明邊裡。掃 64×64 alpha 找實際內容，
+    /// 裁掉透明邊再鋪滿格子；CGBitmapContext 的記憶體第 0 列是頂端，和 CGImage.cropping 的左上原點一致。
+    static func contentRect(_ img: CGImage) -> CGRect? {
+        let n = 64
+        var px = [UInt8](repeating: 0, count: n * n * 4)
+        guard let c = CGContext(data: &px, width: n, height: n, bitsPerComponent: 8, bytesPerRow: n * 4,
+                                space: CGColorSpace(name: CGColorSpace.sRGB)!,
+                                bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return nil }
+        c.interpolationQuality = .low
+        c.draw(img, in: CGRect(x: 0, y: 0, width: n, height: n))
+        var x0 = n, y0 = n, x1 = -1, y1 = -1
+        for y in 0..<n {
+            for x in 0..<n where px[(y * n + x) * 4 + 3] > 8 {
+                x0 = min(x0, x); x1 = max(x1, x); y0 = min(y0, y); y1 = max(y1, y)
+            }
+        }
+        guard x1 >= x0, y1 >= y0 else { return nil }
+        let k = CGFloat(n), w = CGFloat(img.width), h = CGFloat(img.height)
+        return CGRect(x: CGFloat(x0) / k * w, y: CGFloat(y0) / k * h,
+                      width: CGFloat(x1 - x0 + 1) / k * w, height: CGFloat(y1 - y0 + 1) / k * h)
+    }
     /// 乾淨圖示＋右下角小小的車（像 iPhone 鏡像的 App 角標：一眼看得出是開在 iPhone／CarPlay 上）
     static func badge(_ clean: CGImage, px: Int = 256) -> CGImage? {
-        draw(px) { r in
+        let content = contentRect(clean).flatMap { clean.cropping(to: $0) } ?? clean
+        return draw(px) { r in
             let s = r.width
-            NSGraphicsContext.current?.cgContext.draw(clean, in: r)
+            NSGraphicsContext.current?.cgContext.draw(content, in: r)
             let d = s * badgeRatio, b = NSRect(x: s - d - s * 0.02, y: s * 0.02, width: d, height: d)
             NSColor.black.withAlphaComponent(0.85).setFill(); NSBezierPath(ovalIn: b).fill()
             NSColor.white.setStroke(); let ring = NSBezierPath(ovalIn: b.insetBy(dx: 1.5, dy: 1.5)); ring.lineWidth = s * 0.012; ring.stroke()

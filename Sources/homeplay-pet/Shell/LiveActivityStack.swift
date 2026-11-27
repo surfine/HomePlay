@@ -104,6 +104,15 @@ enum LiveActivityStack {
             det.append(i == 0 ? CGRect(x: pill.maxX + detachGap, y: top, width: dw, height: height)
                               : CGRect(x: pill.minX - detachGap - dw, y: top, width: dw, height: height))
         }
+        // 多顆藥丸：主藥丸固定在中間、分離的往右／左長，整組會偏一邊。整組（主＋分離）
+        // 以 cx 為中心，間距照 detachGap／minimalPad；上面留白不變（2026-11-17 使用者：均等的間距）。
+        let span = det.reduce(pill) { $0.union($1) }
+        let dx = cx - span.midX
+        if abs(dx) > 0.01 {
+            let slot = CGRect(x: cx - m0 / 2, y: top, width: m0, height: height).offsetBy(dx: dx, dy: 0)
+            return Layout(pill: pill.offsetBy(dx: dx, dy: 0), leading: nil, trailing: slot,
+                          detached: det.map { $0.offsetBy(dx: dx, dy: 0) })
+        }
         return Layout(pill: pill, leading: nil, trailing: CGRect(x: cx - m0 / 2, y: top, width: m0, height: height), detached: det)
     }
 

@@ -52,11 +52,14 @@ enum HomeHandle {
         }
     }
 
-    /// 點在把手上＝Home 鍵。只有 CarPlay 直播畫面上、把手還看不見時，第一下只讓它現身
+    /// 點在把手上＝Home 鍵，一次往上一層：App／資料庫／切換器 → 主畫面 → 表面。
+    /// 只有 CarPlay 直播畫面上、把手還看不見時，第一下只讓它現身
     /// （2026-11-13 定案：那裡頂端的點按可能是要給 iPhone 的，其他畫面頂端中間沒有別的東西，不必多點一下）
-    enum Tap: Equatable { case reveal, home }
-    static func tap(shownAtDown: Bool, livePill: Bool, onCarPlay: Bool) -> Tap {
-        onCarPlay && !shownAtDown && !livePill ? .reveal : .home
+    enum Tap: Equatable { case reveal, home, surface }
+    static func tap(shownAtDown: Bool, livePill: Bool, onCarPlay: Bool, screen: ShellScreen) -> Tap {
+        if onCarPlay { return !shownAtDown && !livePill ? .reveal : .home }
+        if screen == .home { return .surface }   // 主畫面的再上一層就是表面（2026-11-18 拍板）
+        return .home
     }
 
     /// 深色底用白、淺色底用黑；在門檻附近不來回跳（遲滯）
@@ -227,12 +230,12 @@ enum HomeHandleSelfTest {
         rm.reveal(now: 10, reduceMotion: true)
         check(rm.level(now: 10, reduceMotion: true) == 1 && rm.level(now: 11.99, reduceMotion: true) == 1 && rm.level(now: 12.01, reduceMotion: true) == 0,
               "把手：減少動態效果時直接切換，不淡入淡出")   // l10n-ignore
-        // 點一下＝Home 鍵；只有 CarPlay 畫面上、把手看不見時第一下只現身
-        check(H.tap(shownAtDown: false, livePill: false, onCarPlay: true) == .reveal
-              && H.tap(shownAtDown: true, livePill: false, onCarPlay: true) == .home
-              && H.tap(shownAtDown: false, livePill: false, onCarPlay: false) == .home
-              && H.tap(shownAtDown: false, livePill: true, onCarPlay: false) == .home,
-              "把手：點一下就是 Home 鍵；只有 CarPlay 畫面上隱藏時第一下只現身")   // l10n-ignore
+        // 點一下＝往上一層：App→主畫面、主畫面→表面；只有 CarPlay 畫面上、把手看不見時第一下只現身
+        check(H.tap(shownAtDown: false, livePill: false, onCarPlay: true, screen: .app(CarPlayApp.id)) == .reveal
+              && H.tap(shownAtDown: true, livePill: false, onCarPlay: true, screen: .app(CarPlayApp.id)) == .home
+              && H.tap(shownAtDown: false, livePill: false, onCarPlay: false, screen: .app("weather")) == .home
+              && H.tap(shownAtDown: false, livePill: true, onCarPlay: false, screen: .home) == .surface,
+              "把手：點一下往上一層（App→主畫面、主畫面→表面）；只有 CarPlay 畫面上隱藏時第一下只現身")   // l10n-ignore
         // 隱藏時下拉、拉住停、長按照樣成立：歸屬與判定都不看把手看不看得見
         let hidden = H.Visibility()
         check(!hidden.isShown(now: 100)

@@ -158,6 +158,39 @@ if let i = CommandLine.arguments.firstIndex(of: "--glass-calibrate"), i + 1 < Co
 
 if CommandLine.arguments.contains("--probe-desktop-widgets") { DesktopWidgetProbe.run() }   // SideShow 致敬：印出桌面小工具視窗就結束（Shell/DesktopWidgets.swift）
 if CommandLine.arguments.contains("--sideshow-serve-test") { SideShowServeTest.run() }   // SideShow：只聽 127.0.0.1、假內容、記憶體名冊，給 curl 驗（SideShow/SideShowSelfTest.swift）
+if CommandLine.arguments.contains("--captive-probe") {   // 排障：印出强制门户探测结果就结束
+    let sem = DispatchSemaphore(value: 0)
+    CaptiveWiFi.probe(force: true) { r in
+        print(r == nil ? "captive probe: unknown" : "captive probe: \(r!.captive ? "captive" : "open")")
+        sem.signal()
+    }
+    if sem.wait(timeout: .now() + 12) == .timedOut { print("captive probe: timeout") }
+    exit(0)
+}
+if CommandLine.arguments.contains("--phone-icon-check") {   // 排障：iPhone 圖示裁邊後有沒有鋪滿；順便把成品寫到 /tmp/phone-icons
+    let dir = PhoneIconCache.directory
+    let files = ((try? FileManager.default.contentsOfDirectory(atPath: dir.path)) ?? []).filter { $0.hasSuffix(".png") }.sorted()
+    let outDir = URL(fileURLWithPath: "/tmp/phone-icons", isDirectory: true)
+    try? FileManager.default.createDirectory(at: outDir, withIntermediateDirectories: true)
+    for f in files.prefix(12) {
+        let p = dir.appendingPathComponent(f)
+        guard let s = CGImageSourceCreateWithURL(p as CFURL, nil), let img = CGImageSourceCreateImageAtIndex(s, 0, nil) else { continue }
+        let clean = PhoneIconCache.contentRect(img)
+        guard let badged = PhoneIconCache.badge(img), let r = PhoneIconCache.contentRect(badged) else { continue }
+        let out = outDir.appendingPathComponent(f)
+        if let d = CGImageDestinationCreateWithURL(out as CFURL, "public.png" as CFString, 1, nil) {
+            CGImageDestinationAddImage(d, badged, nil); CGImageDestinationFinalize(d)
+        }
+        print("\(f): clean \(Int(clean?.width ?? 0))/\(Int(clean?.height ?? 0)) → badged \(Int(r.width))/\(Int(r.height))")
+    }
+    exit(0)
+}
+if CommandLine.arguments.contains("--rescue") {   // 快照用：已配对手机久不回应蓝牙的救援卡
+    CarPlayOverlayState.wifiHelp = true; CarPlayOverlayState.forced = true
+    CarPlayOverlayState.rescueForced = true
+    CarPlayOverlayState.connectReason = "phoneNoAnswer"
+    CarPlayOverlayState.helpSince = CACurrentMediaTime() - 200
+}
 if CommandLine.arguments.contains("--selftest") {
     // 纯函数自检：方屏 uv → 画面坐标（留黑扣掉）
     func near(_ a: (Double, Double)?, _ b: (Double, Double)) -> Bool {
@@ -353,6 +386,37 @@ if CommandLine.arguments.contains("--selftest") {
         let late = ConnectHelp.card(reason: "wifiNoConnectBack", ssid: "Home", needsPassword: false, helpElapsed: 45)
         check(early.subtitle.contains("Home") && early.hint == nil && late.hint != nil && late.chip != early.chip, "排障卡：40 秒后改给插线与诊断报告")
         check(ConnectHelp.card(reason: nil, ssid: "", needsPassword: true, helpElapsed: 0).hint != nil, "排障卡：旧接收器没给原因也有提示")
+        let captiveCard = ConnectHelp.card(reason: "wifiNoConnectBack", ssid: "Home", needsPassword: false, helpElapsed: 5, captive: true)
+        check(captiveCard.title != early.title && captiveCard.hint != nil, "排障卡：强制门户换成「先登录」的说法")
+        check(CaptiveWiFi.isOpen(status: 200, host: "captive.apple.com", body: "<HTML><BODY>Success</BODY></HTML>"), "强制门户：正常网络判定")
+        check(CarPlayRescue.shouldOffer(reason: "phoneNoAnswer", paired: true, failedFor: 200), "救援：已配对、久不回应才提议重新配对")
+        check(!CarPlayRescue.shouldOffer(reason: "phoneNoAnswer", paired: true, failedFor: 60), "救援：刚开始连不上不打扰")
+        check(!CarPlayRescue.shouldOffer(reason: "phoneNoAnswer", paired: false, failedFor: 200), "救援：没有配对纪录不提议")
+        check(!CarPlayRescue.shouldOffer(reason: "macFirewall", paired: true, failedFor: 200), "救援：别的原因不提议")
+        check(!CaptiveWiFi.isOpen(status: 200, host: "portal.example.com", body: "login"), "强制门户：被导到别的主机")
+        check(!CaptiveWiFi.isOpen(status: 200, host: "captive.apple.com", body: "Sign in"), "强制门户：同一主机换了内容")
+        check(!CaptiveWiFi.isOpen(status: 511, host: "captive.apple.com", body: "Success"), "强制门户：非 200")
+        // iPhone 圖示：系統畫的 App 圖示帶 macOS 的透明邊（實測 216/256）；裁掉後要鋪滿格子，
+        // 才能和內建 App 一樣大，右下角的車標也不會浮在透明邊裡（2026-11-17 使用者回報）。
+        do {
+            let n = 64
+            var px = [UInt8](repeating: 0, count: n * n * 4)
+            if let c = CGContext(data: &px, width: n, height: n, bitsPerComponent: 8, bytesPerRow: n * 4,
+                                 space: CGColorSpace(name: CGColorSpace.sRGB)!,
+                                 bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue), let _ = c.makeImage() {
+                c.setFillColor(NSColor.red.cgColor)
+                c.fill(CGRect(x: 8, y: 8, width: 48, height: 48))
+                if let img = c.makeImage() {
+                    let r0 = PhoneIconCache.contentRect(img)
+                    check(r0 != nil && abs(r0!.width - 48) <= 2 && abs(r0!.height - 48) <= 2, "iPhone 圖示：找得到內容邊界")
+                    if let b = PhoneIconCache.badge(img, px: 128), let r1 = PhoneIconCache.contentRect(b) {
+                        check(r1.width >= 120 && r1.height >= 120, "iPhone 圖示：裁掉透明邊後鋪滿格子")
+                    } else {
+                        check(false, "iPhone 圖示：badge 畫不出來")
+                    }
+                }
+            }
+        }
         let selftestLog = Substring("[1] 无线：身份自检通过\n[2] 无线：送 0x4301：无线 10.0.0.2\n[3] 无线：手机连入控制口 10.0.0.3\n[4] 无线：会话开始，等画面\n")
         let sum = ConnectHelp.summarizeLog(selftestLog)
         check(sum.contains("start sent 1") && sum.contains("sessions 1") && !sum.contains("10.0.0"), "诊断报告：日志只数次数、不抄地址")
@@ -493,24 +557,37 @@ if CommandLine.arguments.contains("--selftest") {
             for (p, q) in zip(a, b) { k = c.feed(id0: 7, x0: p.0, y0: p.1, id1: 9, x1: q.0, y1: q.1) }
             return k
         }
+        /// 一指当锚的情况要等落后那指（2026-11-26）：在原轨迹后面补一帧，两指都按各自的位移走到 3 倍远
+        func runLong(_ a: [(Double, Double)], _ b: [(Double, Double)]) -> TwoFingerKind {
+            func ext(_ p: [(Double, Double)]) -> [(Double, Double)] {
+                p + [(p[0].0 + 3 * (p[p.count - 1].0 - p[0].0), p[0].1 + 3 * (p[p.count - 1].1 - p[0].1))]
+            }
+            return run(ext(a), ext(b))
+        }
         check(run([(0.40, 0.50), (0.40, 0.47)], [(0.55, 0.50), (0.55, 0.47)]) == .scroll, "两指：一起往下＝滑动")
         check(run([(0.40, 0.50), (0.43, 0.505)], [(0.55, 0.50), (0.575, 0.497)]) == .scroll, "两指：一起往右（一指略慢）＝滑动")
         check(run([(0.40, 0.50), (0.385, 0.50)], [(0.55, 0.50), (0.565, 0.50)]) == .pinch, "两指：相背张开＝捏合")
-        check(run([(0.40, 0.50), (0.40, 0.50)], [(0.55, 0.50), (0.535, 0.50)]) == .pinch, "两指：一指不动另一指靠近＝捏合")
+        check(run([(0.40, 0.50), (0.40, 0.50)], [(0.55, 0.50), (0.535, 0.50)]) == .undecided, "两指：一指不动另一指才走 1.5 mm：先等，可能是慢半拍的滑动")   // l10n-ignore
+        check(runLong([(0.40, 0.50), (0.40, 0.50)], [(0.55, 0.50), (0.535, 0.50)]) == .pinch, "两指：一指一直不动另一指靠近＝捏合")   // l10n-ignore
+        // 真機 2026-11-26：左右滑被當成縮放——先落下的手指先動，另一指慢半拍跟上
+        check(run([(0.40, 0.50), (0.415, 0.50), (0.43, 0.50)], [(0.55, 0.50), (0.551, 0.50), (0.562, 0.50)]) == .scroll, "两指：左右滑、一指慢半拍＝滑动")   // l10n-ignore
+        check(run([(0.40, 0.50), (0.385, 0.50), (0.37, 0.50)], [(0.55, 0.50), (0.5505, 0.50), (0.537, 0.50)]) == .scroll, "两指：往左滑、一指慢半拍＝滑动")   // l10n-ignore
+        check(run([(0.40, 0.50), (0.415, 0.50), (0.425, 0.50)], [(0.55, 0.50), (0.5505, 0.50), (0.551, 0.50)]) == .undecided, "两指：落后的手指还没动、才走 2.5 mm：继续等")   // l10n-ignore
+        check(run([(0.40, 0.50), (0.415, 0.50), (0.44, 0.50)], [(0.55, 0.50), (0.551, 0.50), (0.56, 0.50)]) == .scroll, "两指：左右滑、落后那指只走了 1/4 也还是滑动")   // l10n-ignore
         check(run([(0.40, 0.50), (0.40, 0.488)], [(0.55, 0.50), (0.55, 0.512)]) == .twist, "两指：扭转＝都不做")
         check(run([(0.40, 0.50), (0.403, 0.50)], [(0.55, 0.50), (0.553, 0.50)]) == .undecided, "两指：没走够 1.5 mm 先不判")
         check(run([(0.40, 0.50), (0.396, 0.486)], [(0.55, 0.50), (0.556, 0.487)]) == .scroll, "两指：往下滑时手指略张开＝还是滑动（不误判成捏合）")   // l10n-ignore
         // 一指不动、另一指移动（2.0 改 2 倍后的回归）：沿连线偏 5°／15°／40° 都是捏合；跟连线差很多（往上下走）是滑动
-        check(run([(0.40, 0.50), (0.40, 0.50)], [(0.55, 0.50), (0.535, 0.5013)]) == .pinch
-              && run([(0.40, 0.50), (0.40, 0.50)], [(0.55, 0.50), (0.5355, 0.504)]) == .pinch
-              && run([(0.40, 0.50), (0.4005, 0.50)], [(0.55, 0.50), (0.535, 0.50)]) == .pinch
-              && run([(0.40, 0.50), (0.40, 0.50)], [(0.55, 0.50), (0.5385, 0.4904)]) == .pinch
-              && run([(0.40, 0.50), (0.40, 0.50), (0.40, 0.50), (0.40, 0.50)], [(0.55, 0.50), (0.545, 0.50), (0.54, 0.50), (0.535, 0.50)]) == .pinch,
+        check(runLong([(0.40, 0.50), (0.40, 0.50)], [(0.55, 0.50), (0.535, 0.5013)]) == .pinch
+              && runLong([(0.40, 0.50), (0.40, 0.50)], [(0.55, 0.50), (0.5355, 0.504)]) == .pinch
+              && runLong([(0.40, 0.50), (0.4005, 0.50)], [(0.55, 0.50), (0.535, 0.50)]) == .pinch
+              && runLong([(0.40, 0.50), (0.40, 0.50)], [(0.55, 0.50), (0.5385, 0.4904)]) == .pinch
+              && runLong([(0.40, 0.50), (0.40, 0.50), (0.40, 0.50), (0.40, 0.50)], [(0.55, 0.50), (0.545, 0.50), (0.54, 0.50), (0.535, 0.50)]) == .pinch,
               "两指：一指不动、另一指斜着靠近（偏 5°／15°／40°、慢慢捏）＝捏合")   // l10n-ignore
-        check(run([(0.40, 0.50), (0.40, 0.50)], [(0.55, 0.50), (0.552, 0.485)]) == .scroll
-              && run([(0.40, 0.50), (0.401, 0.499)], [(0.55, 0.50), (0.55, 0.514)]) == .scroll
-              && run([(0.40, 0.50), (0.398, 0.485)], [(0.55, 0.50), (0.555, 0.486)]) == .scroll
-              && run([(0.40, 0.50), (0.4, 0.47)], [(0.55, 0.50), (0.553, 0.471)]) == .scroll,
+        check(runLong([(0.40, 0.50), (0.40, 0.50)], [(0.55, 0.50), (0.552, 0.485)]) == .scroll
+              && runLong([(0.40, 0.50), (0.401, 0.499)], [(0.55, 0.50), (0.55, 0.514)]) == .scroll
+              && runLong([(0.40, 0.50), (0.398, 0.485)], [(0.55, 0.50), (0.555, 0.486)]) == .scroll
+              && runLong([(0.40, 0.50), (0.4, 0.47)], [(0.55, 0.50), (0.553, 0.471)]) == .scroll,
               "两指：上下滑（一指先走、手指略张开）仍是滑动，不误判成捏合")   // l10n-ignore
         var c = TwoFingerClassifier()
         _ = c.feed(id0: 1, x0: 0.4, y0: 0.5, id1: 2, x1: 0.55, y1: 0.5)
@@ -660,6 +737,10 @@ if CommandLine.arguments.contains("--pairing-code") {   // 快照用：插線配
 }
 if CommandLine.arguments.contains("--wifi-help") {   // 快照用：手機報了可用卻沒從 Wi-Fi 連回
     CarPlayOverlayState.wifiHelp = true; CarPlayOverlayState.forced = true
+}
+if CommandLine.arguments.contains("--captive-wifi") {   // 快照用：强制门户的排障卡（Apple Store／饭店）
+    CarPlayOverlayState.wifiHelp = true; CarPlayOverlayState.forced = true
+    CarPlayOverlayState.captiveWiFi = true
 }
 if let r = arg("--connect-reason") {   // 快照用：排障卡（macFirewall localNetwork carPlayConsent ssidUnknown inboundBlocked wifiNoConnectBack）
     CarPlayOverlayState.wifiHelp = true; CarPlayOverlayState.forced = true

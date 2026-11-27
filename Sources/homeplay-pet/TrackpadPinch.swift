@@ -41,6 +41,8 @@ final class TrackpadPinch {
 
     /// 主线程回调；factor 是相对上一帧的倍率（1.02＝这一帧放大 2%）。
     var onMagnify: ((CGFloat) -> Void)?
+    /// 判定成捏合的那一刻问一次（主线程）：这次捏合要不要缩放桌宠。整个接触期间锁定，不逐帧改判。
+    var shouldBeginPinch: (() -> Bool)?
     /// 两指旋转（判成 twist 后每帧）：这一帧转了多少弧度（逆时针为正）；手指离开时叫 onRotateEnd（主线程）。
     /// 2026-11-07 拍板：两指旋转＝桌宠原地转身；捏合与旋转在起手由 TwoFingerClassifier 互斥判定
     var onRotate: ((CGFloat) -> Void)?
@@ -54,7 +56,9 @@ final class TrackpadPinch {
     private var handleRef: UnsafeMutableRawPointer?
     private var startFn: MTDeviceStart?
     private var stopFn: MTDeviceStop?
+    /// 上次真正套用缩放时的指距。没套用的帧不更新它：慢慢捏时每帧变化很小，要累积起来才不会被吞掉。
     private var lastDistance: Float = 0
+    private var pinchAllowed = false
     private var appliedFrames = 0
     private var lastApplyAt: Double = 0
     /// 当前两指手势的类型（触控线程判定、任意线程可读）：捏合只缩放；滑动只转身体／拖 CarPlay；
@@ -118,10 +122,10 @@ final class TrackpadPinch {
         for d in devices { stopFn?(d) }
     }
 
-    /// 两指距离相对手势起始变化超过 2.5% 才确认是捏合；纯双指滚动的轻微漂移不会误缩放。
-    /// 手指离开时只把状态清掉。
+    /// 手指离开时把本次接触的状态清掉。
     fileprivate func resetGesture() {
         lastDistance = 0
+        pinchAllowed = false
         if lastAngle != nil { lastAngle = nil; onRotateEnd?() }
     }
 
@@ -144,20 +148,26 @@ final class TrackpadPinch {
         guard d > 0.001 else { return }
         if decidedNow { appendDiag("gesture.log", "MT two-finger = \(kind.rawValue) d=\(d)") }
         guard kind == .pinch else { lastDistance = d; return }
-        if lastDistance == 0 || decidedNow { lastDistance = d; appliedFrames = 0; return }
+        if lastDistance == 0 || decidedNow {
+            lastDistance = d; appliedFrames = 0
+            pinchAllowed = shouldBeginPinch?() ?? true
+            appendDiag("gesture.log", "MT pinch allowed=\(pinchAllowed)")
+            return
+        }
+        guard pinchAllowed else { return }
         var factor = CGFloat(d / lastDistance)
         guard factor.isFinite, factor > 0 else { return }
+        // 没超过门槛、或这一帧被限速时都不更新基准：变化留着累积到下一帧，慢捏也能缩放
+        guard abs(factor - 1) > 0.0015 else { return }
+        let now = CACurrentMediaTime()
+        guard now - lastApplyAt >= 1.0 / 90 else { return }
         factor = min(1.08, max(0.92, factor))
-        if abs(factor - 1) > 0.0015 {
-            let now = CACurrentMediaTime()
-            guard now - lastApplyAt >= 1.0 / 90 else { lastDistance = d; return }
-            lastApplyAt = now
-            appliedFrames += 1
-            if appliedFrames <= 3 || appliedFrames % 12 == 0 {
-                appendDiag("gesture.log", "MT pinch factor=\(factor) d=\(d)")
-            }
-            onMagnify?(factor)
+        lastApplyAt = now
+        appliedFrames += 1
+        if appliedFrames <= 3 || appliedFrames % 12 == 0 {
+            appendDiag("gesture.log", "MT pinch factor=\(factor) d=\(d)")
         }
+        onMagnify?(factor)
         lastDistance = d
     }
 }

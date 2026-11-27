@@ -10,7 +10,7 @@ const PROD = [640, 1100];    // 機身產品照 1100×1280
 const PROD_H = (w) => Math.round(w * 1280 / 1100);
 // App 卡片裡的三個重點（送出前先問你、開始烹飪、家庭）放寬一格，其餘一格；四排正好排滿
 const WIDE = new Set(['app-messages-confirm', 'app-recipe-step', 'app-home']);
-const FACE_ORDER = ['photos', 'modular', 'analog', 'flow', 'weather', 'calendar', 'growth', 'black', 'island', 'system6'];
+const FACE_ORDER = ['photos', 'modular', 'analog', 'flow', 'weather', 'world', 'calendar', 'growth', 'black', 'island', 'cluster', 'system6'];
 
 export function previewPage(c, p, h) {
   const { head, attr, json, origin, github, notice, releaseDownload, betaDownload, LANGS, otherLangs } = h;

@@ -88,6 +88,8 @@ ${EXTRA_PLIST}
   <key>NSLocationUsageDescription</key><string>Reads the Wi-Fi network name so your iPhone can join wireless CarPlay on the same network, and uses your approximate location for the Weather face.</string>
   <key>NSLocationWhenInUseUsageDescription</key><string>Reads the Wi-Fi network name so your iPhone can join wireless CarPlay on the same network, and uses your approximate location for the Weather face.</string>
   <key>NSBonjourServices</key><array><string>_airplay._tcp</string><string>_carplay-ctrl._tcp</string></array>
+  <!-- 强制门户探测：captive.apple.com 只有 http；只对它开明文，其余照 ATS 默认 -->
+  <key>NSAppTransportSecurity</key><dict><key>NSExceptionDomains</key><dict><key>captive.apple.com</key><dict><key>NSExceptionAllowsInsecureHTTPLoads</key><true/></dict></dict></dict>
 </dict>
 </plist>
 EOF

@@ -15,7 +15,7 @@ OUT = Path(__file__).resolve().parent.parent / 'public' / 'media' / '2.0'
 # 螢幕平面圖（1024² 畫布的放大版）：頁面最寬顯示約 600 CSS px
 SCREENS = ['home-light', 'home-dark', 'home-clear', 'home-tinted', 'widget-gallery', 'home-edit', 'home-library',
            'la-compact', 'la-expanded', 'cc', 'era-1988', 'era-2002', 'era-2026',
-           *[f'face-{s}' for s in ['photos', 'modular', 'analog', 'flow', 'weather', 'calendar', 'growth', 'black', 'island', 'system6']],
+           *[f'face-{s}' for s in ['photos', 'modular', 'analog', 'flow', 'weather', 'world', 'calendar', 'growth', 'black', 'island', 'cluster', 'system6']],
            'app-weather-rain', 'app-timers', 'app-music', 'app-messages-confirm', 'app-facetime', 'app-home', 'app-recipe-step',
            'app-findmy', 'app-intercom', 'clio-listen', 'clio-answer', 'clio-confirm', 'people-greet']
 SCREEN_W = [480, 960]

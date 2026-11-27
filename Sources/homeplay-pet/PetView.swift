@@ -73,6 +73,8 @@ final class PetView: NSView {
     /// CarPlay 畫面＝車上旋鈕（2026-11-07）：送 select／back／left／right／up／down／cw／ccw 給接收端（CarPlayKnobKeys）
     var onCarPlayKnob: ((String) -> Void)?
     var onCancelConnect: (() -> Void)?   // 菜单「取消连线」
+    /// 菜单「暂停 CarPlay」：分钟数；nil＝暂停到用户自己继续
+    var onPauseCarPlay: ((Double?) -> Void)?
     /// 重按（Force Touch）＝进入 CarPlay；AppDelegate 负责拉起 receiver 并连接
     var onForceEnter: (() -> Void)?
     /// 右键「使用 iPhone」/「配对新 iPhone…」：AppDelegate 负责保存并通知 receiver
@@ -81,6 +83,7 @@ final class PetView: NSView {
     var onSetWiFi: ((String, String) -> Void)?
     var onForgetPhone: ((String) -> Void)?
     var onRestorePhones: (() -> Void)?
+    var onRepairPhone: ((String) -> Void)?
     var onCopyDiagnostics: (() -> Void)?   // 右鍵 › iPhone › 拷貝診斷報告：AppDelegate 向接收器要現場
     var onVideoState: ((Bool) -> Void)?   // 直播开始/结束：AppDelegate 据此启停健康检查与统计
     private var forceStage = 0
@@ -2225,6 +2228,10 @@ final class PetView: NSView {
     private(set) var scrollArb = ScrollArbiter()
     /// 起手点归谁：直播屏幕＝CarPlay；机身（逐零件碰撞盒）＝转身体；其余透明区＝不处理。
     /// 屏幕是内容、机身是物件（2026-11-07 拍板）：不直播时屏幕上的双指滑外壳没接的（錶面直滑、App 不捲的）也不转身体
+    /// 觸控板捏合從哪裡起手才縮放桌寵：機身，或沒在直播時的錶面（2026-11-26 拍板：透明邊、CarPlay 畫面不縮放）
+    func pinchStartsOnPet(_ p: NSPoint) -> Bool {
+        hitsModel(p) || (!showingVideo && screenUV(p) != nil)
+    }
     func classifyGesturePoint(_ p: NSPoint) -> GestureTarget {
         GestureTarget.route(onScreen: screenUV(p) != nil, onBody: hitsModel(p), live: showingVideo)
     }
@@ -2340,7 +2347,8 @@ final class PetView: NSView {
         switch face.status {
         case .connecting: return (L("menu.cancelConnect", "取消连接"), #selector(menuCancelConnect), nil, "xmark.circle")
         case .pausedResume, .paused: return (L("menu.resumeCarPlay", "继续 CarPlay"), #selector(menuToggleLive), L("menu.hint.space", "空格"), "play.fill")
-        case .reconnecting: return (L("menu.reconnectCarPlay", "重新连接 CarPlay"), #selector(menuEnterCarPlay), nil, "arrow.clockwise")
+        case .reconnecting, .away: return (L("menu.reconnectCarPlay", "重新连接 CarPlay"), #selector(menuEnterCarPlay), nil, "arrow.clockwise")
+        case .background: return (L("menu.backToCarPlay", "回到 CarPlay"), #selector(menuEnterCarPlay), L("menu.hint.space", "空格"), "car.fill")
         default: return (L("menu.enterCarPlay", "进入 CarPlay"), #selector(menuEnterCarPlay), L("menu.hint.space", "空格"), "car")
         }
     }
@@ -2368,6 +2376,7 @@ final class PetView: NSView {
         // 直播中＝退出（同一手势可再进）；已暂停＝继续；重连中＝重新连接；连线中＝取消。
         let cp = carPlayAction
         menu.addItem(menuItem(cp.title, cp.action, hint: cp.hint, symbol: cp.symbol))
+        if let pause = pauseCarPlayMenuItem() { menu.addItem(pause) }
         if body {
             // 配对过两台以上：手机收进一个子菜单，打勾的是现在这台，点一下就换（不用进偏好设定）
             let phones = CarPlayPhoneBook.menuEntries()
@@ -2385,6 +2394,14 @@ final class PetView: NSView {
             let iphone = NSMenu()
             iphone.addItem(menuItem(L("menu.connectSteps", "连接步骤…"), #selector(menuConnectSteps), symbol: "list.number"))
             iphone.addItem(menuItem(L("menu.wifiPassword", "Wi-Fi 设置…"), #selector(menuWiFiPassword), symbol: "wifi"))
+            // 强制门户（Apple Store、饭店）：用默认浏览器打开登录页；卡片上的「右键 → iPhone → …」指这里
+            iphone.addItem(menuItem(L("menu.captiveLogin", "打开 Wi-Fi 登录页面…"), #selector(menuOpenCaptiveLogin), symbol: "safari"))
+            if !ReceiverLauncher.loadConfig().ignoredPhones.isEmpty {
+                iphone.addItem(menuItem(L("menu.restorePhones", "恢复已忘记的 iPhone…"), #selector(menuRestorePhones), symbol: "arrow.counterclockwise"))
+            }
+            if CarPlayPhoneBook.current != nil || !CarPlayPhoneBook.phones.isEmpty {
+                iphone.addItem(menuItem(L("menu.repairPhone", "重新配对这台 iPhone…"), #selector(menuRepairPhone), symbol: "arrow.triangle.2.circlepath"))
+            }
             iphone.addItem(menuItem(L("menu.pairNewPhone", "配对新 iPhone…"), #selector(menuPairNewPhone), symbol: "plus.circle"))
             iphone.addItem(.separator())
             iphone.addItem(menuItem(L("menu.copyDiagnostics", "拷贝诊断报告"), #selector(menuCopyDiagnostics), symbol: "doc.on.clipboard"))
@@ -2619,6 +2636,22 @@ final class PetView: NSView {
     }
     @objc private func menuCancelConnect() { onCancelConnect?() }
 
+    /// 「暂停 CarPlay」：像 AirDrop 的「所有人（10 分钟）」，到时间自己恢复，不怕忘了开回来。
+    /// 和「退出 CarPlay」（回主画面、会话留在后台）不同：暂停会真的结束手机上的 CarPlay，手机离开驾驶状态，
+    /// AirDrop 等连续互通功能就不会被它挡着。已经暂停、或从没配过手机时不出现。
+    private func pauseCarPlayMenuItem() -> NSMenuItem? {
+        guard face.status != .pausedResume, !CarPlayPhoneBook.phones.isEmpty else { return nil }
+        let sub = NSMenu()
+        for (title, minutes) in [(L("menu.pause10m", "10 分钟"), 10.0), (L("menu.pause1h", "1 小时"), 60.0)] {
+            let item = menuItem(title, #selector(menuPauseCarPlay(_:)), symbol: "timer")
+            item.representedObject = minutes
+            sub.addItem(item)
+        }
+        sub.addItem(menuItem(L("menu.pauseUntilResume", "直到我继续"), #selector(menuPauseCarPlay(_:)), symbol: "pause"))
+        return submenuItem(L("menu.pauseCarPlay", "暂停 CarPlay"), sub, symbol: "pause.circle")
+    }
+    @objc private func menuPauseCarPlay(_ sender: NSMenuItem) { onPauseCarPlay?(sender.representedObject as? Double) }
+
     // 重按（Force Touch，stage 2）＝預覽（2026-11-12 定案；HIG Pointing devices：重按用來顯示 Quick Look 或查詢視窗）：
     // 在圖示或小工具上顯示它的預覽與選單，其他地方不做事。不再進出 CarPlay（空白鍵、把手、選單照舊）。
     override func pressureChange(with event: NSEvent) {
@@ -2642,6 +2675,8 @@ final class PetView: NSView {
     }
     @objc private func menuPairNewPhone() { onPairNewPhone?() }
     @objc func menuConnectSteps() { ConnectHelp.showSteps() }
+    /// 强制门户：用默认浏览器打开登录页（探测不到就开 captive.apple.com）
+    @objc private func menuOpenCaptiveLogin() { CaptiveWiFi.openLoginPage() }
     @objc func menuCopyDiagnostics() { onCopyDiagnostics?() }
     @objc private func menuForgetPhone(_ sender: NSMenuItem) {
         guard let address = sender.representedObject as? String, !address.isEmpty else { return }
@@ -2673,6 +2708,19 @@ final class PetView: NSView {
             NSWorkspace.shared.open(url)
         }
     }
+    /// 救援：Mac 還記得這台、手機卻長時間不回應藍牙（多半是手機那邊忘了這台 Mac）。
+    /// 先清掉 Mac 這邊的舊配對，再開配對引導；只在連不上幾分鐘後才從卡片／選單進來，平常不打擾。
+    @objc private func menuRepairPhone() {
+        NSApp.activate(ignoringOtherApps: true)
+        let alert = NSAlert()
+        alert.messageText = L("repair.title", "重新配对这台 iPhone？")
+        alert.informativeText = L("repair.body", "Mac 会先删掉这边的旧配对，再让 iPhone 重新找到这台 Mac。手机上如果还留着「Aaron's MacBook Air」，先在 设置 › 蓝牙 里忘记它；平常不需要这样做。")
+        alert.addButton(withTitle: L("repair.confirm", "重新配对"))
+        alert.addButton(withTitle: L("wifi.cancel", "取消"))
+        guard alert.runModal() == .alertFirstButtonReturn else { return }
+        let address = CarPlayPhoneBook.current ?? CarPlayPhoneBook.phones.first?.address ?? ""
+        onRepairPhone?(address)
+    }
     @objc private func menuRestorePhones() {
         NSApp.activate(ignoringOtherApps: true)
         let alert = NSAlert()
@@ -2696,6 +2744,10 @@ final class PetView: NSView {
             let alert = NSAlert()
             alert.messageText = L("wifi.title", "Wi-Fi 设置")
             var body = L("wifi.body", "这里填 iPhone 所连的 Wi-Fi（不一定是 Mac 自己连的那个）。Mac 用网线、或两者连不同 SSID 时，请填 iPhone 那个网络的名称和密码。iPhone 已在该网络上时密码可留空。macOS 26 不再允许 App 读取钥匙串密码，需要时请在系统设置里查看后手填（仅存在本机）。")
+            if let c = CaptiveWiFi.latest, c.captive {
+                body = L("wifi.captiveNote", "这个 Wi-Fi 需要网页登录（例如 Apple Store）；先在浏览器登录，iPhone 也要登录同一个网络，再回来连接。") + "\n\n" + body
+            }
+            CaptiveWiFi.probe(force: true) { _ in }   // 背景更新：下次打开这个对话框就有正确提示
             if let note { body += "\n\n" + note }
             alert.informativeText = body
             let container = NSView(frame: NSRect(x: 0, y: 0, width: 360, height: 96))

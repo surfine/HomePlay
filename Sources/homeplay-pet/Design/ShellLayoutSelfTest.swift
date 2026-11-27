@@ -35,6 +35,19 @@ enum ShellLayoutSelfTest {
         let small = ShellTapTargets.all().filter { $0.hit.width < HPGrid.tap - 0.01 || $0.hit.height < HPGrid.tap - 0.01 }
         check(small.isEmpty, "外殼版面：可以單獨點的系統元件點按範圍都不小於 88（\(small.map { "\($0.name) \(Int($0.hit.width))×\(Int($0.hit.height))" }.joined(separator: "、"))）")   // l10n-ignore
 
+        // 多顆即時動態：整組（主藥丸＋分離小藥丸）要對螢幕中線，不是只有主藥丸在中間
+        do {
+            let l = LiveActivityStack.layout(top: Shell.pillTop, single: nil, minimal: [40, 40])
+            let span = l.detached.reduce(l.pill) { $0.union($1) }
+            check(abs(span.midX - 512) < 0.01, "外殼版面：多顆即時動態整組置中")   // l10n-ignore
+        }
+
+        // 把手＝一次往上一層：主畫面→表面，App→主畫面；CarPlay 第一下只現身（2026-11-18）
+        check(HomeHandle.tap(shownAtDown: false, livePill: false, onCarPlay: false, screen: .home) == .surface, "把手：主畫面點一下回表面")   // l10n-ignore
+        check(HomeHandle.tap(shownAtDown: false, livePill: false, onCarPlay: false, screen: .app("weather")) == .home, "把手：App 點一下回主畫面")   // l10n-ignore
+        check(HomeHandle.tap(shownAtDown: false, livePill: false, onCarPlay: true, screen: .app(CarPlayApp.id)) == .reveal, "把手：CarPlay 第一下只現身")   // l10n-ignore
+        check(HomeHandle.tap(shownAtDown: true, livePill: false, onCarPlay: true, screen: .app(CarPlayApp.id)) == .home, "把手：CarPlay 看得見時回主畫面")   // l10n-ignore
+
         library(check)
         grids(check)
     }

@@ -107,8 +107,27 @@ enum Shell {
 
     // 頂端中間（2026-11-12）：待機時是把手（Shell/HomeHandle.swift，預設隱藏）；有 Live Activity 時才長出藥丸，
     // 照內容變寬、高 54（compact／minimal，Shell/LiveActivityStack.swift），位置在「藥丸槽」。
-    /// 藥丸槽的上緣：整顆落在主畫面的玻璃面板裡（面板內再留一檔最小間距）
-    static var pillTop: CGFloat { HPTokens.Home.panelInset + 8 }
+    /// 藥丸槽的上緣：整顆落在主畫面的玻璃面板裡，並在「面板上緣到頁首上緣」之間置中——
+    /// 上面留白＝下面留白，不貼著頂端（2026-11-17 使用者：藥丸在上方，均等的間距與呼吸感）。
+    static var pillTop: CGFloat {
+        let bandTop = HPTokens.Home.panelInset
+        let headerTop: CGFloat? = {
+            switch Shell.nav.screen {
+            case .app:
+                return HPTokens.titleBaseline - HPTokens.titleFont.capHeight
+            case .library where SB.libraryExpanded != nil:
+                return HPTokens.titleBaseline - HPTokens.titleFont.capHeight
+            case .library:
+                return 152 - HPTokens.Size.tap / 2   // 規格：最外層頁首中線 152
+            case .home:
+                return HPTokens.Home.greetingBaseline - HPTokens.Home.greetingSize * 0.75
+            default:
+                return nil
+            }
+        }()
+        guard let headerTop else { return bandTop + 8 }
+        return max(bandTop + 8, (bandTop + headerTop - LiveActivityStack.height) / 2)
+    }
     /// 藥丸槽：即時動態的藥丸出現的那一塊（最窄 166）。頁面內容讓位給它，不讓位給把手
     static var pillSlot: CGRect { CGRect(x: 512 - LiveActivityStack.idleWidth / 2, y: pillTop, width: LiveActivityStack.idleWidth, height: LiveActivityStack.height) }
     /// App（含設定）的深淺色：暗處（夜裡或房間光很暗）、控制中心的「深色模式」，或主畫面外觀選了深色（2026-11-12 定案：跟主畫面外觀）

@@ -2938,6 +2938,8 @@ enum Wireless {
         }
         ws.addObserver(forName: NSWorkspace.didWakeNotification, object: nil, queue: .main) { _ in
             note("Mac 醒来：0.8 秒后重连")
+            // 睡眠可能讓 iPhone 看不到車機的 SDP／車機類；醒來先重新發布，手機回來就不必重新配對。
+            beacon?.republish()
             feed(.wake)
         }
         RunLoop.main.run()

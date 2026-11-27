@@ -510,10 +510,23 @@ extension PetView {
                 // 即時動態的藥丸本來就看得見，照舊；點按範圍以外的地方照舊交給頁面
                 let livePill = !showingVideo && Shell.pillT > 0.02
                 let onHandle = showingVideo || (Shell.nav.screen.coversFace && (shellPoint(d.uv).map { HomeHandle.tapZone.contains($0) } ?? false))
-                if onHandle, HomeHandle.tap(shownAtDown: HomeHandle.shownAtDown, livePill: livePill, onCarPlay: showingVideo) == .reveal {
-                    log("handle: tap only reveals"); return true
+                if onHandle {
+                    switch HomeHandle.tap(shownAtDown: HomeHandle.shownAtDown, livePill: livePill, onCarPlay: showingVideo, screen: Shell.nav.screen) {
+                    case .reveal:
+                        log("handle: tap only reveals"); return true
+                    case .home:
+                        if showingVideo { _ = carPlayToHome(reason: "handle tap") }   // CarPlay 上點看得見的把手＝Home 鍵（同空白鍵、往下拉）
+                        else { shellNavigate(.back) }   // App／資料庫／切換器 → 主畫面（照它的 appReturn）
+                        return true
+                    case .surface:
+                        // 主畫面 → 表面：一次往上一層（Apple Watch 按錶冠回錶面）
+                        Shell.nav = ShellNav()
+                        Face.capsuleGlide = (HomeHandle.rect, CACurrentMediaTime())
+                        Shell.lastActive = CACurrentMediaTime()
+                        face.forceDirty = true
+                        return true
+                    }
                 }
-                if showingVideo { _ = carPlayToHome(reason: "handle tap"); return true }   // CarPlay 上點看得見的把手＝Home 鍵（同空白鍵、往下拉）
                 break
             }
         case .switcher:

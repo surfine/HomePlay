@@ -170,6 +170,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// WS 断开后先快探：接收器重启 1–3 s 就绪，别让桌宠干等 5 s 退避
     private static let fastProbeWindow: Double = 15, fastProbeInterval: Double = 0.3
     private var disconnectedAt: CFTimeInterval?   // 这一轮断线从何时起；出画面归零
+    private var pauseResumeTimer: Timer?          // 定时暂停到点自动继续
+    private var awayWork: DispatchWorkItem?       // 断线久了改成「iPhone 不在附近」
+    /// 断线这么久还没回来，多半是手机带出门了：收起担心脸，安静等（重试照旧在后台跑）
+    private static let phoneAwayAfter: TimeInterval = 180
     private var reconnectProbing = false
     private var lastStats = (t: CACurrentMediaTime(), recv: 0, dec: 0)
     private var rememberFrame = false
@@ -820,7 +824,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if Onboarding.forced { view.face.armOnboarding() }
         // 2.0: --demo-official 的主畫面照官方圖：後面是「照片」錶面（Portraits），不是這台 Mac 上次選的錶面
         if faceStyle == nil, OfficialDemo.on, ["--home", "--library", "--app"].contains(where: CommandLine.arguments.contains) { faceStyle = .photos }
-        if snapshotPath == nil, benchSeconds == 0, !forceHello, !Self.isDiagnosticRun, HelloIntro.takeFirstLaunch() { view.face.beginHello(CACurrentMediaTime(), local: true) }   // 2.0 hello：HomePlay 2 第一次打開（設定卡已排上：hello 停住當它的背景）
+        let firstHello = snapshotPath == nil && benchSeconds == 0 && !forceHello && !Self.isDiagnosticRun && HelloIntro.takeFirstLaunch()
+        if firstHello { view.face.beginHello(CACurrentMediaTime(), local: true) }   // 2.0 hello：HomePlay 2 第一次打開（設定卡已排上：hello 停住當它的背景）
+        // 2.0 開機先到主畫面：HomeView 的本地 App 不靠 CarPlay；CarPlay 只是主畫面上的一個 App。
+        // hello 演完才進，設定／引導還在跑就不搶。2026-11-18 使用者拍板。
+        if BootToHome.enabled, snapshotPath == nil, benchSeconds == 0, !Self.isDiagnosticRun,
+           !SetupFlow.pending, !Onboarding.active {
+            let delay = firstHello ? HelloIntro.duration + 0.35 : 1.2
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in self?.enterBootHome() }
+        }
         if let faceStyle { view.setFaceStyle(faceStyle, remember: false) }
         if forceHello { view.face.beginHello(CACurrentMediaTime()) }   // 官網素材：從這裡重新計時，逐格才穩定
         if let timerSeconds { view.face.startTimer(seconds: timerSeconds) }
@@ -875,6 +887,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         view.onSwitchSource = { [weak self] in self?.switchSource() }
         view.onCarPlayKnob = { [weak self] k in self?.client?.sendKnob(k) }
         view.onCancelConnect = { [weak self] in self?.cancelConnect() }
+        view.onPauseCarPlay = { [weak self] minutes in self?.pauseCarPlay(minutes: minutes) }
         view.onForceEnter = { [weak self] in self?.enterCarPlay() }
         view.onSelectPhone = { [weak self] address in self?.switchPhone(to: address) }
         view.onPairNewPhone = { [weak self] in self?.pairNewPhone() }
@@ -906,6 +919,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             ReceiverLauncher.restoreIgnoredPhones()
             self?.client?.sendRestorePhones()
             log("restored ignored iPhones")
+        }
+        view.onRepairPhone = { [weak self] address in
+            self?.repairPhone(address)
         }
         view.decoder.onDecoded = { [weak self] in self?.health.frameDecoded(now: CACurrentMediaTime()) }
         view.decoder.onDecodeError = { [weak self] in
@@ -1003,6 +1019,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // 不抢焦点；指针在桌宠上才缩放，失败就继续用 ⌥＋双指滚动。
             let mtDevices = TrackpadPinch.shared.start()
             if mtDevices > 0 {
+                // 捏合只在桌寵身上起手才縮放（機身，或沒在直播時的錶面）；透明邊、CarPlay 畫面上不縮放
+                TrackpadPinch.shared.shouldBeginPinch = { [weak self] in
+                    guard let self, let w = self.window, w.frame.contains(NSEvent.mouseLocation) else { return false }
+                    return self.view.pinchStartsOnPet(self.view.convert(w.convertPoint(fromScreen: NSEvent.mouseLocation), from: nil))
+                }
                 TrackpadPinch.shared.onMagnify = { [weak self] factor in
                     guard let self, let w = self.window else { return }
                     guard w.frame.contains(NSEvent.mouseLocation), !TouchInput.fingerDown else { return }   // 觸控的捏合走手勢辨識器
@@ -1269,6 +1290,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     /// 菜单「取消连线」：停掉这次连接，不再自动重连，直到下次「进入 CarPlay」
     func cancelConnect() {
+        clearPause()
+        awayWork?.cancel(); awayWork = nil
         userStopped = true; reconnectTimer?.invalidate(); reconnectTimer = nil
         switchingPhone = false
         PhoneNowPlayingBridge.shared.clear()
@@ -1284,6 +1307,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         CarPlayOverlayState.needsCable = false
         CarPlayOverlayState.bluetoothPairing = false
         CarPlayOverlayState.bluetoothPairFailed = false
+        CarPlayOverlayState.captiveWiFi = nil
         quietAttach = false
         handoffFreeze = false
         handoffTimeoutWork?.cancel(); handoffTimeoutWork = nil
@@ -1413,6 +1437,35 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let timeout = DispatchWorkItem { [weak self] in self?.diagnosticsWaiter?(nil) }
         diagnosticsTimeout = timeout
         DispatchQueue.main.asyncAfter(deadline: .now() + 2, execute: timeout)
+    }
+
+    /// 救援：Mac 還記得這台、手機卻長時間不回應藍牙。清掉本機的舊配對（不留在忽略名單），
+    /// 再開配對引導讓手機重新找到這台 Mac；平常不需要。
+    func repairPhone(_ address: String) {
+        if !address.isEmpty {
+            ReceiverLauncher.forgetPhone(address)
+            ReceiverLauncher.restoreIgnoredPhones()   // forget 會加进忽略名单；这里马上清掉，配对流程才收得到它
+            CarPlayPhoneBook.phones.removeAll {
+                CarPlayPhoneBook.normalize($0.address) == CarPlayPhoneBook.normalize(address)
+            }
+            if CarPlayPhoneBook.isCurrent(address) { CarPlayPhoneBook.current = nil }
+            client?.sendForgetPhone(address: address)
+            client?.sendRestorePhones()
+            log("repair iPhone: local pairing cleared")
+        }
+        pairNewPhone()
+    }
+
+    /// 開機進本地主畫面：HomeView 2.0 的 App 都在本機，不需要先連 CarPlay。
+    private func enterBootHome() {
+        guard BootToHome.enabled, !view.showingVideo, Shell.nav.screen == .face,
+              !Onboarding.active, !SetupFlow.pending else { return }
+        let shot = view.face.backdropFrame ?? view.face.render()
+        Shell.homeHue = Shell.hue(fromFace: shot, face: view.face)
+        Shell.captureHomeBackdrop(shot)
+        Shell.nav = ShellNav(screen: .home, overlay: .none)
+        view.face.forceDirty = true
+        log("boot: home screen (CarPlay is optional)")
     }
 
     func pairNewPhone() {
@@ -1554,6 +1607,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 // 出第一帧：点一下头。断过线的同时笑一下（它回来了），画面不等表情。
                 if !wasQuiet { self.requestMicrophoneIfNeeded(announce: false, reason: "CarPlay live") }
                 self.reconnectStep = 0; self.disconnectedAt = nil; self.health.reset(now: now)
+                self.awayWork?.cancel(); self.awayWork = nil
                 self.switchingPhone = false
                 CarPlayOverlayState.needsPairing = false
                 CarPlayOverlayState.pairingHost = nil
@@ -1584,6 +1638,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     self.carPlayInBackground = true
                     self.view.face.status = .background
                     log("CarPlay live; staying in the background: guest lock")
+                } else if BootToHome.enabled, !self.view.showingVideo, Shell.nav.screen != .app(CarPlayApp.id) {
+                    // 主畫面優先：CarPlay 連上了也留在背景（像一則即時動態），要開再點主畫面的 CarPlay
+                    self.carPlayInBackground = true
+                    self.view.face.status = .background
+                    log("CarPlay live; staying on the home screen (CarPlay is an app)")
                 } else {
                     self.view.showVideo(true)
                     if self.gazeFollow { GazeTracker.shared.setPaused(true) }   // 看 CarPlay 时关摄像头
@@ -1593,6 +1652,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 PhoneNowPlayingBridge.shared.clear()
                 if self.view.showingVideo, !pausedOnPurpose { self.view.mood.disconnected = true }
                 if !wasQuiet { self.view.showVideo(false) }   // 安静挂接时不要打扰桌宠
+                if !self.userStopped { self.watchForPhoneAway() }
                 self.scheduleReconnect(quiet: wasQuiet)
             }
         }
@@ -1664,6 +1724,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     PhoneNowPlayingBridge.shared.clear()
                     self.view.showVideo(false)
                     self.view.face.status = self.switchingPhone ? .connecting : .reconnecting
+                    if !self.switchingPhone { self.watchForPhoneAway() }
                 }
                 return
             }
@@ -1699,6 +1760,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     CarPlayOverlayState.connectReason = reason
                     CarPlayOverlayState.helpSSID = obj["ssid"] as? String ?? ""
                     log("connect help: \(reason ?? "wifi")")
+                    // 強制門戶（Apple Store／飯店）：先確認這台 Mac 的 Wi-Fi 是不是要網頁登錄，
+                    // 是的話排障卡換說法（ConnectHelp.card 的 captive 分支），不再叫使用者去改 Wi-Fi 名稱。
+                    CaptiveWiFi.probe { r in
+                        DispatchQueue.main.async {
+                            CarPlayOverlayState.captiveWiFi = r?.captive
+                            if r?.captive == true { log("connect help: captive Wi-Fi detected") }
+                        }
+                    }
                     // Wi-Fi 名稱未知（macOS 對 App 隱藏）：有定位權限就自己讀；沒問過先出說明卡；被拒才打開 Wi-Fi 設定手填
                     if reason == "ssidUnknown", !self.isLive {
                         DispatchQueue.main.async { self.autoFillSSID(receiverKnows: false, stuck: true) }
@@ -1969,7 +2038,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// CarPlay App 從外殼打開（圖示、切換器）、或膠囊拉下來又取消：叫回前面——會話在背景＝立刻有畫面；沒連上＝去連
     func carPlayToFrontForShell() {
         guard !view.showingVideo else { return }
-        enterCarPlay()
+        // 已經連上（會話在背景）：直接切到直播。還沒連上：留在 CarPlay App 的待機／救援頁，
+        // 背景安靜地把接收器接上，不再先彈一張全螢幕「正在連接」蓋板（2026-11-18 拍板）。
+        if isLive, resumeFromBackground() { return }
+        let target = endpoint ?? "ws://127.0.0.1:\(ReceiverLauncher.port())"
+        endpoint = target
+        userStopped = false
+        if client == nil {
+            ensureReceiver { [weak self] in
+                guard let self, self.client == nil, !self.view.showingVideo else { return }
+                self.connect(target, quiet: true)
+            }
+        }
+        log("CarPlay app: standby page (not connected yet)")
     }
     /// 選單「退出 CarPlay」、控制中心的 CarPlay 方塊：跟重按、空白鍵、👀 一致，回到主畫面、會話留在背景，
     /// 再進 CarPlay 立刻有畫面（2026-10-31 真機：原本這裡整個斷線，每次回 CarPlay 要重連 2–5 秒）。
@@ -1983,9 +2064,57 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             if view.carPlayToHome(reason: "menu exit CarPlay") { return }   // 落在主畫面（同 👀／空白鍵）
             endCarPlay(reason: "toggle")
         } else if let endpoint {
+            clearPause()
             userStopped = false; client?.close(); client = nil
             ensureReceiver { [weak self] in self?.connect(endpoint) }   // receiver 已退出時重新拉起
+        } else if view.face.status == .pausedResume {
+            enterCarPlay()   // 沒掛接過接收器就暫停的：空格／「繼續」照樣能連回來
         }
+    }
+
+    /// 暂停 CarPlay：真的结束手机会话（接收器随后退出），手机离开驾驶状态。
+    /// minutes＝nil 暂停到用户自己继续；有值就到点自动继续。下次登录接收器照常常驻、自动连。
+    func pauseCarPlay(minutes: Double?) {
+        handoffFreeze = false
+        handoffTimeoutWork?.cancel(); handoffTimeoutWork = nil
+        awayWork?.cancel(); awayWork = nil
+        switchingPhone = false
+        carPlayInBackground = false
+        endCarPlay(reason: minutes.map { "pause \(Int($0)) min" } ?? "pause until resumed")
+        isLive = false
+        view.mood.disconnected = false
+        pauseResumeTimer?.invalidate(); pauseResumeTimer = nil
+        CarPlayOverlayState.pauseUntil = nil
+        if let minutes {
+            let until = Date().addingTimeInterval(minutes * 60)
+            CarPlayOverlayState.pauseUntil = until
+            let t = Timer(fire: until, interval: 0, repeats: false) { [weak self] _ in
+                guard let self, self.userStopped else { return }
+                log("CarPlay pause over: resuming")
+                self.enterCarPlay()
+            }
+            RunLoop.main.add(t, forMode: .common)
+            pauseResumeTimer = t
+        }
+        view.face.forceDirty = true
+        view.mood.show(.wink, for: 0.6, now: CACurrentMediaTime())
+    }
+    private func clearPause() {
+        pauseResumeTimer?.invalidate(); pauseResumeTimer = nil
+        CarPlayOverlayState.pauseUntil = nil
+    }
+
+    /// 断线后过一阵子还没回来：改成安静的「iPhone 不在附近」，不再一直挂着担心脸
+    private func watchForPhoneAway() {
+        awayWork?.cancel()
+        let work = DispatchWorkItem { [weak self] in
+            guard let self, !self.isLive, !self.userStopped, self.view.face.status == .reconnecting else { return }
+            self.view.mood.disconnected = false
+            self.view.face.status = .away
+            log("phone away: quiet wait")
+        }
+        awayWork = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + Self.phoneAwayAfter, execute: work)
     }
 
     /// 真正結束 CarPlay：請接收器拆掉手機會話（接收器隨後退出）。現在只有隱藏桌寵、交接中退出會走這裡。
@@ -2004,6 +2133,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if view.showingVideo { view.carPlayToHome(reason: "force press"); return }
         if carPlayLocked { showCarPlayLock("enter"); return }
         if resumeFromBackground() { return }
+        clearPause()
         view.mood.show(.surprised, for: 0.35, now: CACurrentMediaTime())
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { [weak self] in
             self?.view.mood.show(.thinking, for: 12, now: CACurrentMediaTime())

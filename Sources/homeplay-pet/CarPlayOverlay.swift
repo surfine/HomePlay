@@ -11,6 +11,7 @@ enum CarPlayOverlayState {
     static var lastDraw = -1e9
     static var shownSince = -1.0       // 這次蓋板亮了多久：超過 15 秒換一句可操作的提示
     static var needsPairing = false    // receiver 報告「沒有任何已配對的 iPhone」
+    static var pauseUntil: Date?       // 定時暫停：到這個時刻自動繼續；nil＝暫停到使用者自己繼續
     static var pairingHost: String?    // 這台 Mac 的藍牙名（receiver 送來；iPhone 上要點的名字）
     static var pairingStale = false    // iPhone 裡可能還留著這台 Mac 的舊配對：要先 ⓘ 忘記再重配
     static var pairingSucceededAt: Double?   // 剛配對成功：畫面出來前先給一句確認
@@ -20,6 +21,8 @@ enum CarPlayOverlayState {
     static var connectReason: String?     // receiver 判斷的卡住原因（ConnectDiagnostics.Reason）；舊 receiver 沒有
     static var helpSSID = ""              // 要讓 iPhone 連的網路名（空＝receiver 不知道）
     static var helpSince: Double?         // 排障卡這次亮起的時間：40 秒後改給插線退路與診斷報告
+    static var captiveWiFi: Bool?         // 這台 Mac 的 Wi-Fi 是強制門戶（Apple Store／飯店）：排障卡換說法
+    static var rescueForced = false       // 快照用：直接顯示救援卡
     static var needsTrust = false     // USB 插著但 iPhone 沒點「信任」：解鎖並點信任的卡片
     static var needsCable = false     // 首次配對：receiver 先等 20 秒插線（不會打開系統設定）
     static var bluetoothPairing = false   // 有線會話已發起 IOBluetoothDevicePair：iPhone 上點「配對」
@@ -160,9 +163,15 @@ extension Face {
         let succeeded = CarPlayOverlayState.snapshotPaired || (CarPlayOverlayState.pairingSucceededAt.map { now - $0 < 3.0 } ?? false)
         let wifiHelp = CarPlayOverlayState.wifiHelp
         // 卡住時照 receiver 判斷的原因給一張照做就能過的卡（ConnectHelp.card）
+        let rescue = CarPlayOverlayState.rescueForced || CarPlayRescue.shouldOffer(
+            reason: CarPlayOverlayState.connectReason,
+            paired: !CarPlayPhoneBook.phones.isEmpty,
+            failedFor: CarPlayOverlayState.helpSince.map { now - $0 } ?? 0)
         let helpCard = ConnectHelp.card(reason: CarPlayOverlayState.connectReason, ssid: CarPlayOverlayState.helpSSID,
                                         needsPassword: CarPlayOverlayState.wifiNeedsPassword,
-                                        helpElapsed: CarPlayOverlayState.helpSince.map { now - $0 } ?? 0)
+                                        helpElapsed: CarPlayOverlayState.helpSince.map { now - $0 } ?? 0,
+                                        captive: CarPlayOverlayState.captiveWiFi == true,
+                                        rescue: rescue)
         let recentlyPaired = CarPlayOverlayState.pairingSucceededAt.map { now - $0 < 120 } ?? false
         let needTrust = CarPlayOverlayState.needsTrust
         let cable = CarPlayOverlayState.needsCable
@@ -368,6 +377,7 @@ extension Face {
 /// 判斷「連線中」也不用去比對字串。
 enum CarPlayStatus {
     case notConnected, live, paused, reconnecting, connecting, pausedResume, background
+    case away   // 斷線好幾分鐘了：多半是手機帶出門。安靜等，回來自動連（像車機熄火）
     var text: String {
         switch self {
         case .notConnected:
@@ -381,7 +391,13 @@ enum CarPlayStatus {
         case .paused: return L("status.paused", "CarPlay 已暂停")
         case .reconnecting: return L("status.reconnecting", "稍后重新连接")
         case .connecting: return L("status.connecting", "CarPlay 连接中…")
-        case .pausedResume: return L("status.pausedResume", "CarPlay 已暂停 · 空格继续")
+        case .pausedResume:
+            if let until = CarPlayOverlayState.pauseUntil {
+                return String(format: L("status.pausedUntil", "CarPlay 已暂停 · %@ 自动继续"),
+                              until.formatted(date: .omitted, time: .shortened))
+            }
+            return L("status.pausedResume", "CarPlay 已暂停 · 空格继续")
+        case .away: return L("status.away", "iPhone 不在附近 · 回来会自动连上")
         case .background: return L("status.background", "CarPlay 在后台 · 按空格键返回")
         }
     }

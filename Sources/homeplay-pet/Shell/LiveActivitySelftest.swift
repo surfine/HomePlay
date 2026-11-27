@@ -82,11 +82,12 @@ enum LiveActivitySelftest {
               "Live Activity compact：內容槽受上限約束（膠囊 ≤ \(S.maxWidth)、槽 ≤ \(huge.trailing.width)）")   // l10n-ignore：selftest 訊息
         // minimal：中間一顆、兩個分離（右、左）；每顆都貼合內容——圓形，寬內容是橢圓；中間那顆也沒有空位
         let m = S.layout(top: 46, single: nil, minimal: [38, 26, 80])
+        let mSpan = m.detached.reduce(m.pill) { $0.union($1) }
         check(m.detached.count == 2 && m.detached[0].minX > m.pill.maxX && m.detached[1].maxX < m.pill.minX
               && m.detached[0].width == m.detached[0].height && m.detached[1].width > m.detached[1].height
-              && m.pill.width == max(S.height, 38 + 2 * S.minimalPad) && abs(m.pill.midX - 512) < 0.01 && abs(m.trailing.midX - 512) < 0.01
+              && m.pill.width == max(S.height, 38 + 2 * S.minimalPad) && abs(mSpan.midX - 512) < 0.01 && abs(m.trailing.midX - m.pill.midX) < 0.01
               && m.trailing.width == 38 && m.pill.maxY < greetingTop && m.pill.minY == 46,
-              "Live Activity minimal：中間一顆、其餘分離在兩側；每顆寬度跟著內容（圓形或橢圓），沒有留空")   // l10n-ignore：selftest 訊息
+              "Live Activity minimal：整組（主＋分離）置中；每顆寬度跟著內容（圓形或橢圓），沒有留空")   // l10n-ignore：selftest 訊息
         // expanded：上緣＝膠囊上緣（沒有額頭）、左右貼內容邊線（shell-layout.md 第 6 節）、跟螢幕同心、高度照內容
         let big = S.expandedRect(height: S.expandedHeight(.timer), top: 46)
         check(big.minY == 46 && big.minX == HPGrid.Content.leading && big.maxX == HPGrid.Content.trailing && S.expandedRadius(big) <= Screen.concentric(inset: S.expandedInset)

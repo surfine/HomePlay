@@ -13,6 +13,8 @@
   </p>
 </div>
 
+这条 `beta` 分支是 2.0 测试版的源代码。2.0 的介绍和下载见 [`main` 分支的 README](https://github.com/surfine/HomePlay#readme)；下面的编译步骤两边一样。
+
 > 个人实验项目，与 Apple Inc. 无关，也未经 Apple 认证或背书。CarPlay 与 HomeView 是 Apple Inc. 的商标，这里只用来说明兼容性。请自行评估使用风险。
 
 ## 它是什么

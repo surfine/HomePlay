@@ -111,7 +111,12 @@ package final class Iap2BluetoothAccessory: NSObject, IOBluetoothRFCOMMChannelDe
               let device = devices.first(where: { ($0.addressString ?? "").lowercased() == normalized }) else {
             return .failure(.notPaired)
         }
-        guard let record = device.getServiceRecord(for: iap2ServiceUUID) else { return .failure(.noService) }
+        guard let record = device.getServiceRecord(for: iap2ServiceUUID) else {
+            // 手機離線回來後，Mac 的 SDP 快取常被系統收走（真機 2026-11-18）。
+            // iPhone 的 iAP2 RFCOMM 通道固定是 1，先用它試一次；打不開再照上層的刷新／退避走，
+            // 不要因為快取沒有服務就直接放棄、逼使用者重新配對。
+            return .success((device, 1))
+        }
         var channelID: BluetoothRFCOMMChannelID = 0
         guard record.getRFCOMMChannelID(&channelID) == kIOReturnSuccess else { return .failure(.noChannel) }
         return .success((device, channelID))

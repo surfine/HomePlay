@@ -13,7 +13,8 @@ for L in zh-Hant zh-Hans en; do
   D=$O/$L; mkdir -p $D/rain
   shot() { local n=$1; shift; perl -e 'alarm 90; exec @ARGV' $B --size 1600 --at 30000,30000 --lang $L --demo-official "$@" --screen-png $D/$n.png >/dev/null 2>&1 || echo "FAIL $L $n"; }
   run() { shot "$@" & J+=($!); if (( ${#J} >= 4 )); then wait $J[1]; J=(${J[2,-1]}); fi }
-  for s in island photos modular analog flow weather calendar growth black system6; do run face-$s --style $s; done
+  for s in island photos modular analog flow weather world calendar growth black system6; do run face-$s --style $s; done
+  run face-cluster --style cluster --cluster-state normal   # 儀表用設計稿的示範值，狀態固定成一般（不顯示拍照那台 Mac 的熱壓力）
   for e in 1988 2002 2026; do run era-$e --style island --era $e; done
   for a in light dark clear tinted; do run home-$a --home --home-appearance $a; done
   run home-library --home --library

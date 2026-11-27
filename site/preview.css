@@ -177,7 +177,7 @@
 
 /* ── 錶面：十張一面牆 + 島錶面的三個年代 ── */
 .pv-faces{--tint:#ffb340}
-.pv-wall{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:32px var(--gutter)}
+.pv-wall{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:32px var(--gutter)}
 .pv-face{display:grid;gap:12px;justify-items:center;text-align:center}
 .pv-face .pv-screen{width:100%;transition:transform .5s var(--spring)}
 .pv-face:hover .pv-screen{transform:translateY(-6px) scale(1.02)}

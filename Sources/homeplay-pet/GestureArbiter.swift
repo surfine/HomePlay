@@ -85,6 +85,11 @@ struct TwoFingerClassifier {
     /// 一指几乎不动（「锚」）时的比例：只有一指在走，指距变化最多＝它的位移、共同平移＝它的一半，2 倍永远到不了（只剩正好沿连线）。
     /// 锚定时 1.2 倍＝移动那指的方向跟连线夹角在约 53° 以内就算捏合；两指一起走的上下滑仍用 2 倍
     static let anchoredPinchRatio: Double = 1.2
+    /// 一指的位移不到另一指的这个比例时先别判：「一指慢半拍的左右滑」和「一指不动的捏合」
+    /// 在头 1.5 mm 长得一模一样，只能等落后的那根手指跟上（多半几帧内就跟上）。
+    static let laggingRatio: Double = 0.35
+    /// 落后的手指一直不动，走到这么远（约 4.5 mm）才按锚定捏合／滑动定案
+    static let laggingWait: Double = 0.036
 
     private(set) var kind: TwoFingerKind = .undecided
     private var ids: (Int32, Int32)?
@@ -114,10 +119,18 @@ struct TwoFingerClassifier {
         let separation = abs((v1.x - v0.x) * ax + (v1.y - v0.y) * ay)
         let common = (((v0.x + v1.x) / 2) * ((v0.x + v1.x) / 2) + ((v0.y + v1.y) / 2) * ((v0.y + v1.y) / 2)).squareRoot()
         let sameDirection = v0.x * v1.x + v0.y * v1.y > 0
-        let anchored = min(m0, m1) < Self.decideDistance * 0.35
+        // 真機 2026-11-26：左右滑被當成縮放。手指落下有先後，先動的那根走了 1.5 mm、另一根還沒動，
+        // 兩指又是左右排開，幾何上就是「一指不動、另一指沿連線走」的捏合。等落後的手指跟上再判；
+        // 它一直不動（走到約 4.5 mm）才是真的單指錨定捏合。
+        let lagging = min(m0, m1) < Self.laggingRatio * max(m0, m1)
+        if lagging, max(m0, m1) < Self.laggingWait { return kind }
+        // 錨＝一指幾乎不動：絕對值（不到約 0.4 mm），或等過之後仍遠落後另一指（相對比例）
+        let stillAnchor = min(m0, m1) < Self.decideDistance * 0.35
+        let anchored = stillAnchor || lagging
         // 捏合要指距真的变了（扭转时指距和平移都接近 0，不能算捏合）：两指都在走＝指距至少真的变了 1.5 mm；
         // 一指当锚＝移动那指主要沿着连线（它走够 1.5 mm 时，沿连线的分量至少 0.9 mm）
-        let pinch = anchored ? separation >= max(Self.anchoredPinchRatio * common, Self.decideDistance * 0.6)
+        // 兩指同向走（落後那指也真的在動）就是滑，不算錨定捏合
+        let pinch = anchored ? separation >= max(Self.anchoredPinchRatio * common, Self.decideDistance * 0.6) && (stillAnchor || !sameDirection)
                              : separation >= max(Self.pinchRatio * common, Self.decideDistance)
         if pinch { kind = .pinch }
         else if sameDirection || anchored { kind = .scroll }   // 一指几乎不动＋另一指横着连线走：也算滑

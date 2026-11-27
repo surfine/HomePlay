@@ -13,6 +13,8 @@
   </p>
 </div>
 
+This `beta` branch is the 2.0 beta source. For what 2.0 does and the download, see the [README on `main`](https://github.com/surfine/HomePlay#readme); the build steps below are the same on both branches.
+
 > Experimental personal project. Not affiliated with, endorsed by, or certified by Apple. CarPlay and HomeView are trademarks of Apple Inc. Use at your own risk.
 
 ## What it is

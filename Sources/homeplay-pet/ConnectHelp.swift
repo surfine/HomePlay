@@ -18,11 +18,27 @@ enum ConnectHelp {
     static let escalateAfter = 40.0
 
     /// reason：接收器送來的原因（舊版接收器沒有就當 Wi-Fi 沒連回）。ssid：要讓 iPhone 連的網路名（空＝不知道）。
-    static func card(reason: String?, ssid: String, needsPassword: Bool, helpElapsed: Double) -> ConnectCard {
+    /// captive：這台 Mac 現在連的 Wi-Fi 是強制門戶（Apple Store／飯店）；它常擋住裝置互連，先換一種說法。
+    static func card(reason: String?, ssid: String, needsPassword: Bool, helpElapsed: Double,
+                     captive: Bool = false, rescue: Bool = false) -> ConnectCard {
         let late = helpElapsed >= escalateAfter
         let cable = L("status.help.cable", "还不行？插线连一次：解锁 iPhone 点「信任」")
         let report = L("status.help.copyReport", "右键 → iPhone → 拷贝诊断报告")
         let autoRetry = L("status.help.autoRetry", "改好后自动重试")
+        // 已配對的手機長時間沒有回應藍牙：多半是手機那邊把配對丟了。給一鍵重新配對，不要叫人自己找。
+        if rescue {
+            return ConnectCard(title: L("status.help.rescue.title", "iPhone 可能忘了这台 Mac"),
+                               subtitle: L("status.help.rescue.body", "Mac 还记得它，但手机一直没有回应蓝牙。这通常是手机那边的配对丢了，不是 Wi-Fi。"),
+                               hint: L("status.help.rescue.hint", "解锁 iPhone，看 设置 › 蓝牙 里还有没有这台 Mac"),
+                               chip: L("status.help.rescue.chip", "右键 → iPhone → 重新配对这台 iPhone…"))
+        }
+        // 强制门户：不是 Wi-Fi 名称或防火墙的问题，先让用户把两台设备都登录，再给插线／热点的退路。
+        if captive {
+            return ConnectCard(title: L("status.help.captive.title", "这个 Wi-Fi 要先登录"),
+                               subtitle: L("status.help.captive.body", "Apple Store、酒店这类网络要在网页上登录。Mac 和 iPhone 各登录一次；这类网络常挡住两台设备互连，登录了也可能连不上"),
+                               hint: L("status.help.captive.hint", "连不上就插上数据线，或改用 iPhone 个人热点"),
+                               chip: late ? report : L("status.help.captive.chip", "右键 → iPhone → 打开 Wi-Fi 登录页面"))
+        }
         switch reason {
         case "macFirewall":
             return ConnectCard(title: L("status.help.firewall.title", "Mac 防火墙挡住了 iPhone"),
